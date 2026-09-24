@@ -2278,10 +2278,9 @@ ui32 TPDisk::ReleaseUncommittedChunks(TOwner owner) {
         if (state.OwnerId != owner || state.CommitState != TChunkState::DATA_RESERVED) {
             continue;
         }
-        if (state.HasAnyOperationsInProgress()) {
-            // Either I/O from the previous incarnation has not drained yet, or a commit record
-            // for this chunk is already on its way to the log and will make it genuinely owned.
-            // Leave both alone rather than free a chunk something is still working on.
+        if (state.CommitsInProgress) {
+            // A commit record for this chunk is already on its way to the log and will make it
+            // genuinely owned; the owner finds it there on recovery.
             continue;
         }
         // The chunk goes back to the free pool, so from now on it must be treated as holding
@@ -2291,13 +2290,21 @@ ui32 TPDisk::ReleaseUncommittedChunks(TOwner owner) {
             isDirtyMarked = true;
         }
         Mon.UncommitedDataChunks->Dec();
-        state.OwnerId = OwnerUnallocated;
-        state.CommitState = TChunkState::FREE;
-        // Drop the nonces along with the ownership, exactly as ChunkForget does: the next owner
-        // gets a freshly allocated nonce range, so whatever was written here stops validating.
-        state.Nonce = 0;
-        state.CurrentNonce = 0;
-        Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+        if (state.OperationsInProgress) {
+            // I/O of the previous incarnation has not drained yet. Same handling as in ChunkForget:
+            // quarantine releases the chunk through ForceDeleteChunk() once it has, and a commit
+            // still to come for it is refused, the chunk no longer being DATA_RESERVED.
+            state.CommitState = TChunkState::DATA_ON_QUARANTINE;
+            QuarantineChunks.push_back(chunkIdx);
+        } else {
+            state.OwnerId = OwnerUnallocated;
+            state.CommitState = TChunkState::FREE;
+            // Drop the nonces along with the ownership, exactly as ChunkForget does: the next owner
+            // gets a freshly allocated nonce range, so whatever was written here stops validating.
+            state.Nonce = 0;
+            state.CurrentNonce = 0;
+            Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+        }
         ++released;
     }
     if (isDirtyMarked) {
@@ -2335,7 +2342,9 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     TVector<TChunkIdx> ownedChunks;
     ownedChunks.reserve(ChunkState.size());
     for (TChunkIdx chunkId = 0; chunkId < ChunkState.size(); ++chunkId) {
-        if (ChunkState[chunkId].OwnerId == owner) {
+        // A chunk on quarantine was given up by its owner and only waits for its I/O to drain.
+        if (ChunkState[chunkId].OwnerId == owner
+                && ChunkState[chunkId].CommitState != TChunkState::DATA_ON_QUARANTINE) {
             ownedChunks.push_back(chunkId);
         }
     }

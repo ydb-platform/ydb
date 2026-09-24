@@ -43,9 +43,9 @@ namespace NKikimr {
 
         const TLsnSeg Seg;
         const bool ConfirmSyncLogAlso;
-        // What the operation this record belongs to was admitted to Fresh with, counted as in flight until
-        // the record has been replayed into Fresh. An operation writing several records carries all of it on
-        // the first one.
+        // The part of its operation's Fresh admission this record accounts for: what replaying it adds to Fresh.
+        // It counts as in flight until the record has been replayed, so an operation writing several records
+        // stays in flight until the last of them is in Fresh.
         TFreshAdmission FreshAdmission;
     };
 

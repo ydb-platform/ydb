@@ -35,7 +35,7 @@ namespace NKikimr {
     class TFreshAdmissionGate {
     public:
         enum class EDecision {
-            Admitted, // charged as in flight; attach the admission to the first log record
+            Admitted, // charged as in flight; each log record carries its own part of the admission
             Wait,     // park the event; it is handled again once it can be decided
             Refused,  // answer OUT_OF_SPACE
         };
@@ -87,9 +87,9 @@ namespace NKikimr {
 
         std::deque<std::unique_ptr<IEventHandle>> Parked;
         std::optional<TReservation> InFlight;
-        // The loosest bound PDisk has declined since the last reservation it granted, for ordinary and for
-        // housekeeping reservations. A write no looser is refused without asking again. Forgotten once nothing
-        // waits, so a write arriving later always asks.
+        // The loosest bound PDisk has declined, for ordinary and for housekeeping reservations, until it grants
+        // one at that bound or a stricter one. A write no looser is refused without asking again. Forgotten once
+        // nothing waits, so a write arriving later always asks.
         std::optional<ESpaceColor> RefusedAtColor[2];
         bool Draining = false;
         bool StopDraining = false;

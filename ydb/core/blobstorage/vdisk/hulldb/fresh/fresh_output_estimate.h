@@ -140,10 +140,13 @@ namespace NKikimr {
                 return chunksPerSst;
             }
 
-            // A record anywhere near the size of a chunk cannot be written at all, since the writer
-            // never splits one; the huge blob threshold keeps inline items far below that. Bounding
-            // the step only keeps a nonsensical configuration from dividing by zero.
-            const ui64 step = Max<ui64>(capacity > footprint ? capacity - footprint : 0, Max<ui64>(capacity / 2, 1));
+            // The bound holds only while capacity - footprint is positive. A record that might not fit an SST
+            // at all could not be written anyway, the writer never splitting one; the huge blob threshold keeps
+            // inline records far below that. Like the geometry above, it needs more chunks than can be had.
+            if (capacity <= footprint) {
+                return Max<ui32>();
+            }
+            const ui64 step = capacity - footprint;
             const ui64 ssts = 1 + (charge - capacity + step - 1) / step;
             return ssts * chunksPerSst;
         }
@@ -164,6 +167,18 @@ namespace NKikimr {
 
         bool Empty() const {
             return LogoBlobs.Empty() && Blocks.Empty() && Barriers.Empty();
+        }
+
+        void Merge(const TFreshAdmission& other) {
+            LogoBlobs.Merge(other.LogoBlobs);
+            Blocks.Merge(other.Blocks);
+            Barriers.Merge(other.Barriers);
+        }
+
+        void Subtract(const TFreshAdmission& other) {
+            LogoBlobs.Subtract(other.LogoBlobs);
+            Blocks.Subtract(other.Blocks);
+            Barriers.Subtract(other.Barriers);
         }
     };
 

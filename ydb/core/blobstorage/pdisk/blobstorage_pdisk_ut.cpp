@@ -489,6 +489,102 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TestChunkForgetWaitsForRawIo(true);
     }
 
+    // A restarted owner's reservations are released only once the previous incarnation's I/O is
+    // over: YardInit waits for it, so nothing is handed out while a write may still land in it.
+    Y_UNIT_TEST(OwnerReinitReleasesReservationsAfterIoDrains) {
+        auto settings = FewChunksSettings();
+        settings.PlainDataChunks = true;
+        TActorTestContext testCtx(settings);
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk(2);
+        const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
+        const TChunkIdx chunk = *reserved.begin();
+        const auto owner = vdisk.PDiskParams->Owner;
+
+        struct TReadGate {
+            TManualEvent Entered;
+            TManualEvent Resume;
+        };
+        auto gate = std::make_shared<TReadGate>();
+        Y_SCOPE_EXIT(&) {
+            gate->Resume.Signal();
+            testCtx.TestCtx.SectorMap->SetReadCallback({});
+        };
+        testCtx.TestCtx.SectorMap->SetReadCallback([gate] {
+            gate->Entered.Signal();
+            gate->Resume.WaitI();
+        });
+        testCtx.Send(new NPDisk::TEvChunkReadRaw(owner, vdisk.PDiskParams->OwnerRound, chunk, 0, 4096));
+        UNIT_ASSERT_C(gate->Entered.WaitT(TDuration::Seconds(10)), "raw read did not reach the device");
+
+        const ui64 newRound = TVDiskMock::OwnerRound.fetch_add(1);
+        testCtx.Send(new NPDisk::TEvYardInit(newRound, vdisk.VDiskID, testCtx.TestCtx.PDiskGuid, testCtx.Sender));
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (!testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) { return p->OwnerData[owner].OwnerRound == newRound; })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "YardInit did not start");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        // The new round is in effect, but the read of the previous one still holds the chunk.
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            const auto& state = p->ChunkState[chunk];
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_RESERVED);
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+            UNIT_ASSERT_VALUES_EQUAL(state.OperationsInProgress.load(), 1);
+        });
+
+        gate->Resume.Signal();
+        testCtx.TestResponse<NPDisk::TEvChunkReadRawResult>(nullptr);
+        const auto reinit = testCtx.Recv<NPDisk::TEvYardInitResult>();
+        UNIT_ASSERT_VALUES_EQUAL(reinit->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 0);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            for (TChunkIdx idx : reserved) {
+                const auto& state = p->ChunkState[idx];
+                UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::FREE);
+                UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, NPDisk::OwnerUnallocated);
+            }
+        });
+    }
+
+    // Should a reservation still be busy when its owner restarts all the same, it goes to
+    // quarantine, is not reported as owned, and is released once the I/O is over.
+    Y_UNIT_TEST(BusyUncommittedReservationQuarantinedOnOwnerReinit) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk(1);
+        const TChunkIdx chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const auto owner = vdisk.PDiskParams->Owner;
+
+        // YardInit waits for the owner's requests to drain, so this can not be staged with real I/O.
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            auto& state = p->ChunkState[chunk];
+            state.IsDirty = true; // keeps the release from writing a sys log record from this thread
+            ++state.OperationsInProgress;
+            UNIT_ASSERT_VALUES_EQUAL(p->ReleaseUncommittedChunks(owner), 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_ON_QUARANTINE);
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+        });
+
+        const auto reinit = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+            new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                testCtx.TestCtx.PDiskGuid, testCtx.Sender), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 0);
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            --p->ChunkState[chunk].OperationsInProgress;
+        });
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (!testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            return p->ChunkState[chunk].CommitState == NPDisk::TChunkState::FREE
+                && p->ChunkState[chunk].OwnerId == NPDisk::OwnerUnallocated;
+        })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "quarantine did not release the chunk");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+    }
+
     // Counterpart to UncommittedReservationsReleasedOnOwnerReinit: releasing uncommitted
     // reservations at YardInit must leave a committed chunk exactly where it was.
     Y_UNIT_TEST(CommittedChunksSurviveOwnerRestart) {

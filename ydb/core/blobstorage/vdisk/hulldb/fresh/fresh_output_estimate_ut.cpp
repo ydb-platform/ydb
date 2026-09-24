@@ -101,6 +101,43 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(TFreshOutputEstimate::CalculateChunks(0, 0, geometry), 0);
         }
 
+        // Every SST but the last holds more than capacity - footprint, and nothing better can be said of it
+        // however large the records get: that is the step, even for records past half an SST.
+        Y_UNIT_TEST(LargeRecordsBoundTheStep) {
+            TFreshOutputGeometry geometry = Geometry();
+            geometry.TotalPartCount = 1;
+            const ui32 maxInline = AlignDown<ui32>(ui32(SingleSstCapacity / 4 * 3 - RecordBytes - sizeof(TDiskPart)), 4);
+            const ui64 step = SingleSstCapacity - (RecordBytes + maxInline + sizeof(TDiskPart));
+            UNIT_ASSERT_VALUES_EQUAL(
+                TFreshOutputEstimate::CalculateChunks(SingleSstCapacity + 3 * step, maxInline, geometry), 4);
+            UNIT_ASSERT_VALUES_EQUAL(
+                TFreshOutputEstimate::CalculateChunks(SingleSstCapacity + 3 * step + 1, maxInline, geometry), 5);
+        }
+
+        // A record that might not fit an SST cannot be compacted, however many chunks there are.
+        Y_UNIT_TEST(RecordLargerThanSstCannotBeCompacted) {
+            TFreshOutputGeometry geometry = Geometry();
+            geometry.TotalPartCount = 1;
+            UNIT_ASSERT_VALUES_EQUAL(
+                TFreshOutputEstimate::CalculateChunks(SingleSstCapacity + 1, ui32(SingleSstCapacity), geometry), Max<ui32>());
+        }
+
+        // An operation's admission is taken back one record at a time, as its log records are replayed.
+        Y_UNIT_TEST(AdmissionIsTakenBackRecordByRecord) {
+            TFreshAdmission record;
+            record.LogoBlobs.AddInline(100);
+            TFreshAdmission admission;
+            for (ui32 i = 0; i < 3; ++i) {
+                admission.Merge(record);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(admission.LogoBlobs.GetRecords(), 3);
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT(!admission.Empty());
+                admission.Subtract(record);
+            }
+            UNIT_ASSERT(admission.Empty());
+        }
+
         Y_UNIT_TEST(MergeIsTheSumOfBoth) {
             TFreshOutputEstimate a, b;
             a.AddInline(100);

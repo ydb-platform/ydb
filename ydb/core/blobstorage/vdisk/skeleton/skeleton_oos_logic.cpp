@@ -198,6 +198,15 @@ namespace NKikimr {
 
     bool TOutOfSpaceLogic::AllowVPutLikeWrite(const TActorContext& /*ctx*/, bool ignoreBlock, bool isZeroEntry, ui32 size,
             NKikimrBlobStorage::TDataKind::E dataKind) const {
+        const bool system = dataKind == NKikimrBlobStorage::TDataKind::SYSTEM;
+        auto& oos = VCtx->GetOutOfSpaceState();
+        const ESpaceColor color = Max(oos.GetLocalColor(), oos.GetGlobalColor());
+        auto& stat = Stat->Lookup(system ? TStat::SystemPut : TStat::UserPut, color).HandleMsg(size);
+        return stat.Pass(WouldAllowVPutLikeWrite(ignoreBlock, isZeroEntry, dataKind));
+    }
+
+    bool TOutOfSpaceLogic::WouldAllowVPutLikeWrite(bool ignoreBlock, bool isZeroEntry,
+            NKikimrBlobStorage::TDataKind::E dataKind) const {
         // Restore-first reads and garbage collection zero entries: tiny writes a tablet cannot avoid
         // and the only way out of an out-of-space state, so they outlive the ordinary writes of the
         // same kind by one color.
@@ -205,12 +214,8 @@ namespace NKikimr {
         const bool system = dataKind == NKikimrBlobStorage::TDataKind::SYSTEM;
 
         auto& oos = VCtx->GetOutOfSpaceState();
-        const ESpaceColor local = oos.GetLocalColor();
-        const ESpaceColor global = oos.GetGlobalColor();
-
-        auto& stat = Stat->Lookup(system ? TStat::SystemPut : TStat::UserPut, Max(local, global)).HandleMsg(size);
-        return stat.Pass(AllowByLocalColor(local, system, unavoidable)
-                && AllowByGlobalColor(global, system, unavoidable));
+        return AllowByLocalColor(oos.GetLocalColor(), system, unavoidable)
+            && AllowByGlobalColor(oos.GetGlobalColor(), system, unavoidable);
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const {

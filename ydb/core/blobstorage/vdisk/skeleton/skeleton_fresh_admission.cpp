@@ -33,6 +33,10 @@ namespace NKikimr {
         if (const auto& refused = RefusedAtColor[housekeeping]; refused && refuseAtColor <= *refused) {
             return EDecision::Refused;
         }
+        if (shortfall.Total() > Max<ui32>()) {
+            // More than one reservation can ask for, and more than any disk has to give.
+            return EDecision::Refused;
+        }
 
         InFlight = TReservation{shortfall, refuseAtColor, housekeeping};
         YDB_LOG_DEBUG_CTX(ctx, "Reserving chunks for Fresh",
@@ -44,7 +48,7 @@ namespace NKikimr {
             {"housekeeping", housekeeping},
             {"marker", "BSVSFA01"});
         ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkReserve(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-            ui32(Min<ui64>(shortfall.Total(), Max<ui32>())), housekeeping, refuseAtColor));
+            ui32(shortfall.Total()), housekeeping, refuseAtColor));
         return EDecision::Wait;
     }
 
@@ -83,8 +87,13 @@ namespace NKikimr {
 
         if (msg->Status == NKikimrProto::OK) {
             Hull->AddFreshReservedChunks(reservation.Split, msg->ChunkIds);
-            RefusedAtColor[0].reset();
-            RefusedAtColor[1].reset();
+            // A grant tells nothing of the bounds stricter than its own: a batch refused at its strictest bound
+            // and admitted at the next is handled again without asking at the strictest one once more.
+            for (auto& refused : RefusedAtColor) {
+                if (refused && reservation.RefuseAtColor <= *refused) {
+                    refused.reset();
+                }
+            }
         } else {
             Y_VERIFY_S(msg->Status == NKikimrProto::OUT_OF_SPACE, VCtx->VDiskLogPrefix << msg->ToString());
             YDB_LOG_NOTICE_CTX(ctx, "PDisk declined to reserve chunks for Fresh",

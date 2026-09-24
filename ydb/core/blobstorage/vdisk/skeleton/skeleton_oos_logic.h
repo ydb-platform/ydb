@@ -24,6 +24,8 @@ namespace NKikimr {
         // TFreshAdmissionGate and the FreshRefuseAtColor*() bounds below.
         bool AllowVPutLikeWrite(const TActorContext& ctx, bool ignoreBlock, bool isZeroEntry, ui32 size,
             NKikimrBlobStorage::TDataKind::E dataKind) const;
+        // The same judgement, without counting the write in the statistics.
+        bool WouldAllowVPutLikeWrite(bool ignoreBlock, bool isZeroEntry, NKikimrBlobStorage::TDataKind::E dataKind) const;
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvLocalSyncData::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr &ev) const;

@@ -509,13 +509,43 @@ namespace NKikimr {
         // A write is admitted to Fresh only against chunks already reserved for
         // compacting it, see TFreshAdmissionGate.
         ////////////////////////////////////////////////////////////////////////
-        // What a put's blob costs in Fresh, which keeps it as a DiskBlob: header and part data.
-        ui64 FreshInlineBytes(ui64 partBytes) const {
-            return TDiskBlob::GetBlobHeaderSize(Config->BlobHeaderMode) + partBytes;
+        // What a put's record adds to Fresh, which keeps the blob as a DiskBlob: header and part data.
+        TFreshAdmission FreshAdmissionForPut(ui64 partBytes) const {
+            TFreshAdmission admission;
+            admission.LogoBlobs.AddInline(TDiskBlob::GetBlobHeaderSize(Config->BlobHeaderMode) + partBytes);
+            return admission;
         }
 
+        // What a block record adds to Fresh: its index entry.
+        static TFreshAdmission FreshAdmissionForBlock() {
+            TFreshAdmission admission;
+            admission.Blocks.AddIndexOnly();
+            return admission;
+        }
+
+        // Whether a put keeps its data out of Fresh. One that cannot even be classified is answered ERROR and
+        // writes nothing.
+        bool IsHugePut(const TLogoBlobID& id) const {
+            try {
+                return HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
+            } catch (const std::exception&) {
+                return true;
+            }
+        }
+
+        // All of the admission, for an operation that writes a single log record.
         TFreshAdmission TakePendingFreshAdmission() {
             return std::exchange(PendingFreshAdmission, {});
+        }
+
+        // The part of the admission one of the operation's log records carries: what replaying it adds to Fresh.
+        // Each record lands on its own, so the operation stays in flight until the last of them is in Fresh.
+        TFreshAdmission TakeFreshAdmission(const TFreshAdmission& record) {
+            if (!FreshGate) {
+                return {};
+            }
+            PendingFreshAdmission.Subtract(record);
+            return record;
         }
 
         // Whatever of the admission no log record took: the records it was charged for were never written.
@@ -618,10 +648,11 @@ namespace NKikimr {
             UpdatePDiskWriteBytes(dataToWrite.size());
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
+            const ui64 partBytes = buffer.GetSize();
             auto loggedRec = new typename TLoggedRecType<TEvResult>::T(seg, confirmSyncLogAlso, id, ingress,
                 std::move(buffer), info.Checksum, std::move(result), sender, cookie, std::move(info.TraceId), handleClass,
                 SelfVDiskId, Config, VCtx);
-            loggedRec->FreshAdmission = TakePendingFreshAdmission();
+            loggedRec->FreshAdmission = TakeFreshAdmission(FreshAdmissionForPut(partBytes));
             intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
@@ -740,27 +771,72 @@ namespace NKikimr {
             return status;
         }
 
-        void PrivateHandle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
-            if (FreshGate) {
-                // The batch is admitted as a whole, bounded by its most lenient item: a SYSTEM item must not be
-                // refused for sharing a batch with USER ones. Each item is still judged by the color the disk is
-                // in, below, so a USER item goes no further than it would on its own.
-                const auto& record = ev->Get()->Record;
+        // Admits the items of a batch to Fresh. Items may differ in the color they are refused at (see
+        // FreshRefuseAtColorForPut()), and none may take the disk further than it would on its own: the items are
+        // tried together at the strictest bound among them, and should that be refused, the items it binds are
+        // refused and the rest tried at the next bound. Returns false when the event has been parked; otherwise
+        // `refused` marks the items to answer OUT_OF_SPACE, and the others are charged in PendingFreshAdmission.
+        bool AdmitMultiPutToFresh(TEvBlobStorage::TEvVMultiPut::TPtr &ev, TBatchedVec<ui8>& refused,
+                const TActorContext &ctx) {
+            Y_VERIFY_DEBUG_S(PendingFreshAdmission.Empty(), VCtx->VDiskLogPrefix);
+            if (FreshGate->MustQueue()) {
+                FreshGate->Park(ev);
+                return false;
+            }
+
+            // The bound of each item that reaches Fresh. A huge item does not, and is refused as an error anyway.
+            // An item the disk's color refuses right now is not charged, and so stays refused even should the
+            // color change before it is judged again.
+            const auto& record = ev->Get()->Record;
+            TBatchedVec<std::optional<ESpaceColor>> bounds(record.ItemsSize());
+            for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
+                const auto& item = record.GetItems(itemIdx);
+                const bool ignoreBlock = record.GetIgnoreBlock() || item.GetIgnoreBlock();
+                if (IsHugePut(LogoBlobIDFromLogoBlobID(item.GetBlobID()))) {
+                    continue;
+                } else if (OutOfSpaceLogic->WouldAllowVPutLikeWrite(ignoreBlock, item.GetIsZeroEntry(),
+                        item.GetDataKind())) {
+                    bounds[itemIdx] = TOutOfSpaceLogic::FreshRefuseAtColorForPut(item.GetDataKind(),
+                        ignoreBlock || item.GetIsZeroEntry());
+                } else {
+                    refused[itemIdx] = true;
+                }
+            }
+
+            for (;;) {
                 TFreshAdmission admission;
-                ESpaceColor refuseAtColor = TSpaceColor::GREEN;
+                std::optional<ESpaceColor> bound;
                 for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
-                    const auto& item = record.GetItems(itemIdx);
-                    admission.LogoBlobs.AddInline(FreshInlineBytes(ev->Get()->GetItemBuffer(itemIdx).size()));
-                    const bool unavoidable = record.GetIgnoreBlock() || item.GetIgnoreBlock() || item.GetIsZeroEntry();
-                    refuseAtColor = Max(refuseAtColor, TOutOfSpaceLogic::FreshRefuseAtColorForPut(item.GetDataKind(),
-                        unavoidable));
+                    if (bounds[itemIdx] && !refused[itemIdx]) {
+                        admission.Merge(FreshAdmissionForPut(ev->Get()->GetItemBuffer(itemIdx).size()));
+                        bound = bound ? Min(*bound, *bounds[itemIdx]) : *bounds[itemIdx];
+                    }
                 }
-                auto refuse = [&] {
-                    ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, TAppData::TimeProvider->Now());
-                };
-                if (!AdmitToFresh(ev, std::move(admission), refuseAtColor, false, ctx, refuse)) {
-                    return;
+                if (!bound) {
+                    return true; // nothing left to charge
                 }
+                switch (FreshGate->Decide(admission, *bound, false, ctx)) {
+                    case TFreshAdmissionGate::EDecision::Admitted:
+                        PendingFreshAdmission = std::move(admission);
+                        return true;
+                    case TFreshAdmissionGate::EDecision::Wait:
+                        FreshGate->Park(ev);
+                        return false;
+                    case TFreshAdmissionGate::EDecision::Refused:
+                        for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
+                            if (bounds[itemIdx] == bound) {
+                                refused[itemIdx] = true;
+                            }
+                        }
+                        break;
+                }
+            }
+        }
+
+        void PrivateHandle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
+            TBatchedVec<ui8> freshRefused(ev->Get()->Record.ItemsSize());
+            if (FreshGate && !AdmitMultiPutToFresh(ev, freshRefused, ctx)) {
+                return;
             }
             Y_SCOPE_EXIT(&) { LandPendingFreshAdmission(ctx); };
 
@@ -811,7 +887,7 @@ namespace NKikimr {
                 const bool isZeroEntry = item.GetIsZeroEntry();
 
                 if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size(),
-                        item.GetDataKind())) {
+                        item.GetDataKind()) || freshRefused[itemIdx]) {
                     info.HullStatus = {NKikimrProto::OUT_OF_SPACE, "out of space", false};
                     continue;
                 }
@@ -961,15 +1037,19 @@ namespace NKikimr {
             // once the data is written and the record is about to be logged.
             const ESpaceColor freshRefuseAtColor = TOutOfSpaceLogic::FreshRefuseAtColorForPut(
                 ev->Get()->Record.GetDataKind(), ev->Get()->Record.GetIgnoreBlock() || ev->Get()->Record.GetIsZeroEntry());
+            // A put the disk's color refuses right now is charged nothing, and so stays refused below even should the
+            // color change in between.
+            bool freshRefused = false;
             if (FreshGate) {
+                const auto& record = ev->Get()->Record;
                 TFreshAdmission admission;
-                const TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID());
-                bool huge = true; // should this throw, the handling below answers ERROR and writes nothing
-                try {
-                    huge = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
-                } catch (const std::exception&) {}
-                if (!huge) {
-                    admission.LogoBlobs.AddInline(FreshInlineBytes(ev->Get()->GetBufferBytes()));
+                if (IsHugePut(LogoBlobIDFromLogoBlobID(record.GetBlobID()))) {
+                    // admitted once its data is written, as said above
+                } else if (OutOfSpaceLogic->WouldAllowVPutLikeWrite(record.GetIgnoreBlock(), record.GetIsZeroEntry(),
+                        record.GetDataKind())) {
+                    admission = FreshAdmissionForPut(ev->Get()->GetBufferBytes());
+                } else {
+                    freshRefused = true;
                 }
                 auto refuse = [&] {
                     ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space", 0, false}, ev, ctx,
@@ -1008,7 +1088,7 @@ namespace NKikimr {
 
             const bool ignoreBlock = record.GetIgnoreBlock();
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
+            if (!OutOfSpaceLogic->Allow(ctx, ev) || freshRefused) {
                 ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space", 0, false}, ev, ctx, now);
                 return;
             }
@@ -1448,7 +1528,7 @@ namespace NKikimr {
                     record.GetVersion(), 0);
                 auto *versionLoggedRec = new TLoggedRecVBlock(vSeg, true, ~tabletId, record.GetVersion(), 0, nullptr,
                     TActorId(), 0);
-                versionLoggedRec->FreshAdmission = TakePendingFreshAdmission();
+                versionLoggedRec->FreshAdmission = TakeFreshAdmission(FreshAdmissionForBlock());
                 intptr_t versionLoggedRecId = LoggedRecsVault.Put(versionLoggedRec);
                 versionLogMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
                     versionRecord.SerializeAsString(), vSeg, reinterpret_cast<void *>(versionLoggedRecId),
@@ -1463,7 +1543,7 @@ namespace NKikimr {
 
             auto *loggedRec = new TLoggedRecVBlock(seg, true, tabletId, gen, issuerGuid, std::move(result), ev->Sender,
                 ev->Cookie);
-            loggedRec->FreshAdmission = TakePendingFreshAdmission(); // nothing left if the version record took it
+            loggedRec->FreshAdmission = TakeFreshAdmission(FreshAdmissionForBlock());
             intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
 
@@ -3721,7 +3801,7 @@ namespace NKikimr {
         std::shared_ptr<TOutOfSpaceLogic> OutOfSpaceLogic;
         // Set when EnableVDiskFreshSpaceProjection is; without it Fresh space is not managed at all.
         std::unique_ptr<TFreshAdmissionGate> FreshGate;
-        // The admission of the operation being handled, until its first log record takes it.
+        // The admission of the operation being handled, less what its log records have taken so far.
         TFreshAdmission PendingFreshAdmission;
         std::shared_ptr<TQueryCtx> QueryCtx;
         TIntrusivePtr<TVPatchCtx> VPatchCtx;

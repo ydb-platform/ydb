@@ -1799,7 +1799,6 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->Format = NLog::TSettings::PLAIN_SHORT_FORMAT;
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
-        NKikimr::NStLog::OutputLogJson = true;
     } else {
         Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }

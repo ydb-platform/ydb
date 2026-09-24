@@ -6,7 +6,7 @@ It's very useful to to analyze execution plans for queries in order to detect an
 
 You can get the logical plan via {{ ydb-short-name }} [CLI](../../reference/ydb-cli/commands/explain-plan.md).
 
-This plan allows you to compare the query optimizer's predictions with the execution statistics. If the predictions differ significantly from the actual data at the execution stage, this may indicate that the optimizer has not built the most efficient plan for the current query. In this case, you can use [optimizer hints](query-hints.md) to create a more efficient plan.
+This plan allows you to compare the query optimizer's predictions with the execution statistics. If the predictions differ significantly from the actual data at the execution stage, this may indicate that the optimizer has not built the most efficient plan for the current query. In this case, you can use [optimizer hints](../optimization/hints.md) to create a more efficient plan.
 
 ## Query Execution Plan
 

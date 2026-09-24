@@ -176,19 +176,25 @@ __attribute__((visibility("default"))) void line_break(
     *result = MakeSplitSuccess(records);
 }
 
-//! LogParsing::Protoseq(chunk: String?) -> SplitResult
+//! LogParsing::Protoseq(chunk: String?, syncWord: String?) -> SplitResult
 __attribute__((visibility("default"))) void protoseq(
     TExpressionContext* /*ctx*/,
     uint64_t* result,
-    uint64_t arg0)
+    uint64_t arg0,
+    uint64_t arg1)
 {
     TStringBuf chunk;
     if (!TryReadString(arg0, &chunk)) {
         *result = MakeSplitError("no raw chunk", /*hasRaw*/ false, {});
         return;
     }
+    TStringBuf syncWord;
+    if (!TryReadString(arg1, &syncWord) || syncWord.empty()) {
+        *result = MakeSplitError("no syncword", /*hasRaw*/ true, chunk);
+        return;
+    }
     TVector<TStringBuf> frames;
-    if (!NLogParsing::SplitProtoseq(chunk, &frames)) {
+    if (!NLogParsing::TProtoseqSplitter(syncWord).Split(chunk, &frames)) {
         *result = MakeSplitError("cannot split", /*hasRaw*/ true, chunk);
         return;
     }

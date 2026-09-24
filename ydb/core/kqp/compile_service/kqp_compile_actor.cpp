@@ -111,6 +111,10 @@ public:
         }
 
         config->ApplyServiceConfig(tableServiceConfig);
+        config->FeatureFlags = AppData()->FeatureFlags;
+        config->IncrementTranslationCounter = [counters = Counters, dbCounters = DbCounters](const TString& group, const TString& name) {
+            counters->ReportTranslationCounter(dbCounters, group, name);
+        };
 
         // ANALYZE scans use UDAF factories unsupported by new RBO. Select the
         // YQL optimizer on their first attempt, as well as on fallback retries.
@@ -376,8 +380,6 @@ private:
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
-        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
-
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
             false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
@@ -467,6 +469,9 @@ private:
 
     void Reply() {
         Y_ENSURE(KqpCompileResult);
+        KqpCompileResult->EnableTablePathPrefixRelativePaths = KqpCompileResult->QueryAst
+            ? KqpCompileResult->QueryAst->EnableTablePathPrefixRelativePaths
+            : Config->FeatureFlags.GetEnableTablePathPrefixRelativePaths();
         YDB_LOG_DEBUG("Send response",
             {"self", SelfId()},
             {"owner", Owner},

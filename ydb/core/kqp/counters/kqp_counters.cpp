@@ -84,6 +84,7 @@ void TKqpCountersBase::Init() {
 
     SqlV1Translations = KqpGroup->GetCounter("Requests/Sql/V1", true);
     SqlUnknownTranslations = KqpGroup->GetCounter("Requests/Sql/Unknown", true);
+    TablePathPrefixNonAbsolutePath = KqpGroup->GetCounter("TablePathPrefix/NonAbsolutePath", true);
 
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED] =
         KqpGroup->GetCounter("Request/QueryTypeUndefined", true);
@@ -1147,6 +1148,15 @@ void TKqpCounters::ReportLeaseUpdateLatency(const TDuration& duration) {
 
 void TKqpCounters::ReportRunActorLeaseUpdateBacklog(const TDuration& duration) {
     RunActorLeaseUpdateBacklog->Collect(duration.MilliSeconds());
+}
+
+void TKqpCounters::ReportTranslationCounter(TKqpDbCountersPtr dbCounters, const TString& group, const TString& name) {
+    if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
+        TablePathPrefixNonAbsolutePath->Inc();
+        if (dbCounters) {
+            dbCounters->TablePathPrefixNonAbsolutePath->Inc();
+        }
+    }
 }
 
 void TKqpCounters::ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion) {

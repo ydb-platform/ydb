@@ -130,6 +130,7 @@ protected:
 
     ::NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
     ::NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TablePathPrefixNonAbsolutePath;
 
     THashMap<NKikimrKqp::EQueryType, ::NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes;
@@ -301,6 +302,7 @@ public:
     void ReportQueryLatency(TKqpDbCountersPtr dbCounters,
         NKikimrKqp::EQueryAction action, const TDuration& duration);
     void ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion);
+    void ReportTranslationCounter(TKqpDbCountersPtr dbCounters, const TString& group, const TString& name);
     void ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTransactionInfo& txInfo);
 
     void ReportLeaseUpdateLatency(const TDuration& duration);

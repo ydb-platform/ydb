@@ -126,6 +126,9 @@ public:
         }
 
         Config->ApplyServiceConfig(Settings.TableService);
+        Config->IncrementTranslationCounter = [counters = Counters, dbCounters = Settings.DbCounters](const TString& group, const TString& name) {
+            counters->ReportTranslationCounter(dbCounters, group, name);
+        };
 
         Config->FreezeDefaults();
 

@@ -90,6 +90,7 @@ struct TTranslationSettings {
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::None;
     THashMap<TString, TString> ClusterMapping;
     TString PathPrefix;
+    bool EnableTablePathPrefixRelativePaths = false;
     // keys (cluster name) should be normalized
     THashMap<TString, TString> ClusterPathPrefixes;
     THashMap<TString, TString> ModuleMapping;

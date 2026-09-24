@@ -121,6 +121,14 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
+    if (Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')) {
+        for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
+            if (!prefix.empty()) {
+                prefix = BuildTablePath(Settings.PathPrefix, prefix);
+            }
+        }
+    }
+
     if (IsAvailable(NYql::NFeature::GroupByExprAfterWhere)) {
         GroupByExprAfterWhere = true;
     }
@@ -392,10 +400,15 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
+    if (!value.StartsWith('/')) {
+        IncrementMonCounter("TablePathPrefix", "NonAbsolutePath");
+    }
+    const auto prefix = Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/') &&
+        (!value.empty() || !arg.Defined()) ? BuildTablePath(Settings.PathPrefix, value) : value;
     if (arg.Defined()) {
         if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
-            ProviderPathPrefixes_[*arg] = value;
+            ProviderPathPrefixes_[*arg] = prefix;
             return true;
         }
 
@@ -406,9 +419,9 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             return false;
         }
 
-        ClusterPathPrefixes_[normalizedClusterName] = value;
+        ClusterPathPrefixes_[normalizedClusterName] = prefix;
     } else {
-        PathPrefix_ = value;
+        PathPrefix_ = prefix;
     }
 
     return true;

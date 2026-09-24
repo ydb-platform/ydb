@@ -5,10 +5,13 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -50,6 +53,177 @@ static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
+    Y_UNIT_TEST_TWIN(TablePathPrefixRelativeToDatabase, QueryService) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schemeClient = kikimr.GetSchemeClient();
+        auto mkdirResult = schemeClient.MakeDirectory("/Root/folder").ExtractValueSync();
+        UNIT_ASSERT_C(mkdirResult.IsSuccess(), mkdirResult.GetIssues().ToString());
+
+        auto createResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/users` (id Uint64 NOT NULL, PRIMARY KEY (id));
+            CREATE TABLE `/Root/folder/users` (id Uint64 NOT NULL, PRIMARY KEY (id));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        auto writeResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/users` (id) VALUES (99u);
+            UPSERT INTO `/Root/folder/users` (id) VALUES (42u);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+        const auto check = [&](const TString& query, const TString& expected) {
+            if constexpr (QueryService) {
+                auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        };
+        for (const TString& prefix : {TString("folder"), TString("./folder"), TString("folder/child/.."), TString("/Root/folder")}) {
+            check(TStringBuilder() << "PRAGMA TablePathPrefix = '" << prefix << "'; SELECT id FROM users;", "[[42u]]");
+            check(TStringBuilder() << "PRAGMA TablePathPrefix = '" << prefix << "'; SELECT id FROM `/Root/users`;", "[[99u]]");
+        }
+        check("PRAGMA TablePathPrefix = './folder'; SELECT id FROM `../users`;", "[[99u]]");
+        check("PRAGMA TablePathPrefix = '.'; SELECT id FROM users;", "[[99u]]");
+        check("PRAGMA TablePathPrefix = ''; SELECT id FROM users;", "[[99u]]");
+        check("PRAGMA TablePathPrefix = 'unused'; PRAGMA TablePathPrefix = 'folder'; SELECT id FROM users;", "[[42u]]");
+        check("SELECT id FROM users;", "[[99u]]");
+    }
+
+    Y_UNIT_TEST_TWIN(TablePathPrefixRelativeToDatabaseTopicDdl, QueryService) {
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.AddClientServiceType()->SetName("data-streams");
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetPQConfig(pqConfig));
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto topicClient = NYdb::NTopic::TTopicClient(kikimr.GetDriver(), NYdb::NTopic::TTopicClientSettings().Database("/Root"));
+        auto schemeClient = kikimr.GetSchemeClient();
+        const auto mkdirResult = schemeClient.MakeDirectory("/Root/folder").ExtractValueSync();
+        UNIT_ASSERT_C(mkdirResult.IsSuccess(), mkdirResult.GetIssues().ToString());
+
+        const auto execute = [&](const TString& query) -> TStatus {
+            if constexpr (QueryService) {
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+        for (const TString& pragma : {
+            TString("PRAGMA TablePathPrefix = 'folder';"),
+            TString("PRAGMA TablePathPrefix = './folder';"),
+            TString("PRAGMA TablePathPrefix('db', 'folder');"),
+            TString("PRAGMA TablePathPrefix('db', './folder');"),
+        }) {
+            const auto createResult = execute(pragma + "CREATE TOPIC events WITH (retention_period = Interval('PT2H'));");
+            UNIT_ASSERT_C(createResult.IsSuccess(), pragma << ": " << createResult.GetIssues().ToString());
+            const auto created = topicClient.DescribeTopic("/Root/folder/events").ExtractValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), pragma << ": " << created.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(created.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(2));
+
+            const auto alterResult = execute(pragma + "ALTER TOPIC events SET (retention_period = Interval('PT3H'));");
+            UNIT_ASSERT_C(alterResult.IsSuccess(), pragma << ": " << alterResult.GetIssues().ToString());
+            const auto altered = topicClient.DescribeTopic("/Root/folder/events").ExtractValueSync();
+            UNIT_ASSERT_C(altered.IsSuccess(), pragma << ": " << altered.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(altered.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(3));
+
+            const auto dropResult = execute(pragma + "DROP TOPIC events;");
+            UNIT_ASSERT_C(dropResult.IsSuccess(), pragma << ": " << dropResult.GetIssues().ToString());
+            const auto directory = schemeClient.ListDirectory("/Root/folder").ExtractValueSync();
+            UNIT_ASSERT_C(directory.IsSuccess(), pragma << ": " << directory.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(directory.GetChildren().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(TablePathPrefixRelativePathsConfigAndDiagnostics) {
+        UNIT_ASSERT(NKikimrConfig::TFeatureFlags().GetEnableTablePathPrefixRelativePaths());
+        for (bool enabled : {false, true}) {
+            for (bool split : {false, true}) {
+                auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
+                auto databaseGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+                auto databaseCounters = MakeIntrusive<TKqpDbCounters>(
+                    MakeIntrusive<::NMonitoring::TDynamicCounters>(), databaseGroup);
+                NYql::TKikimrConfiguration config;
+                config.FeatureFlags.SetEnableTablePathPrefixRelativePaths(enabled);
+                config.IncrementTranslationCounter = [counters, databaseCounters](const TString& group, const TString& name) {
+                    counters->ReportTranslationCounter(databaseCounters, group, name);
+                };
+                const TString query = R"(
+                    PRAGMA TablePathPrefix = 'folder1';
+                    SELECT * FROM users;
+                    PRAGMA TablePathPrefix = './folder2';
+                    SELECT * FROM users;
+                )";
+                TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
+                    config.GetYqlBindingsMode(), nullptr);
+                builder.SetFromConfig(config).SetKqpTablePathPrefix("/Root/database");
+                const auto statements = ParseStatements(query, {}, true, builder, split);
+                UNIT_ASSERT_VALUES_EQUAL(statements.size(), split ? 2 : 1);
+                for (const auto& statement : statements) {
+                    UNIT_ASSERT_C(statement.Ast->IsOk(), statement.Ast->Issues.ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(statement.EnableTablePathPrefixRelativePaths, enabled);
+                }
+                // Replayed pragmas during statement splitting count once per SQL parse.
+                const auto counter = databaseGroup->GetCounter("TablePathPrefix/NonAbsolutePath", true);
+                UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+                const TString absoluteQuery = R"(
+                    PRAGMA TablePathPrefix = '/Root/folder';
+                    SELECT * FROM users;
+                )";
+                const auto absolute = ParseStatements(absoluteQuery, {}, true, builder, split);
+                UNIT_ASSERT_VALUES_EQUAL(absolute.size(), 1);
+                UNIT_ASSERT_C(absolute.front().Ast->IsOk(), absolute.front().Ast->Issues.ToString());
+                UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+                // Per-database diagnostics survive the sysview aggregation transport.
+                NSysView::TDbServiceCounters serialized;
+                databaseCounters->ToProto(serialized);
+                auto restoredGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+                TKqpDbCounters restored(MakeIntrusive<::NMonitoring::TDynamicCounters>(), restoredGroup);
+                restored.FromProto(serialized);
+                UNIT_ASSERT_VALUES_EQUAL(restoredGroup->GetCounter("TablePathPrefix/NonAbsolutePath", true)->Val(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TablePathPrefixRelativePathsDisabled, QueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTablePathPrefixRelativePaths(false);
+        TKikimrRunner kikimr(settings);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/users` (id Uint64 NOT NULL, PRIMARY KEY (id));").ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto check = [&](const TString& query, bool success) {
+            const auto result = [&]() -> NYdb::TStatus {
+                if constexpr (QueryService) {
+                    return kikimr.GetQueryClient().ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                } else {
+                    return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                }
+            }();
+            if (success) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            }
+        };
+        check("PRAGMA TablePathPrefix = '.'; SELECT * FROM users;", false);
+        check("PRAGMA TablePathPrefix = '/Root'; SELECT * FROM users;", true);
+        check("PRAGMA TablePathPrefix = 'folder'; SELECT * FROM `/Root/users`;", true);
+    }
+
     Y_UNIT_TEST(PreparedQueryInvalidate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

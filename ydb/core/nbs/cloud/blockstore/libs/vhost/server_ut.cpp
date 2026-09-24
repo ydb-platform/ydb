@@ -1090,12 +1090,29 @@ Y_UNIT_TEST_SUITE(TServerTest)
             sgList);
 
         {
-            auto future = server->StopEndpoint(unixSocketPath);
+            // Stop waits for ProcessRequest to return. The handler above
+            // stays there until stopEndpointEvent, so StopEndpoint runs on
+            // another thread and this thread releases it.
+            NProto::TError stopError;
+            bool stopThrew = false;
+            TManualEvent stopDone;
+            SystemThreadFactory()->Run(
+                [&]()
+                {
+                    try {
+                        auto future = server->StopEndpoint(unixSocketPath);
+                        stopError = future.GetValue(TDuration::Seconds(5));
+                    } catch (...) {
+                        stopThrew = true;
+                    }
+                    stopDone.Signal();
+                });
 
             stopEndpointEvent.Signal();
 
-            auto response = future.GetValue(TDuration::Seconds(5));
-            UNIT_ASSERT(!HasError(response));
+            UNIT_ASSERT(stopDone.WaitT(TDuration::Seconds(5)));
+            UNIT_ASSERT(!stopThrew);
+            UNIT_ASSERT(!HasError(stopError));
         }
 
         future1.GetValue(TDuration::Seconds(5));

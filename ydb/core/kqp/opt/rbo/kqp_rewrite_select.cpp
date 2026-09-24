@@ -1556,7 +1556,7 @@ bool IsAsTable(const TExprNode::TPtr input) {
 }
 
 TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
 
     auto sublinks = FindSublinks(node);
     YQL_CLOG(TRACE, ProviderKikimr) << "Sublinks size: " << sublinks.size();
@@ -1571,7 +1571,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newNode;
 
-        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
         auto sublinkType = sublink->Child(0)->Content();
 
         if (sublinkType == "expr") {
@@ -1733,19 +1733,20 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
+                              bool generateRoot) {
 
     if(translated.contains(input.Get())) {
         return translated.at(input.Get());
     }
     TVector<TString> finalColumnOrder;
-    // Start from beggining for each proccesed select;
-    ui64 uniqueAggColumnId = 0;
+    // Generated column names must be unique across the whole query.
+    ui64& uniqueAggColumnId = uniqueColumnIdCounter;
 
     TExprNode::TPtr node = input;
 
     if (generateRoot) {
-        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated);
+        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated);
     }
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
@@ -1801,7 +1802,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     if (translated.contains(childExpr.Get())) {
                         subquery = translated.at(childExpr.Get());
                     } else {
-                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
                     }
 
                     // We need to rename all the IUs in the subquery to reflect the new alias

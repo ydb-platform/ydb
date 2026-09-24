@@ -50,15 +50,16 @@ namespace NYdb::inline Dev::NTopic {
 
                 // Cleanup marks the first message abandoned while the task is pending.
                 queue.Cleanup(actions);
-            } // Runs the actual decompression task and releases its 30 bytes.
+            } // The task releases all 30 bytes claimed by cleanup.
 
-            UNIT_ASSERT(second.IsReady());
+            // The other message belongs to the same task and must not become deliverable.
+            UNIT_ASSERT(!second.IsReady());
             queue.emplace_back(std::move(second));
             {
                 TDeferredActions<false> actions;
-                // Cleanup sees the second message as ready and releases its bytes again.
+                // Cleaning up the other message must not release its 20 bytes again.
                 queue.Cleanup(actions);
-            } // OnUserRetrievedEvent must abort because the 30-byte budget is already zero.
+            }
         }
     } // Y_UNIT_TEST_SUITE(TReadSessionDecompressionAccounting)
 

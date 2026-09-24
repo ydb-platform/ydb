@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/library/erasure/codec_params.h>
+
 #include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/ref.h>
 
@@ -46,6 +48,11 @@ struct ICodec
      *  (in this very order). Not all known blocks may be needed for repair.
      */
     virtual std::optional<TPartIndexList> GetRepairIndices(const TPartIndexList& erasedIndices) const = 0;
+
+    //! Returns the codec's static properties.
+    virtual const TCodecParams& GetParams() const = 0;
+
+    // TODO(babenko): drop the per-property getters below in favor of #GetParams.
 
     //! Returns the number of data blocks this codec can handle.
     virtual int GetDataPartCount() const = 0;

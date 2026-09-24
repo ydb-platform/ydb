@@ -17,15 +17,24 @@ ICodec* FindCodec(ECodec codecId)
     switch (codecId) {
         // These codecs use ISA-l as a backend.
         case ECodec::ReedSolomon_3_3: {
-            static NDetail::TCodec<TReedSolomonIsa<3, 3, 8, NDetail::TCodecTraits>> result(ECodec::ReedSolomon_3_3, /*bytewise*/ true);
+            static NDetail::TCodec<
+                TReedSolomonIsa<3, 3, 8, NDetail::TCodecTraits>,
+                ECodec::ReedSolomon_3_3,
+                /*bytewise*/ true> result;
             return &result;
         }
         case ECodec::IsaReedSolomon_6_3: {
-            static NDetail::TCodec<TReedSolomonIsa<6, 3, 8, NDetail::TCodecTraits>> result(ECodec::IsaReedSolomon_6_3, /*bytewise*/ true);
+            static NDetail::TCodec<
+                TReedSolomonIsa<6, 3, 8, NDetail::TCodecTraits>,
+                ECodec::IsaReedSolomon_6_3,
+                /*bytewise*/ true> result;
             return &result;
         }
         case ECodec::IsaLrc_12_2_2: {
-            static NDetail::TCodec<TLrcIsa<12, 4, 8, NDetail::TCodecTraits>> result(ECodec::IsaLrc_12_2_2, /*bytewise*/ true);
+            static NDetail::TCodec<
+                TLrcIsa<12, 4, 8, NDetail::TCodecTraits>,
+                ECodec::IsaLrc_12_2_2,
+                /*bytewise*/ true> result;
             return &result;
         }
 

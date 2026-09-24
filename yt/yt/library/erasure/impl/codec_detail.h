@@ -21,80 +21,45 @@ struct TCodecTraits
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TUnderlying>
+template <class TUnderlying, ECodec Id, bool Bytewise>
 class TCodec
     : public ICodec
 {
 public:
-    TCodec(ECodec id, bool bytewise)
-        : Id_(id)
-        , Bytewise_(bytewise)
-    { }
+    TCodec();
 
-    ECodec GetId() const override
-    {
-        return Id_;
-    }
+    const TCodecParams& GetParams() const override;
 
-    std::vector<TSharedRef> Encode(const std::vector<TSharedRef>& blocks) const override
-    {
-        return Underlying_.Encode(blocks);
-    }
-
+    std::vector<TSharedRef> Encode(const std::vector<TSharedRef>& blocks) const override;
     std::vector<TSharedRef> Decode(
         const std::vector<TSharedRef>& blocks,
-        const TPartIndexList& erasedIndices) const override
-    {
-        return Underlying_.Decode(blocks, erasedIndices);
-    }
+        const TPartIndexList& erasedIndices) const override;
 
-    bool CanRepair(const TPartIndexList& erasedIndices) const override
-    {
-        return Underlying_.CanRepair(erasedIndices);
-    }
+    bool CanRepair(const TPartIndexList& erasedIndices) const override;
+    bool CanRepair(const TPartIndexSet& erasedIndices) const override;
 
-    bool CanRepair(const TPartIndexSet& erasedIndices) const override
-    {
-        return Underlying_.CanRepair(erasedIndices);
-    }
+    std::optional<TPartIndexList> GetRepairIndices(const TPartIndexList& erasedIndices) const override;
 
-    std::optional<TPartIndexList> GetRepairIndices(const TPartIndexList& erasedIndices) const override
-    {
-        return Underlying_.GetRepairIndices(erasedIndices);
-    }
-
-    int GetDataPartCount() const override
-    {
-        return Underlying_.GetDataPartCount();
-    }
-
-    int GetParityPartCount() const override
-    {
-        return Underlying_.GetParityPartCount();
-    }
-
-    int GetGuaranteedRepairablePartCount() const override
-    {
-        return Underlying_.GetGuaranteedRepairablePartCount();
-    }
-
-    int GetWordSize() const override
-    {
-        return Underlying_.GetWordSize();
-    }
-
-    bool IsBytewise() const override
-    {
-        return Bytewise_;
-    }
+    ECodec GetId() const override;
+    int GetDataPartCount() const override;
+    int GetParityPartCount() const override;
+    int GetGuaranteedRepairablePartCount() const override;
+    int GetWordSize() const override;
+    bool IsBytewise() const override;
 
 private:
-    const ECodec Id_;
-    const bool Bytewise_;
-
+    //! Declared before #Params_, which is initialized from it.
     TUnderlying Underlying_;
+
+    const TCodecParams Params_;
+
+    static TCodecParams BuildParams(const TUnderlying& underlying);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NErasure::NDetail
+
+#define CODEC_DETAIL_INL_H_
+#include "codec_detail-inl.h"
+#undef CODEC_DETAIL_INL_H_

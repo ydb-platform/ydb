@@ -10,7 +10,7 @@ namespace NYT::NErasure {
 
 int ICodec::GetTotalPartCount() const
 {
-    return GetDataPartCount() + GetParityPartCount();
+    return GetParams().TotalPartCount;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

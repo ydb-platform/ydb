@@ -25,8 +25,8 @@ void TRecordBatchBuilder::SkipRecord(const TBatchIterator& /*cursor*/) {
 void TRecordBatchBuilder::AddRecord(const TCursor& position) {
     //    AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
     //    YDB_LOG_TRACE("",
-              {"event", "record_add_on_read"},
-              {"record", position.DebugJson()});
+    //          {"event", "record_add_on_read"},
+    //          {"record", position.DebugJson()});
     position.AppendPositionTo(Builders, MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }
@@ -35,8 +35,8 @@ void TRecordBatchBuilder::AddRecord(const TRWSortableBatchPosition& position) {
     AFL_VERIFY_DEBUG(position.GetData().GetColumns().size() == Builders.size());
     AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
     //    YDB_LOG_TRACE("",
-              {"event", "record_add_on_read"},
-              {"record", position.DebugJson()});
+    //          {"event", "record_add_on_read"},
+    //          {"record", position.DebugJson()});
     position.GetData().AppendPositionTo(Builders, position.GetPosition(), MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }

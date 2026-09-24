@@ -2465,7 +2465,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST_TWIN(QuerySessionsRuntimeStats, Enabled) {
         NKqp::TKikimrSettings settings = NKqp::TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(Enabled);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(Enabled);
         NKqp::TKikimrRunner kikimr(settings);
         constexpr ui32 totalRows = 2000;
         kikimr.RunCall([&] { NKqp::CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });

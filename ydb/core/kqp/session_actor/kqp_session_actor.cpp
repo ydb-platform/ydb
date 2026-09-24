@@ -2462,6 +2462,8 @@ public:
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
             YQL_ENSURE(!ExecuterId);
+        } else {
+            FinishCurrentExecutionStats();
         }
         ExecuterId = exId;
     }
@@ -2549,14 +2551,17 @@ public:
         }
     }
 
-    void UpdateCurrentQueryStats(const TCurrentExecStatsReport& report) {
-        if (!QueryState->CurrentQueryStats.Update(QueryState->CurrentExecutionStats, report)) {
-            return;
-        }
+    void MarkCurrentQueryStatsUpdated() {
         QueryState->CurrentQueryStatsWindow.MarkUpdated();
         if (!QueryState->CurrentQueryStatsPublishScheduled) {
             QueryState->CurrentQueryStatsPublishScheduled = true;
             Schedule(QueryState->CurrentQueryStatsInterval, new TEvents::TEvWakeup(QueryState->QueryId));
+        }
+    }
+
+    void UpdateCurrentQueryStats(const TCurrentExecStatsReport& report) {
+        if (QueryState->CurrentQueryStats.Update(QueryState->CurrentExecutionStats, report)) {
+            MarkCurrentQueryStatsUpdated();
         }
     }
 
@@ -2577,11 +2582,17 @@ public:
         }
     }
 
+    void FinishCurrentExecutionStats() {
+        if (QueryState->CurrentQueryStats.Finish(QueryState->CurrentExecutionStats)) {
+            MarkCurrentQueryStatsUpdated();
+        }
+    }
+
     void FinishCurrentExecutionStats(const TEvKqpExecuter::TEvTxResponse& response) {
         if (response.CurrentExecutionStats) {
             UpdateCurrentQueryStats(*response.CurrentExecutionStats);
         }
-        QueryState->CurrentQueryStats.Finish(QueryState->CurrentExecutionStats);
+        FinishCurrentExecutionStats();
     }
 
     void HandleExecute(TEvKqpExecuter::TEvCurrentExecutionStats::TPtr& ev) {
@@ -4022,7 +4033,7 @@ public:
         FillTxInfo(response);
         FillPoolId(response);
 
-        QueryState->CurrentQueryStats.Finish(QueryState->CurrentExecutionStats);
+        FinishCurrentExecutionStats();
         ExecuterId = TActorId{};
         Cleanup(IsFatalError(ydbStatus));
     }

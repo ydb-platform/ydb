@@ -32,6 +32,7 @@ namespace NKikimr::NSharedCache {
         EvRequest,
         EvResult,
         EvUpdated,
+        EvStickyCollectionPages,
 
         EvEnd
 
@@ -71,12 +72,27 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
+        // One B-tree: index pages belong to IndexCollectionId, leaves to DataCollectionId.
+        struct TBtreeSeed {
+            TLogoBlobID IndexCollectionId;
+            TLogoBlobID DataCollectionId;
+            NTable::NPage::TPageLocation Root;
+            ui32 LevelCount = 0;
+            bool QueueLeaves = true;
+            bool Sticky = false;
+            bool IndexCollectionSticky = false;
+        };
+
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         ECacheMode CacheMode;
+        // Authoritative for the sender: an empty vector withdraws that owner's walks.
+        TVector<TBtreeSeed> BtreeSeeds;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode,
+                TVector<TBtreeSeed> btreeSeeds = {})
             : PageCollection(std::move(pageCollection))
             , CacheMode(cacheMode)
+            , BtreeSeeds(std::move(btreeSeeds))
         {
         }
     };
@@ -157,6 +173,17 @@ namespace NKikimr::NSharedCache {
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
         THashMap<TLogoBlobID, THashSet<TPageOffset>> DroppedPages;
+    };
+
+    // The pages of a sticky collection, for the owner to fetch and keep.
+    struct TEvStickyCollectionPages : public TEventLocal<TEvStickyCollectionPages, EvStickyCollectionPages> {
+        TEvStickyCollectionPages(TLogoBlobID collectionId, TVector<TPageLocation> locations)
+            : CollectionId(std::move(collectionId))
+            , Locations(std::move(locations))
+        {}
+
+        const TLogoBlobID CollectionId;
+        TVector<TPageLocation> Locations;
     };
 }
 

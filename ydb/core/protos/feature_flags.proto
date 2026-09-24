@@ -405,6 +405,4 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableLocalDBBtreeIndexV2 = 337 [default = false];
-    // When EnableLocalDBBtreeIndexV2 is on complete it with V1 shadow index off
-    optional bool EnableLocalDBBtreeIndexV2ShadowV1Write = 338 [default = true];
 }

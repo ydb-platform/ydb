@@ -36,7 +36,7 @@ namespace {
 
         conf.Groups.resize(groups);
         
-        conf.WriteBTreeIndex = writeBTreeIndex;
+        conf.WriteBTreeIndexV1 = writeBTreeIndex;
 
         return conf;
     }

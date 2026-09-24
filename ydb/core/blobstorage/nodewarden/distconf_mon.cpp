@@ -1,7 +1,10 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 
+#include <library/cpp/json/json_writer.h>
+
 #include <google/protobuf/util/json_util.h>
+
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 

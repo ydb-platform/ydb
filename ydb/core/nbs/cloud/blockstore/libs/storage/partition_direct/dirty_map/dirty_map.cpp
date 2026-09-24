@@ -50,6 +50,11 @@ TBlocksDirtyMap::TBlocksDirtyMap(
         DDiskStates[ddisk].Load(ddiskState);
         ++ddisk;
     }
+
+    RestoreBarrier = TPBufferKey{
+        .Generation = state.GetRestoreBarrier().GetGeneration(),
+        .Lsn = state.GetRestoreBarrier().GetLsn()};
+    TargetRestoreBarrier = RestoreBarrier;
 }
 
 TBlocksDirtyMap::~TBlocksDirtyMap()
@@ -111,6 +116,8 @@ void TBlocksDirtyMap::UpdateConfig(
         ReadyToErase.erase(pBufferKey);
         ReadyToFlush.erase(pBufferKey);
     }
+
+    MaybeAdvanceRestoreBarrier();
 }
 
 void TBlocksDirtyMap::RestorePBuffer(
@@ -119,6 +126,11 @@ void TBlocksDirtyMap::RestorePBuffer(
     THostIndex host)
 {
     Y_ABORT_UNLESS(host < PBufferCounters.size());
+
+    if (pBufferKey <= RestoreBarrier) {
+        // The copy under the persisted restore barrier is garbage.
+        return;
+    }
 
     if (auto item = Inflight.GetValue(pBufferKey)) {
         Y_ABORT_UNLESS(item->Range == range);
@@ -304,20 +316,11 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         for (THostIndex host: val.GetEraseNeeded()) {
             val.RequestErase(host);
-
-            if (DisabledHosts.Get(host)) {
-                // We can't handle this situation properly. Barrier cleanup
-                // will help us.
-                val.ConfirmErase(host);
-                if (val.GetState() == TInflightInfo::EState::PBufferErased) {
-                    RemovePBuffer(pBufferKey);
-                    break;
-                }
-            } else {
-                result.AddHint(host, item->Key);
-            }
+            result.AddHint(host, item->Key);
         }
     }
+
+    MaybeAdvanceRestoreBarrier();
 
     return result;
 }
@@ -369,6 +372,7 @@ void TBlocksDirtyMap::WriteFinished(
         // barrier garbage collection later. For now, we will forget about this
         // request as if it never existed.
         RemovePBuffer(pBufferKey);
+        MaybeAdvanceRestoreBarrier();
         return;
     }
 
@@ -413,6 +417,8 @@ void TBlocksDirtyMap::FlushFinished(
 
         inflight.FlushFailed(route.DestinationHostIndex);
     }
+
+    MaybeAdvanceRestoreBarrier();
 }
 
 void TBlocksDirtyMap::EraseFinished(
@@ -448,6 +454,8 @@ void TBlocksDirtyMap::EraseFinished(
 
         inflight.EraseFailed(host);
     }
+
+    MaybeAdvanceRestoreBarrier();
 }
 
 void TBlocksDirtyMap::UpdateBelatedEraseQueue(
@@ -608,6 +616,7 @@ void TBlocksDirtyMap::UnlockPBuffer(TPBufferKey pBufferKey)
     auto item = Inflight.GetValue(pBufferKey);
     Y_ABORT_UNLESS(item.has_value());
     item->Value.UnlockPBuffer();
+    MaybeAdvanceRestoreBarrier();
 }
 
 ILockableRanges::TLockRangeHandle TBlocksDirtyMap::LockDDiskRange(
@@ -806,6 +815,9 @@ TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
     }
 
     TDirtyMapStateProto result;
+    auto* restoreBarrier = result.MutableRestoreBarrier();
+    restoreBarrier->SetGeneration(TargetRestoreBarrier.Generation);
+    restoreBarrier->SetLsn(TargetRestoreBarrier.Lsn);
     if (!hasFreshDDisk) {
         return result;
     }
@@ -815,6 +827,11 @@ TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
     }
 
     return result;
+}
+
+TPBufferKey TBlocksDirtyMap::GetTargetRestoreBarrier() const
+{
+    return TargetRestoreBarrier;
 }
 
 TDirtyMapStateProto TBlocksDirtyMap::MakeFutureState(
@@ -842,10 +859,18 @@ TDirtyMapStateProto TBlocksDirtyMap::MakeFutureState(
     return result;
 }
 
-void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
+void TBlocksDirtyMap::StatePersisted(
+    ui32 persistGeneration,
+    TPBufferKey persistedRestoreBarrier)
 {
     Y_ABORT_UNLESS(persistGeneration <= StateGeneration);
+    Y_ABORT_UNLESS(persistedRestoreBarrier <= TargetRestoreBarrier);
     PersistedStateGeneration = Max(PersistedStateGeneration, persistGeneration);
+
+    if (persistedRestoreBarrier > RestoreBarrier) {
+        RestoreBarrier = persistedRestoreBarrier;
+        ForgetBelowRestoreBarrier();
+    }
 }
 
 ui32 TBlocksDirtyMap::GetCurrentGeneration() const
@@ -1023,7 +1048,9 @@ TString TBlocksDirtyMap::DebugPrintBehindBrief() const
 {
     TStringBuilder result;
     result << "Current gen:" << GetCurrentGeneration()
-           << ", Persisted gen:" << PersistedStateGeneration << " ";
+           << ", Persisted gen:" << PersistedStateGeneration
+           << ", Barrier:" << TargetRestoreBarrier.Print() << "/"
+           << RestoreBarrier.Print() << " ";
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
         auto brief = DDiskStates[h].DebugPrintBehindBrief();
         if (brief) {
@@ -1240,6 +1267,58 @@ void TBlocksDirtyMap::RemovePBuffer(TPBufferKey pBufferKey)
 
     const bool removed = Inflight.RemoveRange(pBufferKey);
     Y_ABORT_UNLESS(removed);
+}
+
+void TBlocksDirtyMap::MaybeAdvanceRestoreBarrier()
+{
+    std::optional<TPBufferKey> minUnflushed;
+    TPBufferKey target;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            const auto& inflight = item.Value;
+            if (inflight.IsDataOnlyInPBuffers()) {
+                if (!minUnflushed || item.Key < *minUnflushed) {
+                    minUnflushed = item.Key;
+                }
+            } else if (
+                inflight.CanBeCoveredByRestoreBarrier() && item.Key > target) {
+                target = item.Key;
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    if (minUnflushed && target >= *minUnflushed) {
+        // The barrier stays below every record not yet flushed.
+        return;
+    }
+    if (target <= TargetRestoreBarrier) {
+        return;
+    }
+
+    TargetRestoreBarrier = target;
+    ++StateGeneration;
+}
+
+void TBlocksDirtyMap::ForgetBelowRestoreBarrier()
+{
+    TVector<TPBufferKey> forgotten;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            if (item.Key <= RestoreBarrier &&
+                item.Value.CanBeCoveredByRestoreBarrier())
+            {
+                item.Value.MarkCoveredByRestoreBarrier();
+                forgotten.push_back(item.Key);
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    for (const auto pBufferKey: forgotten) {
+        ReadyToErase.erase(pBufferKey);
+        RemovePBuffer(pBufferKey);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

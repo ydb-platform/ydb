@@ -1126,10 +1126,10 @@ namespace {
         }
 
         void Reply(const TActorContext& ctx, TEvGetVDiskSpaceReportRequest::TPtr& ev) {
-            if (CachedResponse) {
+            if (CachedReport) {
                 auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
                     NKikimrProto::OK, TString(), ctx.Now(), nullptr, nullptr);
-                response->Record.CopyFrom(*CachedResponse);
+                response->Record.MutableReport()->CopyFrom(*CachedReport);
                 SendVDiskResponse(ctx, ev->Sender, response.release(), ev->Cookie, HullCtx->VCtx, {});
                 return;
             }
@@ -1293,8 +1293,8 @@ namespace {
             const bool success = record.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::OK)
                 && record.HasReport();
             if (success) {
-                CachedResponse = std::make_unique<NKikimrVDisk::TGetVDiskSpaceReportResponse>();
-                CachedResponse->CopyFrom(record);
+                CachedReport = std::make_unique<NKikimrVDisk::TVDiskSpaceReport>();
+                CachedReport->CopyFrom(record.GetReport());
                 PublishReport(record.GetReport());
                 LastAttemptError.clear();
                 LastAttemptSuccessful->Set(1);
@@ -1448,7 +1448,6 @@ namespace {
             , RefreshFailures(Counters->GetCounter("RefreshFailures", true))
             , PeriodicTicksSkipped(Counters->GetCounter("PeriodicTicksSkipped", true))
             , ColdCacheRequests(Counters->GetCounter("ColdCacheRequests", true))
-            , ForcedRefreshRequests(Counters->GetCounter("ForcedRefreshRequests", true))
         {
             RefreshInProgress->Set(0);
             LastAttemptSuccessful->Set(0);
@@ -1495,9 +1494,8 @@ namespace {
         const TCounterPtr RefreshFailures;
         const TCounterPtr PeriodicTicksSkipped;
         const TCounterPtr ColdCacheRequests;
-        const TCounterPtr ForcedRefreshRequests;
 
-        std::unique_ptr<NKikimrVDisk::TGetVDiskSpaceReportResponse> CachedResponse;
+        std::unique_ptr<NKikimrVDisk::TVDiskSpaceReport> CachedReport;
         TString LastAttemptError;
         TActorId ActiveWorkerId;
         ui64 ActiveAttemptId = 0;

@@ -27,6 +27,7 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]

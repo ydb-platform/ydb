@@ -1147,6 +1147,10 @@ public:
         return Slave_->Publish(node, ctx, std::move(options));
     }
 
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) final {
+        return Slave_->UnlockTables(std::move(options));
+    }
+
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override {
         TMaybe<TFuture<TDropTablesResponse>> fmrFuture;
         TMaybe<TFuture<TDropTrackablesResult>> ytFuture;
@@ -1157,7 +1161,7 @@ public:
             std::vector<TString> fmrTableIds;
             TVector<IYtGateway::TDropTrackablesOptions::TClusterAndPath> ytPaths;
 
-            for (const auto& path : options.Pathes()) {
+            for (const auto& path : options.Paths()) {
                 TFmrTableId tableId(path.Cluster, path.Path);
 
                 auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
@@ -1182,7 +1186,7 @@ public:
             }
 
             if (!ytPaths.empty()) {
-                options.Pathes() = std::move(ytPaths);
+                options.Paths() = std::move(ytPaths);
                 ytFuture = Slave_->DropTrackables(std::move(options));
             }
 

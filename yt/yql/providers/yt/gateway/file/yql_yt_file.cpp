@@ -1062,6 +1062,12 @@ public:
         return MakeFuture(res);
     }
 
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& /*options*/) final {
+        TUnlockTablesResult res;
+        res.SetSuccess();
+        return MakeFuture(res);
+    }
+
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) final {
         TDropTrackablesResult res;
         try {
@@ -1072,7 +1078,7 @@ public:
                 return MakeFuture(res);
             }
 
-            for (const auto& i : options.Pathes()) {
+            for (const auto& i : options.Paths()) {
 
                 const TString& cluster = i.Cluster;
                 const TString& path = i.Path;

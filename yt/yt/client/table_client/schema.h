@@ -116,6 +116,8 @@ TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
 void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
 
+void FormatValue(TStringBuilderBase* builder, const TLockMask& lockMask, TStringBuf spec);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema

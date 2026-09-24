@@ -32,6 +32,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("replication_card_cache", &TThis::ReplicationCardCache)
         .Optional();
+    registrar.Parameter("chaos_lease_cache", &TThis::ChaosLeaseCache)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

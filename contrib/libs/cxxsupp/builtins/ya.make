@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(22.1.8)
+VERSION(23.1.1)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-23.1.1.tar.gz)
 
 NO_COMPILER_WARNINGS()
 
@@ -95,26 +95,17 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
     ENDIF()
 ENDIF()
 
-IF (ARCH_WASM64 OR ARCH_WASM32)
-    IF (COMPILER_VERSION != "20")
-        SRCS(
-            wasm/__c_longjmp.S
-            wasm/__cpp_exception.S
-        )
-    ENDIF()
-ENDIF()
-
 IF (ARCH_ARM6 OR ARCH_ARM7)
     SRCS(
         absvdi2.c
         absvsi2.c
         absvti2.c
-        adddf3.c
         addtf3.c
         addvdi3.c
         addvsi3.c
         addvti3.c
         apple_versioning.c
+        arm/adddf3.S
         arm/adddf3vfp.S
         arm/addsf3.S
         arm/addsf3vfp.S
@@ -135,33 +126,61 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         arm/aeabi_memset.S
         arm/aeabi_uidivmod.S
         arm/aeabi_uldivmod.S
+        arm/aeabi_uread4.S
+        arm/aeabi_uread8.S
+        arm/aeabi_uwrite4.S
+        arm/aeabi_uwrite8.S
         arm/bswapdi2.S
         arm/bswapsi2.S
         arm/chkstk.S
         arm/clzdi2.S
         arm/clzsi2.S
+        arm/cmpdf2.S
+        arm/cmpsf2.S
         arm/comparesf2.S
+        arm/divdf3.S
         arm/divdf3vfp.S
         arm/divmodsi4.S
         arm/divsf3.S
         arm/divsf3vfp.S
         arm/divsi3.S
+        arm/dnan2.c
+        arm/dnorm2.c
+        arm/dunder.c
         arm/eqdf2vfp.S
         arm/eqsf2vfp.S
+        arm/extendsfdf2.S
         arm/extendsfdf2vfp.S
+        arm/fixdfdi.S
+        arm/fixdfsi.S
         arm/fixdfsivfp.S
+        arm/fixsfdi.S
+        arm/fixsfsi.S
         arm/fixsfsivfp.S
+        arm/fixunsdfdi.S
+        arm/fixunsdfsi.S
         arm/fixunsdfsivfp.S
+        arm/fixunssfdi.S
+        arm/fixunssfsi.S
         arm/fixunssfsivfp.S
+        arm/floatdidf.S
+        arm/floatdisf.S
+        arm/floatsidf.S
         arm/floatsidfvfp.S
+        arm/floatsisf.S
         arm/floatsisfvfp.S
+        arm/floatundidf.S
+        arm/floatunsidf.S
+        arm/floatunsisf.S
         arm/floatunssidfvfp.S
         arm/floatunssisfvfp.S
         arm/fnan2.c
         arm/fnorm2.c
         arm/fp_mode.c
         arm/funder.c
+        arm/gedf2.S
         arm/gedf2vfp.S
+        arm/gesf2.S
         arm/gesf2vfp.S
         arm/gtdf2vfp.S
         arm/gtsf2vfp.S
@@ -170,6 +189,7 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         arm/ltdf2vfp.S
         arm/ltsf2vfp.S
         arm/modsi3.S
+        arm/muldf3.S
         arm/muldf3vfp.S
         arm/mulsf3.S
         arm/mulsf3vfp.S
@@ -206,11 +226,14 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         arm/sync_fetch_and_xor_4.S
         arm/sync_fetch_and_xor_8.S
         arm/sync_synchronize.S
+        arm/truncdfsf2.S
         arm/truncdfsf2vfp.S
         arm/udivmodsi4.S
         arm/udivsi3.S
         arm/umodsi3.S
+        arm/unorddf2.S
         arm/unorddf2vfp.S
+        arm/unordsf2.S
         arm/unordsf2vfp.S
         ashldi3.c
         ashlti3.c
@@ -227,7 +250,6 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         ctzsi2.c
         ctzti2.c
         divdc3.c
-        divdf3.c
         divdi3.c
         divmoddi4.c
         divmodti4.c
@@ -242,43 +264,27 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         extendhfdf2.c
         extendhfsf2.c
         extendhftf2.c
-        extendsfdf2.c
         extendsftf2.c
         ffsdi2.c
         ffssi2.c
         ffsti2.c
-        fixdfdi.c
-        fixdfsi.c
         fixdfti.c
-        fixsfdi.c
-        fixsfsi.c
         fixsfti.c
         fixtfdi.c
         fixtfsi.c
         fixtfti.c
-        fixunsdfdi.c
-        fixunsdfsi.c
         fixunsdfti.c
-        fixunssfdi.c
-        fixunssfsi.c
         fixunssfti.c
         fixunstfdi.c
         fixunstfsi.c
         fixunstfti.c
-        floatdidf.c
-        floatdisf.c
         floatditf.c
-        floatsidf.c
-        floatsisf.c
         floatsitf.c
         floattidf.c
         floattisf.c
         floattitf.c
-        floatundidf.c
         floatundisf.c
         floatunditf.c
-        floatunsidf.c
-        floatunsisf.c
         floatunsitf.c
         floatuntidf.c
         floatuntisf.c
@@ -290,7 +296,6 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         moddi3.c
         modti3.c
         muldc3.c
-        muldf3.c
         muldi3.c
         mulodi4.c
         mulosi4.c
@@ -327,7 +332,6 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         subvti3.c
         trampoline_setup.c
         truncdfhf2.c
-        truncdfsf2.c
         truncsfhf2.c
         trunctfdf2.c
         trunctfhf2.c
@@ -350,6 +354,7 @@ ELSEIF (ARCH_AARCH64)
         aarch64/fp_mode.c
         aarch64/sme-abi-assert.c
         aarch64/sme-abi.S
+        aarch64/sme-libc-opt-memcpy-memmove-sve.S
         absvdi2.c
         absvsi2.c
         absvti2.c

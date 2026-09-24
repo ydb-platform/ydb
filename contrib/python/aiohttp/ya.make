@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.12.15)
+VERSION(3.14.3)
 
 LICENSE(Apache-2.0)
 
@@ -104,9 +104,6 @@ RESOURCE_FILES(
     PREFIX contrib/python/aiohttp/
     .dist-info/METADATA
     .dist-info/top_level.txt
-    aiohttp/_websocket/.hash/mask.pxd.hash
-    aiohttp/_websocket/.hash/mask.pyx.hash
-    aiohttp/_websocket/.hash/reader_c.pxd.hash
     aiohttp/py.typed
 )
 

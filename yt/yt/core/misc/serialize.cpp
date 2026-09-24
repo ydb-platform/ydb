@@ -123,7 +123,7 @@ TLoadContextStream::TLoadContextStream(
     TStreamLoadContext* context,
     IZeroCopyInput* input)
     : Context_(context)
-    , Input_(input)
+    , ZeroCopyInput_(input)
 { }
 
 void TLoadContextStream::SkipToCheckpoint()

@@ -785,13 +785,21 @@ public:
         return Inner_->Commit(std::move(options));
     }
 
+    NThreading::TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) final {
+        if (QContext_.CanRead() && QContext_.CaptureMode() != EQPlayerCaptureMode::Full) {
+            throw yexception() << "Can't replay UnlockTables";
+        }
+
+        return Inner_->UnlockTables(std::move(options));
+    }
+
     NThreading::TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) final {
         if (QContext_.CanRead()) {
             if (QContext_.CaptureMode() != EQPlayerCaptureMode::Full) {
                 throw yexception() << "Can't replay DropTrackables";
             }
 
-            for (auto& path : options.Pathes()) {
+            for (auto& path : options.Paths()) {
                 auto dumpPath = GetTableDumpPath(path.Path, path.Cluster);
                 if (dumpPath.Defined()) {
                     AddRandomSuffixToDumpPath(*dumpPath);

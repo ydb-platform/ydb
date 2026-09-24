@@ -1,0 +1,9 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    Rank() OVER w
+FROM
+    AS_TABLE([<|key: 1|>])
+WINDOW
+    w AS ()
+;

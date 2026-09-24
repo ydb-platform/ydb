@@ -196,32 +196,12 @@ struct IServiceContext
     //! Returns mutable request header.
     virtual NProto::TRequestHeader& RequestHeader() = 0;
 
-    //! Returns true if request/response info logging is enabled.
+    //! Returns true if request/response logging is enabled.
     virtual bool IsLoggingEnabled() const = 0;
 
-    //! Registers a portion of request logging info.
-    /*!
-     *  \param incremental If true then \p info is just remembered but no logging happens.
-     *  If false then all remembered infos are logged (comma-separated).
-     *  This must be the last call to #SetRawRequestInfo for this context.
-     *
-     *  Passing empty \p info in incremental mode is no-op.
-     *  Passing empty \p info in non-incremental mode flushes the logging message.
-     */
-    virtual void SetRawRequestInfo(std::string info, bool incremental) = 0;
-
-    //! After this call there is no obligation to set request info for this request.
-    virtual void SuppressMissingRequestInfoCheck() = 0;
-
-    //! Registers a portion of response logging info.
-    /*!
-     *  \param incremental If false then \p info overrides all previously remembered infos.
-     *  These infos are logged (comma-separated) when the context is replied.
-     *
-     *  Passing empty \p info in incremental mode is no-op.
-     *  Passing empty \p info in non-incremental mode clears the logging infos.
-     */
-    virtual void SetRawResponseInfo(std::string info, bool incremental) = 0;
+    //! Marks the request annotations complete; with #flush emits the request log message,
+    //! after which no further request annotation is allowed.
+    virtual void CommitRequestAnnotations(bool flush) = 0;
 
     //! Return the lists accumulating annotations, or null when logging is disabled.
     virtual NLogging::TLoggingTagList* GetRequestAnnotations() = 0;
@@ -255,21 +235,6 @@ struct IServiceContext
 
     // Extension methods.
 
-    void SetRequestInfo();
-    void SetResponseInfo();
-
-    template <class... TArgs>
-    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
-
-    template <class... TArgs>
-    void SetIncrementalRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
-
-    template <class... TArgs>
-    void SetResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
-
-    template <class... TArgs>
-    void SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
-
     //! Annotates the request: |context->AnnotateRequest().With("Key", value)|.
     /*!
      *  The tags are committed when the returned guard dies, i.e. at the end of the enclosing
@@ -291,8 +256,8 @@ struct IServiceContext
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
 
-    //! The same as ReplyFrom() but sets response info.
-    void ReplyAndLogFrom(bool incremental, TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages);
+    //! The same as ReplyFrom() but also annotates the response with the accompanying tags.
+    void ReplyAndLogFrom(TFuture<std::pair<TSharedRefArray, NLogging::TLoggingTagList>> asyncMessages);
 
     //! Replies with a given error when the latter is set.
     void ReplyFrom(TFuture<void> asyncError);

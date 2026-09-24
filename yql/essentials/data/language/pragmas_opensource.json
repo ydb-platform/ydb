@@ -513,6 +513,9 @@
     "name": "yt.ReduceLocalityTimeout"
   },
   {
+    "name": "yt.ReleaseSnapshotLocks"
+  },
+  {
     "name": "yt.ReleaseTempData"
   },
   {

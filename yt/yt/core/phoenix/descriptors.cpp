@@ -59,7 +59,7 @@ bool TTypeDescriptor::IsTemplate() const
 
 const TTypeSchemaPtr& TTypeDescriptor::GetSchema() const
 {
-   std::call_once(
+    std::call_once(
         SchemaOnceFlag_,
         [&] {
             Schema_ = New<TTypeSchema>();
@@ -76,7 +76,7 @@ const TTypeSchemaPtr& TTypeDescriptor::GetSchema() const
 
 const TYsonString& TTypeDescriptor::GetSchemaYson() const
 {
-   std::call_once(
+    std::call_once(
         SchemaYsonOnceFlag_,
         [&] {
             SchemaYson_ = ConvertToYsonString(GetSchema());

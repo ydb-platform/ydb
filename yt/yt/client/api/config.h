@@ -51,6 +51,7 @@ struct TConnectionConfig
     std::optional<std::string> ClusterName;
     TTableMountCacheConfigPtr TableMountCache;
     NChaosClient::TReplicationCardCacheConfigPtr ReplicationCardCache;
+    NChaosClient::TChaosLeaseCacheConfigPtr ChaosLeaseCache;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 

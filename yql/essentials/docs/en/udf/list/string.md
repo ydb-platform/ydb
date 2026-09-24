@@ -104,6 +104,9 @@ Functions for ASCII strings:
 * `String::ReverseBits(String{Flags:AutoMap}) -> String` - Added in the version [2025.02](../../changelog/2025.02.md#string-module)
   Reverses a string, treating it as a bit sequence.
 
+* `String::Soundex(String{Flags:AutoMap}) -> String` - Added in the version [2026.03](../../changelog/2026.03.md#string-module)
+  Returns the four-character Soundex code for English-language names.
+
 * `String::IsAscii(String{Flags:AutoMap}) -> Bool`
 
 * `String::IsAsciiSpace(String{Flags:AutoMap}) -> Bool`

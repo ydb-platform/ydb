@@ -229,11 +229,6 @@ DEFINE_ENUM(ETabletActionState,
     ((AbortingSmoothMove)       (13))
 );
 
-DEFINE_ENUM(ETabletServiceFeatures,
-    ((WriteGenerations)         (0))
-    ((SharedWriteLocks)         (1))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))

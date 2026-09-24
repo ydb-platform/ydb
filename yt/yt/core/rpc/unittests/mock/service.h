@@ -286,14 +286,8 @@ public:
 
     MOCK_METHOD(
         void,
-        SetRawRequestInfo,
-        (std::string info, bool incremental),
-        (override));
-
-    MOCK_METHOD(
-        void,
-        SetRawResponseInfo,
-        (std::string info, bool incremental),
+        CommitRequestAnnotations,
+        (bool flush),
         (override));
 
     MOCK_METHOD(

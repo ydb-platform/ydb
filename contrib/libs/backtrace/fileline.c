@@ -37,6 +37,7 @@ POSSIBILITY OF SUCH DAMAGE.  */
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #if defined (HAVE_KERN_PROC_ARGS) || defined (HAVE_KERN_PROC)
@@ -424,9 +425,6 @@ backtrace_syminfo_to_full_callback (void *data, uintptr_t pc,
 				    uintptr_t symsize ATTRIBUTE_UNUSED)
 {
   struct backtrace_call_full *bdata = (struct backtrace_call_full *) data;
-
-  /* If STATE->MOREDATA is set, then data will point to a
-     backtrace_moredata struct, which is what full_callback expects.  */
 
   bdata->ret = bdata->full_callback (bdata->full_data, pc, NULL, 0, symname);
 }

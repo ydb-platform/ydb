@@ -83,7 +83,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 // No tx writes (bulk upsert) must break decent/proper txs.
                 // Decent/proper txs asked for isolation, so we have to give them isolation.
-                Self->OperationsManager->BreakConflictingTxs(op->GetLockId(), txc);
+                Self->OperationsManager->BreakConflictingTxs(op->GetLockId());
             }
         } else {
             auto& info = Self->OperationsManager->GetLockVerified(op->GetLockId());

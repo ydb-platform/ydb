@@ -43,7 +43,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
     }
 
-    Self->EnqueueProgressTx(ctx, std::nullopt);
+    Self->EnqueueProgressTx(ctx);
     return true;
 }
 

@@ -6302,12 +6302,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
     }
 
-    Y_UNIT_TEST(WriteInvalidatesConcurrentLazyHnswBuild) {
+    Y_UNIT_TEST(HnswMvccBuildCatchesConcurrentWrites) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.SetNeedStatsCollectors(true);
+        serverSettings.AppConfig->MutableDataShardConfig()->SetEnableHnswMvcc(true);
+        serverSettings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
@@ -6327,7 +6329,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             auto request = helper.GetBaseReadRequest(
                 "table-vector-race", readId, NKikimrDataEvents::FORMAT_CELLVEC);
             request->Record.ClearSnapshot();
-            AddRangeQuery<ui32>(*request, {1}, true, {1}, true);
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
             auto* topK = request->Record.MutableVectorTopK();
             topK->SetColumn(2);
             topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
@@ -6370,8 +6372,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
         delayedBuildResults.clear();
 
-        // The obsolete result is discarded. This read falls back to the table,
-        // observes the concurrent insert, and starts a replacement build.
+        // The original graph installs with the concurrent insert in its journal.
+        // The write and foreground reads did not wait for the delayed build.
         result = helper.SendRead("table-vector-race", makeRequest(2).release());
         CheckResult(helper.Tables.at("table-vector-race").UserTable, *result, {
             {TCell::Make<ui32>(1), TCell::Make<ui32>(100),
@@ -6381,13 +6383,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
             NScheme::TTypeInfo(NScheme::NTypeIds::String),
         });
-        runtime.WaitFor("replacement HNSW build result", [&] { return !delayedBuildResults.empty(); });
-        for (auto& event : delayedBuildResults) {
-            runtime.Send(event.Release());
-        }
-        delayedBuildResults.clear();
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        UNIT_ASSERT(delayedBuildResults.empty());
 
-        // The replacement build installs successfully and remains correct.
         result = helper.SendRead("table-vector-race", makeRequest(3).release());
         CheckResult(helper.Tables.at("table-vector-race").UserTable, *result, {
             {TCell::Make<ui32>(1), TCell::Make<ui32>(100),
@@ -6397,6 +6395,201 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
             NScheme::TTypeInfo(NScheme::NTypeIds::String),
         });
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMvccReadsIntermediateInsertAfterDelete, Rebuild) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableDataShardConfig()->SetEnableHnswMvcc(true);
+        settings.AppConfig->MutableDataShardConfig()->SetKeepSnapshotTimeout(1000);
+        settings.AppConfig->MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
+        settings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(Rebuild ? 50 : 1000);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("hnsw-mvcc", {
+            {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
+            {"emb", "String", false, false}});
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                (1, 1, "\x66\x66\x66\x3F\xCD\xCC\xCC\x3D\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto shardActor = ResolveTablet(runtime, helper.Tables.at("hnsw-mvcc").TabletId);
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(shard);
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        Ydb::Table::VectorIndexSettings indexSettings;
+        indexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        indexSettings.set_vector_dimension(2);
+        indexSettings.set_hnsw_min_rows(1);
+        ui64 readId = 0;
+        auto read = [&](TRowVersion version) {
+            auto request = helper.GetBaseReadRequest("hnsw-mvcc", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, version);
+            if (version.IsMax()) {
+                request->Record.ClearSnapshot();
+            }
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = indexSettings;
+            auto result = helper.SendRead("hnsw-mvcc", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
+            return result;
+        };
+        for (ui32 attempt = 0; attempt < 20 && !shard->GetHnswIndex(tid, 3, indexSettings, false); ++attempt) {
+            read(TRowVersion::Max());
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false));
+        const auto before = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, TDuration::Hours(1));
+        auto original = shard->GetHnswIndex(tid, 3, indexSettings, false);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                (1, 3, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        const auto inserted = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, TDuration::Hours(1));
+        ExecSQL(helper.Server, helper.Sender, "DELETE FROM `/Root/hnsw-mvcc` WHERE parent=1 AND key=3;");
+        const auto deleted = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, TDuration::Hours(1));
+        for (const auto& [version, expected] : std::vector<std::pair<TRowVersion, ui32>>{
+                {before, 1}, {inserted, 3}, {deleted, 1}}) {
+            auto result = read(version);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), expected);
+            // Assert acceleration, not just correctness of the fallback scan.
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        }
+        if (Rebuild) {
+            // Inserting and deleting the same key changed one of two base rows:
+            // exactly 50%, so no automatic rebuild may have started.
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false) == original);
+            TVector<TAutoPtr<IEventHandle>> delayed;
+            bool capture = true;
+            constexpr ui32 buildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+            auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (capture && ev->GetTypeRewrite() == buildResultEvent) {
+                    delayed.push_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            Y_DEFER { runtime.SetObserverFunc(observer); };
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                    (1, 2, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+            )");
+            runtime.WaitFor("automatic HNSW rebuild", [&] { return !delayed.empty(); });
+            UNIT_ASSERT_VALUES_EQUAL(delayed.size(), 1);
+            // Both a write and a read complete while the rebuild is suspended.
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
+                    (1, 4, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(read(TRowVersion::Max())->GetCells(0)[1].template AsValue<ui32>(), 4);
+            UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false) == original);
+            capture = false;
+            for (auto& ev : delayed) {
+                runtime.Send(ev.Release());
+            }
+            runtime.WaitFor("published HNSW rebuild", [&] {
+                auto current = shard->GetHnswIndex(tid, 3, indexSettings, false);
+                return current && current != original;
+            });
+            auto current = shard->GetHnswIndex(tid, 3, indexSettings, false);
+            UNIT_ASSERT_VALUES_EQUAL(current->Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(current->ChangeCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(read(TRowVersion::Max())->GetCells(0)[1].template AsValue<ui32>(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(read(inserted)->GetCells(0)[1].template AsValue<ui32>(), 3);
+            // A completely erased table can publish an empty generation.
+            ExecSQL(helper.Server, helper.Sender, "DELETE FROM `/Root/hnsw-mvcc` WHERE parent=1;");
+            runtime.WaitFor("empty HNSW rebuild", [&] {
+                auto empty = shard->GetHnswIndex(tid, 3, indexSettings, false);
+                return empty && empty->Size() == 0;
+            });
+            const auto emptyBase = shard->GetHnswIndex(tid, 3, indexSettings, false)->GetBaseVersion();
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            UNIT_ASSERT(shard->GetSnapshotManager().GetLowWatermark() >= emptyBase);
+            // Explicit snapshots below the watermark still keep their generation.
+            UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false, before) == original);
+            UNIT_ASSERT(DiscardVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, before));
+            UNIT_ASSERT(DiscardVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, inserted));
+            UNIT_ASSERT(DiscardVolatileSnapshot(helper.Server, {"/Root/hnsw-mvcc"}, deleted));
+            runtime.SimulateSleep(TDuration::Seconds(6));
+            UNIT_ASSERT(!shard->GetHnswIndex(tid, 3, indexSettings, false, before));
+            // Cache retirement cannot destroy a reader's owning reference.
+            std::weak_ptr<THnswIndex> oldGraph = original;
+            UNIT_ASSERT(!oldGraph.expired());
+            original.reset();
+            UNIT_ASSERT(oldGraph.expired());
+        }
+    }
+
+    Y_UNIT_TEST(HnswMvccColdHistoricalReadDoesNotPoisonHead) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableDataShardConfig()->SetEnableHnswMvcc(true);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("hnsw-cold", {
+            {"key", "Uint32", true, false}, {"emb", "String", false, false}});
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-cold` (key, emb) VALUES
+                (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01");
+        )");
+        const auto old = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-cold"}, TDuration::Hours(1));
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-cold` (key, emb) VALUES
+                (1, "\x00\x00\x80\xBF\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(
+            ResolveTablet(runtime, helper.Tables.at("hnsw-cold").TabletId)));
+        UNIT_ASSERT(shard);
+        const auto tid = shard->GetUserTables().begin()->second->LocalTid;
+        Ydb::Table::VectorIndexSettings indexSettings;
+        indexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        indexSettings.set_vector_dimension(2);
+        indexSettings.set_hnsw_min_rows(1);
+        ui64 id = 0;
+        auto read = [&](TRowVersion version, ui32 expected) {
+            auto request = helper.GetBaseReadRequest("hnsw-cold", ++id, NKikimrDataEvents::FORMAT_CELLVEC, version);
+            if (version.IsMax()) {
+                request->Record.ClearSnapshot();
+            }
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(1);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            *top->MutableSettings() = indexSettings;
+            auto result = helper.SendRead("hnsw-cold", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[0].AsValue<ui32>(), expected);
+            return result->Record.GetStats().GetRows();
+        };
+        for (ui32 attempt = 0; attempt < 20 && !shard->GetHnswIndex(tid, 2, indexSettings, false); ++attempt) {
+            UNIT_ASSERT_VALUES_EQUAL(read(old, 1), 2);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(shard->GetHnswIndex(tid, 2, indexSettings, false));
+        UNIT_ASSERT_VALUES_EQUAL(read(TRowVersion::Max(), 2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(read(old, 1), 2);
+        UNIT_ASSERT(!shard->GetHnswIndex(tid, 2, indexSettings, false, old));
     }
 
     Y_UNIT_TEST(BadRequest) {

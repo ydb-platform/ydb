@@ -38,9 +38,6 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery21
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpIndexes.PreSharding-Unique
-ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NonIntegerPkRowIdCompact
-ydb/core/kqp/ut/indexes/json unittest.[*/*] chunk
-ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
@@ -50,9 +47,7 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
-ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
-ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BlockHashJoinCrossWithJoinFilters-UseBlockHashJoin-UseBlockHashJoinForCross
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
@@ -87,13 +82,10 @@ ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/mind/hive/ut THiveTest.TestCheckSubHiveMigrationWithReboots
 ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTabletsWithReboots
 ydb/core/mind/hive/ut THiveTestWithTenants.TestShrinkStoragePool
-ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario3
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithreaded
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldDemoteDisabledDDiskWhenHealthyQuorumExists
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldHoldSafeBarrierForInflightWrite
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldKeepWatermarkWhenCopyFails
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldPersistTouchedBeforeFirstFlush
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestTest.ShouldNotSendWriteRequestAfterQuorumIsReached
@@ -177,8 +169,6 @@ ydb/core/transfer/ut/row_table Transfer_RowTable.WriteNullToColumn
 ydb/core/transfer/ut/row_table unittest.sole chunk
 ydb/core/transfer/ut/transfer_metrics TransferMetrics.TestDescribeTransfer
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
-ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
-ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
 ydb/library/actors/http/ut HttpProxy.StreamingCompressedFatRandomResponse1
@@ -663,12 +653,9 @@ ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbe
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_clickbench
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpcds
 ydb/tests/functional/tpc/medium test_default_path.py.TestDefaultPath.test_tpch
-ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProcessing.test_clickbench[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.WARNING]
-ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.ERROR]
-ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.2.yql]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[second_query_set.join.sql]
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
@@ -690,7 +677,6 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWM.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMComputeSchedulerP1T1.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestTpchWMS0_1.test
-ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltp50.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
@@ -895,11 +881,9 @@ ydb/tests/stress/remove_storage_groups/tests test_workload.py.TestYdbAlterStorag
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test
-ydb/tests/stress/s3_backups/tests py3test.sole chunk
 ydb/tests/stress/s3_backups/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-test_sct]
-ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-test_scv]
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[heavy-column]
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]

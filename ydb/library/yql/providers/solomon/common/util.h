@@ -3,7 +3,6 @@
 #include <google/protobuf/map.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash.h>
 #include <util/generic/size_literals.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
@@ -127,10 +126,6 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
 // cluster settings, so that gateways_config.proto, which lives in a separate
 // repository, needs no new cluster type.
 bool IsMoniumProject(const TSolomonClusterConfig& config);
-
-// Reads the USE_TLS property of an external data source. TLS is on when the property
-// is absent or equals "true" in any case; any other value keeps TLS off, as before.
-bool ParseUseTls(const THashMap<TString, TString>& properties);
 
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project);
 

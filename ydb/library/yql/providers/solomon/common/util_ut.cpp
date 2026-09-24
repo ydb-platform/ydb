@@ -345,22 +345,4 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TestSolomonParseUseTls) {
-    Y_UNIT_TEST(AbsentMeansTls) {
-        UNIT_ASSERT(ParseUseTls({}));
-    }
-
-    Y_UNIT_TEST(TrueInAnyCase) {
-        for (const TString value : {"true", "TRUE", "True", "tRuE"}) {
-            UNIT_ASSERT_C(ParseUseTls({{"use_tls", value}}), value);
-        }
-    }
-
-    Y_UNIT_TEST(OtherValuesKeepTlsOff) {
-        for (const TString value : {"false", "FALSE", "False", "", "0", "no", " true"}) {
-            UNIT_ASSERT_C(!ParseUseTls({{"use_tls", value}}), value);
-        }
-    }
-}
-
 }  // namespace NYql::NSo

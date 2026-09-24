@@ -1,45 +1,79 @@
 # min_max-индекс
 
-{% if backend_name == 'YDB' %}[min_max-индекс](../../../../dev/min_max-skip-index.md){% else %}min_max-индекс{% endif %} — [локальный индекс](../../../../concepts/glossary.md#local-index), его можно задать только с ключевым словом `LOCAL`. При создании таблицы в секции `INDEX` используется тип `min_max` (по аналогии с [вторичным индексом](secondary_index.md), но с обязательным `LOCAL` и соответствующим `USING`). См. также [локальные индексы](../../../../concepts/query_execution/local_indexes.md).
+`min_max` — локальный skip-индекс для колоночных таблиц. Для каждого фрагмента
+данных он хранит минимальное и максимальное значение одной колонки. YDB может
+пропустить фрагмент, если его диапазон не удовлетворяет предикату запроса.
+
+min_max-индекс доступен начиная с YDB 26.2.
+
+{% note info %}
+
+В YDB 26.2 эта возможность скрыта за флагом `enable_local_min_max_index` и по
+умолчанию выключена.
+
+{% endnote %}
+
+## Синтаксис {#syntax}
 
 ```yql
 CREATE TABLE `<table_name>` (
-    ...
-    INDEX `<index_name>`
-        LOCAL
-        USING min_max
+    ...,
+    INDEX `<index_name>` LOCAL USING min_max
         ON ( <index_column> )
-    [,   ...]
-)
-```
-
-Где:
-
-* `<index_name>` — имя индекса.
-* `LOCAL` — обязательное ключевое слово для min_max-индекса.
-* `<index_column>` — колонка, по которой строится индекс. Нужно указать ровно одну колонку.
-* Для min_max-индекса не поддерживаются колонки покрытия (`COVER (...)`) и дополнительные колонки данных.
-
-Параметры `WITH (...)`:
-
-{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
-
-Создание min_max-индекса для уже существующей таблицы описано в разделе [`ALTER TABLE ADD INDEX`](../alter_table/indexes.md#local-min-max).
-
-## Пример {#example}
-
-```yql
-CREATE TABLE events (
-    id Uint64,
-    created_at Timestamp,
-    level Int32,
-    PRIMARY KEY (id),
-    INDEX idx_created_at LOCAL USING min_max
-        ON (created_at),
-    INDEX idx_level LOCAL USING min_max
-        ON (level)
 )
 WITH (
     STORE = COLUMN
 );
 ```
+
+Действуют следующие ограничения:
+
+* поддерживаются только колоночные таблицы;
+* ключевое слово `LOCAL` обязательно;
+* в `ON (...)` должна быть указана ровно одна колонка;
+* `COVER (...)` и дополнительные колонки данных не поддерживаются;
+* у индекса нет собственных параметров `WITH (...)`;
+* колонки типов `Json` и `JsonDocument` не поддерживаются.
+
+Оптимизатор может использовать индекс с предикатами `=`, `<`, `<=`, `>`, `>=`
+и `BETWEEN`, а также с их совместимыми комбинациями через `AND` или `OR`.
+Синтаксис `VIEW` применять не нужно: локальный индекс автоматически используется
+уровнем хранения.
+
+## Пример функционального теста {#functional-test}
+
+Следующий пример создаёт колоночную таблицу, объявляет индекс, записывает три
+значения и проверяет предикат по диапазону:
+
+```yql
+CREATE TABLE minmax_example (
+    id Uint64 NOT NULL,
+    value Int64,
+    PRIMARY KEY (id),
+    INDEX minmax_idx LOCAL USING min_max ON (value)
+)
+WITH (
+    STORE = COLUMN
+);
+
+UPSERT INTO minmax_example (id, value) VALUES
+    (1u, 10l),
+    (2u, 20l),
+    (3u, 30l);
+
+SELECT value
+FROM minmax_example
+WHERE value BETWEEN 15l AND 25l;
+-- Ровно одна строка: 20
+
+SHOW CREATE TABLE minmax_example;
+-- Возвращённый DDL содержит minmax_idx и USING min_max.
+
+DROP TABLE minmax_example;
+```
+
+Функциональный тест должен проверить и точный результат запроса, и наличие
+индекса в схеме таблицы. На трёх строках пример проверяет схему и корректность
+запроса, но не физический пропуск фрагментов. Для теста производительности или
+пропуска фрагментов нужны данные, образующие несколько фрагментов, и анализ
+статистики запроса.

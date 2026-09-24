@@ -1,48 +1,78 @@
 # min_max index
 
-{% if backend_name == 'YDB' %} [min-max index](../../../../dev/min_max-skip-index.md){% else %}min-max index{% endif %} is a [local index](../../../../concepts/glossary.md#local-index) that can only be specified with the `LOCAL` keyword. When creating a table, the `min_max` type is used in the `INDEX` section (similar to a [secondary index](secondary_index.md), but with a mandatory `LOCAL` and corresponding `USING`). See also [local indexes](../../../../concepts/query_execution/local_indexes.md).
+A `min_max` index is a local skip index for column-oriented tables. For each
+data fragment, it stores the minimum and maximum value of one column. YDB can
+skip a fragment when its interval cannot satisfy the query predicate.
 
+The `min_max` index is available starting from YDB 26.2.
+
+{% note info %}
+
+In YDB 26.2, this feature is gated by `enable_local_min_max_index` and is
+disabled by default.
+
+{% endnote %}
+
+## Syntax {#syntax}
 
 ```yql
 CREATE TABLE `<table_name>` (
-    ...
-    INDEX `<index_name>`
-        LOCAL
-        USING min_max
+    ...,
+    INDEX `<index_name>` LOCAL USING min_max
         ON ( <index_column> )
-    [,   ...]
-)
-```
-
-
-Where:
-
-* `<index_name>` — index name.
-* `LOCAL` — required keyword for the min_max index.
-* `<index_column>` — the column on which the index is built. You must specify exactly one column.
-* For the min_max index, covering columns (`COVER (...)`) and additional data columns are not supported.
-
-`WITH (...)` parameters:
-
-{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
-
-Creating a min_max index for an existing table is described in the [`ALTER TABLE ADD INDEX`](../alter_table/indexes.md#local-min-max) section.
-
-## Example {#example}
-
-
-```yql
-CREATE TABLE events (
-    id Uint64,
-    created_at Timestamp,
-    level Int32,
-    PRIMARY KEY (id),
-    INDEX idx_created_at LOCAL USING min_max
-        ON (created_at),
-    INDEX idx_level LOCAL USING min_max
-        ON (level)
 )
 WITH (
     STORE = COLUMN
 );
 ```
+
+The following restrictions apply:
+
+* only column-oriented tables are supported;
+* `LOCAL` is required;
+* `ON (...)` must contain exactly one column;
+* `COVER (...)` and additional data columns are not supported;
+* the index has no index-specific `WITH (...)` parameters;
+* `Json` and `JsonDocument` columns are not supported.
+
+The optimizer can use this index with `=`, `<`, `<=`, `>`, `>=`, and `BETWEEN`
+predicates and compatible combinations of them using `AND` or `OR`. Do not use
+the `VIEW` syntax: the storage layer applies this local index automatically.
+
+## Functional test example {#functional-test}
+
+The following example creates a column-oriented table, declares the index,
+writes three values, and checks a range predicate:
+
+```yql
+CREATE TABLE minmax_example (
+    id Uint64 NOT NULL,
+    value Int64,
+    PRIMARY KEY (id),
+    INDEX minmax_idx LOCAL USING min_max ON (value)
+)
+WITH (
+    STORE = COLUMN
+);
+
+UPSERT INTO minmax_example (id, value) VALUES
+    (1u, 10l),
+    (2u, 20l),
+    (3u, 30l);
+
+SELECT value
+FROM minmax_example
+WHERE value BETWEEN 15l AND 25l;
+-- Exactly one row: 20
+
+SHOW CREATE TABLE minmax_example;
+-- The returned DDL contains minmax_idx and USING min_max.
+
+DROP TABLE minmax_example;
+```
+
+A functional test should verify both the exact query result and that the index
+is present in the table schema. With only three rows, the example verifies the
+schema and query correctness, but not physical fragment skipping. A performance
+or pruning test needs enough data to form several fragments and must inspect
+query statistics.

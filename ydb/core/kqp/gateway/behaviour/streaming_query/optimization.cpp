@@ -113,6 +113,45 @@ bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
     return true;
 }
 
+bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprContext& ctx) {
+    for (const auto& feature : features) {
+        const auto value = feature.Value();
+        if (!value || feature.Name().Value().StartsWith(TStreamingQueryConfig::TSqlSettings::RESERVED_FEATURE_PREFIX)) {
+            continue;
+        }
+
+        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+            return MakeIntrusive<TIssue>(ctx.GetPosition(feature.Pos()), TStringBuilder()
+                << "At streaming query setting " << to_upper(TString(feature.Name().Value())));
+        });
+
+        if (feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom) {
+            if (value.Maybe<TCoAtom>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>()) {
+                const auto literal = value.Maybe<TCoAtom>() ? value.Cast<TCoAtom>() : value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
+                const auto mode = to_lower(TString(literal.Value()));
+                if (mode != "earliest" && mode != "latest") {
+                    ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"));
+                    return false;
+                }
+            } else if (!EnsureSpecificDataType(value.Cast().Ref(), EDataSlot::Timestamp, ctx)) {
+                ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"));
+                return false;
+            }
+        } else if (!value.Maybe<TCoAtom>()) {
+            if (!EnsureDataType(value.Cast().Ref(), ctx)) {
+                return false;
+            }
+            const auto slot = value.Cast().Ref().GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
+            if (!IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8}, slot)) {
+                ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "Streaming query setting must have type String, Utf8 or Bool"));
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 }  // anonymous namespace
 
 TExprNode::TPtr TStreamingQueryOptimizer::ExtractWorldFeatures(TCoNameValueTupleList& features, TExprContext& ctx) const {
@@ -147,9 +186,17 @@ TStatus TStreamingQueryOptimizer::ValidateObjectNodeAnnotation(TExprNode::TPtr n
     size_t astIdx = 0;
 
     if (auto createObject = TMaybeNode<TKiCreateObject>(node)) {
+        if (!CheckStreamingQueryFeatures(createObject.Cast().Features(), ctx)) {
+            return TStatus::Error;
+        }
+
         ast = createObject.Cast().Ast().Ptr();
         astIdx = TKiCreateObject::idx_Ast;
     } else if (auto alterObject = TMaybeNode<TKiAlterObject>(node)) {
+        if (!CheckStreamingQueryFeatures(alterObject.Cast().Features(), ctx)) {
+            return TStatus::Error;
+        }
+
         ast = alterObject.Cast().Ast().Ptr();
         astIdx = TKiAlterObject::idx_Ast;
     } else {

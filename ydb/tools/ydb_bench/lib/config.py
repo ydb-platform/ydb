@@ -103,6 +103,7 @@ def _parameter_schema(parameter):
 def _profile_schema(benchmark):
     if benchmark.profile_kind == "distributed-ydb":
         schema = _profile_schema(BENCHMARKS.get("local-ydb"))
+        schema["properties"]["actor-system"]["properties"].pop("use-waker")
         for field in ("geometry", "affinity", "ydbd-binary"):
             schema["properties"].pop(field, None)
         schema["properties"]["cluster-template"] = {
@@ -111,8 +112,14 @@ def _profile_schema(benchmark):
             "description": "Immutable cluster placement snapshot, including hosts, DC/racks and tenants.",
         }
         schema["properties"]["tenant"] = {"type": "string", "pattern": "^/Root/"}
+        schema["properties"]["reset-disks"] = {"type": "boolean", "default": False}
         schema["required"] = ["cluster-template"]
-        schema["anyOf"] = [{"required": ["tenant", "workload", "load"]}, {"required": ["cli-nodes"]}]
+        schema["properties"]["mode"] = {"enum": ["deploy"]}
+        schema["anyOf"] = [
+            {"required": ["tenant", "workload", "load"]},
+            {"required": ["cli-nodes"]},
+            {"required": ["mode"]},
+        ]
         actor = {
             "type": "object",
             "additionalProperties": False,
@@ -174,6 +181,7 @@ def _profile_schema(benchmark):
                         "use-shared-threads": {"type": "boolean", "default": False},
                         "use-united-pool": {"type": "boolean", "default": False},
                         "use-ring-queue": {"type": "boolean", "default": True},
+                        "use-waker": {"type": "boolean", "default": False},
                         **{
                             role: {
                                 "type": "object",
@@ -617,14 +625,17 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             _config_error(location + ".ydbd-binary", "must be an absolute path on the benchmark host")
         binary_config["ydbd_binary"] = binary_path
 
+    actor_flags = (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+    if benchmark.profile_kind == "local-ydb":
+        actor_flags += (("use-waker", False),)
     actor_system = _mapping(
         value.get("actor-system"),
         location + ".actor-system",
-        ("use-shared-threads", "use-united-pool", "use-ring-queue", "static-nodes", "dynamic-nodes"),
+        tuple(name for name, _ in actor_flags) + ("static-nodes", "dynamic-nodes"),
     )
     actor_system_config = {
         name.replace("-", "_"): _boolean(actor_system.get(name, default), location + ".actor-system." + name)
-        for name, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+        for name, default in actor_flags
     }
     for role in ("static-nodes", "dynamic-nodes"):
         if role in actor_system:
@@ -960,13 +971,25 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
 
 
 def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    if isinstance(value, dict) and value.get("mode") == "deploy":
+        return _parse_deployment_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if isinstance(value, dict) and "cli-nodes" in value:
         return _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     location = "{}.{}".format(benchmark.name, profile_name)
     value = _mapping(
         value,
         location,
-        ("cluster-template", "tenant", "workload", "actor-system", "client", "load", "measurement", "timeout"),
+        (
+            "cluster-template",
+            "tenant",
+            "workload",
+            "actor-system",
+            "client",
+            "load",
+            "measurement",
+            "timeout",
+            "reset-disks",
+        ),
     )
     snapshot = value.get("cluster-template")
     if not isinstance(snapshot, dict):
@@ -979,7 +1002,7 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     except BenchmarkError as error:
         _config_error(location + ".cluster-template", str(error))
     dynamics = sum(node["role"] == "dynamic" and node["tenant"] == value["tenant"] for node in template["nodes"])
-    common = {key: item for key, item in value.items() if key not in ("cluster-template", "tenant")}
+    common = {key: item for key, item in value.items() if key not in ("cluster-template", "tenant", "reset-disks")}
     common["geometry"] = {
         "preset": "custom",
         "static-nodes": sum(node["role"] == "static" for node in template["nodes"]),
@@ -989,7 +1012,11 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     common["affinity"] = {role: {"mode": "none"} for role in ("static-nodes", "dynamic-nodes", "ydb-cli")}
     configuration = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
     profile = configuration.parameters["local_ydb"]
-    profile["distributed"] = {"template": template, "tenant": value["tenant"]}
+    profile["distributed"] = {
+        "template": template,
+        "tenant": value["tenant"],
+        "reset_disks": _boolean(value.get("reset-disks", False), location + ".reset-disks"),
+    }
     # These values come from individual template nodes/tenants, not the local
     # executor's defaults. Do not publish fictitious 64 GiB disks or no affinity.
     profile.pop("affinity")
@@ -998,9 +1025,71 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     return configuration
 
 
+def _distributed_actor(raw, where, role):
+    raw = _mapping(raw, where, ("cpu-count", "use-shared-threads", "use-united-pool", "use-ring-queue"))
+    count = _positive_integer(raw.get("cpu-count", 4), where + ".cpu-count")
+    if count > 32767:
+        _config_error(where + ".cpu-count", "must be at most 32767")
+    return {
+        role: {"cpu_count": count},
+        **{
+            key.replace("-", "_"): _boolean(raw.get(key, default), where + "." + key)
+            for key, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+        },
+    }
+
+
+def _parse_deployment_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    location = benchmark.name + "." + profile_name
+    value = _mapping(value, location, ("mode", "cluster-template", "storage", "tenants", "reset-disks"))
+    if perf_enabled:
+        _config_error(location, "perf is not supported for cluster deployment")
+    snapshot = value.get("cluster-template")
+    if (
+        not isinstance(snapshot, dict)
+        or not isinstance(snapshot.get("host_ids"), list)
+        or any(not isinstance(host, str) for host in snapshot["host_ids"])
+    ):
+        _config_error(location, "requires a placement snapshot")
+    template = execution_template(snapshot, set(snapshot["host_ids"]), None, deploy=True)
+    names = {tenant["path"] for tenant in template["tenants"]}
+    tenants = _mapping(value.get("tenants"), location + ".tenants", names)
+    profile = {
+        "mode": "deploy",
+        "geometry": {},
+        "actor_system": {
+            **_distributed_actor(value.get("storage"), location + ".storage", "static_nodes"),
+            "tenants": {
+                name: _distributed_actor(tenants.get(name), location + ".tenants." + name, "dynamic_nodes")
+                for name in names
+            },
+        },
+        "distributed": {
+            "template": template,
+            "tenant": None,
+            "reset_disks": _boolean(value.get("reset-disks", False), location + ".reset-disks"),
+        },
+    }
+    return RunConfiguration(
+        benchmark=benchmark,
+        profile=profile_name,
+        threads=(1,),
+        parameters={"local_ydb": profile},
+        duration_seconds=0,
+        repetitions=1,
+        timeout_seconds=300,
+        affinity_modes=("roles",),
+        perf_frequency=perf_frequency,
+    )
+
+
 def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
     location = "{}.{}".format(benchmark.name, profile_name)
-    value = _mapping(value, location, ("cluster-template", "storage", "tenants", "cli-nodes", "measurement", "timeout"))
+    value = _mapping(
+        value,
+        location,
+        ("cluster-template", "storage", "tenants", "cli-nodes", "measurement", "timeout", "reset-disks"),
+    )
     snapshot = value.get("cluster-template")
     if (
         not isinstance(snapshot, dict)
@@ -1092,26 +1181,10 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
     tenant_names = {t["path"] for t in template["tenants"]}
     tenants = _mapping(value.get("tenants"), location + ".tenants", tenant_names)
 
-    def actor(raw, where, role):
-        raw = _mapping(raw, where, ("cpu-count", "use-shared-threads", "use-united-pool", "use-ring-queue"))
-        count = _positive_integer(raw.get("cpu-count", 4), where + ".cpu-count")
-        if count > 32767:
-            _config_error(where + ".cpu-count", "must be at most 32767")
-        return {
-            role: {"cpu_count": count},
-            **{
-                key.replace("-", "_"): _boolean(raw.get(key, default), where + "." + key)
-                for key, default in (
-                    ("use-shared-threads", False),
-                    ("use-united-pool", False),
-                    ("use-ring-queue", True),
-                )
-            },
-        }
-
-    storage = actor(value.get("storage"), location + ".storage", "static_nodes")
+    storage = _distributed_actor(value.get("storage"), location + ".storage", "static_nodes")
     tenant_settings = {
-        name: actor(tenants.get(name), location + ".tenants." + name, "dynamic_nodes") for name in tenant_names
+        name: _distributed_actor(tenants.get(name), location + ".tenants." + name, "dynamic_nodes")
+        for name in tenant_names
     }
     profile["actor_system"] = {**storage, "tenants": tenant_settings}
     profile["distributed"] = {
@@ -1119,6 +1192,7 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
         "tenant": normalized[selected]["tenant"],
         "cli_nodes": normalized,
         "search_cli": search_clients[0] if search_clients else None,
+        "reset_disks": _boolean(value.get("reset-disks", False), location + ".reset-disks"),
     }
     if not search_clients:
         profile["load"] = {
@@ -1240,4 +1314,6 @@ def load_config(path, perf_enabled=False, perf_frequency=99):
                 )
             runs.append(_parse_profile(benchmark, profile_name, profile, perf_enabled, perf_frequency))
 
+    if len(runs) != 1 and any(run.parameters.get("local_ydb", {}).get("mode") == "deploy" for run in runs):
+        _config_error("$", "Deploy cluster requires a dedicated run with exactly one profile")
     return LoadedConfig(path=path.resolve(), sha256=hashlib.sha256(data).hexdigest(), runs=tuple(runs))

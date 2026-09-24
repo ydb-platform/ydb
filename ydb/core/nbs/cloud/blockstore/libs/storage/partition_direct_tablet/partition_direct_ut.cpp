@@ -64,7 +64,8 @@ struct TScopedNbsService: TDisableCopyMove
     EWriteMode writeMode,
     TDuration writeHedgingDelay = TDuration::Seconds(1),
     ui64 pbufferCleanupLsnStep = 0,
-    ui32 syncRequestsBatchSize = 0)
+    ui32 syncRequestsBatchSize = 0,
+    ui32 maxInflightWritesForDirectWrite = 0)
 {
     NKikimrConfig::TNbsConfig nbsConfig;
     auto* storageConfig = nbsConfig.MutableNbsStorageConfig();
@@ -79,6 +80,10 @@ struct TScopedNbsService: TDisableCopyMove
     if (syncRequestsBatchSize) {
         storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
     }
+    // Explicit 0 disables adaptive DirectWrite so tests that pin WriteMode
+    // keep seeing that mode at iodepth 1.
+    storageConfig->MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(
+        maxInflightWritesForDirectWrite);
 
     return nbsConfig;
 }
@@ -90,7 +95,8 @@ struct TScopedNbsService: TDisableCopyMove
     EWriteMode writeMode,
     TDuration writeHedgingDelay = TDuration::Seconds(1),
     ui64 pbufferCleanupLsnStep = 0,
-    ui32 syncRequestsBatchSize = 0)
+    ui32 syncRequestsBatchSize = 0,
+    ui32 maxInflightWritesForDirectWrite = 0)
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -120,7 +126,8 @@ struct TScopedNbsService: TDisableCopyMove
         writeMode,
         writeHedgingDelay,
         pbufferCleanupLsnStep,
-        syncRequestsBatchSize));
+        syncRequestsBatchSize,
+        maxInflightWritesForDirectWrite));
 }
 
 NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(
@@ -233,16 +240,13 @@ NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
 TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
-    ui32 vChunkIndex)
+    TVChunkConfig config,
+    TDirtyMapStateProto dirtyMapState = {})
 {
-    auto config = TVChunkConfig::MakeDefault(
-        vChunkIndex,
-        DirectBlockGroupHostCount,
-        DefaultPrimaryCount);
-
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
-            std::move(config));
+            std::move(config),
+            std::move(dirtyMapState));
     auto future = request->UpdateCompleted.GetFuture();
 
     const TActorId sender = env.Runtime->AllocateEdgeActor(
@@ -260,14 +264,27 @@ TPersistResultFuture SendVChunkConfigUpdate(
     return future;
 }
 
-TPersistResultFuture SendDirtyMapStateUpdate(
+TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
     ui32 vChunkIndex,
-    ui32 stateGeneration)
+    size_t primaryCount = DefaultPrimaryCount)
+{
+    return SendVChunkConfigUpdate(
+        env,
+        partitionTabletId,
+        TVChunkConfig::MakeDefault(
+            vChunkIndex,
+            DirectBlockGroupHostCount,
+            primaryCount));
+}
+
+TPersistResultFuture SendDirtyMapStateUpdate(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    ui32 vChunkIndex)
 {
     TDirtyMapStateProto state;
-    state.SetStateGeneration(stateGeneration);
 
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
@@ -288,6 +305,34 @@ TPersistResultFuture SendDirtyMapStateUpdate(
     env.Runtime->DestroyActor(sender);
 
     return future;
+}
+
+void PersistDDiskTouch(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    ui32 vChunkIndex)
+{
+    auto request =
+        std::make_unique<TEvPartitionDirectPrivate::TEvSetVChunkTouched>(
+            vChunkIndex);
+    auto future = request->UpdateCompleted.GetFuture();
+
+    const TActorId sender = env.Runtime->AllocateEdgeActor(
+        env.Settings.ControllerNodeId,
+        __FILE__,
+        __LINE__);
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        sender,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+    env.Runtime->DestroyActor(sender);
+
+    env.Sim(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(
+        EPersistResult::Success,
+        future.GetValue(TDuration::Seconds(10)));
 }
 
 NProto::TError DeletePartition(
@@ -1236,15 +1281,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 env.Settings.ControllerNodeId);
         };
 
-        auto first = SendDirtyMapStateUpdate(env, partition, 0, 1);
+        auto first = SendDirtyMapStateUpdate(env, partition, 0);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
         UNIT_ASSERT(!first.HasValue());
 
         TVector<TPersistResultFuture> batched;
-        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1, 2));
-        batched.push_back(SendDirtyMapStateUpdate(env, partition, 2, 3));
-        batched.push_back(SendDirtyMapStateUpdate(env, partition, 3, 4));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 2));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 3));
         env.Sim(TDuration::Seconds(1));
 
         // While the first transaction is in flight, the remaining updates do
@@ -1278,7 +1323,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // Completion of a batch resets the in-flight state: a later update
         // starts and completes a new transaction normally.
-        auto next = SendDirtyMapStateUpdate(env, partition, 4, 5);
+        auto next = SendDirtyMapStateUpdate(env, partition, 4);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(3u, blockedCommits.size());
         UNIT_ASSERT(!next.HasValue());
@@ -1291,7 +1336,101 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         runtime->FilterFunction = {};
     }
 
-    Y_UNIT_TEST(ShouldBatchVChunkConfigUpdates)
+    Y_UNIT_TEST(ShouldCommitVChunkTouchedBeforeFirstFlush)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectWrite,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/0,
+            /*syncRequestsBatchSize=*/1);
+        const ui64 partition = CreatePartitionTablet(env);
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        const auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        bool touchedRequestReleased = false;
+        bool touchedCommitObserved = false;
+        size_t flushRequestCount = 0;
+        size_t dirtyMapPersistRequestCount = 0;
+        std::unique_ptr<IEventHandle> blockedTouchedRequest;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                    TEvPartitionDirectPrivate::TEvSetVChunkTouched::EventType &&
+                !touchedRequestReleased)
+            {
+                UNIT_ASSERT(!blockedTouchedRequest);
+                blockedTouchedRequest = std::move(ev);
+                return false;
+            } else if (
+                type == TEvTablet::TEvCommitResult::EventType &&
+                touchedRequestReleased)
+            {
+                const auto* msg = ev->Get<TEvTablet::TEvCommitResult>();
+                if (msg->TabletID == partition) {
+                    touchedCommitObserved = true;
+                }
+            } else if (type == NDDisk::TEvSync::EventType) {
+                UNIT_ASSERT(touchedCommitObserved);
+                ++flushRequestCount;
+            } else if (
+                type ==
+                TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::EventType)
+            {
+                UNIT_ASSERT(touchedCommitObserved);
+                ++dirtyMapPersistRequestCount;
+            }
+            return true;
+        };
+
+        WriteBlock(
+            env,
+            loadActorAdapter,
+            edge,
+            0,
+            NUnitTest::RandomString(DefaultBlockSize, 1));
+        env.Sim(TDuration::Seconds(5));
+
+        UNIT_ASSERT(blockedTouchedRequest);
+        UNIT_ASSERT_VALUES_EQUAL(0, flushRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMapPersistRequestCount);
+
+        touchedRequestReleased = true;
+        runtime->Send(
+            std::move(blockedTouchedRequest),
+            env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(touchedCommitObserved);
+
+        WriteBlock(
+            env,
+            loadActorAdapter,
+            edge,
+            1,
+            NUnitTest::RandomString(DefaultBlockSize, 2));
+        env.Sim(TDuration::Seconds(10));
+
+        // Dirty-map state reflecting the write can only be produced after a
+        // flush response, so observing the real flush after the touched
+        // transaction commits proves the required persistence order.
+        UNIT_ASSERT_C(flushRequestCount > 0, "first flush was not started");
+
+        runtime->FilterFunction = {};
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldBatchVChunkStateUpdatesInOneQueue)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -1336,9 +1475,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(!first.HasValue());
 
         TVector<TPersistResultFuture> batched;
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 0));
         batched.push_back(SendVChunkConfigUpdate(env, partition, 1));
-        batched.push_back(SendVChunkConfigUpdate(env, partition, 2));
-        batched.push_back(SendVChunkConfigUpdate(env, partition, 3));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1));
         env.Sim(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
@@ -1422,11 +1561,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommitResults.size());
 
         auto pendingConfig = SendVChunkConfigUpdate(env, partition, 1);
-        auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0, 1);
+        auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0);
         env.Sim(TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommitResults.size());
+        UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommitResults.size());
 
-        auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1, 2);
+        auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1);
         env.Sim(TDuration::Seconds(1));
 
         UNIT_ASSERT(!executingConfig.HasValue());
@@ -1829,6 +1968,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         bool dropNextAllocationResult = false;
         // The replayed add lands at slot 5 of a six-host group; the copy to
         // it is finished once vchunk 0 reports the slot as a full ddisk.
+        bool copyToSlot5Started = false;
         bool copyToSlot5Finished = false;
         runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
         {
@@ -1858,21 +1998,30 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 return false;
             }
             if (type ==
-                TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::EventType)
+                TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::EventType)
             {
-                const auto& config =
-                    ev->Get<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>()
-                        ->VChunkConfig;
-                if (config.GetVChunkIndex() == 0 &&
-                    config.GetHostCount() == 6 && config.GetFullDDisks().Get(5))
-                {
-                    copyToSlot5Finished = true;
+                const auto* msg = ev->Get<
+                    TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>();
+                if (msg->VChunkIndex == 0) {
+                    if (msg->State.DDiskStatesSize() == 6 &&
+                        msg->State.GetDDiskStates(5)
+                                .GetBehind()
+                                .GetEncodingCase() !=
+                            TBlockFieldProto::ENCODING_NOT_SET)
+                    {
+                        copyToSlot5Started = true;
+                    }
+                    if (copyToSlot5Started && msg->State.DDiskStatesSize() == 0)
+                    {
+                        copyToSlot5Finished = true;
+                    }
                 }
             }
             return true;
         };
 
         const ui64 partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
 
         // Grow the group to six hosts, then remove host 2: slot 2 is dead and
         // the group is at generation 2.
@@ -2200,6 +2349,155 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
+    Y_UNIT_TEST(ShouldSelectWriteModeByDiskWideInflight)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        // Set maxInflightWritesForDirectWrite=1,
+        // first write should be DirectWrite,
+        // second one should be IndirectWrite.
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::IndirectWrite,
+            TDuration::Seconds(10),
+            /*pbufferCleanupLsnStep=*/0,
+            /*syncRequestsBatchSize=*/0,
+            /*maxInflightWritesForDirectWrite=*/1);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        size_t singularWriteCount = 0;
+        size_t pluralWriteCount = 0;
+        bool holdWrites = true;
+        TVector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldWrites;
+
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvWritePersistentBuffer::EventType)
+            {
+                ++singularWriteCount;
+                if (holdWrites) {
+                    heldWrites.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvWritePersistentBuffers::EventType)
+            {
+                ++pluralWriteCount;
+                if (holdWrites) {
+                    heldWrites.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        auto sendWrite = [&](ui64 startIndex, char fill)
+        {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(startIndex);
+            request->Record.MutableBlocks()->AddBuffers(TString(4096, fill));
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+        };
+
+        sendWrite(1, 'A');
+        runtime->Sim([&] { return singularWriteCount < 3; });
+        UNIT_ASSERT_VALUES_EQUAL(0u, pluralWriteCount);
+        UNIT_ASSERT(singularWriteCount >= 3);
+
+        sendWrite(100, 'B');
+        runtime->Sim([&] { return pluralWriteCount == 0; });
+        UNIT_ASSERT(pluralWriteCount > 0);
+
+        holdWrites = false;
+        for (auto& [nodeId, ev]: heldWrites) {
+            runtime->Schedule(TDuration::Zero(), ev.release(), nullptr, nodeId);
+        }
+        heldWrites.clear();
+
+        for (size_t i = 0; i < 2; ++i) {
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+        }
+
+        auto readBlock = [&](ui64 startIndex, char fill)
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(startIndex);
+            request->Record.SetBlocksCount(1);
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
+                TString(4096, fill));
+        };
+
+        readBlock(1, 'A');
+        readBlock(100, 'B');
+
+        const size_t pluralBeforeThird = pluralWriteCount;
+        singularWriteCount = 0;
+        sendWrite(200, 'C');
+        runtime->Sim([&] { return singularWriteCount < 3; });
+        UNIT_ASSERT_VALUES_EQUAL(pluralBeforeThird, pluralWriteCount);
+        UNIT_ASSERT(singularWriteCount >= 3);
+
+        {
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+        }
+
+        StopFastPathService(env, partition, edge);
+    }
+
     Y_UNIT_TEST(ShouldWriteAndReadFromHandoffPersistentBuffers)
     {
         TEnvironmentSetup env{{
@@ -2412,6 +2710,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/4,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2499,6 +2806,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/2,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2594,6 +2910,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/4,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2674,25 +2999,51 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         const ui64 tabletId = CreatePartitionTablet(env);
 
-        const TActorId edge = runtime->AllocateEdgeActor(
-            env.Settings.ControllerNodeId,
-            __FILE__,
-            __LINE__);
+        PersistDDiskTouch(env, tabletId, 0);
+        PersistDDiskTouch(env, tabletId, 1);
+        PersistDDiskTouch(env, tabletId, 2);
 
-        runtime->SendToPipe(
-            tabletId,
-            edge,
-            new NActors::NMon::TEvRemoteHttpInfo(
-                "/app?TabletID=" + ToString(tabletId)),
-            0,
-            TTestActorSystem::GetPipeConfigWithRetries());
+        auto firstUpdate = SendVChunkConfigUpdate(env, tabletId, 1, 2);
+        auto secondConfig =
+            TVChunkConfig::MakeDefault(2, DirectBlockGroupHostCount, 4);
+        for (THostIndex host = 0; host < secondConfig.GetHostCount(); ++host) {
+            if (secondConfig.GetDDiskRole(host) == EHostRole::Primary) {
+                secondConfig.DisableHost(host);
+                break;
+            }
+        }
+        auto secondUpdate =
+            SendVChunkConfigUpdate(env, tabletId, std::move(secondConfig));
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            firstUpdate.GetValue(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            secondUpdate.GetValue(TDuration::Seconds(10)));
 
-        auto response =
-            env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
-                edge);
-        UNIT_ASSERT(response);
+        const auto renderOverview = [&]
+        {
+            const TActorId edge = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+            runtime->SendToPipe(
+                tabletId,
+                edge,
+                new NActors::NMon::TEvRemoteHttpInfo(
+                    "/app?TabletID=" + ToString(tabletId)),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
 
-        const TString& html = response->Get()->Html;
+            auto response =
+                env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                    edge);
+            UNIT_ASSERT(response);
+            return response->Get()->Html;
+        };
+
+        TString html = renderOverview();
         UNIT_ASSERT(!html.empty());
         UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
         UNIT_ASSERT_STRING_CONTAINS(
@@ -2702,6 +3053,22 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
         UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
         UNIT_ASSERT_STRING_CONTAINS(html, "Regions");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Touched VChunks</td><td>3 /");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "1.13 GiB = 128.00 MiB * 8 (Enabled DDisk) + "
+            "128.00 MiB * 1 (Disabled DDisk)");
+
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        html = renderOverview();
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "1.13 GiB = 128.00 MiB * 8 (Enabled DDisk) + "
+            "128.00 MiB * 1 (Disabled DDisk)");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)
@@ -2776,6 +3143,61 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(
             enabled,
             "action=disable&node=100500&dbg=0");
+    }
+
+    Y_UNIT_TEST(BalanceMonitoringPageRequestsManualBalancing)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto query = [&](TStringBuf range)
+        {
+            runtime->SendToPipe(
+                tabletId,
+                edge,
+                new NActors::NMon::TEvRemoteHttpInfo(
+                    "/app?TabletID=" + ToString(tabletId) +
+                        "&page=overview&action=balance&" + range,
+                    HTTP_METHOD_POST),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+
+            auto response =
+                env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                    edge,
+                    false);
+            UNIT_ASSERT(response);
+            return response->Get()->Html;
+        };
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=1"),
+            "DDisk balancing requested.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=32"),
+            "DDisk balancing requested.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=1&strategy=configured"),
+            "&page=overview&strategy=configured");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=9999"),
+            "Invalid DDisk balancing request.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=invalid&to=1"),
+            "Invalid DDisk balancing request.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=1&to=1"),
+            "Invalid DDisk balancing request.");
     }
 
     Y_UNIT_TEST(StandardTabletPageRenders)

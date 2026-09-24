@@ -139,6 +139,13 @@ keeping automatic pool sizing enabled. They do not affect the YDB CLI.
 The Builder exposes all three switches; saved profile parameters and comparisons
 retain their values.
 
+For `local-ydb`, `actor-system.use-waker: true` enables the experimental waker
+for automatically configured BASIC executor pools through YDBD's `use_waker`.
+It defaults to `false` and requires a YDBD build that supports this field.
+When disabled, the field is omitted from the generated YDB configuration so
+older external binaries keep working. The saved profile and Builder retain the
+explicit boolean value.
+
 Set `ydbd-binary: /absolute/path/to/ydbd` in a `local-ydb` profile to
 use a different YDBD build. The Builder exposes the same optional executable
 path. It refers to a readable executable on the benchmark host (not the browser
@@ -304,6 +311,84 @@ portable configuration directly.
 
 ### Distributed YDB (experimental)
 
+Select **Deploy cluster** in the distributed Builder to reserve and deploy a
+cluster without running a workload. This is a dedicated run with one profile:
+its YAML contains `mode: deploy`, `cluster-template`, `storage`, and `tenants`.
+CLI nodes in the snapshot are ignored; no load generator or search is started.
+The cluster remains active until **Release cluster** is pressed in Runs or the
+run page. Connection endpoints and the actual launch YAML remain available in
+the profile. Other runs can be queued on the coordinator while it is held.
+The queue advances only after worker cleanup is confirmed. Cancel, controller
+shutdown and lease expiration retain the existing interruption/recovery rules;
+an interrupted deployment is not automatically restarted.
+
+While ready, a reservation records per-host CPU telemetry and all YDB counters
+(every five seconds, using the compressed dictionary/delta archive format).
+Completed one-minute intervals are copied into the profile's `telemetry/`
+directory while the cluster is held; Release saves the final interval before
+stopping nodes. Run downloads and run-level Prometheus export include these
+archives. Collection/transfer errors are reported explicitly; an interrupted
+transfer can leave the latest interval incomplete. Older reservations without
+telemetry remain readable and are labelled as having no recorded metrics.
+
+The template **Configuration** tab edits all message types reachable from the
+bundled YDB `TAppConfig` and `TEphemeralInputFields` protobuf descriptors. The latter
+covers YAML input fields such as `hosts`, `host_configs`, `fail_domain_type`,
+`default_disk_type`, `erasure` and top-level `storage_pool_types`.
+Nested messages, repeated fields,
+maps and oneof alternatives are discovered at runtime, not maintained as a
+separate field list. The schema fingerprint identifies the editor schema; it
+does not establish compatibility with an external YDB binary.
+
+Only explicitly added fields are saved in the template's `ydb_config` mapping.
+Removing a field unsets it; an unchecked boolean remains explicitly false.
+Use **Add section** or the **+** beside a section to search available fields.
+Scalar values can be set before adding; Cancel leaves the draft unchanged.
+Tenant **Effective configuration** shows inherited values read-only; **Override**
+enables a local value and **Reset** returns a field to inheritance.
+**Overrides only** hides inherited values without removing them from the field picker.
+64-bit integer values are kept as strings across the browser boundary. The
+top-level YAML tab accepts/exports a configuration V2 draft with `metadata`,
+`config`, `allowed_labels` and `selector_config`. Metadata starts at revision 0
+with an empty cluster identity; the runner supplies the actual session identity.
+Configuration scope selects cluster defaults or a tenant's overrides, stored in
+`ydb_tenant_configs`. Each tenant has one exact `tenant` selector. Nested maps
+use `!inherit` by default. The checkbox beside each tenant mapping controls
+whether it inherits or replaces the entire section; replacement paths are stored
+in `ydb_tenant_replacements`. YAML imports preserve this choice. Lists replace
+the corresponding list (their items do not inherit). Other selector predicates
+and multiple selectors for one tenant are rejected
+rather than silently converted. Legacy bare mappings can still be imported.
+Unknown fields are retained
+and reported, not silently removed. Comments and YAML formatting are not retained.
+Validation checks known protobuf field types, not full YDB cluster semantics.
+
+The tabs are Cluster, Physical, Logical, Tenants, Configuration and YAML.
+Applying YAML reconciles missing DCs/racks from `hosts` or `nameservice_config.node`,
+and tenants from exact tenant selectors or explicit tenant-pool slots. Registered
+hosts are matched by exact name, ID or endpoint hostname (case-insensitive DNS names);
+unknown or ambiguous hosts reject the entire operation with a dialog. No hosts are
+registered automatically. Existing nodes, disks and assignments are preserved.
+New tenants default to SSD and one storage group; review them before saving.
+Application changes only the draft, not the saved template. Imported managed or
+unknown config sections retain the existing execution-validation restrictions.
+Cluster is a projection of the same `ydb_config` mapping: domain name,
+self-management erasure, state storage and storage pool types. Renaming the
+domain in this form updates template tenant paths, not existing run drafts.
+Absent state storage and pools keep YDB/benchmark automatic generation.
+Execution supports one domain (ID 1), erasure `none`, `block-4-2` or
+`mirror-3-dc`, standard SSD/HDD pools and a single flat state-storage ring
+using static node IDs. Geometry is checked before worker preparation.
+Advanced configurations remain editable but may be rejected for execution.
+
+During distributed execution supported configuration overrides are recursively
+merged into each generated node config; lists replace existing lists. Unknown
+fields and benchmark-owned placement, disk, endpoint, system bootstrap and
+actor-system sections reject execution rather than bypassing admission or
+silently overriding the run Builder. These sections remain editable/exportable
+for standalone configuration work. Importing configuration does not reconstruct
+physical placement yet. No resources are opened or modified by the editor.
+
 `distributed-ydb` runs one fixed YDB cluster across the hosts in a placement
 template. All participating benchmark servers must run a compatible distributed
 peer protocol on Linux and be registered with the coordinator. The coordinator
@@ -321,6 +406,32 @@ The initial draft uses the `kv` upsert workload, one thread per CLI, 4 vCPU
 per static/dynamic node, and no verification repetition. These are editable
 starting values, not recommendations for a particular machine.
 
+In the **Physical** view, select a static node and use **Add disk** to configure
+individual SectorMap, file, block-device or PARTLABEL entries. Each entry specifies
+SSD/HDD media; SectorMap and file entries also specify size in GiB. Paths belong
+to the node's host; PARTLABEL stores a partition label, not a device path.
+Saving a template never creates files or opens/formats devices. Legacy SectorMap
+count/size settings migrate to an explicit disk list. Identical paths on one host
+are rejected, including PARTLABEL and its explicit `/dev/disk/by-partlabel/` path.
+Other aliases require host-side device identity checks and are not resolved by
+template validation. Execution supports all four sources with SSD or HDD media.
+Temporary files use `temporary: true` without a path; each generation creates its
+own files in `file-disks/<session-id>/` next to the history database and removes
+them after processes stop, including cancellation and recovery cleanup.
+Persistent files use `name` and reside directly in `file-disks/`; they remain after
+cleanup. Existing files must have the configured size. Existing files and block
+devices require the run-level `reset-disks: true` permission: YDB metadata is
+cleared before each cluster start, including search repetitions. Use only dedicated
+benchmark disks; their previous data is lost. New files need no reset permission.
+Workers reject mounted devices, active holders, duplicate device identities and
+overlapping disk/partition assignments, and hold generation-scoped disk locks.
+This does not replace reserving the devices against unrelated external workloads.
+Disks appear inside their storage node in Physical. Drag a disk onto another
+static node to reassign it within the same physical host.
+Individual disk cross-host moves are rejected. Whole nodes may move between hosts
+when all their disks are SectorMap or temporary files: configuration moves, not data. Empty
+storage nodes may be saved while editing; execution requires at least one disk.
+
 The legacy single-generator format uses the YAML editor. Its
 `cluster-template` field contains the complete placement snapshot, and `tenant`
 selects a database from that snapshot. `workload`, `actor-system`, `client`,
@@ -329,7 +440,7 @@ Actor-system vCPU is independent of affinity. Binary selection, node counts,
 logical locations, tenant assignments and CPU masks come from the template;
 there is no separate run-level geometry or affinity override.
 
-Supported legacy scope is SectorMap SSD storage with erasure `NONE`, one CLI
+Supported legacy scope is storage with erasure `NONE`, one CLI
 generator, at least one static node, and a target tenant with dynamic nodes.
 Other tenant definitions are allowed, but only the selected tenant receives
 the workload. Geometry is fixed during search and verification. This is not a
@@ -415,11 +526,22 @@ load:
 Use `measurement.verification-repetitions` to enable final verification. In the
 Builder, choose the workload and search objective under **Load generators**;
 verification is configured in **Run policy**. YAML remains a separate top-level tab.
-All participant servers must use the same distributed protocol version (2).
+All participant servers must use the same distributed protocol version (12).
 
 Each worker freezes the selected binaries, resolves placement from its own
 topology and reserves ports. The coordinator retains that execution plan,
 binary checksums, results and host-qualified telemetry in one canonical run.
+Each distributed profile retains `profile.yaml` with its input configuration,
+including the embedded cluster template. Before starting YDB nodes, the coordinator
+checks that all workers generated identical YAML and downloads one complete
+`cluster/configuration/cluster.yaml` (and
+`verification-cluster/configuration/cluster.yaml` for a fresh verification cluster).
+All static and dynamic nodes use this same document: storage actor-system settings
+are in the base configuration, and each tenant's settings are in its selector.
+These are the same bytes supplied to YDB, including resolved placement and tenant
+overrides, not a later reconstruction from the saved template.
+The run Configuration page and profile result link to these retained artifacts.
+Older runs without these artifacts are explicitly reported as unavailable.
 Counters are viewed per host, without merging unrelated wall clocks. Aggregate
 CPU metrics require sufficient common measurement coverage and bounded clock
 uncertainty; missing coverage is not reported as zero utilization.
@@ -579,7 +701,75 @@ returns to the first page. Pages are a live view, not an immutable snapshot:
 changing durations or timestamps may move active runs between pages.
 The legacy `/api/runs` list response is retained for older clients.
 
-The offline UI has four persistent navigation sections:
+The gear icon opens **Settings → Monitoring**. Monitoring settings are stored
+separately from host availability. Each server maintains a shared in-memory peer
+availability state, checked in the background every 10 seconds after each check
+cycle. Failed network requests mark peers unavailable immediately; federation and
+UI proxy requests skip them until a successful authenticated identity probe.
+Partial run pages retain an error and do not advance their cursor. A notification
+appears once per transition to unavailable (also on initial observation of an
+unavailable peer), while the results retain their incomplete-data warning.
+
+Monitoring settings are stored
+separately from run configurations in `.monitoring-settings.json`. The initial
+owner is selected by host ID and remains the owner after synchronization;
+all peers must be reachable for initialization. Later edits use optimistic
+revision checks and are forwarded to that owner. Peers pull updates every 30
+seconds. Unavailable peers remain pending; conflicting independent owners are
+reported rather than silently overwriting configuration. Keep the owner in the
+host directory; automatic owner failover is not supported.
+
+The Prometheus URL must be reachable from benchmark hosts; an empty URL disables
+the integration. An optional bearer token is stored in the server-side settings
+file and synchronized with peers. The browser receives a token-presence flag and
+a mask with four asterisks and the last four characters (short tokens are fully masked);
+an empty token input preserves the saved token, with a separate removal control.
+Peer transport must be trusted (use HTTPS outside a trusted network).
+Legacy import-service URLs are not reused as Prometheus URLs during migration.
+The Grafana URL must be reachable from the user's browser.
+Finished runs and attempts offer **Export metrics to Prometheus** when the URL
+is configured. Export runs on the owning benchmark server in the background,
+decodes archived counters without modifying them and sends Remote Write 1.0 to
+`PROMETHEUS_URL/api/v1/write`. Enable `--web.enable-remote-write-receiver` and
+configure `storage.tsdb.out_of_order_time_window` to cover historical samples.
+Original timestamps, zero values and histogram bucket counts are preserved;
+no histogram sum is invented. Series include `bench_host`, `bench_run`,
+`bench_benchmark`, `bench_profile`, `bench_attempt`, and `bench_repetition`.
+Exports require a finished run so archives remain stable. One export runs per
+server; temporary SQLite staging is limited to 2 GiB. Progress is stored under
+`.metrics-exports`. Every new or retried export checks raw Prometheus samples
+over the archived time interval: identical labels, timestamps and values are
+skipped; missing samples are sent; conflicting values stop the export.
+Query failures do not fall back to blind writes. A changed archive fingerprint
+prevents unsafe retries. Changing the Prometheus URL or token invalidates saved
+export statuses across hosts after settings synchronization, even when changing
+back to an earlier URL. Grafana-only changes leave statuses intact.
+An interrupted request can be replayed with identical timestamps and values.
+Partial failure does not roll back samples already accepted by Prometheus.
+
+Attempt pages also offer **Open in Grafana** when a Grafana URL and recorded
+counter timestamps are available. The chooser lists existing Grafana dashboards
+and bundled benchmark versions of the YDB dashboards. Links carry
+the attempt time range and host/run/profile/attempt variables. Bundled panels
+use those variables in every metric selector; existing third-party dashboards
+must implement the variables themselves to isolate a benchmark attempt.
+
+Configure `grafana_url` as the browser-facing base URL and `grafana_api_url`
+as the base URL reachable from the monitoring settings owner (empty means use
+`grafana_url`). All hosts forward Grafana operations to that owner, so Grafana
+can remain on its loopback listener. The optional `grafana_token` is a separate
+Grafana service-account token, stored and redacted like the Prometheus token.
+Its permissions must allow reading dashboards/datasources and creating dashboards.
+`grafana_datasource_uid` selects the default Prometheus datasource in the chooser.
+The user can choose another datasource before opening or installing a dashboard.
+The binary bundles all JSON dashboards in `ydb/deploy/helm/ydb-prometheus/dashboards/`.
+New files are discovered automatically during the next build; deployed binaries
+do not fetch new templates at runtime. Dashboard names come from their JSON titles.
+**Install and open** uses a separate versioned UID and `overwrite=false`;
+existing dashboards are never overwritten. Installation
+does not export metrics. Export counters separately before viewing archived data.
+
+The offline UI has the following persistent navigation sections:
 
 - **Runs** is the local/imported run journal. It filters by status, benchmark,
   profile, source, and period; provides YAML, `run.json`, and portable archive

@@ -69,7 +69,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
         std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
 
-        NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
         const TDelayParams* const DelayParams; // owned by scheduler
 
         const bool AllowMinFairShare; // tasks should look at this in case of missing snapshot
@@ -89,7 +88,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NSnapshot::TPool* TakeSnapshot() override;
 
-        // TODO: override AddQuery() to initialize query->Delay = Counters.Delay
+        void CollectDelay(ui64 microseconds) const {
+            if (Counters) {
+                Counters->Delay->Collect(microseconds);
+            }
+        }
     };
 
     class TDatabase : public TPool {

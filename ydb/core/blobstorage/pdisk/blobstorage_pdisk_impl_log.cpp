@@ -1761,13 +1761,17 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.SpaceColorBorder = GetColorBorderIcb();
                 StaticGroupChunkReservePerMilleCached = StaticGroupChunkReservePerMille;
                 params.StaticGroupChunkReservePerMille = static_cast<ui32>(StaticGroupChunkReservePerMilleCached);
+                const bool tightSpaceColors = Cfg->FeatureFlags.GetEnableTightPDiskSpaceColors();
                 ui64 chunkBaseLimitIcb = ChunkBaseLimitPerMille;
                 if (chunkBaseLimitIcb) {
                     params.ChunkBaseLimit = std::clamp(chunkBaseLimitIcb,
                             static_cast<ui64>(13), static_cast<ui64>(130));
+                } else if (tightSpaceColors) {
+                    params.ChunkBaseLimit = TColorLimits::TightCyanPermille;
                 } else {
                     params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
                 }
+                params.TightSpaceColorFloors = tightSpaceColors;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {
                         params.OwnersInfo[ownerId] = {

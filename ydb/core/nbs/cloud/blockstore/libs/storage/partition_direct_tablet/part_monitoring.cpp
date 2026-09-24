@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_util.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
@@ -195,8 +196,48 @@ TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
         .DirectBlockGroupsConnections =
             DumpProto(args.DirectBlockGroupsConnections),
         .AddHostInProgress = DumpProto(args.AddHostInProgress),
-        .VChunkConfigs = args.VChunkConfigs,
     };
+}
+
+struct TTouchedDDiskCounts
+{
+    size_t Enabled = 0;
+    size_t Disabled = 0;
+};
+
+TTouchedDDiskCounts GetTouchedDDiskCounts(
+    const TTouchedVChunks& touchedVChunks,
+    const TVChunkConfigs& vChunkConfigs)
+{
+    TTouchedDDiskCounts result;
+    size_t configuredTouchedVChunkCount = 0;
+    for (const auto& [vChunkIndex, config]: vChunkConfigs) {
+        if (touchedVChunks.Get(vChunkIndex)) {
+            const size_t ddiskCount = config.GetDDisks().Count();
+            const size_t enabledDDiskCount = config.GetEnabledDDisks().Count();
+            result.Enabled += enabledDDiskCount;
+            result.Disabled += ddiskCount - enabledDDiskCount;
+            ++configuredTouchedVChunkCount;
+        }
+    }
+
+    result.Enabled +=
+        (touchedVChunks.GetCount() - configuredTouchedVChunkCount) *
+        DefaultPrimaryCount;
+    return result;
+}
+
+void SendRenderMonPageEvent(
+    TActorSystem* actorSystem,
+    const TActorId& tablet,
+    const TActorId& requester,
+    TMonPageData data)
+{
+    actorSystem->Send(
+        tablet,
+        new TEvPartitionDirectPrivate::TEvRenderMonPage(
+            requester,
+            std::move(data)));
 }
 
 }   // namespace
@@ -206,6 +247,8 @@ TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
 TTabletInfo TPartitionActor::MakeMonTabletInfo() const
 {
     const ui32 blockSize = VolumeConfig.GetBlockSize();
+    const auto touchedDDiskCounts =
+        GetTouchedDDiskCounts(TouchedVChunks, VChunkConfigs);
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
@@ -213,9 +256,23 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
         .BlockCount = VolumeConfig.GetPartitions(0).GetBlockCount(),
         .VChunkSize = StorageConfig->GetVChunkSize(),
         .VolumeDirectBlockGroupCount = DefaultVolumeDirectBlockGroupCount,
+        .TouchedVChunkCount = TouchedVChunks.GetCount(),
+        .TouchedEnabledDDiskCount = touchedDDiskCounts.Enabled,
+        .TouchedDisabledDDiskCount = touchedDDiskCounts.Disabled,
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };
+}
+
+void TPartitionActor::HandleRenderMonPage(
+    const TEvPartitionDirectPrivate::TEvRenderMonPage::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto* request = ev->Get();
+    ctx.Send(
+        request->Requester,
+        new NMon::TEvRemoteHttpInfoRes(
+            RenderMonPage(request->Data, VChunkConfigs, TouchedVChunks)));
 }
 
 bool TPartitionActor::OnRenderAppHtmlPage(
@@ -233,6 +290,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
 
     TMonPageData data{
         .Page = page,
+        .SelectedDDiskBalanceStrategy =
+            ParseDDiskBalanceStrategy(cgi.Get("strategy")),
         .TabletInfo = MakeMonTabletInfo(),
         .SelectedDbg = ParseSelectedDbg(cgi),
         .SelectedVChunk = ParseSelectedVChunk(cgi),
@@ -246,7 +305,43 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         data.RuntimeError = "tablet is still initializing";
         ctx.Send(
             ev->Sender,
-            new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+            new NMon::TEvRemoteHttpInfoRes(
+                RenderMonPage(data, VChunkConfigs, TouchedVChunks)));
+        return true;
+    }
+
+    if (page == EMonPage::Overview && cgi.Get("action") == "balance" &&
+        ev->Get()->GetMethod() == HTTP_METHOD_POST)
+    {
+        ui32 from = 0;
+        ui32 to = 0;
+        bool requested = false;
+        if (cgi.Has("from") && cgi.Has("to") &&
+            TryFromString(cgi.Get("from"), from) &&
+            TryFromString(cgi.Get("to"), to) && from < to &&
+            to <= data.TabletInfo.VolumeDirectBlockGroupCount)
+        {
+            for (ui32 i = from; i < to; ++i) {
+                if (auto dbg = FastPathService->GetDirectBlockGroup(i)) {
+                    dbg->BalanceDDisks(data.SelectedDDiskBalanceStrategy);
+                    requested = true;
+                }
+            }
+        }
+
+        const TString querySuffix =
+            TStringBuilder()
+            << "&strategy="
+            << DDiskBalanceStrategyParam(data.SelectedDDiskBalanceStrategy);
+
+        ctx.Send(
+            ev->Sender,
+            new NMon::TEvRemoteHttpInfoRes(MakeRedirectResponse(
+                TabletID(),
+                "overview",
+                requested ? "DDisk balancing requested."
+                          : "Invalid DDisk balancing request.",
+                querySuffix)));
         return true;
     }
 
@@ -256,13 +351,16 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,
+                 tablet = SelfId(),
                  actorSystem = TActivationContext::ActorSystem()]   //
                 (const TFuture<TVector<TDbgSnapshot>>& future) mutable
                 {
                     data.Dbgs = future.GetValue();
-                    actorSystem->Send(
+                    SendRenderMonPageEvent(
+                        actorSystem,
+                        tablet,
                         requester,
-                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                        std::move(data));
                 });
         return true;
     }
@@ -280,7 +378,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         if (!data.SelectedVChunk) {
             ctx.Send(
                 ev->Sender,
-                new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                new NMon::TEvRemoteHttpInfoRes(
+                    RenderMonPage(data, VChunkConfigs, TouchedVChunks)));
             return true;
         }
 
@@ -288,13 +387,16 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,
+                 tablet = SelfId(),
                  actorSystem = TActivationContext::ActorSystem()]   //
                 (const TFuture<std::optional<TVChunkSnapshot>>& future) mutable
                 {
                     data.VChunk = future.GetValue();
-                    actorSystem->Send(
+                    SendRenderMonPageEvent(
+                        actorSystem,
+                        tablet,
                         requester,
-                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                        std::move(data));
                 });
         return true;
     }
@@ -307,13 +409,16 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,
+                 tablet = SelfId(),
                  actorSystem = TActivationContext::ActorSystem()]   //
                 (const TFuture<TVChunkStatsGatherResult>& future) mutable
                 {
                     data.VChunkStats = future.GetValue();
-                    actorSystem->Send(
+                    SendRenderMonPageEvent(
+                        actorSystem,
+                        tablet,
                         requester,
-                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                        std::move(data));
                 });
         return true;
     }
@@ -387,32 +492,36 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,
+                 tablet = SelfId(),
                  actorSystem = TActivationContext::ActorSystem()]   //
                 (const TFuture<TVector<TDbgSnapshot>>& future) mutable
                 {
                     data.Dbgs = future.GetValue();
-                    actorSystem->Send(
+                    SendRenderMonPageEvent(
+                        actorSystem,
+                        tablet,
                         requester,
-                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                        std::move(data));
                 });
         return true;
     }
 
     if (page == EMonPage::Latency || page == EMonPage::Memory) {
-        if (page == EMonPage::Memory) {
-            data.FastPathServiceInfo = FastPathService->GetMonInfo();
-        }
+        data.FastPathServiceInfo = FastPathService->GetMonInfo();
         FastPathService->GatherMonSnapshots(std::nullopt)
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,
+                 tablet = SelfId(),
                  actorSystem = TActivationContext::ActorSystem()]   //
                 (const TFuture<TVector<TDbgSnapshot>>& future) mutable
                 {
                     data.Dbgs = future.GetValue();
-                    actorSystem->Send(
+                    SendRenderMonPageEvent(
+                        actorSystem,
+                        tablet,
                         requester,
-                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                        std::move(data));
                 });
         return true;
     }
@@ -423,13 +532,16 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,
+                 tablet = SelfId(),
                  actorSystem = TActivationContext::ActorSystem()]   //
                 (const TFuture<TVector<TDbgSnapshot>>& future) mutable
                 {
                     data.Dbgs = future.GetValue();
-                    actorSystem->Send(
+                    SendRenderMonPageEvent(
+                        actorSystem,
+                        tablet,
                         requester,
-                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                        std::move(data));
                 });
         return true;
     }
@@ -451,7 +563,6 @@ bool TPartitionActor::PrepareMonitoring(
     std::initializer_list<bool> results = {
         db.ReadVolumeConfig(args.VolumeConfig),
         db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
-        db.ReadAllVChunkConfigs(args.VChunkConfigs),
         db.ReadAddHostInProgress(args.AddHostInProgress),
     };
 
@@ -483,7 +594,8 @@ void TPartitionActor::CompleteMonitoring(
     };
     ctx.Send(
         args.Requester,
-        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+        new NMon::TEvRemoteHttpInfoRes(
+            RenderMonPage(data, VChunkConfigs, TouchedVChunks)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

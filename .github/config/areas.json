@@ -1,0 +1,53 @@
+{
+  "canonical": [
+    "area/blobstorage",
+    "area/core",
+    "area/cs",
+    "area/datashard",
+    "area/docs",
+    "area/engineering",
+    "area/fq",
+    "area/infra",
+    "area/nbs",
+    "area/optimizer",
+    "area/pmo",
+    "area/queryprocessor",
+    "area/sdk",
+    "area/security",
+    "area/support",
+    "area/topics",
+    "area/ui"
+  ],
+  "gh_org": "ydb-platform",
+  "gh_teams": {
+    "area/blobstorage": "https://github.com/orgs/ydb-platform/teams/blobstorage",
+    "area/core": "https://github.com/orgs/ydb-platform/teams/core",
+    "area/cs": "https://github.com/orgs/ydb-platform/teams/cs",
+    "area/datashard": "https://github.com/orgs/ydb-platform/teams/datashard",
+    "area/docs": "https://github.com/orgs/ydb-platform/teams/docs",
+    "area/engineering": "https://github.com/orgs/ydb-platform/teams/engineering",
+    "area/fq": "https://github.com/orgs/ydb-platform/teams/fq",
+    "area/nbs": "https://github.com/orgs/ydb-platform/teams/nbs",
+    "area/queryprocessor": "https://github.com/orgs/ydb-platform/teams/qp",
+    "area/sdk": "https://github.com/orgs/ydb-platform/teams/appteam",
+    "area/security": "https://github.com/orgs/ydb-platform/teams/security",
+    "area/topics": "https://github.com/orgs/ydb-platform/teams/topics",
+    "area/ui": "https://github.com/orgs/ydb-platform/teams/ui-backend"
+  },
+  "no_area": "area/-",
+  "unknown": "area/-",
+  "aliases": {
+    "area/appteam": "area/sdk",
+    "area/cli": "area/sdk",
+    "area/actorsystem": "area/blobstorage",
+    "area/hive": "area/core",
+    "area/schemeshard": "area/core",
+    "area/system-infra": "area/core",
+    "area/pg": "area/queryprocessor",
+    "area/runtime": "area/queryprocessor",
+    "area/yql": "area/queryprocessor",
+    "area/ui-backend": "area/ui",
+    "area/qa": "area/engineering",
+    "area/duty": "area/engineering"
+  }
+}

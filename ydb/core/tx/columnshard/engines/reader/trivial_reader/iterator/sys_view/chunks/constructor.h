@@ -19,9 +19,9 @@ private:
 
 public:
     TPortionDataConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const TPortionInfo::TConstPtr& portion,
-        const ISnapshotSchema::TPtr& schema)
+        const ISnapshotSchema::TPtr& schema, const ESourcesSorting sourcesSorting)
         : TBase(tabletId, TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portion->GetPortionId(), 0, 0),
-              TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
+              TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()), sourcesSorting)
         , PathId(pathId)
         , Portion(portion)
         , Schema(schema)
@@ -43,7 +43,7 @@ class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDat
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
 
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
+    virtual std::unique_ptr<NReader::NCommon::TDataSourceLease> DoExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {

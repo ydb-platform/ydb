@@ -95,7 +95,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
     AddUsedIUs(usedIUs, join->GetLeftInput()->GetOutputIUs());
     AddUsedIUs(usedIUs, join->GetRightInput()->GetOutputIUs());
-    for (const auto& [leftKey, rightKey] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         usedIUs.insert(leftKey);
         usedIUs.insert(rightKey);
     }
@@ -105,10 +107,11 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     // Build an inner join, but in case of LeftSemi and LeftOnly, the right side may contain duplicate IUs
     // which will break the plan. So we rename them
+    const auto joinKind = join->JoinKeys.empty() ? "Cross" : "Inner";
     auto commonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), join->GetRightInput()->GetOutputIUs());
     auto rightRenameMap = MakeRenameMap(commonIUs, props.InternalVarIdx, usedIUs);
     auto innerJoin = MakeJoinWithRightRenames(
-        join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
+        join->GetLeftInput(), join->GetRightInput(), join->Pos, joinKind, join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
     auto filterExpr = MakeConjunction(join->JoinFilters);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
@@ -131,9 +134,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
     }
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
+    TVector<TJoinKey> newJoinKeys;
     for (const auto & column : keyColumns) {
-        newJoinKeys.push_back(std::make_pair(column, column));
+        newJoinKeys.emplace_back(column, column);
     }
 
     auto result = MakeJoinWithRightRenames(join->GetLeftInput(), newFilter, join->Pos, join->JoinKind, newJoinKeys, {}, renameMap, ctx.ExprCtx, props);

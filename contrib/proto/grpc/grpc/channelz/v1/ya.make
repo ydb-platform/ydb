@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2026-03-31)
+VERSION(2026-09-02)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc-proto/archive/99135b19189588fcc787acb84cff27991787473d.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc-proto/archive/dd549fc4ed04b60b0fdd3866b82ef0a7c87c6e4f.tar.gz)
 
 PY_NAMESPACE(grpc.channelz.v1)
 

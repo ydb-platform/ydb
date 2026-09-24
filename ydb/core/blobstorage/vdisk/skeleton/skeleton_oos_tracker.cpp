@@ -119,11 +119,11 @@ namespace NKikimr {
             MonGroup.CapacityAlertRed() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::RED) ? 1 : 0;
             MonGroup.CapacityAlertBlack() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) ? 1 : 0;
 
-            if (msg->NumSlots > 0) {
-                ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
+            if (msg->NumOwners > 0) {
+                ui32 timeAvailable = 1'000'000'000 / msg->NumOwners;
                 CostGroup.DiskTimeAvailableNs() = timeAvailable;
                 if (VCtx->CostTracker) {
-                    VCtx->CostTracker->UpdatePDiskParameters(msg->NumSlots, msg->ExpectedSlotCount);
+                    VCtx->CostTracker->UpdatePDiskParameters(msg->NumOwners, msg->ExpectedSlotCount);
                 }
             }
 

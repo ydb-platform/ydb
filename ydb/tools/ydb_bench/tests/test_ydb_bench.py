@@ -2,6 +2,7 @@ import csv
 import hashlib
 import inspect
 import io
+import itertools
 import json
 import os
 import plistlib
@@ -1103,7 +1104,7 @@ class YdbBenchTest(unittest.TestCase):
             local-ydb:
               geometry-best:
                 workload: {type: kv, operation: upsert}
-                actor-system: {use-shared-threads: true, use-united-pool: true, use-ring-queue: false}
+                actor-system: {use-shared-threads: true, use-united-pool: true, use-ring-queue: false, use-waker: true}
                 geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
                 load: {parameter: threads, values: [1]}
                 measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
@@ -1140,11 +1141,11 @@ class YdbBenchTest(unittest.TestCase):
         for call in self.last_local_ydb_cluster_constructor.call_args_list:
             self.assertEqual(
                 call.kwargs["actor_system"],
-                {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+                {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False, "use_waker": True},
             )
         self.assertEqual(
             manifest["parameters"]["actor_system"],
-            {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+            {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False, "use_waker": True},
         )
         verification_cluster = self.last_local_ydb_cluster_constructor.call_args_list[1]
         self.assertEqual(verification_cluster.args[3], self.root / "geometry-best" / "verification-cluster")
@@ -2462,29 +2463,39 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
                 "use_shared_threads": False,
                 "use_united_pool": False,
                 "use_ring_queue": True,
+                "use_waker": False,
             },
         )
-        for shared in (False, True):
-            for united in (False, True):
-                for ring in (False, True):
-                    with self.subTest(shared=shared, united=united, ring=ring):
-                        profile["actor-system"] = {
-                            "use-shared-threads": shared,
-                            "use-united-pool": united,
-                            "use-ring-queue": ring,
-                        }
-                        flags = load().parameters["local_ydb"]["actor_system"]
-                        self.assertEqual(
-                            flags, {"use_shared_threads": shared, "use_united_pool": united, "use_ring_queue": ring}
-                        )
-                        cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
-                        self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+        for shared, united, ring, waker in itertools.product((False, True), repeat=4):
+            with self.subTest(shared=shared, united=united, ring=ring, waker=waker):
+                profile["actor-system"] = {
+                    "use-shared-threads": shared,
+                    "use-united-pool": united,
+                    "use-ring-queue": ring,
+                    "use-waker": waker,
+                }
+                flags = load().parameters["local_ydb"]["actor_system"]
+                expected = {
+                    "use_shared_threads": shared,
+                    "use_united_pool": united,
+                    "use_ring_queue": ring,
+                    "use_waker": waker,
+                }
+                self.assertEqual(flags, expected)
+                cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
+                if not waker:
+                    del expected["use_waker"]
+                self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **expected})
         self.assertTrue(
             local_ydb._cluster_config([{"ic_port": 19001}], 64, "host")["config"]["actor_system_config"][
                 "use_ring_queue"
             ]
         )
-        for key in ("use-shared-threads", "use-united-pool", "use-ring-queue"):
+        self.assertNotIn(
+            "use_waker",
+            local_ydb._cluster_config([{"ic_port": 19001}], 64, "host")["config"]["actor_system_config"],
+        )
+        for key in ("use-shared-threads", "use-united-pool", "use-ring-queue", "use-waker"):
             for value in (0, 1, "true", "false", None, [], {}):
                 with self.subTest(key=key, value=value):
                     profile["actor-system"] = {key: value}
@@ -2505,6 +2516,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
                   use-shared-threads: true
                   use-united-pool: false
                   use-ring-queue: false
+                  use-waker: true
                   static-nodes: {cpu-count: 8}
                   dynamic-nodes: {cpu-count: 4}
         """))
@@ -2520,6 +2532,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             const old={parameters:{}},current={parameters:profile.local_ydb};
             const legacy=JSON.parse(JSON.stringify(profile)),legacyYaml=[];
             delete legacy.local_ydb.actor_system.use_ring_queue;
+            delete legacy.local_ydb.actor_system.use_waker;
             serializeLocalYdb(legacyYaml,legacy);
             process.stdout.write(JSON.stringify({
               yaml:'local-ydb:\\n  flags:\\n'+yaml.join('\\n'),
@@ -2542,7 +2555,8 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             load_config(self._config(result["yaml"])).runs[0].parameters["local_ydb"]["actor_system"], flags
         )
         self.assertEqual(
-            result["defaults"], {"use_shared_threads": False, "use_united_pool": False, "use_ring_queue": True}
+            result["defaults"],
+            {"use_shared_threads": False, "use_united_pool": False, "use_ring_queue": True, "use_waker": False},
         )
         self.assertTrue(result["old"]["use_ring_queue"])
         self.assertTrue(
@@ -2554,6 +2568,11 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         self.assertFalse(result["old"]["use_shared_threads"])
         self.assertTrue(result["current"]["use_shared_threads"])
         self.assertFalse(result["current"]["use_united_pool"])
+        self.assertFalse(result["old"]["use_waker"])
+        self.assertTrue(result["current"]["use_waker"])
+        self.assertFalse(
+            load_config(self._config(result["legacyYaml"])).runs[0].parameters["local_ydb"]["actor_system"]["use_waker"]
+        )
         self.assertEqual(result["current"]["Static node vCPUs"], 8)
         self.assertEqual(result["current"]["Dynamic node vCPUs"], 4)
 
@@ -2604,6 +2623,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             "local-actor-system-use_united_pool",
             "local-actor-system-use_shared_threads",
             "local-actor-system-use_ring_queue",
+            "local-actor-system-use_waker",
         ):
             self.assertIn('id="' + field + '"' if field != "local-ydbd-version" else "id=" + field, html)
 
@@ -4120,7 +4140,7 @@ const document={querySelector:selector=>{
   return buttons.get(selector)
 }};
 const enc=encodeURIComponent,esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;');
-const sectionTabs=()=>'<nav>Summary YAML</nav>',bindSectionTabs=()=>{};
+const sectionTabs=()=>'<nav>Summary YAML</nav>',bindSectionTabs=()=>{},mountMetricsExport=()=>{};
 const clearRefresh=()=>{},profileGroups=()=>({'local-ydb/one':[{}]}),
   parseLocalYdbProfileSelection=()=>({profile:'',view:''}),breadcrumbs=()=>'',status=value=>value,
   humanTime=()=>'',duration=()=>'',runHref=(id,kind)=>'/'+id+'/'+kind,shell=(_,body)=>body,
@@ -4130,7 +4150,7 @@ async function api(path){
   if(path.endsWith('/config.json')){
     configReads++;
     if(failConfig)throw Error('Saved YAML unavailable');
-    return {yaml:'saved: <script>not markup</script>',perf:true,continue_on_error:false,structured:{'local-ydb':{
+    return {yaml:'saved: <script>not markup</script>',profile_yaml:{'local-ydb/one':'profile: <script>not markup</script>'},perf:true,continue_on_error:false,structured:{'local-ydb':{
       one:{workload:{type:'stock',operation:'add-rand-order'},load:{search:{start:'1',maximum:'256'}},
         'actor-system':{'use-united-pool':'false'},'unknown-setting':'<script>'},
       two:{workload:{type:'kv'},measurement:{duration:'60'}}
@@ -4140,15 +4160,24 @@ async function api(path){
 }
 (async()=>{
   await renderRun('run-id','','configuration');
+  const savedLinks=savedYdbConfigurationHtml('remote:run',[
+    {path:'distributed-ydb/example/cluster/configuration/node.yaml',label:'<node>'}
+  ]);
+  if(!savedLinks.includes('&lt;node>')||!savedLinks.includes('/remote:run/artifact/'))throw Error('Saved YAML link is unsafe or loses its owner');
+  if(!savedYdbConfigurationHtml('old',[]).includes('not reconstructed'))throw Error('Missing historical configuration must be explicit');
   const distributed=configurationProfile({'cluster-template':{name:'cluster',nodes:[{name:'node-1',host_id:'local'}]},
     storage:{'cpu-count':8},tenants:{'/Root/db':{'cpu-count':16}},'cli-nodes':{'cli-1':{client:{threads:4}}},measurement:{duration:60}});
   for(const text of ['Cluster','Storage','Tenant · /Root/db','Load generator · cli-1','Run policy','Local']){
     if(!distributed.includes(text))throw Error('Distributed section missing: '+text)
   }
   if((distributed.match(/node-1/g)||[]).length!==1)throw Error('Repeated node name');
-  if(!app.innerHTML.includes('saved: &lt;script>'))throw Error('Saved YAML is absent or unescaped');
+  if(!app.innerHTML.includes('saved: &lt;script>'))throw Error('Run YAML is absent or unescaped');
+  if(app.innerHTML.includes('Profile YAML</option>'))throw Error('Profile YAML mixed with YDB configuration');
+  if(!app.innerHTML.includes('No YDB configuration was saved for this profile'))throw Error('Missing YDB configuration is not explained');
+  if(app.innerHTML.includes('data-config-view='))throw Error('Redundant Profiles level remains');
   if(!app.innerHTML.includes('perf: on'))throw Error('Run options missing');
-  if(!app.innerHTML.includes('data-config-profile="yaml"'))throw Error('YAML is not a peer profile tab');
+  if(!app.innerHTML.includes('data-config-profile="yaml"'))throw Error('Run YAML must share profile navigation');
+  if(!app.innerHTML.includes('data-config-section="6"'))throw Error('Profile subtabs missing');
   if(app.innerHTML.includes('configuration:summary'))throw Error('Redundant Summary level remains');
   for(const value of ['Workload','Load &amp; objective','Actor system','local-ydb/two','Unknown setting','false']){
     if(!app.innerHTML.includes(value))throw Error('Structured field missing: '+value)
@@ -4157,8 +4186,17 @@ async function api(path){
   if(app.innerHTML.includes('id=local-ydb-result'))throw Error('Mounted profile instead of configuration');
   await buttons.get('#refresh-run').onclick();
   if(configReads!==2)throw Error('Refresh lost configuration tab');
-  configurationSelections.set('run-id','YAML');await buttons.get('#refresh-run').onclick();
-  if(!app.innerHTML.includes('data-config-profile="yaml" class="selected"'))throw Error('Refresh lost YAML selection');
+  configurationSelections.set('run-id','local-ydb/two');
+  configurationSections.set(JSON.stringify(['run-id','local-ydb/two']),'YDB configuration');
+  await buttons.get('#refresh-run').onclick();
+  if(!app.innerHTML.includes('data-config-profile="1" class="selected"'))throw Error('Refresh lost profile selection');
+  if(!app.innerHTML.includes('data-config-section="6" class="active" aria-pressed="true">YDB configuration'))throw Error('Refresh lost subtab selection');
+  configurationSelections.set('run-id','yaml');
+  await buttons.get('#refresh-run').onclick();
+  if(!app.innerHTML.includes('data-config-profile="yaml" class="selected"'))throw Error('Refresh lost Run YAML selection');
+  const distributedSections=configurationProfileSections({'cluster-template':{name:'cluster'},storage:{'cpu-count':8},tenants:{'/Root/a':{'cpu-count':16}}});
+  if(distributedSections.map(([name])=>name).join(',')!=='Cluster,Storage,Tenants,Load generators,Run policy')throw Error('Distributed subtabs mismatch');
+  if(distributedSections[0][1].includes('Cpu count')||!distributedSections[1][1].includes('8'))throw Error('Profile sections overlap');
   failConfig=true;await renderRun('run-id','','configuration');
   if(!app.innerHTML.includes('Saved YAML unavailable')||!app.innerHTML.includes('class=run-tabs')){
     throw Error('Missing YAML error must preserve navigation')
@@ -4198,6 +4236,7 @@ const renderRun=(...args)=>{rendered=args};
         script = web._JS[web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")]
         script += """
 const assert=require('node:assert/strict'),location={hash:'#new'};
+const editor={model:{profiles:[]}};
 let editorHost='sas',button={textContent:'Start run'},resolve;
 const document={querySelector:()=>button};
 const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Promise(done=>{resolve=done})};
@@ -4211,6 +4250,18 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
   assert.equal(button.textContent,'Add to queue');
   pending=refreshEditorActivity();resolve({queued:0});await pending;
   assert.equal(button.textContent,'Start run');
+  editor.model.profiles=[{distributed_config:{mode:'deploy'}}];
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Deploy cluster');
+  pending=refreshEditorActivity();resolve({active_run_id:'busy'});await pending;
+  assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:1});await pending;
+  assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Deploy cluster');
+  editor.model.profiles=[];
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Start run');
 })().catch(error=>{console.error(error);process.exitCode=1});
 """
         subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
@@ -4222,6 +4273,7 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
             with mock.patch.object(web, "load_manifest", return_value={"config": {"snapshot": snapshot}}):
                 saved = web.RunService.run_config(service, "old")
         self.assertEqual(saved["yaml"], snapshot)
+        self.assertEqual(yaml.safe_load(saved["profile_yaml"]["local-ydb/old"]), yaml.safe_load(snapshot))
         self.assertEqual(
             saved["structured"], {"local-ydb": {"old": {"workload": {"type": "stock"}, "custom-option": "001"}}}
         )
@@ -4231,6 +4283,66 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
                     saved = web.RunService.run_config(service, "old")
             self.assertEqual(saved["yaml"], snapshot)
             self.assertIsNone(saved["structured"])
+
+    def test_saved_ydb_configuration_files_are_scoped_to_run(self):
+        profile = self.root / "distributed-ydb" / "example"
+        directory = profile / "cluster" / "configuration"
+        directory.mkdir(parents=True)
+        config = directory / "node.yaml"
+        config.write_text("config: {}\n")
+        (profile / "profile.yaml").write_text("distributed-ydb: {}\n")
+        (directory / "index.json").write_text(
+            json.dumps(
+                [
+                    {"node": "static", "host_id": "a", "path": "configuration/node.yaml"},
+                    {"node": "escape", "path": "../../../outside.yaml"},
+                ]
+            )
+        )
+        files = web._saved_ydb_configurations(self.root, profile)
+        self.assertEqual(2, len(files))
+        self.assertEqual("Profile snapshot", files[0]["label"])
+        self.assertEqual("distributed-ydb/example/cluster/configuration/node.yaml", files[1]["path"])
+        self.assertEqual([], web._saved_ydb_configurations(self.root, self.root.parent))
+        (directory / "index.json").write_text("invalid")
+        self.assertEqual(1, len(web._saved_ydb_configurations(self.root, profile)))
+
+    def test_saved_cluster_yaml_and_legacy_identical_configs(self):
+        profile = self.root / "distributed-ydb" / "example"
+        directory = profile / "cluster" / "configuration"
+        directory.mkdir(parents=True)
+        (directory / "cluster.yaml").write_text("config: {}\n")
+        files = web._saved_ydb_configurations(self.root, profile)
+        self.assertEqual(1, len(files))
+        self.assertEqual("cluster · YDB YAML", files[0]["label"])
+        (directory / "cluster.yaml").rename(directory / "one.yaml")
+        (directory / "two.yaml").write_text("config: {}\n")
+        (directory / "index.json").write_text(
+            json.dumps(
+                [
+                    {"node": "one", "path": "configuration/one.yaml"},
+                    {"node": "two", "path": "configuration/two.yaml"},
+                ]
+            )
+        )
+        files = web._saved_ydb_configurations(self.root, profile)
+        self.assertEqual(1, len(files))
+        self.assertEqual("cluster · YDB YAML", files[0]["label"])
+        (directory / "two.yaml").write_text("config: {different: true}\n")
+        self.assertEqual(2, len(web._saved_ydb_configurations(self.root, profile)))
+
+    def test_saved_profile_yaml_keeps_types_and_isolates_profiles(self):
+        document = {"distributed-ydb": {"one": {"enabled": False, "count": 8}, "two": {"name": "001"}}}
+        service = mock.Mock(output=self.root)
+        with mock.patch.object(web, "_run_directory", return_value=self.root):
+            with mock.patch.object(
+                web, "load_manifest", return_value={"config": {"snapshot": yaml.safe_dump(document)}}
+            ):
+                saved = web.RunService.run_config(service, "run")
+        for name, value in document["distributed-ydb"].items():
+            self.assertEqual(
+                yaml.safe_load(saved["profile_yaml"]["distributed-ydb/" + name]), {"distributed-ydb": {name: value}}
+            )
 
     def test_local_ydb_latency_verification_rejects_the_only_feasible_load(self):
         configuration = load_config(self._config("""
@@ -5382,7 +5494,7 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
     def test_local_ydb_actor_system_config_is_used_by_static_dynamic_and_scaled_nodes(self):
-        flags = {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False}
+        flags = {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False, "use_waker": True}
         cluster = local_ydb.LocalYdbCluster(
             self.root / "ydbd",
             self.root / "ydb",
@@ -8063,6 +8175,7 @@ class WebTest(unittest.TestCase):
             "use_shared_threads": True,
             "use_united_pool": False,
             "use_ring_queue": False,
+            "use_waker": True,
             "private": "not projected",
         }
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -8095,6 +8208,7 @@ class WebTest(unittest.TestCase):
                     "use_shared_threads": True,
                     "use_united_pool": False,
                     "use_ring_queue": False,
+                    "use_waker": True,
                 },
             )
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):

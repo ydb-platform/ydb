@@ -60,6 +60,12 @@ TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& sessio
     }
 }
 
+NYdb::NTopic::TTopicDescription DescribeTopic(NYdb::NTopic::TTopicClient& pq, const TString& path) {
+    const auto result = pq.DescribeTopic(path).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result.GetTopicDescription();
+}
+
 template<bool UseSchemaSecrets>
 void CreateSecret(const TString& secretName, const TString& secretValue, TSession& session) {
     TString query;
@@ -7470,6 +7476,51 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ChangefeedBarriersIntervalBelowOneSecondSql) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/table` (
+                Key Uint64,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', BARRIERS_INTERVAL = Interval('PT0.5S')
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "barriers_interval must be at least 1 second");
+    }
+
+    Y_UNIT_TEST(ChangefeedBarriersIntervalBelowOneSecondApi) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.CreateTable("/Root/table", TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .Build()
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto changefeed = TChangefeedDescription("feed", EChangefeedMode::KeysOnly, EChangefeedFormat::Json)
+            .WithResolvedTimestamps(TDuration::MilliSeconds(500));
+        result = session.AlterTable("/Root/table", TAlterTableSettings()
+            .AppendAddChangefeeds(changefeed)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resolved timestamps interval must be at least 1 second");
+    }
+
     Y_UNIT_TEST(ChangefeedAwsRegion) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetPQConfig(DefaultPQConfig())
@@ -13123,6 +13174,403 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "METRICS_LEVEL value should be an integer", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTopicRejectsHugePartitionCount, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_over_ui32` WITH (min_active_partitions = )"
+                << (ui64(Max<ui32>()) + 1) << ")";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Uint32", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_over_ui64` WITH (min_active_partitions = 18446744073709551616)
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "overflow", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAndAlterTopicYqlSettings, UseQueryService) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_settings` WITH (
+                    min_active_partitions = 2,
+                    retention_period = Interval('PT2H'),
+                    retention_storage_mb = 100,
+                    partition_write_speed_bytes_per_second = 2097152,
+                    partition_write_burst_bytes = 2097152,
+                    supported_codecs = 'RAW,GZIP',
+                    metrics_level = 2,
+                    content_based_deduplication = true
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/topic_settings");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitioningSettings().GetMinActivePartitions(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitions().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetRetentionPeriod(), TDuration::Hours(2));
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetRetentionStorageMb().value(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionWriteSpeedBytesPerSecond(), 2_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionWriteBurstBytes(), 2_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetSupportedCodecs().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetSupportedCodecs()[0], ECodec::RAW);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetSupportedCodecs()[1], ECodec::GZIP);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetMetricsLevel().value(), 2);
+            UNIT_ASSERT(desc.GetContentBasedDeduplication());
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_settings` SET (
+                    retention_period = Interval('PT3H'),
+                    retention_storage_mb = 200,
+                    partition_write_speed_bytes_per_second = 1048576,
+                    partition_write_burst_bytes = 1048576,
+                    supported_codecs = 'RAW',
+                    metrics_level = 3
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/topic_settings");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetRetentionPeriod(), TDuration::Hours(3));
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetRetentionStorageMb().value(), 200);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionWriteSpeedBytesPerSecond(), 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionWriteBurstBytes(), 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetSupportedCodecs().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetSupportedCodecs()[0], ECodec::RAW);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetMetricsLevel().value(), 3);
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_settings` RESET (
+                    retention_period,
+                    retention_storage_mb,
+                    partition_write_speed_bytes_per_second,
+                    partition_write_burst_bytes,
+                    supported_codecs,
+                    metrics_level,
+                    content_based_deduplication
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/topic_settings");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetRetentionPeriod(), TDuration::Days(1));
+            UNIT_ASSERT(!desc.GetRetentionStorageMb().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionWriteSpeedBytesPerSecond(), 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionWriteBurstBytes(), 1_MB);
+            UNIT_ASSERT(desc.GetSupportedCodecs().empty());
+            UNIT_ASSERT(!desc.GetMetricsLevel().has_value());
+            UNIT_ASSERT(!desc.GetContentBasedDeduplication());
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_autoscale` WITH (
+                    min_active_partitions = 2,
+                    max_active_partitions = 10,
+                    auto_partitioning_strategy = 'SCALE_UP',
+                    auto_partitioning_stabilization_window = Interval('PT10M'),
+                    auto_partitioning_up_utilization_percent = 80,
+                    auto_partitioning_down_utilization_percent = 20
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/topic_autoscale");
+            const auto& partitioning = desc.GetPartitioningSettings();
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMinActivePartitions(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMaxActivePartitions(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::ScaleUp);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetStabilizationWindow(), TDuration::Minutes(10));
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetUpUtilizationPercent(), 80);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetDownUtilizationPercent(), 20);
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_autoscale` SET (
+                    max_active_partitions = 20,
+                    auto_partitioning_strategy = 'SCALE_UP_AND_DOWN',
+                    auto_partitioning_stabilization_window = Interval('PT15M'),
+                    auto_partitioning_up_utilization_percent = 70,
+                    auto_partitioning_down_utilization_percent = 25
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/topic_autoscale");
+            const auto& partitioning = desc.GetPartitioningSettings();
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetMaxActivePartitions(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::ScaleUpAndDown);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetStabilizationWindow(), TDuration::Minutes(15));
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetUpUtilizationPercent(), 70);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetDownUtilizationPercent(), 25);
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_autoscale` RESET (
+                    auto_partitioning_stabilization_window,
+                    auto_partitioning_up_utilization_percent,
+                    auto_partitioning_down_utilization_percent
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/topic_autoscale");
+            const auto& partitioning = desc.GetPartitioningSettings();
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetStabilizationWindow(), TDuration::Seconds(300));
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetUpUtilizationPercent(), 90);
+            UNIT_ASSERT_VALUES_EQUAL(partitioning.GetAutoPartitioningSettings().GetDownUtilizationPercent(), 30);
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_autoscale` RESET (auto_partitioning_strategy)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "RESET is currently not supported for topic options", result.GetIssues().ToString());
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_settings` RESET (min_active_partitions)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "RESET is currently not supported for topic options", result.GetIssues().ToString());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_autoscale` RESET (max_active_partitions)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "RESET is currently not supported for topic options", result.GetIssues().ToString());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_settings` RESET (metering_mode)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "RESET is currently not supported for topic options", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AddAndAlterChangefeedYqlTopicSettings, UseQueryService) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY',
+                    FORMAT = 'JSON',
+                    RETENTION_PERIOD = Interval('PT2H'),
+                    TOPIC_MIN_ACTIVE_PARTITIONS = 3,
+                    TOPIC_MAX_ACTIVE_PARTITIONS = 30,
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                )
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto desc = DescribeTopic(pq, "/Root/table/feed");
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetRetentionPeriod(), TDuration::Hours(2));
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitions().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitioningSettings().GetMinActivePartitions(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitioningSettings().GetMaxActivePartitions(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::ScaleUp);
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ALTER CHANGEFEED feed SET (retention_period = Interval('PT4H'))
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "alter is not supported", result.GetIssues().ToString());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ALTER CHANGEFEED feed SET (topic_min_active_partitions = 4)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "alter is not supported", result.GetIssues().ToString());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ALTER CHANGEFEED feed SET (topic_max_active_partitions = 40)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "alter is not supported", result.GetIssues().ToString());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ALTER CHANGEFEED feed SET (topic_auto_partitioning = 'DISABLED')
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "alter is not supported", result.GetIssues().ToString());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ALTER CHANGEFEED feed RESET (retention_period)
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (retention_period = Interval('PT4H'))
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetRetentionPeriod(), TDuration::Hours(4));
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` RESET (retention_period)
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetRetentionPeriod(), TDuration::Days(1));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTopicMeteringModeRequestUnits, UseQueryService) {
+        using namespace NTopic;
+
+        auto pqConfig = DefaultPQConfig();
+        pqConfig.MutableBillingMeteringConfig()->SetEnabled(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(pqConfig));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        const auto result = executeQuery(R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/topic_ru` WITH (metering_mode = 'request_units')
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/topic_ru").GetMeteringMode(), EMeteringMode::RequestUnits);
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTopicContentBasedDeduplication, UseQueryService) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_cbd`
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(!DescribeTopic(pq, "/Root/topic_cbd").GetContentBasedDeduplication());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_cbd` SET (content_based_deduplication = true)
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(DescribeTopic(pq, "/Root/topic_cbd").GetContentBasedDeduplication());
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_cbd` RESET (content_based_deduplication)
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(!DescribeTopic(pq, "/Root/topic_cbd").GetContentBasedDeduplication());
         }
     }
 

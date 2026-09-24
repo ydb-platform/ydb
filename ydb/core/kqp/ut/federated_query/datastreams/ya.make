@@ -15,10 +15,11 @@ ENDIF()
 SRCS(
     common.cpp
     datastreams_checkpoints_ut.cpp
-    datastreams_ut.cpp
-    datastreams_table_mode_ut.cpp
     datastreams_queries_restart_ut.cpp
+    datastreams_table_mode_ut.cpp
+    datastreams_ut.cpp
     kqp_has_path_ut.cpp
+    streaming_aggregation_ut.cpp
     streaming_ddl_ut.cpp
     streaming_operation_continuation_ut.cpp
     streaming_deferrd_commit_write_ut.cpp
@@ -33,8 +34,8 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
-    ydb/core/sys_view/common
     ydb/core/protos
+    ydb/core/sys_view/common
     ydb/core/testlib
     ydb/library/grpc/server/actors
     ydb/library/table_creator
@@ -45,10 +46,11 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     ydb/public/lib/ydb_cli/commands/interactive/common
-    ydb/services/workload_manager/ut/common
     ydb/services/metadata/abstract
-    yql/essentials/sql/pg
+    ydb/services/workload_manager/ut/common
     yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
+    yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/yson2
 )
 

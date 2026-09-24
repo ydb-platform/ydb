@@ -1332,7 +1332,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
 
     // ChangePathState
     case TTxState::ETxType::TxChangePathState:
-        return CreateChangePathState(NextPartId(), txState);
+        return CreateChangePathState(NextPartId(), txState, context);
 
     // Incremental Restore Finalization
     case TTxState::ETxType::TxIncrementalRestoreFinalize:

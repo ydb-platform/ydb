@@ -7,6 +7,8 @@
 
 #include <yt/yt_proto/yt/client/chunk_client/proto/data_statistics.pb.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -28,11 +30,13 @@ public:
         i64 startRowIndex,
         const std::vector<std::string>& omittedInaccessibleColumns,
         TTableSchemaPtr schema,
-        const NProto::TRowsetStatistics& statistics)
+        const NProto::TRowsetStatistics& statistics,
+        const NProfiling::TWallTimer& totalTimer)
         : TRowBatchReader(std::move(underlying), /*isStreamWithStatistics*/ true)
         , StartRowIndex_(startRowIndex)
         , TableSchema_(std::move(schema))
         , OmittedInaccessibleColumns_(omittedInaccessibleColumns)
+        , TotalTimer_(totalTimer)
     {
         ApplyStatistics(statistics);
     }
@@ -57,6 +61,13 @@ public:
         return dataStatistics;
     }
 
+    TTableReaderTimingStatistics GetTimingStatistics() const override
+    {
+        return TTableReaderTimingStatistics{
+            .TotalTime = TotalTimer_.GetElapsedTime(),
+        };
+    }
+
     const TTableSchemaPtr& GetTableSchema() const override
     {
         return TableSchema_;
@@ -71,6 +82,7 @@ private:
     const i64 StartRowIndex_;
     const TTableSchemaPtr TableSchema_;
     const std::vector<std::string> OmittedInaccessibleColumns_;
+    const NProfiling::TWallTimer TotalTimer_;
 
     // NB: Statistics are updated asynchronously.
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, StatisticsLock_);
@@ -85,7 +97,9 @@ private:
     }
 };
 
-TFuture<ITableReaderPtr> CreateTableReader(IAsyncZeroCopyInputStreamPtr inputStream)
+TFuture<ITableReaderPtr> CreateTableReader(
+    IAsyncZeroCopyInputStreamPtr inputStream,
+    const NProfiling::TWallTimer& totalTimer)
 {
     return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
         NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
@@ -98,7 +112,8 @@ TFuture<ITableReaderPtr> CreateTableReader(IAsyncZeroCopyInputStreamPtr inputStr
             meta.start_row_index(),
             FromProto<std::vector<std::string>>(meta.omitted_inaccessible_columns()),
             FromProto<TTableSchemaPtr>(meta.schema()),
-            meta.statistics());
+            meta.statistics(),
+            totalTimer);
     })).As<ITableReaderPtr>();
 }
 

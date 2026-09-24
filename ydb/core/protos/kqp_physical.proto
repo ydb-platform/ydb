@@ -808,4 +808,6 @@ message TKqpPhyQuery {
     optional bool DisableCheckpoints = 17;
     optional bool EnableWatermarks = 18  [deprecated=true];
     optional EIsolationLevel DefaultTxMode = 19;
+    optional bool DisablePessimisticLocks = 20;
+    optional uint64 MaxTasksPerStage = 21;
 }

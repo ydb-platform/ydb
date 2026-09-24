@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
-from ydb.tools.ydb_bench.lib.hosts import request_peer
 from ydb.tools.ydb_bench.lib.run_index import order_value
 
 
@@ -89,7 +88,7 @@ class Federation:
     def read(self, host_id, path, local):
         if host_id == self.directory.id:
             return local()
-        status, _, body = request_peer(self.directory.get(host_id), path)
+        status, _, body = self.directory.request(host_id, path)
         if status != 200:
             raise BenchmarkError('host returned HTTP ' + str(status))
         try:

@@ -13,6 +13,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/bitmap.h>
 #include <util/generic/set.h>
 
 #include <algorithm>
@@ -25,6 +26,25 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
+
+// Provides an empty touched-vchunk mask for fast-path service tests.
+class TEmptyTouchedProvider final: public ITouchedProvider
+{
+public:
+    // Implemented ITouchedProvider.
+    [[nodiscard]] bool Get(ui32 vChunkIndex) const override
+    {
+        Y_UNUSED(vChunkIndex);
+        return false;
+    }
+
+    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
+        ui32 regionIndex) const override
+    {
+        Y_UNUSED(regionIndex);
+        return {};
+    }
+};
 
 // Records node state changes issued by TFastPathService for one DBG.
 class TChaosInjectorControlMock final: public NTransport::IChaosInjectorControl
@@ -105,6 +125,8 @@ struct TFixture: public NUnitTest::TBaseFixture
             ChaosInjectorControls.push_back(std::move(control));
         }
 
+        TEmptyTouchedProvider touchedProvider;
+
         return std::make_shared<TFastPathService>(
             Runtime->GetActorSystem(0),
             NActors::TActorId(),
@@ -117,6 +139,7 @@ struct TFixture: public NUnitTest::TBaseFixture
             std::move(directBlockGroups),
             std::move(chaosInjectorControls),
             TVChunkConfigs{},
+            &touchedProvider,
             TDirtyMapStateProtos{},
             std::make_shared<TStorageConfig>(std::move(storageServiceConfig)),
             nullptr,
@@ -250,6 +273,29 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
             UNIT_ASSERT(service->GetDirectBlockGroup(i));
         }
         UNIT_ASSERT(!service->GetDirectBlockGroup(VChunkPerRegionCount));
+    }
+
+    Y_UNIT_TEST_F(ShouldTrackInflightWritesInOnWriteStarted, TFixture)
+    {
+        auto service = MakeService(0);
+
+        const ui64 first = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(1u, first);
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
+
+        const ui64 second = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(2u, second);
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetMonInfo().InflightWriteCount);
+
+        service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
+
+        service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetMonInfo().InflightWriteCount);
     }
 }
 

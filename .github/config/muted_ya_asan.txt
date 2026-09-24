@@ -1,3 +1,4 @@
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotLogUnknownSync
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_16Segments
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_1Segment
@@ -48,6 +49,7 @@ ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/formats/arrow/accessor/sub_columns/ut SubColumnsSparsedBuilder.BinaryJsonMatchesPlain
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthHigher
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumer
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsCbor
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsLongStreamName
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShards
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithIncorrectHashKey
@@ -121,11 +123,14 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageTooBig
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesInvalidValues
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesMultiple
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRetentionPeriod
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityBatchInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityZeroTimeout
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExistingTopicNoConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueSetsDefaultTopicMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithBadQueueName
@@ -152,6 +157,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesUnknownAttribute
 ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery07
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery09
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
@@ -164,6 +170,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithTwoGroupByHops
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.WritingInLocalYdbTablesWithCheckpoints
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
+ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
@@ -219,6 +226,7 @@ ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableW
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_topic_cloud_events unittest.[*/*] chunk
 ydb/core/viewer/ut Viewer.PutRecordViewer
 ydb/core/viewer/ut Viewer.QueryExecuteScript
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy

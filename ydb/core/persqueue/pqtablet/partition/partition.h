@@ -1127,7 +1127,9 @@ private:
     // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
     // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
-    // Writing blob with topic quota variables
+    // Writing blob with topic quota variables.
+    // BlobQuotaSize / MessagesQuotaSize belong to TopicQuotaRequestCookie, not to the KV write
+    // cycle. The next quota request may already be in flight when HandleWriteResponse runs.
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;

@@ -621,8 +621,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node)
     if (maybeOffset) {
         TExpression offset(maybeOffset.Cast().Ptr(), &Ctx);
         result = MakeIntrusive<TOpLimit>(input, node->Pos(), count, offset, EOpPhase::Undefined);
+    } else {
+        result = MakeIntrusive<TOpLimit>(input, node->Pos(), count, EOpPhase::Undefined);
     }
-    result = MakeIntrusive<TOpLimit>(input, node->Pos(), count, EOpPhase::Undefined);
     if (Projections.contains(input.Get())) {
         Projections.insert({result.Get(), Projections.at(input.Get())});
     }

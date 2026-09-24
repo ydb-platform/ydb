@@ -16,8 +16,8 @@ def read_proc_stat() -> tuple[float, float]:
     with open("/proc/stat") as f:
         line = f.readline()
     parts = line.split()
-    # cpu user nice system idle iowait irq softirq steal guest guest_nice
-    total = sum(int(x) for x in parts[1:])
+    # user nice system idle iowait irq softirq steal. guest and guest_nice are already inside user and nice.
+    total = sum(int(x) for x in parts[1:9])
     idle = int(parts[4]) if len(parts) > 4 else 0
     iowait = int(parts[5]) if len(parts) > 5 else 0
     idle += iowait

@@ -126,7 +126,7 @@ def _compute_parallel_stats(runs: list[dict[str, Any]]) -> dict[str, dict[str, A
     if not events or t0 is None:
         return {}
 
-    events.sort(key=lambda e: (e[0], -e[1]))
+    events.sort(key=lambda e: (e[0], e[1]))
 
     suite_count: dict[str, int] = defaultdict(int)
     total_count = 0
@@ -287,7 +287,7 @@ def build_cpu_recommendations(
         if (
             suite in suites_with_indexed
             and not r.get("chunk_group")
-            and int(r.get("chunk", -1) or -1) == 0
+            and int(-1 if r.get("chunk") is None else r.get("chunk")) == 0
         ):
             continue
         start = float(r.get("start_us", 0) or 0)
@@ -339,7 +339,7 @@ def build_cpu_recommendations(
         status = str(r.get("status", "") or "").upper()
         error_type = str(r.get("error_type", "") or "").upper()
         is_timeout = error_type == "TIMEOUT" or ("TIMEOUT" in status)
-        is_muted = bool(r.get("is_muted")) or status == "MUTE"
+        is_muted = bool(r.get("is_muted")) or status in {"MUTE", "MUTED"}
         is_failedish = status in {"FAILED", "ERROR", "INTERNAL"}
         if is_timeout:
             by_suite_timeouts[suite] += 1
@@ -362,7 +362,7 @@ def build_cpu_recommendations(
             sorted_cores = sorted(cores_list)
             n = len(sorted_cores)
             median_c = sorted_cores[(n - 1) // 2] if n else 0.0
-            idx95 = min(int(0.95 * n + 0.5), n - 1) if n else 0
+            idx95 = min(n - 1, max(0, math.ceil(0.95 * n) - 1)) if n else 0
             p95_c = sorted_cores[idx95] if n else 0.0
         if report_status_by_suite and suite in report_status_by_suite:
             chunk_status = report_status_by_suite[suite].get("chunks", _status_bucket())
@@ -588,8 +588,13 @@ def build_cpu_recommendations(
             if ya_cpu is None:
                 cpu_action = "ok" if recommended_num <= 1 else "set"
             else:
-                ya_cpu_i = int(ya_cpu)
-                if recommended_num > ya_cpu_i:
+                try:
+                    ya_cpu_i = int(ya_cpu)
+                except (TypeError, ValueError):
+                    ya_cpu_i = None
+                if ya_cpu_i is None:
+                    cpu_action = "set"
+                elif recommended_num > ya_cpu_i:
                     cpu_action = "raise"
                 elif recommended_num < ya_cpu_i:
                     if split_pressure:

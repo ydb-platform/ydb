@@ -416,7 +416,10 @@ def build_html_dashboard(
     function showTab(id) {{
       const tabs = ['chunkTab', 'suiteTab'];
       tabs.forEach(t => {{
-        document.getElementById(t).classList.toggle('active', t === id);
+        const el = document.getElementById(t);
+        const on = t === id;
+        el.classList.toggle('active', on);
+        el.style.display = on ? 'block' : 'none';
       }});
       document.getElementById('tabBtnChunk').classList.toggle('active', id === 'chunkTab');
       document.getElementById('tabBtnSuite').classList.toggle('active', id === 'suiteTab');
@@ -758,7 +761,7 @@ def build_html_dashboard(
       if (s == null || s === '') return '';
       const div = document.createElement('div');
       div.textContent = String(s);
-      return div.innerHTML;
+      return div.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
     }}
     const cfg = data.run_config || {{}};
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
@@ -903,7 +906,7 @@ def build_html_dashboard(
       }}
 
       // Default: show suites with the highest non-chunk failures first.
-      let suggestionsSortCol = 23;  // test_fails_total
+      let suggestionsSortCol = 25;  // test_fails_total
       let suggestionsSortAsc = false;
       // Heavy tests table default: suite -> test.
       let heavySortCol = 1;  // 1=suite_path, 2=ya_size, 3=threshold, 4=test, 5=duration, 6=chunk
@@ -929,11 +932,11 @@ def build_html_dashboard(
       ];
 
       function titleAttr(text) {{
-        return String(text || '').replace(/"/g, '&quot;');
+        return escapeHtml(String(text || ''));
       }}
 
       function tipCell(text, tooltip, extraStyle) {{
-        const t = text == null ? '' : String(text);
+        const t = escapeHtml(text == null ? '' : String(text));
         const tip = titleAttr(tooltip || '');
         if (!tip) return t;
         const style = 'cursor:help;text-decoration:underline dotted;' + (extraStyle || '');

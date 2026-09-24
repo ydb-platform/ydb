@@ -770,7 +770,7 @@ namespace NKikimr {
         }
     }
 
-    void THull::CompactFreshIfRequired(EHullDbType type, const TActorContext& ctx) {
+    void THull::CompactFreshDbIfRequired(EHullDbType type, const TActorContext& ctx) {
         switch (type) {
             case EHullDbType::LogoBlobs:
                 CompactFreshLogoBlobsIfRequired(ctx);
@@ -801,7 +801,7 @@ namespace NKikimr {
             if (levelIndex.FreshWouldOutgrowSst(record) && levelIndex.CanRotateFreshCur()) {
                 levelIndex.RequestFreshSizeRotation();
                 // starts the compaction that rotates Cur out, unless records are in flight
-                CompactFreshIfRequired(type, ctx);
+                CompactFreshDbIfRequired(type, ctx);
             }
         });
         return !IsFreshRotationPending(admission);
@@ -851,7 +851,7 @@ namespace NKikimr {
             const bool pending = levelIndex.IsFreshRotationPending();
             levelIndex.LandInFresh(record);
             if (pending) {
-                CompactFreshIfRequired(type, ctx);
+                CompactFreshDbIfRequired(type, ctx);
             }
         });
     }

@@ -74,7 +74,7 @@ namespace NKikimr {
         template <typename TFunc>
         void ForEachFreshRecord(const TFreshAdmission& admission, TFunc&& func) const;
         // Starts a Fresh compaction of the database, should one be due.
-        void CompactFreshIfRequired(EHullDbType type, const TActorContext& ctx);
+        void CompactFreshDbIfRequired(EHullDbType type, const TActorContext& ctx);
 
     public:
         THull(

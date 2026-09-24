@@ -1635,16 +1635,20 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
     TStringStream errorReason;
     TGuard<TMutex> guard(StateMutex);
 
-    if (evChunkForget.IsDDisk) {
-        // Preprocessing can precede owner reinitialization. Revalidate at execution so
-        // a delayed forget from an older incarnation cannot free current reservations.
+    {
+        // Preprocessing does not check the round, and may precede owner reinitialization
+        // anyway. Check at execution, so that a delayed forget from an older incarnation
+        // cannot free the current one's reservations: YardInit hands the older incarnation's
+        // uncommitted reservations back to the free pool, where the current one may reserve
+        // the very same chunks again.
         auto status = CheckOwnerAndRound(&evChunkForget, errorReason);
         if (!IsOwnerUser(evChunkForget.Owner)) {
             status = NKikimrProto::INVALID_OWNER;
         }
         if (status != NKikimrProto::OK) {
             PCtx->ActorSystem->Send(evChunkForget.Sender,
-                new NPDisk::TEvChunkForgetResult(status, 0, errorReason.Str()), 0, evChunkForget.Cookie);
+                new NPDisk::TEvChunkForgetResult(status, 0, errorReason.Str()), 0,
+                evChunkForget.IsDDisk ? evChunkForget.Cookie : 0);
             Mon.ChunkForget.CountResponse();
             return;
         }

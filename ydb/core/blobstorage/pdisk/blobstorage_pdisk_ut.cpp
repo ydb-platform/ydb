@@ -293,12 +293,38 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 testCtx.Sender, TDuration::Seconds(10));
             UNIT_ASSERT(reply);
             UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? 12345 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, isDDisk ? NKikimrProto::INVALID_ROUND : NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::INVALID_ROUND);
             testCtx.SafeRunOnPDisk([&](auto* p) {
-                UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitState,
-                    isDDisk ? NPDisk::TChunkState::DATA_DECOMMITTED : NPDisk::TChunkState::FREE);
+                UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitState, NPDisk::TChunkState::DATA_DECOMMITTED);
             });
         }
+    }
+
+    // What makes the check above matter: YardInit hands a restarted owner's reservations back to
+    // the free pool, and its new incarnation may reserve the same chunks again. A forget the old
+    // incarnation sends late must not take them away from it.
+    Y_UNIT_TEST(ChunkForgetFromPreviousOwnerRoundLeavesReservationsAlone) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto staleRound = vdisk.PDiskParams->OwnerRound;
+
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->Owner, owner);
+        vdisk.ReserveChunk();
+        const TChunkIdx chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+            new NPDisk::TEvChunkForget(owner, staleRound, TVector<ui32>{chunk}), NKikimrProto::INVALID_ROUND);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            const auto& state = p->ChunkState[chunk];
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_RESERVED);
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+        });
+        // The current incarnation still forgets its own reservations as usual.
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+            new NPDisk::TEvChunkForget(owner, vdisk.PDiskParams->OwnerRound, TVector<ui32>{chunk}), NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(ChunkForgetAndReserveReceiveOneTerminalReplyOnStop) {

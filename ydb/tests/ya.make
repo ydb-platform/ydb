@@ -1,5 +1,6 @@
 RECURSE(
     compatibility
+    crash_repro
     datashard
     example
     fq

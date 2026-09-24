@@ -85,9 +85,9 @@ message TTableServiceConfig {
         // MemoryArenaMaxFreeSize and the Memory the tasks acquire as they grow. Past it the demand is a charged
         // deficit: extra Memory requests are refused and the spilling cookies report the pressure, RM/ArenaDeficit.
         optional uint64 ExecutionUnitMemory = 36 [default = 1048576];       // 1 MiB
-        // The arena is resized to Used + (Min + Max) / 2 whenever its free part leaves the band; a max below the min
-        // is raised to it, and both zero make the arena track its usage exactly. The free part counts against the
-        // kqp queue limit like the usage, but is given back to a Memory request it would let in.
+        // Once a second the arena is resized to Used + (Min + Max) / 2 whenever its free part leaves the band; a max
+        // below the min is raised to it. A usage that overruns the arena by more than the max grows it right away,
+        // RM/ArenaBurstGrows. The free part counts against the kqp queue limit like the usage.
         optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
         optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
     }

@@ -387,7 +387,7 @@ public:
             }
         }
 
-        // the arena never refuses, and it is charged after everything that can fail has succeeded: no rollback
+        // the arena never refuses, and its demand is applied after everything that can fail has succeeded: no rollback
         if (Y_UNLIKELY(resources.Memory == 0)) {
             tx.Allocated(resources);
             ApplyArenaDemand(resources, /* allocate */ true);
@@ -401,45 +401,31 @@ public:
             }
         };
 
-        bool hasScanQueryMemory = false;
-        bool arenaYielded = false;
-        for (;;) {
-            bool yieldArena = false;
-            with_lock (Lock) {
-                if (Y_UNLIKELY(!ResourceBroker)) {
-                    TStringBuilder reason;
-                    reason << "AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId;
-                    result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, reason);
-                    return result;
+        bool hasScanQueryMemory = true;
+
+        with_lock (Lock) {
+            if (Y_UNLIKELY(!ResourceBroker)) {
+                TStringBuilder reason;
+                reason << "AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId;
+                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, reason);
+                return result;
+            }
+
+            hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
+
+            if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
+                auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
+                // the pool limit follows the latest tx that allocates from the pool
+                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
+                if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
+                    poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
                 }
-
-                hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-                // on the node total only: the arena does not charge the pools, a pool refusal is not its doing
-                yieldArena = !hasScanQueryMemory && !arenaYielded && ArenaSurplusCoversLocked(resources.Memory);
-
-                if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
-                    auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
-                    // the pool limit follows the latest tx that allocates from the pool
-                    poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
-                    if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
-                        poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
-                    }
-                    if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
-                        hasScanQueryMemory = false;
-                        TotalMemoryResource->Release(resources.Memory);
-                        poolMemory->RecordDenied();
-                    }
+                if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
+                    hasScanQueryMemory = false;
+                    TotalMemoryResource->Release(resources.Memory);
+                    poolMemory->RecordDenied();
                 }
             }
-            if (!yieldArena) {
-                break;
-            }
-            // the free part of the arena would let the request in: given back, once, and the admission retried over
-            // it; the first demand past the shrunk size, or the periodic pass, regrows it as far as the band asks and
-            // the node total then allows. Best effort: a demand change that lands in between can take the memory
-            // back first
-            arenaYielded = true;
-            AdjustArena(/* retryRefused */ false, /* yieldSurplus */ true);
         }
 
         if (!hasScanQueryMemory) {
@@ -468,33 +454,12 @@ public:
             }
         };
 
-        // the resource broker shares its memory between its queues, so it can refuse what the node total admitted;
-        // the free part of the arena is what kqp holds of that memory beyond its demand, so it is given back and
-        // the task submitted once more. Unlike the node total the resource broker does not say what it lacks, so
-        // any free part is given back, whether or not it covers the request, and a task waiting in another queue
-        // may take it first: the request is then refused as before, over an arena at its demand that the next
-        // change past it, or the periodic pass, regrows
-        ui64 rbTaskId = 0;
-        bool allocated = false;
-        for (;;) {
-            rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
-            const TString rbTaskName = TStringBuilder() << "kqp-" << txId << '-' << taskId << '-' << rbTaskId;
-            allocated = ResourceBroker->SubmitTaskInstant(
-                TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, resources.Memory}, NLocalDb::KqpResourceManagerTaskName, 0, {}),
-                SelfId);
-            if (allocated) {
-                break;
-            }
-            bool yieldArena = false;
-            with_lock (Lock) {
-                yieldArena = !arenaYielded && ArenaSurplusLocked() > 0;
-            }
-            if (!yieldArena) {
-                break;
-            }
-            arenaYielded = true;
-            AdjustArena(/* retryRefused */ false, /* yieldSurplus */ true);
-        }
+        ui64 rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
+        TString rbTaskName = TStringBuilder() << "kqp-" << txId << '-' << taskId << '-' << rbTaskId;
+
+        bool allocated = ResourceBroker->SubmitTaskInstant(
+            TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, resources.Memory}, NLocalDb::KqpResourceManagerTaskName, 0, {}),
+            SelfId);
 
         if (!allocated) {
             TStringBuilder reason;
@@ -552,8 +517,7 @@ public:
             }
         }
 
-        // after the release, so that the arena sees the node memory it may now take, and before the execution units
-        // go back, so that their next taker is not in the arena together with them
+        // before the execution units go back, so that their next taker is not counted in the arena together with them
         ApplyArenaDemand(resources, /* allocate */ false);
 
         if (resources.ExecutionUnits) {
@@ -748,16 +712,12 @@ public:
     }
 
     // The memory arena (issue #53093): one long lived kqp_query task of the resource broker backs the external
-    // memory and the execution units in use. The demand is always satisfied; the arena is resized afterwards to
-    // Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band. Its footprint Max(Size, Used) is
-    // charged to the node total, so Memory admission, the spilling cookies and the published resources count it,
-    // the free part of the arena included: the resource broker holds it for this node as it holds the demand. A
-    // Memory request that only the free part keeps out at the node total, or that the resource broker refuses
-    // while the arena has a free part, is retried, once, over the arena shrunk to its demand (AllocateResources).
-    //
-    // The demand is tracked lock-free: while the arena covers it the charge does not move, so a task that starts
-    // or ends only touches two atomics and the ceiling below. The lock is taken to grow, to shrink, and whenever
-    // the arena needs attention. A shrink left to the periodic pass leaves the arena above the demand, never below.
+    // memory and the execution units in use. The demand is always satisfied and tracked lock-free. The periodic
+    // pass resizes the arena to Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band; a demand
+    // that overruns the arena by more than MaxFree grows it right away, on the allocation path. The footprint
+    // Max(Size, Used) as of the last resize is charged to the node total, so Memory admission, the spilling cookies
+    // and the published resources count it. A Memory request that the free part keeps out is refused: the pass
+    // shrinks the arena once its free part exceeds MaxFree, or the node total no longer leaves room for it.
 
     ui64 ArenaUsed() const {
         return ArenaExternalMemory.load() + ArenaExecutionUnits.load() * ExecutionUnitMemory.load();
@@ -769,30 +729,20 @@ public:
         return static_cast<ui32>(resources.ExecutionUnits);
     }
 
+    bool ArenaActiveLocked() const {
+        return EnableMemoryArena.load() && !Arena.Stopped;
+    }
+
     ui64 ArenaDeficitLocked(ui64 used) const {
-        return EnableMemoryArena.load() && used > Arena.Size ? used - Arena.Size : 0;
-    }
-
-    // The free part of the arena a yield can give back: none while a round is in flight, when the plan cannot act
-    // (ArenaPlanLocked). Must be called under Lock.
-    ui64 ArenaSurplusLocked() const {
-        const ui64 used = ArenaUsed();
-        if (Arena.AdjustInProgress || Arena.Stopped || Arena.Size <= used) {
-            return 0;
-        }
-        return Arena.Size - used;
-    }
-
-    // Whether the arena, shrunk to its demand, would let a Memory request in under what the node total leaves it;
-    // not through Available(), which reads 0 once the total has dropped under the arena. Must be called under Lock.
-    bool ArenaSurplusCoversLocked(ui64 memory) const {
-        return ArenaSurplusLocked() && ArenaUsed() + memory <= ArenaSizeCapLocked();
+        const ui64 size = Arena.Size.load();
+        return ArenaActiveLocked() && used > size ? used - size : 0;
     }
 
     // Returns true when the charge moved.
     bool ReconcileArenaLocked() {
         const ui64 used = ArenaUsed();
-        const ui64 footprint = EnableMemoryArena.load() ? Max(Arena.Size, used) : 0;
+        const ui64 size = Arena.Size.load();
+        const ui64 footprint = ArenaActiveLocked() ? Max(size, used) : 0;
         const bool changed = footprint != Arena.Charged;
         if (footprint > Arena.Charged) {
             TotalMemoryResource->ForceAcquire(footprint - Arena.Charged);
@@ -800,15 +750,14 @@ public:
             TotalMemoryResource->Release(Arena.Charged - footprint);
         }
         Arena.Charged = footprint;
-        // only what moved, and only from here: an idle resource manager must not publish over a busy one, and the
-        // lock-free path leaves the gauges to the periodic pass rather than racing on them
+        // only what moved: an idle resource manager must not publish over a busy one
         if (used != Arena.ShownUsed) {
             Counters->RmArenaUsed->Set(used);
             Arena.ShownUsed = used;
         }
-        if (Arena.Size != Arena.ShownSize) {
-            Counters->RmArenaSize->Set(Arena.Size);
-            Arena.ShownSize = Arena.Size;
+        if (size != Arena.ShownSize) {
+            Counters->RmArenaSize->Set(size);
+            Arena.ShownSize = size;
         }
         if (const ui64 deficit = ArenaDeficitLocked(used); deficit != Arena.ShownDeficit) {
             Counters->RmArenaDeficit->Set(deficit);
@@ -826,12 +775,12 @@ public:
         }
         const i64 minFree = MemoryArenaMinFreeSize.load();
         const i64 maxFree = MemoryArenaMaxFreeSize.load();
-        const i64 free = static_cast<i64>(Arena.Size) - static_cast<i64>(used);
+        const i64 free = static_cast<i64>(Arena.Size.load()) - static_cast<i64>(used);
         if (free < minFree || free > maxFree) {
             return used + static_cast<ui64>((minFree + maxFree) / 2);
         }
         // in band: a trickle of small queries costs no resource broker call
-        return Arena.Size;
+        return Arena.Size.load();
     }
 
     // What the node total leaves for the arena once the transactions have taken their share. The resource broker
@@ -844,176 +793,106 @@ public:
         return limit > others ? limit - others : 0;
     }
 
-    // The band wants a bigger arena than the resource broker has granted: before the cap, and whether or not a
-    // round makes it, since a growth still wanted when the adjuster leaves keeps the gate (AdjustArena) and gets
-    // the fast path the ceiling of a withheld growth rather than the band's (ArenaFastCeilingLocked)
-    bool ArenaGrowWantedLocked(ui64 used) const {
-        return ArenaTargetLocked(used) > Arena.Size;
-    }
-
-    // The demand a change may reach before the arena needs the lock. Must be called under Lock.
-    ui64 ArenaFastCeilingLocked(ui64 used) const {
-        if (!EnableMemoryArena.load()) {
-            return ArenaFastPathOpen;
-        }
-        // the states in which ArenaPlanLocked cannot act, a charge that is not the size, and a configuration with
-        // no band to absorb a change: a ceiling published under any of them would describe a size that is about
-        // to change, or leave the adjuster's recheck below nothing to make progress with
-        if (MemoryArenaMaxFreeSize.load() == 0 || Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker
-            || Arena.Charged != Arena.Size)
-        {
-            return ArenaFastPathShut;
-        }
-        // a growth the band wants but cannot have now: the cap or the gate withholds it, or a yield has just planned
-        // for the demand alone (AllocateResources). The periodic pass or the first change past the size takes it up;
-        // until then the charge, Max(Size, Used), does not move while the demand stays within the size, so a change
-        // within it needs no lock, and the first change past it takes the lock and is charged as a deficit
-        if (ArenaGrowWantedLocked(used)) {
-            return Arena.Size + 1;
-        }
-        const ui64 minFree = MemoryArenaMinFreeSize.load();
-        if (Arena.Size < minFree) {
-            return ArenaFastPathShut;
-        }
-        return Arena.Size - minFree + 1;
-    }
-
-    // Applies the demand without the lock, and reports whether the arena already covers it.
-    bool ArenaFastUpdate(const TKqpResourcesRequest& resources, bool allocate) {
-        if (allocate) {
-            ArenaExternalMemory.fetch_add(resources.ExternalMemory);
-            ArenaExecutionUnits.fetch_add(ArenaUnitsOf(resources));
-        } else {
-            const ui64 external = ArenaExternalMemory.fetch_sub(resources.ExternalMemory);
-            const ui64 units = ArenaExecutionUnits.fetch_sub(ArenaUnitsOf(resources));
-            // TTxState::Released has already verified the tx part of the demand
-            Y_DEBUG_ABORT_UNLESS(external >= resources.ExternalMemory);
-            Y_DEBUG_ABORT_UNLESS(units >= ArenaUnitsOf(resources));
-        }
-        // sequentially consistent, as is the adjuster's store of the ceiling followed by its own read of the
-        // demand: the two cannot miss each other, so a change that skips here was seen by the adjuster
-        const ui64 ceiling = ArenaFastCeiling.load();
-        return ceiling != ArenaFastPathShut && ArenaUsed() < ceiling;
-    }
-
-    void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
-        if ((resources.ExternalMemory || resources.ExecutionUnits) && !ArenaFastUpdate(resources, allocate)) {
-            AdjustArena();
-        }
-    }
-
-    // The size the arena should be resized to, Arena.Size when it should not. A yield (AllocateResources) asks for
-    // the demand alone, whatever the band wants.
-    ui64 ArenaPlanLocked(ui64 used, bool yieldSurplus) {
-        if (Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker) {
-            return Arena.Size;
-        }
-        ui64 target = ArenaTargetLocked(used);
-        if (yieldSurplus) {
-            target = Min(target, used);
+    // The size the arena should be resized to, its size when it should not.
+    ui64 ArenaPlanLocked(ui64 used) const {
+        const ui64 size = Arena.Size.load();
+        if (!ResourceBroker) {
+            return size;
         }
         const ui64 cap = ArenaSizeCapLocked();
         // The arena may hold what it backs and, beyond that, only what the node total leaves it, so a total that
         // has dropped or transactions that have taken more of it pull the arena down even while the band is asking
         // for a bigger one. It keeps backing its own demand: the resource broker is never told less than the node
         // is really using.
-        ui64 planned = Min(target, Max(used, cap));
-        if (planned > Arena.Size) {
-            planned = Max(Arena.Size, Min(planned, cap)); // growing stops at the cap, see ArenaSizeCapLocked
+        ui64 planned = Min(ArenaTargetLocked(used), Max(used, cap));
+        if (planned > size) {
+            planned = Max(size, Min(planned, cap)); // growing stops at the cap, see ArenaSizeCapLocked
         }
         return planned;
     }
 
-    // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller
-    // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A growth the
-    // resource broker refused is asked again only by a caller that passes retryRefused, see NoteArenaGrowth; a
-    // retry that finds a round in flight is dropped, the next one makes it. yieldSurplus plans for the demand
-    // alone for every round of the call, see ArenaPlanLocked; a yield that finds a round in flight is dropped too.
-    void AdjustArena(bool retryRefused = false, bool yieldSurplus = false) {
-        bool publish = false;
-        // a resource broker round and its outcome, written back by the locked section that plans the next one
-        TIntrusivePtr<IResourceBroker> broker;
-        bool roundMade = false;
-        ui64 size = 0;
-        ui64 taskId = 0;
-        bool taskLost = false;
-        bool stopped = false;
-        for (;;) {
-            ui64 target = 0;
-            ui64 deficit = 0;
-            with_lock (Lock) {
-                // while this section runs every demand change takes the lock and waits for its outcome
-                ArenaFastCeiling.store(ArenaFastPathShut);
-                if (roundMade) {
-                    roundMade = false;
-                    Arena.AdjustInProgress = false;
-                    stopped = Arena.Stopped;
-                    // the arena task can only vanish behind the adjuster with the other tasks of the dead actor
-                    Y_DEBUG_ABORT_UNLESS(!taskLost || stopped, "the arena task is gone");
-                    Arena.Size = stopped ? 0 : size;
-                    Arena.TaskId = stopped ? 0 : taskId;
-                }
-                publish |= ReconcileArenaLocked();
-                if (stopped) {
-                    break;
-                }
-                const ui64 used = ArenaUsed();
-                size = Arena.Size;
-                target = ArenaPlanLocked(used, yieldSurplus);
-                // an adjuster records the outcome of its round before the locked section that lets go of the
-                // arena, so a plan made here after the round sees it
-                const bool gated = !retryRefused && ArenaGrowRefused.load(std::memory_order_relaxed);
-                if (target == size || (gated && target > size)) {
-                    if (retryRefused && !ArenaGrowWantedLocked(used)) {
-                        // the refused growth is no longer wanted: the gate would otherwise outlive it, hold back the
-                        // next demand change and make its grant news
-                        ArenaGrowRefused.store(false, std::memory_order_relaxed);
-                    }
-                    const ui64 ceiling = ArenaFastCeilingLocked(used);
-                    ArenaFastCeiling.store(ceiling);
-                    if (ceiling != ArenaFastPathShut && ArenaUsed() >= ceiling) {
-                        continue; // a change landed while this section ran
-                    }
-                    break;
-                }
-                taskId = Arena.TaskId;
-                deficit = ArenaDeficitLocked(used);
-                Arena.AdjustInProgress = true;
-                broker = ResourceBroker;
-            }
-
-            taskLost = false;
-            if (target > size) {
-                const ui64 sizeBefore = size;
-                const ui64 want = target - size;
-                const ui64 granted = GrowArena(*broker, taskId, size, want, Min(deficit, want), taskLost);
-                NoteArenaGrowth(sizeBefore, want, granted, deficit);
-                // one retry per call, a refusal this round gates the next one; yieldSurplus holds for every round,
-                // or the re-plan after the shrink would find the free part below the band and take the memory back
-                // before the admission it was given up for is retried
-                retryRefused = false;
-            } else {
-                ShrinkArena(*broker, taskId, size, size - target, taskLost);
-            }
-            roundMade = true;
+    void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
+        if (!resources.ExternalMemory && !resources.ExecutionUnits) {
+            return;
         }
-        if (stopped && taskId) {
-            // created or adopted after the actor died, so not dropped with the others; one created before was, and
-            // the resource broker then reports the finish of an unknown task, an error line and nothing else
-            broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
+        if (!allocate) {
+            const ui64 external = ArenaExternalMemory.fetch_sub(resources.ExternalMemory);
+            const ui64 units = ArenaExecutionUnits.fetch_sub(ArenaUnitsOf(resources));
+            // TTxState::Released has already verified the tx part of the demand
+            Y_DEBUG_ABORT_UNLESS(external >= resources.ExternalMemory);
+            Y_DEBUG_ABORT_UNLESS(units >= ArenaUnitsOf(resources));
+            return; // the surplus is left to the periodic pass
+        }
+        ArenaExternalMemory.fetch_add(resources.ExternalMemory);
+        ArenaExecutionUnits.fetch_add(ArenaUnitsOf(resources));
+        // a burst that overruns the arena by far is not left to the periodic pass; a resize in progress is not
+        // waited for, and a growth the resource broker or the node total withheld is not asked again
+        if (EnableMemoryArena.load() && !ArenaGrowWithheld.load(std::memory_order_relaxed)
+            && ArenaUsed() > Arena.Size.load() + MemoryArenaMaxFreeSize.load())
+        {
+            if (TTryGuard<TMutex> guard(ArenaLock); guard.WasAcquired()) {
+                ResizeArenaLocked(/* burst */ true);
+            }
+        }
+    }
+
+    // The periodic pass (TKqpResourceManagerActor::HandleAdjustArena).
+    void AdjustArena() {
+        with_lock (ArenaLock) {
+            ResizeArenaLocked(/* burst */ false);
+        }
+    }
+
+    // Under ArenaLock, held across the resource broker calls; Lock is taken only to plan and to commit. A burst
+    // (ApplyArenaDemand) only grows.
+    void ResizeArenaLocked(bool burst) {
+        if (Arena.Stopped) {
+            return;
+        }
+        TIntrusivePtr<IResourceBroker> broker;
+        ui64 used = 0;
+        ui64 target = 0;
+        with_lock (Lock) {
+            broker = ResourceBroker;
+            used = ArenaUsed();
+            target = ArenaPlanLocked(used);
+        }
+        ui64 size = Arena.Size.load();
+        ui64 taskId = Arena.TaskId;
+        if (target > size) {
+            if (burst) {
+                Counters->RmArenaBurstGrows->Inc();
+            }
+            const ui64 sizeBefore = size;
+            const ui64 delta = target - size;
+            const ui64 deficit = used > size ? used - size : 0;
+            const ui64 granted = GrowArena(*broker, taskId, size, delta, Min(deficit, delta));
+            NoteArenaGrowth(sizeBefore, delta, granted, deficit);
+        } else if (target < size && !burst) {
+            ShrinkArena(*broker, taskId, size, size - target);
+        }
+        bool publish = false;
+        with_lock (Lock) {
+            Arena.Size.store(size);
+            Arena.TaskId = taskId;
+            publish = ReconcileArenaLocked();
+            // the band still wants more than the resource broker or the node total gave: the allocation path
+            // leaves it to the next pass rather than ask on every request
+            const bool withheld = ArenaTargetLocked(used) > size;
+            ArenaGrowWithheld.store(withheld, std::memory_order_relaxed);
+            if (!withheld) {
+                Arena.GrowRefused = false; // stale: a later refusal is news, a later grant is not
+            }
         }
         if (publish) {
             FireResourcesPublishing();
         }
     }
 
-    // A growth that did not fully go through sets the gate that keeps a demand change from asking the resource
-    // broker again, so that a node under memory pressure does not ask once per released allocation; the periodic
-    // pass retries regardless, and drops the gate once the growth is no longer wanted (AdjustArena). Logged on a
-    // change of outcome only, not on every refused pass.
+    // Logged on a change of outcome only, not on every refused pass.
     void NoteArenaGrowth(ui64 sizeBefore, ui64 delta, ui64 granted, ui64 deficit) {
         const bool refused = granted < delta;
-        if (ArenaGrowRefused.exchange(refused, std::memory_order_relaxed) == refused || !ActorSystem) {
+        if (std::exchange(Arena.GrowRefused, refused) == refused || !ActorSystem) {
             return;
         }
         if (refused && granted) {
@@ -1036,7 +915,7 @@ public:
     }
 
     // Grows by delta, or by the deficit alone when the full delta is refused. Returns what was granted.
-    ui64 GrowArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 delta, ui64 deficit, bool& taskLost) {
+    ui64 GrowArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 delta, ui64 deficit) {
         const ui64 asks[2] = {delta, deficit < delta ? deficit : 0}; // the second try only when it is a different ask
         for (ui64 ask : asks) {
             if (!ask) {
@@ -1049,15 +928,13 @@ public:
             }
             if (taskId == 0) {
                 taskId = id;
-                size = ask;
-            } else if (broker.MergeTasksInstant(taskId, id, SelfId)) {
-                size += ask; // the donor is finished by the merge
             } else {
-                // both tasks are in fly and of the same type, so the arena task is gone: the delta task takes over
-                taskLost = true;
-                taskId = id;
-                size = ask;
+                // the donor is finished by the merge; the arena task is dropped by the resource broker only after
+                // StopArena, which waits for this resize
+                const bool merged = broker.MergeTasksInstant(taskId, id, SelfId);
+                Y_ABORT_UNLESS(merged);
             }
+            size += ask;
             Counters->RmArenaGrows->Inc();
             return ask;
         }
@@ -1065,40 +942,35 @@ public:
         return 0;
     }
 
-    void ShrinkArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 by, bool& taskLost) {
-        bool ok = false;
+    void ShrinkArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 by) {
+        bool shrunk = false;
         if (by >= size) {
             // cancelled, not finished: the arena outlives the queries it backs, and the resource broker averages
             // the lifetime of finished tasks into the execution time it shows for the type and orders a waiting
             // queue by (TScheduler::FinishTask); the delta tasks a growth merges in are finished by the merge, as
             // the per tx ones are, but they live for the length of the merge
-            ok = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
-            by = size;
-        } else {
-            ok = broker.ReduceTaskResourcesInstant(taskId, {0, by}, SelfId);
-        }
-        if (ok) {
-            Counters->RmArenaShrinks->Inc();
-        } else {
-            // the arena task is gone: recreated by the next growth
-            taskLost = true;
-            by = size;
-        }
-        size -= by;
-        if (size == 0) {
+            shrunk = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
             taskId = 0;
+            size = 0;
+        } else {
+            shrunk = broker.ReduceTaskResourcesInstant(taskId, {0, by}, SelfId);
+            size -= by;
         }
+        Y_DEBUG_ABORT_UNLESS(shrunk);
+        Counters->RmArenaShrinks->Inc();
     }
 
-    // The resource manager outlives its actor: after PassAway the demand is still tracked and charged, but the
-    // resource broker, which drops the arena task with the per tx ones, is not called any more.
+    // The resource manager outlives its actor: after PassAway the resource broker, which drops the arena task with
+    // the per tx ones, is not called any more, and the demand is not charged any more.
     void StopArena() {
-        with_lock (Lock) {
-            Arena.Stopped = true;
-            Arena.Size = 0;
-            Arena.TaskId = 0;
-            ArenaFastCeiling.store(ArenaFastPathShut);
-            ReconcileArenaLocked();
+        with_lock (ArenaLock) {
+            ArenaGrowWithheld.store(true, std::memory_order_relaxed); // for good, there is no pass any more
+            with_lock (Lock) {
+                Arena.Stopped = true;
+                Arena.Size.store(0);
+                Arena.TaskId = 0;
+                ReconcileArenaLocked();
+            }
         }
     }
 
@@ -1134,25 +1006,24 @@ public:
     // config change re-prices the ones in use
     std::atomic<ui64> ArenaExternalMemory = 0;
     std::atomic<ui64> ArenaExecutionUnits = 0;
-    // see ArenaFastCeilingLocked; shut means every change takes the lock, open means none of them needs to
-    static constexpr ui64 ArenaFastPathShut = 0;
-    static constexpr ui64 ArenaFastPathOpen = Max<ui64>();
-    std::atomic<ui64> ArenaFastCeiling = ArenaFastPathShut;
-    // the last growth did not fully go through, see NoteArenaGrowth
-    std::atomic<bool> ArenaGrowRefused = false;
+    // the allocation path leaves the growth to the periodic pass, see ResizeArenaLocked
+    std::atomic<bool> ArenaGrowWithheld = false;
 
-    // the memory arena (guarded by Lock), see AdjustArena
+    // serializes the resizes of the arena; taken before Lock, never under it
+    TMutex ArenaLock;
     struct TMemoryArena {
-        // the supply: the memory of the arena task, 0 <=> TaskId == 0
-        ui64 Size = 0;
-        ui64 TaskId = 0;
+        // the supply: the memory of the arena task, 0 <=> TaskId == 0; written under both locks, the allocation
+        // path reads it with none
+        std::atomic<ui64> Size = 0;
+        ui64 TaskId = 0; // written under both locks
+        bool Stopped = false; // written under both locks, TKqpResourceManagerActor::PassAway
+        bool GrowRefused = false; // ArenaLock: the last growth did not fully go through, see NoteArenaGrowth
+        // Lock
         ui64 Charged = 0; // force-acquired from TotalMemoryResource, Max(Size, Used) after every reconcile
         // the last values published to the gauges
         ui64 ShownUsed = 0;
         ui64 ShownSize = 0;
         ui64 ShownDeficit = 0;
-        bool AdjustInProgress = false;
-        bool Stopped = false; // TKqpResourceManagerActor::PassAway
     };
     TMemoryArena Arena;
     std::atomic<bool> EnableMemoryArena = true;
@@ -1328,11 +1199,10 @@ private:
         PublishResourceUsage("alloc");
     }
 
-    // A demand change the memory arena absorbed without the lock leaves it above the demand; this is what gives
-    // the surplus back, refreshes the gauges, and retries a growth the resource broker refused or the node total
-    // withheld, see ArenaFastCeilingLocked.
+    // Shrinks the memory arena, retries a growth that was withheld, and picks up a new resource broker, queue limit
+    // or config, see TKqpResourceManager::ResizeArenaLocked.
     void HandleAdjustArena() {
-        ResourceManager->AdjustArena(/* retryRefused */ true);
+        ResourceManager->AdjustArena();
         Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());
     }
 
@@ -1359,8 +1229,6 @@ private:
             ResourceManager->SetTotalMemoryLimit(queueConfig.GetLimit().GetMemory());
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});
-            // a raised queue limit may let a refused arena growth through
-            ResourceManager->AdjustArena(/* retryRefused */ true);
         }
     }
 
@@ -1368,8 +1236,6 @@ private:
         with_lock (ResourceManager->Lock) {
             ResourceManager->ResourceBroker = ev->Get()->ResourceBroker;
         }
-        // the demand accepted before the resource broker was attached gets its arena task now
-        ResourceManager->AdjustArena();
     }
 
     void AskSelfNodeInfo() {
@@ -1449,8 +1315,6 @@ private:
             ResourceManager->SetConfigValues(config);
             Config.Swap(&config);
         }
-        // outside the lock, which AdjustArena takes itself: re-prices the units, applies the new thresholds
-        ResourceManager->AdjustArena();
     }
 
     static void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1490,14 +1354,13 @@ private:
                     const ui64 unitMemory = ResourceManager->ExecutionUnitMemory.load();
                     const ui64 arenaUsed = arenaExternal + arenaUnits * unitMemory;
                     str << "ScanQuery memory resource: " << ResourceManager->TotalMemoryResource->ToString() << Endl;
-                    str << "Memory arena: size " << arena.Size
+                    str << "Memory arena: size " << arena.Size.load()
                         << ", used " << arenaUsed
                         << " (external " << arenaExternal
                         << ", execution units " << arenaUnits << " x " << unitMemory << ")"
                         << ", charged " << arena.Charged
                         << ", deficit " << ResourceManager->ArenaDeficitLocked(arenaUsed)
                         << ", broker task " << arena.TaskId
-                        << (arena.AdjustInProgress ? ", adjusting" : "")
                         << (ResourceManager->EnableMemoryArena.load() ? "" : ", disabled")
                         << Endl;
                     str << "ExecutionUnits resource: " << ResourceManager->ExecutionUnitsResource.load() << Endl;

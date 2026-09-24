@@ -462,7 +462,6 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
         }
 
         THashMap<ui64, ui64> portionRows;
-        ui64 totalRows = 0;
         {
             auto rows = ExecuteScanQuery(tableClient, R"(
                 SELECT PortionId, Rows
@@ -471,9 +470,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             )");
             UNIT_ASSERT_C(rows.size() >= 1, rows.size());
             for (const auto& row : rows) {
-                const ui64 rowsInPortion = GetUint64(row.at("Rows"));
-                portionRows[GetUint64(row.at("PortionId"))] = rowsInPortion;
-                totalRows += rowsInPortion;
+                portionRows[GetUint64(row.at("PortionId"))] = GetUint64(row.at("Rows"));
             }
         }
 
@@ -504,12 +501,32 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), portionRowCount);
         }
         {
+            THashMap<ui64, ui64> visibleRows;
+            {
+                auto rows = ExecuteScanQuery(tableClient, R"(
+                    PRAGMA kikimr.EnableSystemColumns = "true";
+                    SELECT _yql_portion_id AS PortionId, COUNT(*) AS Cnt
+                    FROM `/Root/ColumnTable`
+                    GROUP BY _yql_portion_id
+                )");
+                UNIT_ASSERT_C(!rows.empty(), rows.size());
+                for (const auto& row : rows) {
+                    visibleRows[GetUint64(row.at("PortionId"))] = GetUint64(row.at("Cnt"));
+                }
+            }
+
             ui64 minPortionId = portionId;
             for (const auto& [id, _] : portionRows) {
                 minPortionId = Min(minPortionId, id);
             }
+            ui64 expected = 0;
+            for (const auto& [id, cnt] : visibleRows) {
+                if (id >= minPortionId) {
+                    expected += cnt;
+                }
+            }
             auto rows = scanKeys(TStringBuilder() << "_yql_portion_id >= CAST(" << minPortionId << "u AS Uint64)");
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), totalRows);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), expected);
         }
 
         {

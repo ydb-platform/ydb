@@ -31,7 +31,8 @@ NHttp::IServerPtr CreateServer(
     const NConcurrency::IPollerPtr& poller,
     const NConcurrency::IPollerPtr& acceptor,
     const IInvokerPtr& controlInvoker,
-    std::optional<NCrypto::TCertProfiler> certProfiler = std::nullopt);
+    std::optional<NCrypto::TCertProfiler> certProfiler = std::nullopt,
+    IInvokerPtr compressionInvoker = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

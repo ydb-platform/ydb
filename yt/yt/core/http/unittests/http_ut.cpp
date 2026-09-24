@@ -1662,5 +1662,191 @@ TEST_W(TCompressionTest, Roundtrip)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TAcceptEncodingTest, FirstSupportedEncodingWins)
+{
+    EXPECT_EQ("gzip", GetBestAcceptedContentEncoding("gzip, deflate, br").ValueOrThrow());
+    EXPECT_EQ("br", GetBestAcceptedContentEncoding("unknown, br;q=0.8, gzip").ValueOrThrow());
+    EXPECT_EQ("z-brotli_10", GetBestAcceptedContentEncoding("z-brotli_10").ValueOrThrow());
+    EXPECT_EQ("identity", GetBestAcceptedContentEncoding(" identity ").ValueOrThrow());
+    EXPECT_FALSE(GetBestAcceptedContentEncoding("unknown, x-gzip").IsOK());
+    EXPECT_FALSE(GetBestAcceptedContentEncoding("x-lzop").IsOK());
+}
+
+class TContentEncodingServerTest
+    : public ::testing::Test
+{
+protected:
+    IPollerPtr Poller;
+    IServerPtr Server;
+    IClientPtr Client;
+
+    NTesting::TPortHolder TestPort;
+    std::string TestUrl;
+
+    void SetUp() override
+    {
+        TestPort = NTesting::GetFreePort();
+        TestUrl = Format("http://localhost:%v", TestPort);
+        Poller = CreateThreadPoolPoller(4, "HttpTest");
+
+        auto serverConfig = New<TServerConfig>();
+        serverConfig->Port = TestPort;
+        serverConfig->EnableContentEncoding = true;
+        Server = CreateServer(serverConfig, Poller);
+
+        Client = CreateClient(New<TClientConfig>(), Poller);
+    }
+
+    void TearDown() override
+    {
+        Server->Stop();
+        Server.Reset();
+        Poller->Shutdown();
+        Poller.Reset();
+        TestPort.Reset();
+    }
+};
+
+std::string ReadDecoded(const IResponsePtr& rsp, const TContentEncoding& encoding)
+{
+    auto decompressingStream = CreateDecompressingAdapter(rsp, encoding, GetCurrentInvoker());
+    return ReadAll(CreateZeroCopyAdapter(decompressingStream));
+}
+
+TEST_W(TContentEncodingServerTest, ResponseIsEncodedPerAcceptEncoding)
+{
+    Server->AddHandler("/echo", New<TEchoHttpHandler>());
+    Server->Start();
+
+    auto headers = New<THeaders>();
+    headers->Set("Accept-Encoding", "gzip");
+    auto body = TSharedRef::FromString(std::string(10'000, 'a'));
+    auto rsp = WaitFor(Client->Post(TestUrl + "/echo", body, headers)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_EQ("gzip", rsp->GetHeaders()->GetOrThrow("Content-Encoding"));
+    EXPECT_EQ("Accept-Encoding", rsp->GetHeaders()->GetOrThrow("Vary"));
+    EXPECT_EQ(ToString(body), ReadDecoded(rsp, "gzip"));
+}
+
+TSharedRef Encode(const TSharedRef& payload, const TContentEncoding& encoding)
+{
+    auto output = New<TSharedRefOutputStream>();
+    auto encoder = CreateCompressingAdapter(output, encoding, GetCurrentInvoker());
+    WaitFor(encoder->Write(payload))
+        .ThrowOnError();
+    WaitFor(encoder->Close())
+        .ThrowOnError();
+    return MergeRefsToRef<TDefaultSharedBlobTag>(output->Finish());
+}
+
+TEST_W(TContentEncodingServerTest, WriteBodyIsEncoded)
+{
+    auto body = TSharedRef::FromString(std::string(10'000, 'b'));
+    Server->AddHandler("/body", BIND([body] (const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) {
+        rsp->SetStatus(EStatusCode::OK);
+        WaitFor(rsp->WriteBody(body))
+            .ThrowOnError();
+    }));
+    Server->Start();
+
+    auto headers = New<THeaders>();
+    headers->Set("Accept-Encoding", "br");
+    auto rsp = WaitFor(Client->Get(TestUrl + "/body", headers)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_EQ("br", rsp->GetHeaders()->GetOrThrow("Content-Encoding"));
+    EXPECT_EQ(ToString(body), ReadDecoded(rsp, "br"));
+}
+
+TEST_W(TContentEncodingServerTest, UnsupportedAcceptEncodingFallsBackToIdentity)
+{
+    Server->AddHandler("/echo", New<TEchoHttpHandler>());
+    Server->Start();
+
+    auto headers = New<THeaders>();
+    headers->Set("Accept-Encoding", "unknown-codec");
+    auto body = TSharedRef::FromString(std::string("plain"));
+    auto rsp = WaitFor(Client->Post(TestUrl + "/echo", body, headers)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_FALSE(rsp->GetHeaders()->Find("Content-Encoding"));
+    EXPECT_EQ("plain", ReadAll(rsp));
+}
+
+TEST_W(TContentEncodingServerTest, MissingAcceptEncodingKeepsIdentity)
+{
+    Server->AddHandler("/echo", New<TEchoHttpHandler>());
+    Server->Start();
+
+    auto body = TSharedRef::FromString(std::string("plain"));
+    auto rsp = WaitFor(Client->Post(TestUrl + "/echo", body)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_FALSE(rsp->GetHeaders()->Find("Content-Encoding"));
+    EXPECT_EQ("plain", ReadAll(rsp));
+}
+
+TEST_W(TContentEncodingServerTest, EmptyResponseIsNotEncoded)
+{
+    Server->AddHandler("/ok", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto headers = New<THeaders>();
+    headers->Set("Accept-Encoding", "gzip");
+    auto rsp = WaitFor(Client->Get(TestUrl + "/ok", headers)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_FALSE(rsp->GetHeaders()->Find("Content-Encoding"));
+    EXPECT_EQ("", ReadAll(rsp));
+}
+
+TEST_W(TContentEncodingServerTest, HandlerSetContentEncodingIsRespected)
+{
+    Server->AddHandler("/self", BIND([] (const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) {
+        rsp->SetStatus(EStatusCode::OK);
+        rsp->GetHeaders()->Set("Content-Encoding", "identity");
+        WaitFor(rsp->WriteBody(TSharedRef::FromString(std::string("raw"))))
+            .ThrowOnError();
+    }));
+    Server->Start();
+
+    auto headers = New<THeaders>();
+    headers->Set("Accept-Encoding", "gzip");
+    auto rsp = WaitFor(Client->Get(TestUrl + "/self", headers)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_EQ("identity", rsp->GetHeaders()->GetOrThrow("Content-Encoding"));
+    EXPECT_EQ("raw", ReadAll(rsp));
+}
+
+TEST_W(TContentEncodingServerTest, RequestIsDecodedPerContentEncoding)
+{
+    Server->AddHandler("/echo", New<TEchoHttpHandler>());
+    Server->Start();
+
+    auto body = TSharedRef::FromString(std::string(10'000, 'd'));
+    auto headers = New<THeaders>();
+    headers->Set("Content-Encoding", "gzip");
+    auto rsp = WaitFor(Client->Post(TestUrl + "/echo", Encode(body, "gzip"), headers)).ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_EQ(ToString(body), ReadAll(rsp));
+}
+
+TEST_W(TContentEncodingServerTest, UnsupportedRequestContentEncodingIsRejected)
+{
+    Server->AddHandler("/echo", New<TEchoHttpHandler>());
+    Server->Start();
+
+    auto headers = New<THeaders>();
+    headers->Set("Content-Encoding", "unknown-codec");
+    auto rsp = WaitFor(Client->Post(TestUrl + "/echo", TSharedRef::FromString(std::string("x")), headers)).ValueOrThrow();
+
+    EXPECT_EQ(EStatusCode::UnsupportedMediaType, rsp->GetStatusCode());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NHttp

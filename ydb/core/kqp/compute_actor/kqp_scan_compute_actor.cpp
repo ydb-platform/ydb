@@ -131,8 +131,10 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
                 }
             }
 
-            taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
-            taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
+            if (RuntimeSettings.WithProgressStats || RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+                taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
+                taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
+            }
             tableStats->SetReadRows(stats->Rows);
             tableStats->SetReadBytes(stats->Bytes);
             tableStats->SetAffectedPartitions(stats->AffectedShards);

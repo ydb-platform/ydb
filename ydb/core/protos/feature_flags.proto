@@ -408,5 +408,6 @@ message TFeatureFlags {
     // Enables CDC schema records for newly created asynchronous replication streams.
     // Existing streams retain their legacy data-only protocol.
     optional bool EnableAsyncReplicationSchemaChanges = 338 [default = false];
-    optional bool EnableColumnshardGroupDecommission = 339 [default = false];
+    optional bool EnableColumnshardMoveData = 339 [default = false];
+    optional bool EnableColumnshardCutHistory = 340 [default = false];
 }

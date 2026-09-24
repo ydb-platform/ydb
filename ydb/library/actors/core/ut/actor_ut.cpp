@@ -787,6 +787,12 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         actorSystem.Start();
 
         THolder<IActor> innerActor = MakeHolder<TTestActor>();
+        UNIT_ASSERT(innerActor->GetMailboxPriority() == EMailboxPriority::Normal);
+        innerActor->SetMailboxPriority(EMailboxPriority::High);
+        UNIT_ASSERT(innerActor->GetMailboxPriority() == EMailboxPriority::High);
+        innerActor->SetMailboxPriority(EMailboxPriority::Normal);
+        UNIT_ASSERT(innerActor->GetMailboxPriority() == EMailboxPriority::Normal);
+        innerActor->SetMailboxPriority(EMailboxPriority::High);
         ui64 pongCounter = 0;
         THolder<IActor> pongActor = MakeHolder<TPongDecorator>(std::move(innerActor), &pongCounter);
         ui64 pingCounter = 0;
@@ -796,6 +802,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         TAtomic actorsAlive = 0;
 
         THolder<IActor> endActor = MakeHolder<TTestEndDecorator>(std::move(pingActor), &pad, &actorsAlive);
+        UNIT_ASSERT(endActor->GetMailboxPriority() == EMailboxPriority::High);
         actorSystem.Register(endActor.Release(), TMailboxType::HTSwap);
 
         pad.Park();
@@ -1271,20 +1278,24 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
     }
 
     Y_UNIT_TEST(SystemFlagStaysSetUntilExplicitlyCleared) {
-        auto setup = TActorBenchmark::GetActorSystemSetup();
-        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+        for (const auto priority : {EMailboxPriority::Normal, EMailboxPriority::High}) {
+            auto setup = TActorBenchmark::GetActorSystemSetup();
+            TActorBenchmark::AddBasicPool(setup, 1, true, false);
 
-        TActorSystem actorSystem(setup);
-        actorSystem.Start();
+            TActorSystem actorSystem(setup);
+            actorSystem.Start();
 
-        ui32 notifications = 0;
-        TThreadParkPad done;
-        actorSystem.Register(new TPersistentObserverActor(notifications, done), TMailboxType::HTSwap, 0);
+            ui32 notifications = 0;
+            TThreadParkPad done;
+            auto* actor = new TPersistentObserverActor(notifications, done);
+            actor->SetMailboxPriority(priority);
+            actorSystem.Register(actor, TMailboxType::HTSwap, 0);
 
-        done.Park();
-        actorSystem.Stop();
+            done.Park();
+            actorSystem.Stop();
 
-        UNIT_ASSERT_VALUES_EQUAL(notifications, 2);
+            UNIT_ASSERT_VALUES_EQUAL(notifications, 2);
+        }
     }
 }
 

@@ -2,6 +2,7 @@
 #include "activity_guard.h"
 #include "actor.h"
 #include "executor_pool_base.h"
+#include "executor_pool_base_impl.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "executor_thread.h"
 #include "mailbox.h"
@@ -154,51 +155,7 @@ namespace NActors {
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) {
-        NHPTimer::STime hpstart = GetCycleCountFast();
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        ui32 at = actor->GetActivityType().GetIndex();
-        Y_DEBUG_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
-        if (at >= Stats.MaxActivityType()) {
-            at = TActorTypeOperator::GetActorActivityIncorrectIndex();
-            Y_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
-        }
-        AtomicIncrement(Stats.ActorsAliveByActivity[at]);
-#endif
-        AtomicIncrement(ActorRegistrations);
-
-        TMailbox* mailbox = cache ? cache.Allocate() : MailboxTable->Allocate();
-
-        // Free mailboxes are not executing, lock to a normal state
-        mailbox->LockFromFree();
-
-        const ui64 localActorId = AllocateID();
-        mailbox->AttachActor(localActorId, actor);
-
-        // do init
-        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
-        DoActorInit(ActorSystem, actor, actorId, parentId);
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        if (ActorSystem->MonitorStuckActors()) {
-            with_lock (StuckObserverMutex) {
-                Y_ABORT_UNLESS(actor->StuckIndex == Max<size_t>());
-                actor->StuckIndex = Actors.size();
-                Actors.push_back(actor);
-            }
-        }
-#endif
-
-        // Once we unlock the mailbox the actor starts running and we cannot use the pointer any more
-        actor = nullptr;
-
-        mailbox->Unlock(this, GetCycleCountFast(), revolvingWriteCounter);
-
-        NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;
-        if (elapsed > 1000000) {
-            LWPROBE(SlowRegisterNew, PoolId, NHPTimer::GetSeconds(elapsed) * 1000.0);
-        }
-
-        return actorId;
+        return RegisterWithInitializer(actor, cache, revolvingWriteCounter, parentId, [](TMailbox*, IActor*) {});
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) {

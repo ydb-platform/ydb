@@ -49,8 +49,13 @@ SRCS(
     execution_stats.cpp
     executor_pool_base.cpp
     executor_pool_base.h
+    executor_pool_base_impl.h
     executor_pool_basic.cpp
     executor_pool_basic.h
+    executor_pool_basic_queue.h
+    executor_pool_priority.cpp
+    executor_pool_priority.h
+    executor_pool_priority_queue.h
     executor_pool_io.cpp
     executor_pool_io.h
     executor_pool_shared.cpp

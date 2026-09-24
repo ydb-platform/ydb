@@ -37,6 +37,9 @@ namespace NActors {
         // tiny-ydb configs
         std::vector<i16> AdjacentPools;
         i16 ForcedForeignSlotCount = 0;
+        // Opt in to a separate executor implementation. Ordinary pools retain
+        // their existing mailbox and activation-queue behavior.
+        bool UsePriority = false;
     };
 
     struct TSharedExecutorPoolConfig {

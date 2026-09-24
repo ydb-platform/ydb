@@ -32,6 +32,11 @@ namespace NActors {
 #endif
         TAtomic RegisterRevolvingCounter = 0;
         ui64 AllocateID();
+        // The default initializer compiles away; specialized pools can prepare
+        // their own metadata before the actor publishes its first event.
+        template<class TInitializer>
+        TActorId RegisterWithInitializer(IActor* actor, TMailboxCache& cache, ui64 revolvingCounter,
+            const TActorId& parentId, TInitializer&& initialize);
     public:
         explicit TExecutorPoolBaseMailboxed(ui32 poolId);
         ~TExecutorPoolBaseMailboxed();

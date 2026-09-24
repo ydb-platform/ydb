@@ -171,7 +171,8 @@ public:
         std::optional<ui32> dbgIndex,
         TChaosConfig::TChaosNodeConfig::EChaosMode mode);
 
-    // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
+    // Gathers one detailed per-VChunk DBG snapshot when dbgIndex is set;
+    // otherwise gathers summary snapshots for all DBGs.
     [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
         std::optional<size_t> dbgIndex) const;
 

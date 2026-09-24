@@ -1,6 +1,8 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -425,8 +427,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     Y_UNIT_TEST(RowIdOptIn_PlainBuildsAndKeysByRowId) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -469,8 +469,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     Y_UNIT_TEST(RowIdOptIn_RelevanceBuildsAndKeysByRowId) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -500,8 +498,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     Y_UNIT_TEST(RowIdOptIn_RejectsIfRowIdWrongType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         DoCreateTextTableWithRowId(runtime, env, txId,
@@ -518,8 +514,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     Y_UNIT_TEST(RowIdOptIn_RejectsIfRowIdNullable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         DoCreateTextTableWithRowId(runtime, env, txId,
@@ -536,8 +530,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     Y_UNIT_TEST(RowIdOptIn_AutoProvisionsMissingUniqueIndex) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         // __ydb_row_id is well-formed (Uint64 NOT NULL) but has no unique index yet. With the unique-index
@@ -568,8 +560,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     Y_UNIT_TEST(RowIdOptIn_AutoProvisionsWhenUniqueIndexOnDifferentColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         // __ydb_row_id is well-formed, but the only existing unique index keys some other column. The build
@@ -615,8 +605,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         // __ydb_row_id column and a unique index over it (the unique-index feature is enabled by TTestEnv).
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -646,6 +634,156 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         });
     }
 
+    Y_UNIT_TEST(AutoProvisionRowIdRetryOverLeftoverSequence) {
+        // __ydb_row_id auto-provision should not fail if the sequence is left from a previous failed build attempt
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The easiest way to check is to create it by hand
+        TestCreateSequence(runtime, ++txId, "/MyRoot/texts", Sprintf(R"(
+            Name: "%s"
+        )", NTableIndex::NFulltext::RowIdSequenceName));
+        env.TestWaitNotification(runtime, txId);
+
+        // Index build should succeed
+        auto buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+    }
+
+    Y_UNIT_TEST(AutoProvisionDropSequenceOnFailure) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> buildColumnBlocker(runtime, [&](const auto& ev) {
+            // Corrupt the request to force datashard to reply with a failure
+            ev->Get()->Record.SetOwnerId(0);
+            ev->Get()->Record.SetPathId(0);
+            return true;
+        });
+        ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        runtime.WaitFor("build column request", [&]{ return buildColumnBlocker.size() > 0; });
+        buildColumnBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        // Check that neither the sequence nor the __ydb_row_id column exist
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {
+            NLs::PathExist,
+            NLs::IndexesCount(0),
+            NLs::CheckColumns("texts", {"pk", "text", "data"}, {}, {"pk"}, true)
+        });
+    }
+
+    Y_UNIT_TEST(RowIdBuild_RetrySequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT(tablePartitions.size() == 1);
+            const ui64 textsTabletId = tablePartitions[0].GetDatashardId();
+
+            auto fnWriteRow = [&] (TString pk, TString text, TString data) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('pk   (Utf8   '"%s") ) ) )
+                        (let row '( '('text (String '"%s") )
+                                    '('data (String '"%s") ) ) )
+                        (return (AsList (UpdateRow '__user__texts key row) ))
+                    )
+                )", pk.c_str(), text.c_str(), data.c_str());
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, textsTabletId, writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            };
+
+            fnWriteRow("pone", "green apple", "one");
+            fnWriteRow("ptwo", "red apple and blue apple", "two");
+            fnWriteRow("pthree", "yellow apple", "three");
+            fnWriteRow("pfour", "red car", "four");
+        }
+
+        bool seen = false;
+        TActorId dsId;
+        ui64 cookie = 0;
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvNextValResult> seqBlocker(runtime, [&](const auto& ev) {
+            if (seen) {
+                return false;
+            }
+            seen = true;
+            dsId = ev->GetRecipientRewrite();
+            cookie = ev->Cookie;
+            return true;
+        });
+        ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        runtime.WaitFor("sequence allocate request", [&]{ return seqBlocker.size() > 0; });
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            NYql::TIssueManager issueManager;
+            issueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, "Sequence shard is unavailable"));
+            runtime.Send(new IEventHandle(
+                dsId,
+                sender,
+                new NSequenceProxy::TEvSequenceProxy::TEvNextValResult(Ydb::StatusIds::UNAVAILABLE, issueManager.GetIssues()),
+                0,
+                cookie
+            ));
+        }
+        seqBlocker.Stop();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+    }
+
     Y_UNIT_TEST(RowIdDisabled_RejectsCustomPkBuild) {
         // With EnableFulltextIndexRowId off, building a fulltext index over a custom (non single integer)
         // PK cannot use or auto-provision __ydb_row_id, so the build is rejected (mirrors the CREATE TABLE
@@ -653,7 +791,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         // The gate reads this flag live at classify time, so setting it here disables rowid doc_id mode.
         appData.FeatureFlags.SetEnableFulltextIndexRowId(false);
         ui64 txId = 100;
@@ -750,7 +887,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         appData.FeatureFlags.SetEnableFulltextIndex(true);
         appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
         appData.FeatureFlags.SetEnableAddUniqueIndex(true);
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
     }
 
@@ -1298,7 +1434,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         appData.FeatureFlags.SetEnableFulltextIndex(true);
         appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
         appData.FeatureFlags.SetEnableAddUniqueIndex(true);
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
     }
 
@@ -1310,7 +1445,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         flags.SetEnableFulltextIndex(true);
         flags.SetEnableCompactFulltextIndex(enabled);
         flags.SetEnableAddUniqueIndex(true);
-        flags.SetEnableUniqConstraint(true);
         SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
     }
 

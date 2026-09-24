@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    yql/essentials/sql/settings
     yql/essentials/parser/common/antlr4
     yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4
     yql/essentials/parser/antlr_ast/gen/v1_antlr4
@@ -8,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    ansi.cpp
     base_visitor.cpp
     cursor_text.cpp
     narrowing_visitor.cpp

@@ -234,6 +234,74 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     };
 
+    Y_UNIT_TEST(TraceVerbositySetupWithoutActorContext) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /storage/groups HTTP/1.1\r\n\r\n", endpoint, {});
+        auto ev = IEventHandle::Downcast<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(
+            new IEventHandle(TActorId(), TActorId(), new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+
+        auto handler = std::make_unique<TStorageGroups>(nullptr, ev);
+        UNIT_ASSERT(handler);
+    }
+
+    Y_UNIT_TEST(TraceVerbosityLimitControl) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        std::optional<ui8> traceVerbosity;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::TEvListNodes::EventType && ev->TraceId) {
+                traceVerbosity = ev->TraceId.GetVerbosity();
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto makeRequest = [&](bool requestMaxVerbosity, bool withTraceparent = false) {
+            traceVerbosity.reset();
+            TActorId sender = runtime.AllocateEdgeActor();
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            if (withTraceparent) {
+                httpReq.HttpHeaders.AddHeader(
+                    "traceparent",
+                    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+            }
+            if (requestMaxVerbosity) {
+                httpReq.HttpHeaders.AddHeader("X-Trace-Verbosity", "15");
+            } else {
+                httpReq.HttpHeaders.AddHeader("X-Want-Trace", "true");
+            }
+            auto page = MakeHolder<TMonPage>("viewer", "title");
+            TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodelist", nullptr);
+            auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release(), 0));
+            runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>();
+
+            UNIT_ASSERT(traceVerbosity);
+            return *traceVerbosity;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(true, true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+
+        TControlBoard::SetValue(
+            0,
+            runtime.GetAppData().Icb->ViewerControls.LimitTraceVerbosity);
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(true), NWilson::TTraceId::MAX_VERBOSITY);
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(true, true), NWilson::TTraceId::MAX_VERBOSITY);
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(false), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(false, true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+    }
+
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
 

@@ -85,11 +85,9 @@ bool TUdfStoreService::AreLibraryDependenciesReady(
     try {
         const auto parsed = NWasm::ParseManifest(manifest);
         for (const auto& libraryName : parsed.RequiredLibraries) {
-            if (LocallyReadyLibraries.contains(libraryName)) {
-                continue;
-            }
             const auto* library = snap->GetLibraryByName(libraryName);
-            if (!library || library->GetCompileStatus() != ECompileStatus::Ready) {
+            const auto ready = LocallyReadyLibraries.find(libraryName);
+            if (!library || ready == LocallyReadyLibraries.end() || ready->second != library->GetUid()) {
                 return false;
             }
         }
@@ -146,11 +144,6 @@ void TUdfStoreService::EnqueueNativeUdfIfNeeded(const TUdfModule& udf) {
 }
 
 void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot) {
-    if (udf.GetCompileStatus() == ECompileStatus::Ready
-        || udf.GetCompileStatus() == ECompileStatus::Failed)
-    {
-        return;
-    }
     if (!AreLibraryDependenciesReady(udf.GetManifest(), snapshot)) {
         return;
     }
@@ -164,9 +157,6 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const T
 }
 
 void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot) {
-    if (udf.GetCompileStatus() != ECompileStatus::Ready) {
-        return;
-    }
     const TString& name = udf.GetName();
     if (LoadedUdfs.contains(name) || IsNamePending(name, EUdfType::WASM)) {
         return;
@@ -208,11 +198,6 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSna
 }
 
 void TUdfStoreService::EnqueueLibraryCompileIfNeeded(const TUdfModule& library) {
-    if (library.GetCompileStatus() == ECompileStatus::Ready
-        || library.GetCompileStatus() == ECompileStatus::Failed)
-    {
-        return;
-    }
     if (IsLibraryPending(library.GetName())) {
         return;
     }
@@ -224,9 +209,7 @@ void TUdfStoreService::ReportGapsUnblockedByLibrary(const TString& libraryName) 
         return;
     }
     for (const auto& [_, udf] : CurrentSnapshot->GetUdfs()) {
-        if (udf.GetType() != EUdfType::WASM
-            || udf.GetCompileStatus() == ECompileStatus::Ready
-            || udf.GetCompileStatus() == ECompileStatus::Failed)
+        if (udf.GetType() != EUdfType::WASM)
         {
             continue;
         }
@@ -355,6 +338,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 {"oldMd5", existing->GetMd5()},
                 {"newMd5", library.GetMd5()});
             UnloadWasmUdfsDependingOnLibrary(name);
+            LocallyReadyLibraries.erase(name);
             RequestArtifact(name, library.GetUid(), true);
         } else {
             EnqueueLibraryCompileIfNeeded(library);
@@ -430,11 +414,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 if (!LoadedUdfs.contains(name)) {
                     FetchRetryCounts.erase(name);
                 }
-                if (udf.GetCompileStatus() != ECompileStatus::Ready) {
-                    EnqueueWasmCompileIfNeeded(udf, snapshot.get());
-                } else {
-                    EnqueueWasmLoadIfNeeded(udf, snapshot.get());
-                }
+                EnqueueWasmCompileIfNeeded(udf, snapshot.get());
                 break;
             case EUdfType::LIBRARY:
                 break;
@@ -464,14 +444,14 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
 
     CurrentSnapshot = snapshot;
 
-    TVector<TString> confirmedLibraries;
-    for (const auto& name : LocallyReadyLibraries) {
+    TVector<TString> staleLibraries;
+    for (const auto& [name, uid] : LocallyReadyLibraries) {
         const auto* library = CurrentSnapshot->GetLibraryByName(name);
-        if (library && library->GetCompileStatus() == ECompileStatus::Ready) {
-            confirmedLibraries.push_back(name);
+        if (!library || library->GetUid() != uid) {
+            staleLibraries.push_back(name);
         }
     }
-    for (const auto& name : confirmedLibraries) {
+    for (const auto& name : staleLibraries) {
         LocallyReadyLibraries.erase(name);
     }
 
@@ -591,7 +571,11 @@ void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
         YDB_LOG_INFO("TUdfStoreService: library compiled for cpu_spec",
             {"libraryName", libraryName},
             {"localCpuSpec", LocalCpuSpec});
-        LocallyReadyLibraries.insert(libraryName);
+        if (CurrentSnapshot) {
+            if (const auto* library = CurrentSnapshot->GetLibraryByName(libraryName)) {
+                LocallyReadyLibraries[libraryName] = library->GetUid();
+            }
+        }
         ReportGapsUnblockedByLibrary(libraryName);
     } else {
         YDB_LOG_ERROR("TUdfStoreService: failed to compile library",

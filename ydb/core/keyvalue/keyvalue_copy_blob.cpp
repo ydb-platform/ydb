@@ -197,6 +197,11 @@ public:
 
         CheckYellow(ev->Get()->StatusFlags, newGroupId);
 
+        if (!YellowStopChannels.empty()) {
+            ReplyYellowStop();
+            return;
+        }
+
         ReplySuccess();
     }
 
@@ -210,6 +215,13 @@ public:
     void ReplyNodata() {
         Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
             TEvKeyValue::TEvBlobCopied::EResult::NODATA, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+        PassAway();
+    }
+
+    void ReplyYellowStop() {
+        Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
+            TEvKeyValue::TEvBlobCopied::EResult::YELLOW_STOP, BlobId, NewBlobId, RequestUid,
             std::move(YellowMoveChannels), std::move(YellowStopChannels)));
         PassAway();
     }

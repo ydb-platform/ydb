@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "blobstorage_hullstorageratio.h"
-#include "fresh_space_tracker.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
@@ -125,6 +124,8 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskConfig> VCfg;
         const TIntrusivePtr<TIngressCache> IngressCache;
         const ui32 ChunkSize;
+        // Granularity PDisk appends in; the SST writer pads to it (see TFreshOutputGeometry).
+        const ui32 AppendBlockSize;
         const ui32 CompWorthReadSize;
         const bool FreshCompaction;
         const bool GCOnlySynced;
@@ -135,7 +136,9 @@ namespace NKikimr {
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
-        const std::shared_ptr<TFreshSpaceTracker> FreshSpaceTracker;
+        // Reserve chunks for compacting Fresh before accepting the writes that fill it
+        // (EnableVDiskFreshSpaceProjection). See TFreshData and TFreshAdmissionGate.
+        const bool FreshChunkReservation;
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
@@ -160,7 +163,8 @@ namespace NKikimr {
                 TDuration hullCompStorageRatioMaxCalcDuration,
                 ui32 hullCompLevel0MaxSstsAtOnce,
                 ui32 hullCompSortedPartsNum,
-                bool enableFreshSpaceProjection = false
+                bool freshChunkReservation = false,
+                ui32 appendBlockSize = 4096
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

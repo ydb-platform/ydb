@@ -6,6 +6,7 @@
 
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -174,6 +175,128 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             /*requireExact=*/std::nullopt,
             sourceKeys,
             EqHeightDesignRankErrorBound());
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeAfterAddStatisticsWithStaleSchema, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = PrepareTable(env, "Database", "Table", ColumnShard);
+
+        // Prime the aggregator node's cache before adding the statistic.
+        const auto sender = runtime.AllocateEdgeActor(1);
+        const auto navigate = [&] {
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            auto request = std::make_unique<TNavigate>();
+            request->DatabaseName = "/Root/Database";
+            auto& entry = request->ResultSet.emplace_back();
+            entry.TableId = table.PathId;
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            entry.Operation = TNavigate::OpTable;
+            runtime.Send(MakeSchemeCacheID(), sender,
+                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), 1);
+            auto response = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
+            const auto& result = response->Get()->Request->ResultSet.front();
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, TNavigate::EStatus::Ok);
+            return result.MultiColumnStatistics.size();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(navigate(), 0);
+
+        // Let ALTER finish, but delay its notification to the aggregator's cache.
+        TBlockEvents<TSchemeBoardEvents::TEvNotifyUpdate> updates(runtime, [&](auto& ev) {
+            return ev->Get()->PathId == table.PathId
+                && ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(1);
+        });
+        ExecuteYqlScript(env, R"(
+            ALTER TABLE `/Root/Database/Table`
+            ADD STATISTICS stat1 ON (Value) WITH (EQ_HEIGHT_HISTOGRAM);
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(navigate(), 0);
+
+        // A synchronized navigation must receive the pending notification before
+        // its sync response, as it would without our artificial delivery delay.
+        auto sync = runtime.AddObserver<NSchemeBoard::NInternalEvents::TEvSyncVersionRequest>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            const TPathId pathId(record.GetPathOwnerId(), record.GetLocalPathId());
+            if (ev->Sender.NodeId() == runtime.GetNodeId(1)
+                && (pathId == table.PathId || record.GetPath() == table.Path)) {
+                updates.Stop().Unblock();
+            }
+        });
+
+        Analyze(runtime, table.SaTabletId, {table.PathId});
+        updates.Stop().Unblock();
+        CheckEqHeightHistogram(runtime, table.PathId, {2}, ColumnTableRowsNumber, 1);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeAfterAlteringTableStatistics, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
+
+        const auto navigateStatistics = [&](ui32 nodeIndex) {
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            auto request = std::make_unique<TNavigate>();
+            request->DatabaseName = "/Root/Database";
+            auto& entry = request->ResultSet.emplace_back();
+            entry.TableId = tableInfo.PathId;
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            entry.Operation = TNavigate::OpTable;
+            entry.SyncVersion = true;
+            const auto sender = runtime.AllocateEdgeActor(nodeIndex);
+            runtime.Send(MakeSchemeCacheID(), sender,
+                new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), nodeIndex);
+            const auto response = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
+            UNIT_ASSERT(response);
+            const auto& entries = response->Get()->Request->ResultSet;
+            UNIT_ASSERT_VALUES_EQUAL(entries.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(entries[0].Status, TNavigate::EStatus::Ok);
+            return entries[0].MultiColumnStatistics;
+        };
+
+        // Warm both the query node's cache and the aggregator node's cache before ALTER.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            UNIT_ASSERT(navigateStatistics(nodeIndex).empty());
+        }
+
+        ExecuteYqlScript(env, R"(
+            ALTER TABLE `/Root/Database/Table`
+            ADD STATISTICS multi_stat ON (Key, Value) WITH (EQ_HEIGHT_HISTOGRAM);
+        )");
+        ExecuteYqlScript(env, "ANALYZE `/Root/Database/Table`;");
+
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {1, 2}, ColumnTableRowsNumber, 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", tableInfo.PathId,
+            EStatType::EQ_HEIGHT_HISTOGRAM, "1,2"), 1);
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const auto statistics = navigateStatistics(nodeIndex);
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "multi_stat");
+        }
+
+        ExecuteYqlScript(env, "ALTER TABLE `/Root/Database/Table` DROP STATISTICS multi_stat;");
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            UNIT_ASSERT_C(navigateStatistics(nodeIndex).empty(), "Dropped statistics remain in the scheme cache");
+        }
+
+        ExecuteYqlScript(env, R"(
+            ALTER TABLE `/Root/Database/Table`
+            ADD STATISTICS multi_stat ON (Value, Key) WITH (EQ_HEIGHT_HISTOGRAM);
+        )");
+        ExecuteYqlScript(env, "ANALYZE `/Root/Database/Table`;");
+
+        CheckEqHeightHistogram(runtime, tableInfo.PathId, {2, 1}, ColumnTableRowsNumber, 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", tableInfo.PathId,
+            EStatType::EQ_HEIGHT_HISTOGRAM, "2,1"), 1);
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const auto statistics = navigateStatistics(nodeIndex);
+            UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "multi_stat");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].ColumnNamesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumnNames(0), "Value");
+            UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumnNames(1), "Key");
+        }
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogramDeclaredPkDedup, ColumnShard) {

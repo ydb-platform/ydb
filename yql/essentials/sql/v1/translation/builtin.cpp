@@ -3906,10 +3906,7 @@ TNodeResult BuildBuiltinFunc(
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from "
                                                                                << functionInfo->MinArgs << " to " << functionInfo->MaxArgs << " arguments, but got: " << args.size())));
         }
-        TString bindingName = functionInfo->BindingName;
-        if (functionInfo->MinArgs != functionInfo->MaxArgs) {
-            bindingName += ToString(args.size());
-        }
+        const TString bindingName = functionInfo->GetBindingName(args.size());
         ctx.RequiredModules.emplace("spark_module", "/lib/yql/spark.yqls");
         TVector<TNodePtr> applyArgs = {
             new TCallNodeImpl(pos, "bind", {BuildAtom(pos, "spark_module", 0), BuildQuotedAtom(pos, bindingName)})};

@@ -28,7 +28,6 @@ namespace NKikimr::NUdfApi {
 
 using namespace NActors;
 
-using NUdfStore::ECompileStatus;
 using NUdfStore::EUdfType;
 
 namespace {
@@ -253,7 +252,6 @@ private:
                 row.Type = Type_;
                 row.Version = Params_.version();
                 row.ChunkCount = Chunks_.size();
-                row.CompileStatus = ECompileStatus::Pending;
                 row.Manifest = TString(Params_.manifest_json());
 
                 NQuery::TWriteConditions conditions;
@@ -310,7 +308,6 @@ private:
         result.set_uid(Uid_);
         result.set_md5(Md5_);
         result.set_size(Body_.size());
-        result.set_compile_status(Ydb::Udf::PENDING);
         result.set_replaced_existing(ReplacedExisting_);
 
         YDB_LOG_INFO("UdfService: uploaded module",

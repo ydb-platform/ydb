@@ -855,10 +855,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         EraseAll(inflightInfo);
     }
 
-    // UpdateHosts requires every removed host to also be disabled
-    // (removed is a subset of disabled). Removing an already-disabled host must
-    // not touch the byte counters and, for a written inflight, must not change
-    // the state.
+    // Removing an already-disabled host must not touch the byte counters and,
+    // for a written inflight, must not change the state.
     Y_UNIT_TEST(ShouldUpdateHostsRemoveDisabledInWrittenState)
     {
         TTestReadyQueue readyQueue;
@@ -935,6 +933,58 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferErased,
             inflightInfo.GetState());
+    }
+
+    Y_UNIT_TEST(ShouldRemoveEnabledDDiskWhileFlushing)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+
+        for (THostIndex host: MakeDDisks(4)) {
+            Y_UNUSED(inflightInfo.RequestFlush(host));
+        }
+
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{3});
+
+        const auto removed = THostMask::MakeMask({THostIndex{3}});
+        inflightInfo.UpdateHosts(
+            THostMask::MakeEmpty(),
+            removed,
+            THostMask::MakeEmpty());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+
+        // A late response from the removed DDisk no longer belongs to this
+        // inflight flush.
+        inflightInfo.ConfirmFlush(THostIndex{3});
+        inflightInfo.FlushFailed(THostIndex{3});
+
+        inflightInfo.ConfirmFlush(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            readyQueue.GetFlushCompletedMask(MakeKey(123)));
+
+        // Demoting the DDisk does not disable its PBuffer. It must still be
+        // erased together with the other PBuffer copies.
+        for (THostIndex host: MakePrimaryHosts(4)) {
+            inflightInfo.RequestErase(host);
+            inflightInfo.ConfirmErase(host);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErased,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{3}));
     }
 
     Y_UNIT_TEST(ShouldCompleteFlushWhenConfirmedHostIsDisabled)

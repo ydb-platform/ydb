@@ -426,7 +426,7 @@ message TTableDescription {
 
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
-    optional uint64 PartitionsCount = 55;
+    optional uint64 PartitionCount = 55;
 }
 
 message TCompressionOptions {

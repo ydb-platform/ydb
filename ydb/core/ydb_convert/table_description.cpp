@@ -2482,8 +2482,8 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
     }
 
     stats->set_rows_estimate(in.GetTableStats().GetRowCount());
-    if (in.GetTable().HasPartitionsCount()) {
-        stats->set_partitions(in.GetTable().GetPartitionsCount());
+    if (in.GetTable().HasPartitionCount()) {
+        stats->set_partitions(in.GetTable().GetPartitionCount());
     } else {
         // Fallback for an older schemeshard. Semantically PartCount is the
         // number of LSM parts, but at the table level schemeshard repurposed

@@ -3561,9 +3561,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
     }
 
-    // KIKIMR-25849: PartitionsCount must be filled even when the
+    // KIKIMR-25849: PartitionCount must be filled even when the
     // TablePartitions list is not requested
-    Y_UNIT_TEST(DescribeTablePartitionsCount) {
+    Y_UNIT_TEST(DescribeTablePartitionCount) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -3577,20 +3577,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Without partitioning info: PartitionsCount must still be filled
+        // Without partitioning info: PartitionCount must still be filled
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", false), {
             NLs::Finished,
             NLs::TablePartitionCount(3),
         });
 
-        // With partitioning info: PartitionsCount must match the list
+        // With partitioning info: PartitionCount must match the list
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {
             NLs::Finished,
             NLs::PartitionCount(3),
             NLs::TablePartitionCount(3),
         });
 
-        // Split one shard and check that PartitionsCount follows the actual shard count
+        // Split one shard and check that PartitionCount follows the actual shard count
         auto describe = DescribePath(runtime, "/MyRoot/Table", true);
         const auto& partitions = describe.GetPathDescription().GetTablePartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3u);

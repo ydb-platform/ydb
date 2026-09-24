@@ -1386,7 +1386,7 @@ message DescribeTableResult {
 
     // Actual number of table partitions (shards), always filled, so clients
     // don't need to request shard_key_bounds or table_stats.
-    uint64 partitions_count = 21;
+    uint64 partition_count = 21;
 }
 
 message Query {

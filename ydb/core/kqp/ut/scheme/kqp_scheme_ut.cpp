@@ -2791,13 +2791,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithUniformPartitions(true);
     }
 
-    // KIKIMR-25849: partitions_count must be filled without requesting
+    // KIKIMR-25849: partition_count must be filled without requesting
     // table stats or shard boundaries
-    Y_UNIT_TEST(DescribeTablePartitionsCount) {
+    Y_UNIT_TEST(DescribeTablePartitionCount) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/DescribeTablePartitionsCount";
+        TString tableName = "/Root/DescribeTablePartitionCount";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
@@ -2811,12 +2811,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        // No extra options: partitions_count must still be present
+        // No extra options: partition_count must still be present
         {
             auto describeResult = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& proto = NYdb::TProtoAccessor::GetProto(describeResult.GetTableDescription());
-            UNIT_ASSERT_VALUES_EQUAL(proto.partitions_count(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(proto.partition_count(), 4);
         }
 
         // With table statistics: the legacy TableStats.partitions must match

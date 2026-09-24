@@ -134,8 +134,8 @@ public:
                 }
                 if (pbPathDescription.HasTable()) {
                     const auto& pbTable(pbPathDescription.GetTable());
-                    if (pbTable.HasPartitionsCount()) {
-                        pbCommon.SetPartitions(pbTable.GetPartitionsCount());
+                    if (pbTable.HasPartitionCount()) {
+                        pbCommon.SetPartitions(pbTable.GetPartitionCount());
                     } else {
                         // Fallback for an older schemeshard
                         if (pbTable.HasUniformPartitionsCount()) {

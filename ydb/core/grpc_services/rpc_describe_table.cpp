@@ -149,14 +149,14 @@ private:
 
                     // The actual number of partitions is always available,
                     // no need to request shard boundaries or table stats
-                    describeTableResult.set_partitions_count(tableDescription.GetColumnShardCount());
+                    const auto shardCount = tableDescription.GetSharding().GetColumnShards().size();
+                    describeTableResult.set_partition_count(shardCount);
 
                     try {
                         if (GetProtoRequest()->include_table_stats()) {
                             FillTableStats(describeTableResult, pathDescription, false, {});
 
-                            describeTableResult.mutable_table_stats()->set_partitions(
-                                tableDescription.GetColumnShardCount());
+                            describeTableResult.mutable_table_stats()->set_partitions(shardCount);
                         }
                     } catch (const std::exception& ex) {
                         return ReplyOnException(ex, "Unable to fill table stats");
@@ -187,10 +187,10 @@ private:
 
                 // Fallback to the partitions list keeps compatibility
                 // with an older schemeshard that does not fill the field yet.
-                if (tableDescription.HasPartitionsCount()) {
-                    describeTableResult.set_partitions_count(tableDescription.GetPartitionsCount());
+                if (tableDescription.HasPartitionCount()) {
+                    describeTableResult.set_partition_count(tableDescription.GetPartitionCount());
                 } else {
-                    describeTableResult.set_partitions_count(pathDescription.TablePartitionsSize());
+                    describeTableResult.set_partition_count(pathDescription.TablePartitionsSize());
                 }
 
                 try {

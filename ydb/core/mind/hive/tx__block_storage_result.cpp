@@ -68,7 +68,10 @@ public:
                         Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
-            } else if (msg->Status == NKikimrProto::ERROR && tablet->IsReadyToBlockStorage() && msg->ActualGeneration >= tablet->KnownGeneration) {
+            } else if (msg->Status == NKikimrProto::ERROR && tablet->IsReadyToBlockStorage() && msg->ActualGeneration >= tablet->GetBlockStorageGeneration()) {
+                // The group is already blocked at our generation or above, so a tablet might have run with the old storage info.
+                // Our own partially applied block also reports our generation, so a quorum failure may get here too,
+                // which is safe, since unconfirmed storage info has not been published yet.
                 Y_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
                 ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
 
@@ -132,7 +135,7 @@ public:
                 }
 
                 Y_ABORT_UNLESS(msg->ActualGeneration < Max<ui32>());
-                tablet->KnownGeneration = msg->ActualGeneration + 1;
+                tablet->KnownGeneration = Max(tablet->KnownGeneration, msg->ActualGeneration + 1);
                 tablet->ChannelProfileReassignReason =
                     NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
                 tablet->State = ETabletState::GroupAssignment;

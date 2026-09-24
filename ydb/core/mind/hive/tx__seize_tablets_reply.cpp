@@ -120,7 +120,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletChannelGen::Version>(protoTabletChannelGen.GetVersion()),
                                 NIceDb::TUpdate<Schema::TabletChannelGen::Timestamp>(timestamp.MilliSeconds()));
 
-                    channel.History.emplace_back(generation, groupId, timestamp);
+                    channel.History.emplace_back(generation, groupId, timestamp, protoTabletChannelGen.GetVersion());
                 }
 
                 ++channelId;

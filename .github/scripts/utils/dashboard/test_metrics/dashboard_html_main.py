@@ -696,8 +696,8 @@ def build_html_dashboard(
         tickmode: tickVals ? 'array' : 'auto',
         tickvals: tickVals || undefined,
         ticktext: tickText || undefined,
-        hoverformat: '%Y-%m-%d %H:%M:%S',
-        // Hide Plotly default unified X title like "1.772e12".
+        // Plotly formats date hovers in UTC. The title is replaced in plotly_hover.
+        hoverformat: '',
         unifiedhovertitle: {{ text: '' }},
       }};
     }}
@@ -723,7 +723,7 @@ def build_html_dashboard(
           'xaxis.tickmode': ax.tickmode,
           'xaxis.tickvals': ax.tickvals,
           'xaxis.ticktext': ax.ticktext,
-          'xaxis.hoverformat': '%Y-%m-%d %H:%M:%S',
+          'xaxis.hoverformat': '',
           'xaxis.unifiedhovertitle.text': '',
           'hoverdistance': -1,
           'spikedistance': -1,
@@ -747,7 +747,7 @@ def build_html_dashboard(
             el.data.forEach((tr, i) => {{
               if (tr && tr.customdata && (tr.name === 'CPU total (monitor)' || tr.name === 'RAM total (monitor)') && Array.isArray(tr.x)) {{
                 indices.push(i);
-                customdatas.push((tr.x || []).map(v => formatTimeLabel(Number(v))));
+                customdatas.push((tr.x || []).map(v => formatTimeLabel(v)));
               }}
             }});
             if (indices.length) Plotly.restyle(el, {{ customdata: customdatas }}, indices);
@@ -1742,6 +1742,13 @@ def build_html_dashboard(
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
         panel.textContent = `t=${{formatTimeLabel(t)}}\\n` + lines.join('\\n');
+        requestAnimationFrame(() => {{
+          const label = formatTimeLabel(t);
+          plot.querySelectorAll('.hoverlayer text').forEach((node) => {{
+            const raw = node.textContent || '';
+            if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}[ T]\\d{{2}}:\\d{{2}}:\\d{{2}}/.test(raw)) node.textContent = label;
+          }});
+        }});
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
@@ -1904,11 +1911,11 @@ def build_html_dashboard(
         const xLabels = xDisp.map(v => formatTimeLabel(v));
         Plotly.addTraces('cpuLayer', [
           {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
         ]);
         Plotly.addTraces('ramLayer', [
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
         ]);
         addCpuLimitTrace('cpuLayer', ro);
         addRamLimitTraces('ramLayer', ro);
@@ -1955,11 +1962,11 @@ def build_html_dashboard(
       const xLabels = xDisp.map(v => formatTimeLabel(v));
       Plotly.addTraces('cpuLayerSuite', [
         {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
       ]);
       Plotly.addTraces('ramLayerSuite', [
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{x|%Y-%m-%d %H:%M:%S}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
       ]);
       addCpuLimitTrace('cpuLayerSuite', ro);
       addRamLimitTraces('ramLayerSuite', ro);

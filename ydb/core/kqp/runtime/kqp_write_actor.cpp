@@ -4971,7 +4971,7 @@ public:
             });
 
             if (needToFlushBeforeCommit) {
-                Flush();
+                Flush({});
             } else if (NeedResolveBeforeCommit()) {
                 StartResolveRound();
             } else {

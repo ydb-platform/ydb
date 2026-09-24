@@ -2,9 +2,9 @@
 
 #include <util/generic/fwd.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 // Permits invalid special comments
 bool IsAnsiQuery(const TString& query);
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST

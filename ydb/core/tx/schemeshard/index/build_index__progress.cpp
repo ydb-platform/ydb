@@ -416,11 +416,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
     // This propose contains only drop operations, so FailOnExist (relevant only for create) is irrelevant here.
     propose->Record.SetFailOnExist(false);
 
-    auto indexPath = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
+    auto indexPath = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.GetBuildIndexName());
     const TString indexPathStr = indexPath.PathString();
 
     auto addDropTable = [&](const TString& tableName) {
-        auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).Dive(tableName);
+        auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.GetBuildIndexName()).Dive(tableName);
         if (!path.IsResolved() || path.IsDeleted()) {
             return;
         }
@@ -473,7 +473,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     propose->Record.SetFailOnExist(true);
 
     const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
-    const TString indexPathStr = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).PathString();
+    const TString indexPathStr = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.GetBuildIndexName()).PathString();
 
     NKikimrSchemeOp::TModifyScheme indexBuildProto;
     buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
@@ -560,7 +560,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     }
 
     using namespace NTableIndex::NKMeans;
-    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.GetBuildIndexName()).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
     auto suffix = buildInfo.KMeans.NextBuildSuffix();
@@ -711,7 +711,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     auto path = TPath::Init(buildInfo.TablePathId, ss);
     const auto& tableInfo = ss->Tables.at(path->PathId);
 
-    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.GetBuildIndexName()).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
 
@@ -768,7 +768,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     auto path = TPath::Init(buildInfo.TablePathId, ss);
     const auto& tableInfo = ss->Tables.at(path->PathId);
 
-    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.GetBuildIndexName()).PathString());
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
 
@@ -922,7 +922,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpPrepareIndexValidation);
     modifyScheme.SetInternal(true);
-    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.GetBuildIndexName()).PathString());
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
     modifyScheme.MutablePrepareIndexValidation()->SetTableName(NTableIndex::ImplTable);
 
@@ -941,6 +941,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
+    if (buildInfo.SubState == TIndexBuildInfo::ESubState::RebuildReplacing) {
+        auto& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveIndex);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        auto& move = *modifyScheme.MutableMoveIndex();
+        move.SetTablePath(TPath::Init(buildInfo.TablePathId, ss).PathString());
+        move.SetSrcPath(buildInfo.RebuildIndexName);
+        move.SetDstPath(buildInfo.IndexName);
+        move.SetAllowOverwrite(true);
+        return propose;
+    }
+
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpApplyIndexBuild);
     modifyScheme.SetInternal(true);
@@ -951,7 +965,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetTablePath(TPath::Init(buildInfo.TablePathId, ss).PathString());
 
     if (buildInfo.IsBuildIndex()) {
-        indexBuild.SetIndexName(buildInfo.IndexName);
+        indexBuild.SetIndexName(buildInfo.GetBuildIndexName());
     }
 
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
@@ -978,6 +992,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
+    if (buildInfo.SubState == TIndexBuildInfo::ESubState::RebuildReplacing) {
+        // The build snapshot has already been finalized. Only the replacement index remains.
+        auto table = TPath::Init(buildInfo.TablePathId, ss);
+        auto& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(table.Parent().PathString());
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        auto& drop = *modifyScheme.MutableDropIndex();
+        drop.SetTableName(table.LeafName());
+        drop.SetIndexName(buildInfo.RebuildIndexName);
+        return propose;
+    }
+
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCancelIndexBuild);
     modifyScheme.SetInternal(true);
@@ -986,7 +1014,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
 
     auto& indexBuild = *modifyScheme.MutableCancelIndexBuild();
     indexBuild.SetTablePath(TPath::Init(buildInfo.TablePathId, ss).PathString());
-    indexBuild.SetIndexName(buildInfo.IndexName);
+    indexBuild.SetIndexName(buildInfo.GetBuildIndexName());
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
@@ -1038,7 +1066,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     modifyScheme.SetInternal(true);
 
     auto path = TPath::Init(buildInfo.TablePathId, ss);
-    path.Dive(buildInfo.IndexName);
+    path.Dive(buildInfo.GetBuildIndexName());
     path.Dive(NTableIndex::NKMeans::PrefixTable);
     modifyScheme.SetWorkingDir(path.PathString());
 
@@ -1195,7 +1223,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
         if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
@@ -1251,7 +1279,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
         if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
@@ -1285,7 +1313,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
         if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
@@ -1437,7 +1465,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvFilterKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
         path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
         path.Rise();
 
@@ -3309,7 +3337,7 @@ public:
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextRowIdSrc;
                     Self->PersistBuildIndexState(db, buildInfo);
                 }
-                if (buildInfo.IsRebuild && buildInfo.IsBuildVectorIndex()) {
+                if (buildInfo.IsRebuild && buildInfo.RebuildIndexName.empty() && buildInfo.IsBuildVectorIndex()) {
                     // For rebuild: drop old impl tables, then create new ones
                     buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::RebuildDrop;
                     PersistKMeansState(txc, buildInfo);
@@ -3525,7 +3553,20 @@ public:
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
+                if (!buildInfo.RebuildIndexName.empty() &&
+                    buildInfo.SubState != TIndexBuildInfo::ESubState::RebuildReplacing) {
+                    // Finalize the replacement before atomically moving it over the live index.
+                    // Persist the phase and transaction reset together so a restart resumes the move.
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::RebuildReplacing;
+                    buildInfo.ApplyTxId = {};
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                    buildInfo.ApplyTxDone = false;
+                    NIceDb::TNiceDb db(txc.DB);
+                    Self->PersistBuildIndexState(db, buildInfo);
+                    Self->PersistBuildIndexApplyTx(db, buildInfo);
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
+                }
                 Progress(BuildId);
             }
             break;
@@ -4820,6 +4861,12 @@ public:
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
                 if (buildInfo.IsBuildColumns()) {
                     ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_DroppingColumns);
+                } else if (!buildInfo.RebuildIndexName.empty() && record.GetStatus() != NKikimrScheme::StatusAccepted) {
+                    buildInfo.ApplyTxId = {};
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                    buildInfo.ApplyTxDone = false;
+                    Self->PersistBuildIndexApplyTx(db, buildInfo);
+                    ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
                 } else {
                     ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
                 }

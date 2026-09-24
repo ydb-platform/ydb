@@ -3,7 +3,7 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 using NSQLTranslation::ParseTranslationSettings;
 using NSQLTranslation::TTranslationSettings;
@@ -16,4 +16,4 @@ bool IsAnsiQuery(const TString& query) {
     return settings.AnsiLexer;
 }
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST

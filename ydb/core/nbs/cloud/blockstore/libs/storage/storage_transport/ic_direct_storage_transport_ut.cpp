@@ -1,7 +1,6 @@
-#include "direct_block_group_test_fixture.h"
+#include "testlib/storage_transport_test_fixture.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/fake_direct_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -12,12 +11,11 @@
 
 #include <atomic>
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 using namespace NKikimr;
 using namespace NThreading;
-using namespace NTransport;
-using namespace NTransport::NTestLib;
+using namespace NTestLib;
 
 namespace {
 
@@ -81,7 +79,7 @@ TGuardedSgList MakeSgList(TString& buffer)
 }
 
 void CheckDirectWriteChecksums(
-    TDBGFixture& fixture,
+    TStorageTransportTestFixture& fixture,
     bool directSession,
     bool enableChecksums)
 {
@@ -165,7 +163,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 {
     // Without a registered IDirectSession the datapath falls back to the actor
     // path and still completes successfully against the local stub.
-    Y_UNIT_TEST_F(FallsBackToActorPathWithoutSession, TDBGFixture)
+    Y_UNIT_TEST_F(
+        FallsBackToActorPathWithoutSession,
+        TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -195,7 +195,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     }
 
-    Y_UNIT_TEST_F(ActorPathDirectWriteCarriesPerBlockChecksums, TDBGFixture)
+    Y_UNIT_TEST_F(
+        ActorPathDirectWriteCarriesPerBlockChecksums,
+        TStorageTransportTestFixture)
     {
         CheckDirectWriteChecksums(
             *this,
@@ -203,7 +205,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             /*enableChecksums=*/true);
     }
 
-    Y_UNIT_TEST_F(DirectSessionWriteCarriesPerBlockChecksums, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DirectSessionWriteCarriesPerBlockChecksums,
+        TStorageTransportTestFixture)
     {
         CheckDirectWriteChecksums(
             *this,
@@ -211,7 +215,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             /*enableChecksums=*/true);
     }
 
-    Y_UNIT_TEST_F(ActorPathCanDisableWriteChecksums, TDBGFixture)
+    Y_UNIT_TEST_F(
+        ActorPathCanDisableWriteChecksums,
+        TStorageTransportTestFixture)
     {
         CheckDirectWriteChecksums(
             *this,
@@ -219,7 +225,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             /*enableChecksums=*/false);
     }
 
-    Y_UNIT_TEST_F(DirectSessionCanDisableWriteChecksums, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DirectSessionCanDisableWriteChecksums,
+        TStorageTransportTestFixture)
     {
         CheckDirectWriteChecksums(
             *this,
@@ -229,7 +237,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
     // With a fake IDirectSession injected, WriteToDDisk / ReadFromDDisk go
     // through the direct-session Send + cookie-demux path and echo payload.
-    Y_UNIT_TEST_F(DirectPathWriteAndRead, TDBGFixture)
+    Y_UNIT_TEST_F(DirectPathWriteAndRead, TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -275,7 +283,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
     // A shut-down IDirectSession makes Send() return false; Remove() drops the
     // handler and completes the promise with OUTDATED / "Session broken".
-    Y_UNIT_TEST_F(DeadSessionCompletesWithOutdated, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DeadSessionCompletesWithOutdated,
+        TStorageTransportTestFixture)
     {
         auto transport =
             std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
@@ -304,7 +314,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             SessionBrokenErrorMessage);
     }
 
-    Y_UNIT_TEST_F(DirectPathReadCopiesPayload, TDBGFixture)
+    Y_UNIT_TEST_F(DirectPathReadCopiesPayload, TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -335,7 +345,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto readFuture = transport->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{1, 0, DefaultBlockSize},
-            MakeKey(42),
+            TPBufferKey{.Generation = 1, .Lsn = 42},
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -346,7 +356,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         UNIT_ASSERT_VALUES_EQUAL(writeBuf, readBuf);
     }
 
-    Y_UNIT_TEST_F(DirectPathWriteToManyPBuffersAggregatesReplies, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DirectPathWriteToManyPBuffersAggregatesReplies,
+        TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -405,7 +417,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
     Y_UNIT_TEST_F(
         DirectPathWriteToManyPBuffersSessionBrokenCompletesRemaining,
-        TDBGFixture)
+        TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -489,7 +501,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             protoIds.size());
     }
 
-    Y_UNIT_TEST_F(DirectPathUndeliveredCompletesWithError, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DirectPathUndeliveredCompletesWithError,
+        TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -521,7 +535,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
     // Actor-path fallback: a held PBuffer read must be rejected on node
     // disconnect via RejectAllSessionRequestsForNode (not only DDisk maps).
-    Y_UNIT_TEST_F(ActorPathPBufferReadRejectedOnDisconnect, TDBGFixture)
+    Y_UNIT_TEST_F(
+        ActorPathPBufferReadRejectedOnDisconnect,
+        TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -543,7 +559,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto future = transportPtr->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
-            MakeKey(1),
+            TPBufferKey{.Generation = 1, .Lsn = 1},
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -563,7 +579,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             SessionBrokenErrorMessage);
     }
 
-    Y_UNIT_TEST_F(DirectPathEraseSyncList, TDBGFixture)
+    Y_UNIT_TEST_F(DirectPathEraseSyncList, TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -587,7 +603,10 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
         auto batch = transport->BatchEraseFromPBuffer(
             pbConnection,
-            TVector<TPBufferKey>{MakeKey(1), MakeKey(2), MakeKey(3)},
+            TVector<TPBufferKey>{
+                {.Generation = 1, .Lsn = 1},
+                {.Generation = 1, .Lsn = 2},
+                {.Generation = 1, .Lsn = 3}},
             nullptr);
         WaitFuture(executor, batch, WaitTimeout);
         UNIT_ASSERT(
@@ -607,7 +626,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             pbConnection,
             ddConnection,
             TVector{NDDisk::TBlockSelector{0, 0, DefaultBlockSize}},
-            TVector<TPBufferKey>{MakeKey(1)},
+            TVector<TPBufferKey>{{.Generation = 1, .Lsn = 1}},
             nullptr);
         WaitFuture(executor, sync, WaitTimeout);
         UNIT_ASSERT(
@@ -621,7 +640,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     }
 
-    Y_UNIT_TEST_F(DirectPathConcurrentRequestsDoNotCrossTalk, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DirectPathConcurrentRequestsDoNotCrossTalk,
+        TStorageTransportTestFixture)
     {
         auto executor = MakeExecutor();
         auto transport =
@@ -708,7 +729,9 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         UNIT_ASSERT_VALUES_EQUAL(writeB, readB2);
     }
 
-    Y_UNIT_TEST_F(DestroysOwnedActorAndRejectsPendingConnect, TDBGFixture)
+    Y_UNIT_TEST_F(
+        DestroysOwnedActorAndRejectsPendingConnect,
+        TStorageTransportTestFixture)
     {
         auto transport =
             std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
@@ -736,4 +759,4 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     }
 }
 
-}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

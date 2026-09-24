@@ -216,6 +216,7 @@ private:
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);
+                FillMetricsSettings(describeTableResult, tableDescription);
 
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
             }

@@ -1,6 +1,4 @@
-#include "request_annotations.h"
-
-#include "request_info.h"
+#include "request_tags.h"
 
 #include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/distributed_table_session.h>
@@ -11,18 +9,40 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
-#include <yt/yt/core/rpc/client.h>
+#include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NApi::NRpcProxy {
 
+using NLogging::TLoggingTagList;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-void AnnotateReadTableRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+namespace {
+
+template <class TPayload>
+std::optional<TPayload> TryParseSignedPayload(const NSignature::TSignaturePtr& signature)
+{
+    if (!signature) {
+        return std::nullopt;
+    }
+
+    try {
+        return NYTree::ConvertTo<TPayload>(NYson::TYsonStringBuf(signature->Payload()));
+    } catch (const std::exception&) {
+        // Do not fail here, let server validate the payload.
+        return std::nullopt;
+    }
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLoggingTagList MakeReadTableRequestTags(
     const NYPath::TRichYPath& path,
     const NProto::TReqReadTable& req)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Path", path)
         .With("Unordered", req.unordered())
         .With("OmitInaccessibleColumns", req.omit_inaccessible_columns())
@@ -31,40 +51,36 @@ void AnnotateReadTableRequestInfo(
         .With("ArrowFallbackRowsetFormat", NProto::ERowsetFormat_Name(req.arrow_fallback_rowset_format()));
 }
 
-void AnnotateReadFileRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeReadFileRequestTags(
     const NProto::TReqReadFile& req)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Path", req.path())
         .With("Offset", YT_OPTIONAL_FROM_PROTO(req, offset))
         .With("Length", YT_OPTIONAL_FROM_PROTO(req, length));
 }
 
-void AnnotateWriteTableRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeWriteTableRequestTags(
     const NYPath::TRichYPath& path)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Path", path);
 }
 
-void AnnotateWriteFileRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeWriteFileRequestTags(
     const NYPath::TRichYPath& path,
     const NProto::TReqWriteFile& req)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Path", path)
         .With("ComputeMD5", req.compute_md5());
 }
 
-void AnnotatePartitionTablesRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakePartitionTablesRequestTags(
     const std::vector<NYPath::TRichYPath>& paths,
     const NProto::TReqPartitionTables& req)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Paths", paths)
         .With("PartitionMode", FromProto<NTableClient::ETablePartitionMode>(req.partition_mode()))
         .With("KeyGuarantee", req.enable_key_guarantee())
@@ -77,143 +93,132 @@ void AnnotatePartitionTablesRequestInfo(
         .With("OmitInaccessibleRows", req.omit_inaccessible_rows());
 }
 
-void AnnotateReadTablePartitionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeReadTablePartitionRequestTags(
     const NProto::TReqReadTablePartition& req)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Unordered", req.unordered())
         .With("OmitInaccessibleColumns", req.omit_inaccessible_columns())
         .With("DesiredRowsetFormat", NProto::ERowsetFormat_Name(req.desired_rowset_format()))
         .With("ArrowFallbackRowsetFormat", NProto::ERowsetFormat_Name(req.arrow_fallback_rowset_format()));
 }
 
-void AnnotateStartDistributedWriteSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeStartDistributedWriteSessionRequestTags(
     const NYPath::TRichYPath& path)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Path", path);
 }
 
-void AnnotatePingDistributedWriteSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakePingDistributedWriteSessionRequestTags(
     NObjectClient::TObjectId tableId)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("TableId", tableId);
 }
 
-void AnnotatePingDistributedWriteSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakePingDistributedWriteSessionRequestTags(
     const NTableClient::TSignedDistributedWriteSessionPtr& session)
 {
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteSession>(session.Underlying())) {
-        AnnotatePingDistributedWriteSessionRequestInfo(request, payload->PatchInfo.ObjectId);
+    if (auto payload = TryParseSignedPayload<TDistributedWriteSession>(session.Underlying())) {
+        return MakePingDistributedWriteSessionRequestTags(payload->PatchInfo.ObjectId);
     }
+    return {};
 }
 
-void AnnotateFinishDistributedWriteSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeFinishDistributedWriteSessionRequestTags(
     NObjectClient::TObjectId tableId)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("TableId", tableId);
 }
 
-void AnnotateFinishDistributedWriteSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeFinishDistributedWriteSessionRequestTags(
     const NTableClient::TSignedDistributedWriteSessionPtr& session)
 {
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteSession>(session.Underlying())) {
-        AnnotateFinishDistributedWriteSessionRequestInfo(request, payload->PatchInfo.ObjectId);
+    if (auto payload = TryParseSignedPayload<TDistributedWriteSession>(session.Underlying())) {
+        return MakeFinishDistributedWriteSessionRequestTags(payload->PatchInfo.ObjectId);
     }
+    return {};
 }
 
-void AnnotateWriteTableFragmentRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeWriteTableFragmentRequestTags(
     NObjectClient::TObjectId tableId,
     NCypressClient::TTransactionId mainTransactionId)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("TableId", tableId)
         .With("MainTransactionId", mainTransactionId);
 }
 
-void AnnotateWriteTableFragmentRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeWriteTableFragmentRequestTags(
     const NTableClient::TSignedWriteFragmentCookiePtr& cookie)
 {
-    if (auto payload = NDetail::TryParseSignedPayload<TWriteFragmentCookie>(cookie.Underlying())) {
-        AnnotateWriteTableFragmentRequestInfo(
-            request,
+    if (auto payload = TryParseSignedPayload<TWriteFragmentCookie>(cookie.Underlying())) {
+        return MakeWriteTableFragmentRequestTags(
             payload->PatchInfo.ObjectId,
             payload->MainTransactionId);
     }
+    return {};
 }
 
-void AnnotateStartDistributedWriteFileSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeStartDistributedWriteFileSessionRequestTags(
     const NYPath::TRichYPath& path)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("Path", path);
 }
 
-void AnnotatePingDistributedWriteFileSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakePingDistributedWriteFileSessionRequestTags(
     NObjectClient::TObjectId fileId)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("FileId", fileId);
 }
 
-void AnnotatePingDistributedWriteFileSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakePingDistributedWriteFileSessionRequestTags(
     const NFileClient::TSignedDistributedWriteFileSessionPtr& session)
 {
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteFileSession>(session.Underlying())) {
-        AnnotatePingDistributedWriteFileSessionRequestInfo(request, payload->HostData.FileId);
+    if (auto payload = TryParseSignedPayload<TDistributedWriteFileSession>(session.Underlying())) {
+        return MakePingDistributedWriteFileSessionRequestTags(payload->HostData.FileId);
     }
+    return {};
 }
 
-void AnnotateFinishDistributedWriteFileSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeFinishDistributedWriteFileSessionRequestTags(
     NObjectClient::TObjectId fileId)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("FileId", fileId);
 }
 
-void AnnotateFinishDistributedWriteFileSessionRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeFinishDistributedWriteFileSessionRequestTags(
     const NFileClient::TSignedDistributedWriteFileSessionPtr& session)
 {
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteFileSession>(session.Underlying())) {
-        AnnotateFinishDistributedWriteFileSessionRequestInfo(request, payload->HostData.FileId);
+    if (auto payload = TryParseSignedPayload<TDistributedWriteFileSession>(session.Underlying())) {
+        return MakeFinishDistributedWriteFileSessionRequestTags(payload->HostData.FileId);
     }
+    return {};
 }
 
-void AnnotateWriteFileFragmentRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeWriteFileFragmentRequestTags(
     NObjectClient::TObjectId fileId,
     NCypressClient::TTransactionId mainTransactionId)
 {
-    request->Annotate()
+    return TLoggingTagList()
         .With("FileId", fileId)
         .With("MainTransactionId", mainTransactionId);
 }
 
-void AnnotateWriteFileFragmentRequestInfo(
-    const NRpc::TClientRequestPtr& request,
+TLoggingTagList MakeWriteFileFragmentRequestTags(
     const NFileClient::TSignedWriteFileFragmentCookiePtr& cookie)
 {
-    if (auto payload = NDetail::TryParseSignedPayload<TWriteFileFragmentCookie>(cookie.Underlying())) {
-        AnnotateWriteFileFragmentRequestInfo(
-            request,
+    if (auto payload = TryParseSignedPayload<TWriteFileFragmentCookie>(cookie.Underlying())) {
+        return MakeWriteFileFragmentRequestTags(
             payload->CookieData.FileId,
             payload->CookieData.MainTransactionId);
     }
+    return {};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

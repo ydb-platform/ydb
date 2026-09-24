@@ -572,7 +572,7 @@ function shell(current,body,breadcrumb=''){
     "const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-"
     "nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};\n"
     "const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool',"
-    "use_ring_queue:'use-ring-queue'};\n"
+    "use_ring_queue:'use-ring-queue',use_waker:'use-waker'};\n"
     "const localYdbSearchKeys={resolution_percent:'resolution-percent'};\n"
     "const localYdbObjectiveKeys={target_role:'target-role',plateau_gain_percent:'plateau-gain-percent',plateau_points:'p"
     "lateau-points',cpu_saturation_percent:'cpu-saturation-percent'};\n"
@@ -666,7 +666,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "option.operation_defaults,operation)?option.operation_defaults[operation]:option.default]));return {type,operation,opt"
     "ions}}\n"
     "function defaultLocalYdb(){const definition=localYdbWorkloadDefinition('kv');return {workload:defaultLocalYdbWorkload('kv'),"
-    "actor_system:{use_shared_threads:false,use_united_pool:false,use_ring_queue:true},"
+    "actor_system:{use_shared_threads:false,use_united_pool:false,use_ring_queue:true,use_waker:false},"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
     ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:localYdbDefaultWarmupSeconds(definition),duration:30,rep"
     "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
@@ -791,7 +791,8 @@ function localCheck(id,label,checked,help=''){
 function actorSystemFlag(key,checked){
   const help={use_shared_threads:'Allow executor pools to share worker threads. Default: off.',
     use_united_pool:'Enable the united executor pool implementation. Default: off.',
-    use_ring_queue:'Use ring queues in the actor system. Default: on.'};
+    use_ring_queue:'Use ring queues in the actor system. Default: on.',
+    use_waker:'Enable the experimental executor waker. Requires a YDBD build with use_waker support. Default: off.'};
   return '<label class=actor-flag><input id="local-actor-system-'+key+'" type=checkbox '+(checked?'checked':'')+
     ' aria-describedby="flag-help-'+key+'">'+esc(key)+'<span class=flag-help role=tooltip id="flag-help-'+key+'">'+
     esc(help[key]||key)+'</span></label>'
@@ -1884,6 +1885,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    'Dynamic node vCPUs':parameters.actor_system?.dynamic_nodes?.cpu_count??'automatic',\n"
     "    'use_united_pool':parameters.actor_system?.use_united_pool??false,\n"
     "    'use_ring_queue':parameters.actor_system?.use_ring_queue??true,\n"
+    "    'use_waker':parameters.actor_system?.use_waker??false,\n"
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
     "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
     "    'Storage groups':geometry.storage_groups??'—','Disk size GiB':geometry.disk_size_gb??'—','YDB CLI threads':client.threads??'—',\n"
@@ -5792,7 +5794,15 @@ class RunService:
             client = project(value.get("client"), ("threads",))
             actor_system = project(
                 value.get("actor_system"),
-                ("use_shared_threads", "use_united_pool", "use_ring_queue", "static_nodes", "dynamic_nodes", "tenants"),
+                (
+                    "use_shared_threads",
+                    "use_united_pool",
+                    "use_ring_queue",
+                    "use_waker",
+                    "static_nodes",
+                    "dynamic_nodes",
+                    "tenants",
+                ),
             )
             load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
             measurement = project(

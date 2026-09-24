@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 void TWasmLibraryCompileActor::Bootstrap() {
@@ -117,9 +119,9 @@ void TWasmLibraryCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequest
     if (Step_ == EStep::DeleteStaleArtifactChunks || Step_ == EStep::DeleteStaleArtifacts) {
         // Leftover rows of replaced uploads are not worth failing over, but
         // still confirm we own the modules row before reporting ready.
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmLibraryCompileActor: failed to drop stale artifacts of '" << LibraryName_
-            << "': " << ev->Get()->GetErrorMessage();
+        YDB_LOG_WARN("TWasmLibraryCompileActor: failed to drop stale artifacts of",
+            {"libraryName", LibraryName_},
+            {"errorMessage", ev->Get()->GetErrorMessage()});
         Step_ = EStep::ConfirmStillCurrent;
         ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
         return;
@@ -346,22 +348,24 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmLibraryCompileActor: " << message;
+    YDB_LOG_ERROR("",
+        {"TWasmLibraryCompileActor", message});
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, message));
     PassAway();
 }
 
 void TWasmLibraryCompileActor::ReplyDeferred(const TString& reason) {
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmLibraryCompileActor: deferred library '" << LibraryName_ << "': " << reason;
+    YDB_LOG_INFO("TWasmLibraryCompileActor: deferred library",
+        {"libraryName", LibraryName_},
+        {"reason", reason});
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, reason, true));
     PassAway();
 }
 
 void TWasmLibraryCompileActor::ReplySuccess() {
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmLibraryCompileActor: compiled library '" << LibraryName_
-        << "' for cpu_spec='" << CpuSpec_ << "'";
+    YDB_LOG_INFO("TWasmLibraryCompileActor: compiled library for cpu_spec='",
+        {"libraryName", LibraryName_},
+        {"cpuSpec", CpuSpec_});
     Send(ReplyTo_, new TEvLibraryCompileResponse(true, LibraryName_));
     PassAway();
 }

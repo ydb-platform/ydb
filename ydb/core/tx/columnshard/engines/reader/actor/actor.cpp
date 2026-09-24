@@ -308,7 +308,6 @@ bool TColumnShardScan::ProduceResults() noexcept {
     // detected while the scan runs, so this has to be re-checked as results come, not only once.
     if (ReadMetadataRange->HasWritesAndBroken()) {
         SendScanAborted();
-        ScanIterator.reset();
         Finish(NColumnShard::TScanCounters::EStatusFinish::BrokenLock);
         return false;
     }
@@ -335,8 +334,6 @@ bool TColumnShardScan::ProduceResults() noexcept {
             {"iterator", ScanIterator->DebugString()},
             {"message", resultConclusion.GetErrorMessage()});
         SendScanError(resultConclusion.GetErrorMessage());
-
-        ScanIterator.reset();
         Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorResult);
         return false;
     }
@@ -437,9 +434,8 @@ void TColumnShardScan::ContinueProcessing() {
             if (ChunksLimiter.HasMore()) {
                 auto g = Stats->MakeGuard("Finish");
                 MakeResult();
-                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
                 SendResult(false, true);
-                ScanIterator.reset();
+                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
             }
         } else {
             while (true) {
@@ -448,7 +444,6 @@ void TColumnShardScan::ContinueProcessing() {
                     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                         {"event", "ContinueProcessing"},
                         {"error", hasMoreData.GetErrorMessage()});
-                    ScanIterator.reset();
                     SendScanError("iterator_error:" + hasMoreData.GetErrorMessage());
                     return Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorScan);
                 } else if (!*hasMoreData) {
@@ -619,6 +614,8 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }
+    const TString iteratorDebugString = ScanIterator ? ScanIterator->DebugString(false) : "NO";
+    ScanIterator.reset();
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
         {"scanActorId", ScanActorId},
         {"tabletId", TabletId});
@@ -631,7 +628,7 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
         {"event", "scan_finish"},
         {"computeActorId", ScanComputeActorId},
         {"stats", Stats->ToJson()},
-        {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
+        {"iterator", iteratorDebugString});
     PassAway();
 }
 

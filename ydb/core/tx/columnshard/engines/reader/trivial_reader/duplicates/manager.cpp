@@ -111,7 +111,7 @@ TDuplicateManager::TDuplicateManager(
                   GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
               GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
-    , AbortionFlag(std::make_shared<TAtomicCounter>(0))
+    , AbortionFlag(context.GetDuplicatesAbortionFlag())
     , HangTracker(inflightTimeout)
 {
 }

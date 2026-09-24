@@ -779,7 +779,7 @@ def build_html_dashboard(
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
     const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
-      const artifactsUrl = (cfg.artifacts_url || '').trim().replace(/\\/$/, '');
+      const artifactsUrl = (cfg.artifacts_url || '').trim();
     const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
     const hasCiData = pr || branch || commit || artifactsUrl;
     const repo = escapeHtml((cfg.repo || 'ydb-platform/ydb').trim());
@@ -821,7 +821,7 @@ def build_html_dashboard(
       tryLinks.forEach((path, i) => {{
         if (i > 0) linksEl.appendChild(document.createTextNode('\u00a0'));
         const a = document.createElement('a');
-        a.href = artifactsBase + '/' + String(path || '').replace(/^\/+/, '');
+        a.href = artifactsBase + '/' + String(path || '').split('/').filter(Boolean).join('/');
         a.target = '_blank';
         a.rel = 'noopener';
         a.textContent = 'try ' + (i + 1);

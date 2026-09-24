@@ -202,8 +202,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[1]);
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[2]);
 
-        auto snapshot =
-            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        auto snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary),
+            WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(2, snapshot.ConfiguredDDiskImbalance.Moves);
         UNIT_ASSERT_VALUES_EQUAL(
             6,
@@ -240,7 +242,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(size_t(1), touchedCounts[pendingHost]);
         UNIT_ASSERT_VALUES_EQUAL(size_t(1), configuredCounts[pendingHost]);
 
-        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary),
+            WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(1, snapshot.ConfiguredDDiskImbalance.Moves);
         UNIT_ASSERT_VALUES_EQUAL(
             7,
@@ -266,7 +271,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(size_t(0), touchedCounts[1]);
 
-        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary),
+            WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(1, snapshot.ConfiguredDDiskImbalance.Moves);
         UNIT_ASSERT_VALUES_EQUAL(
             5,
@@ -318,8 +326,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         vchunk->Start();
         WaitDirtyMapReady(executor, vchunk);
 
-        const auto snapshot =
-            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        const auto snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary),
+            WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(
             3,
             snapshot.ConfiguredDDiskImbalance.TotalDDiskCount);
@@ -493,11 +503,25 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             DiskDescription,
             dbg,
             *Service,
-            0);
+            0,
+            true);
         WaitDirtyMapReady(executor, vchunk);
 
-        auto snapshot =
-            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        const auto summary = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary),
+            WaitTimeout);
+        UNIT_ASSERT(summary.VChunks.empty());
+
+        auto snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::PerVChunk),
+            WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(1, snapshot.VChunks.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            snapshot.VChunks.front().Config.GetVChunkIndex());
+        UNIT_ASSERT(snapshot.VChunks.front().Touched);
         UNIT_ASSERT(snapshot.FreshDDisks.empty());
 
         RunOnExecutor(
@@ -510,9 +534,17 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             })
             .GetValue(WaitTimeout);
 
-        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::PerVChunk),
+            WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(1, snapshot.FreshDDisks.size());
         UNIT_ASSERT(snapshot.FreshDDisks.at(0).Get(0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            DefaultVChunkSize - DefaultBlockSize,
+            snapshot.VChunks.front().FreshBytes);
+        UNIT_ASSERT_VALUES_EQUAL(0, snapshot.VChunks.front().RottenBytes);
+        UNIT_ASSERT_VALUES_EQUAL(0, snapshot.VChunks.front().PBufferBytes);
 
         RunOnExecutor(
             executor,
@@ -527,7 +559,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             })
             .GetValue(WaitTimeout);
 
-        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        snapshot = WaitFuture(
+            executor,
+            dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::PerVChunk),
+            WaitTimeout);
         UNIT_ASSERT(snapshot.FreshDDisks.at(0).Get(0));
     }
 

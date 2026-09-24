@@ -4,7 +4,7 @@ Optimizer hints allow you to influence the behavior of the cost-based optimizer 
 
 ## Usage
 
-Hints are specified via the `PRAGMA ydb.OptimizerHints` pragma at the beginning of the SQL query. 
+Hints are specified via the `PRAGMA ydb.OptimizerHints` pragma at the beginning of the SQL query.
  If the optimizer is unable to apply at least one of the specified hints to the query, the user will be notified via a warning.
 
 ## Syntax
@@ -17,18 +17,17 @@ Rows(TableList Op Value)
 Bytes(TableList Op Value)
 JoinOrder(JoinTree)
 
-where:
-TableList - a list of table names or aliases from the query
-Op - an operation:
-  - `#` - set an absolute value
-  - `*` - multiply by a value
-  - `/` - divide by a value
-  - `+` - add a value
-  - `-` - subtract a value
-  - `Number` - a numeric value
-Value - a numeric value
-JoinTree - a binary tree represented using parentheses, for example: (R S) (T U)
-
+где:
+TableList - перечисление названий таблиц или элиасов из запроса
+Op - операция:
+  - `#` - задать абсолютное значение
+  - `*` - умножить на значение
+  - `/` - разделить на значение
+  - `+` - прибавить значение
+  - `-` - вычесть значение
+  - `Number` - числовое значение
+Value - числовое значение
+JoinTree - представление бинарного дерева с помощью скобок, например: (R S) (T U)
 ```
 
 For example, the following query uses three hints `Rows` that set [cardinality](../../concepts/glossary.md#cardinality), as well as a hint for the full order of joins `JoinOrder` and a hint for selecting the join algorithm `JoinType`:
@@ -47,7 +46,6 @@ SELECT * FROM
     R   INNER JOIN  S   on  R.id = S.id
         INNER JOIN  T   on  R.id = T.id
         INNER JOIN  U   on  T.id = U.id;
-
 ```
 
 ## Requirements for CBO (Cost Based Optimizer)
@@ -81,7 +79,6 @@ If the order of joins is not fixed by a separate hint, the optimizer will build 
 
 ```text
 JoinType(t1 t2 ... tn Broadcast | Shuffle | Lookup)
-
 ```
 
 #### Parameters
@@ -99,15 +96,14 @@ If the query plan includes a [join operator](../../concepts/glossary.md#operator
 #### Examples
 
 ```sql
--- Use Broadcast to join the nation and region tables
+-- Использовать Broadcast для соединения таблиц nation, region
 JoinType(nation region Broadcast)
 
--- Use ShuffleJoin for a join whose subtree contains only customers, orders, and products
+-- Использовать ShuffleJoin для соединения, в поддереве которого будут только таблицы customers, orders, products
 JoinType(customers orders products Shuffle)
 
--- Use LookupJoin to join the nation and region tables
+-- Использовать LookupJoin для соединения таблиц nation, region
 JoinType(nation region Lookup)
-
 ```
 
 Let's apply join algorithm hints to the following query:
@@ -126,14 +122,12 @@ SELECT * FROM
         INNER JOIN  T   on  R.id = T.id
         INNER JOIN  U   on  T.id = U.id
         INNER JOIN  V   on  U.id = V.id;
-
 ```
 
 You can view the query execution plan using the [CLI](../../reference/ydb-cli/commands/explain-plan.md) command:
 
 ```bash
  ydb -p <profile_name> sql --explain -f query.sql
-
 ```
 
 ```text
@@ -155,10 +149,9 @@ You can view the query execution plan using the [CLI](../../reference/ydb-cli/co
 │   │   └──> TableFullScan (Table: U, ReadColumns: ["id (-∞, +∞)","payload4"])            │
 │   └──> TableFullScan (Table: V, ReadColumns: ["id (-∞, +∞)","payload5"])                │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
-
 ```
 
-Since the optimizer may change the order of joins during query optimization, the hint should reflect the exact list of tables that are being joined. 
+Since the optimizer may change the order of joins during query optimization, the hint should reflect the exact list of tables that are being joined.
  For example, in this query, it is assumed that the order of joins will be: R with S, then T, and finally U. Specifying a different join algorithm may change the order of joins in the plan, and some hints may not be applied. In such a case, you can add an additional join order hint.
 
 ### 2. Rows: [Cardinality](../../concepts/glossary.md#cardinality) Hints
@@ -173,7 +166,6 @@ The optimizer will change its estimate of the number of rows for the join operat
 
 ```text
 Rows(t1 t2 ... tn (*|/|+|-|#) Number)
-
 ```
 
 #### Parameters
@@ -190,18 +182,17 @@ Rows(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Multiply the expected row count by 2 for a join whose subtree contains only users, orders, and yandex
+-- Умножить ожидаемое количество строк на 2 для соединения, в поддереве которого есть только таблицы users orders yandex
 Rows(users orders yandex * 2.0)
 
--- Set the expected row count for the products table to 1.3e6
+-- Заменить ожидаемое число строк таблицы products на 1.3e6
 Rows(products # 1.3e6)
 
--- Divide the expected row count by 228
+-- Уменьшить ожидаемое количество строк в 228 раз
 Rows(filtered_table / 228)
 
--- Add 5000 rows to the expected result
+-- Добавить 5000 строк к ожидаемому результату
 Rows(table1 table2 + 5000)
-
 ```
 
 Let's run a query without [cardinality](../../concepts/glossary.md#cardinality) hints and then see how the hints change the query plan.
@@ -210,7 +201,6 @@ Let's run a query without [cardinality](../../concepts/glossary.md#cardinality) 
 SELECT * FROM
     R   INNER JOIN  S   on  R.id = S.id
         INNER JOIN  T   on  R.id = T.id;
-
 ```
 
 Without hints, the optimizer builds the following plan:
@@ -226,7 +216,6 @@ Without hints, the optimizer builds the following plan:
 │ 0      │ 10     │ 100    │   │ └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])    │
 │ 0      │ 10     │ 100    │   └──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
 └────────┴────────┴────────┴───────────────────────────────────────────────────────────────────────────────┘
-
 ```
 
 If we apply the following hints:
@@ -243,7 +232,6 @@ PRAGMA ydb.OptimizerHints =
 SELECT * FROM
     R   INNER JOIN  S   on  R.id = S.id
         INNER JOIN  T   on  R.id = T.id;
-
 ```
 
 We get the following plan:
@@ -259,14 +247,12 @@ We get the following plan:
 │ 0         │ 1e+09  │ 100    │     ├──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
 │ 0         │ 10     │ 100    │     └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])      │
 └───────────┴────────┴────────┴─────────────────────────────────────────────────────────────────────────────────┘
-
 ```
 
 We will also get the following alerts:
 
 ```text
 Warning: Unapplied hint: Rows(R S # 10e8)
-
 ```
 
 Here we can see that after applying the [cardinality](../../concepts/glossary.md#cardinality) hints, the order of joins of the base tables changed, and one of the hints could not be applied because there is no such join in the plan.
@@ -279,7 +265,6 @@ Allows you to change the expected data size in bytes for a join or individual ta
 
 ```text
 Bytes(t1 t2 ... tn (*|/|+|-|#) Number)
-
 ```
 
 #### Parameters are similar to Rows, but apply to the data size in bytes
@@ -287,18 +272,17 @@ Bytes(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Multiply the expected data size by 1.5
+-- Умножить ожидаемый размер данных на 1.5
 Bytes(large_table * 1.5)
 
--- Set the data size for the join to 1GB
+-- Заменить размер данных для соединения на 1GB
 Bytes(table1 table2 # 1073741824)
 
--- Divide the expected size by 2
+-- Уменьшить ожидаемый размер в 2 раза
 Bytes(compressed_table / 2)
 
--- Add 100MB to the expected size
+-- Добавить 100MB к ожидаемому размеру
 Bytes(temp_table + 104857600)
-
 ```
 
 ### 4. JoinOrder — Join Order
@@ -309,7 +293,6 @@ Allows you to fix a certain subtree of joins in the overall join tree.
 
 ```text
 JoinOrder((t1 t2) (t3 (t4 ...)))
-
 ```
 
 #### Parameters
@@ -325,18 +308,17 @@ The optimizer will only consider plans that include the specified partial or ful
 #### Examples
 
 ```sql
--- Force users to join with orders first, then with products
+-- Принудительно соединить сначала users с orders, затем с products
 JoinOrder((users orders) products)
 
--- A more complex join order
+-- Более сложный порядок соединений
 JoinOrder(((customers orders) products) shipping)
 
--- Join grouping
+-- Группировка соединений
 JoinOrder((table1 table2) (table3 table4))
 
--- Multi-level structure
+-- Многоуровневая структура
 JoinOrder((users (orders products)) (addresses phones))
-
 ```
 
 Let's apply a join order hint to the following query:
@@ -345,7 +327,6 @@ Let's apply a join order hint to the following query:
 SELECT * FROM
     R   INNER JOIN  S   on  R.id = S.id
         INNER JOIN  T   on  R.id = T.id;
-
 ```
 
 The query plan without hints looks like this:
@@ -361,7 +342,6 @@ The query plan without hints looks like this:
 │ 0      │ 10     │ 100    │   │ └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])    │
 │ 0      │ 10     │ 100    │   └──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
 └────────┴────────┴────────┴───────────────────────────────────────────────────────────────────────────────┘
-
 ```
 
 By applying the following join order hint:
@@ -374,7 +354,6 @@ PRAGMA ydb.OptimizerHints =
 SELECT * FROM
     R   INNER JOIN  S   on  R.id = S.id
         INNER JOIN  T   on  R.id = T.id;
-
 ```
 
 We get the following plan:
@@ -390,7 +369,6 @@ We get the following plan:
 │ 0      │ 10     │ 100    │     ├──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
 │ 0      │ 10     │ 100    │     └──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])      │
 └────────┴────────┴────────┴─────────────────────────────────────────────────────────────────────────────────┘
-
 ```
 
 Here we can see that the order of joins has changed to the one specified in the hint.
@@ -407,5 +385,4 @@ PRAGMA ydb.OptimizerHints =
     JoinOrder((users orders) products)
     Bytes(products # 1073741824)
 ';
-
 ```

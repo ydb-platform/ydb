@@ -62,13 +62,13 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
     const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NConveyorComposite::TSchedulerQueryIdentity> schedulerQueryIdentity)
+    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
     , ScanOrbit(std::move(orbit))
     , PathId(pathId)
-    , SchedulerQueryIdentity(std::move(schedulerQueryIdentity))
+    , SchedulerPool(std::move(schedulerPool))
     , ColumnShardActorId(columnShardActorId)
     , ScanComputeActorId(scanComputeActorId)
     , ScanDiagnosticsActorId(scanDiagnosticsActorId)
@@ -101,7 +101,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 
     std::shared_ptr<TReadContext> context =
         std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager, ScanCountersPool, ReadMetadataRange, SelfId(),
-            ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit, SchedulerQueryIdentity);
+            ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit, TxId, SchedulerPool);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();

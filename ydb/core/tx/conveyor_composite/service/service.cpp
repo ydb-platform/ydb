@@ -3,11 +3,13 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/config/validation/validators.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/tx/conveyor_composite/tracing/probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/string/join.h>
 
@@ -150,11 +152,13 @@ void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*e
 }
 
 void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto& ev = *evExt->Get();
+    const auto identity = ev.GetQueryIdentity();
     const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());
 
     if (LWPROBE_ENABLED(TaskProcessedResult)) {
@@ -176,45 +180,57 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
     workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    TryReleaseQuery(identity);
     TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());
 }
 
-void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
-    auto& event = *ev->Get();
+void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr ev) {
+    const auto& event = *ev->Get();
+    const auto& schedulerPool = event.GetSchedulerPool();
+    const auto& scheduler = AppData()->KqpComputeScheduler;
+    const bool schedulerDisabled = scheduler && !scheduler->IsEnabled();
+    const auto identity = schedulerPool && !schedulerDisabled ? TSchedulerQueryIdentity{event.GetTxId()} : kServiceQueryIdentity;
     LWPROBE(RegisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetScopeId(), event.GetInternalProcessId());
     const bool isNewIdentity = Manager->RegisterProcess(event.GetCategory(), event.GetScopeId(), event.GetInternalProcessId(),
-        event.GetCPULimits(), event.GetSchedulerQueryIdentity());
-    if (isNewIdentity && !event.GetSchedulerQueryIdentity().IsDefault()) {
-        // TODO: Replace this temporary direct scheduler lookup with a request to TKqpQueryManager once that interface is available.
-        if (const auto& scheduler = AppData()->KqpComputeScheduler) {
-            if (auto query = scheduler->GetQuery(event.GetSchedulerQueryIdentity().QueryId)) {
-                Manager->SetQuery(event.GetSchedulerQueryIdentity(), std::move(query));
-            }
+        event.GetCPULimits(), identity);
+    if (isNewIdentity && !identity.IsServiceQuery) {
+        const auto schedulerId = NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId());
+        Send(schedulerId, new NKqp::NScheduler::TEvAddDatabase(schedulerPool->DatabaseId));
+        Send(schedulerId, new NKqp::NScheduler::TEvAddPool(schedulerPool->DatabaseId, schedulerPool->PoolId));
+        auto addQuery = MakeHolder<NKqp::NScheduler::TEvAddQuery>();
+        addQuery->DatabaseId = schedulerPool->DatabaseId;
+        addQuery->PoolId = schedulerPool->PoolId;
+        addQuery->QueryId = identity.QueryId;
+        Send(schedulerId, addQuery.Release(), 0, identity.QueryId);
+
+        auto query = (co_await NActors::ActorWaitForEvent<NKqp::NScheduler::TEvQueryResponse>(identity.QueryId))->Get()->Query;
+        if (query) {
+            Manager->SetQuery(identity, std::move(query));
+            TryReleaseQuery(identity);
+        } else {
+            Manager->MovePendingQueryToService(identity);
         }
     }
+    TryApplyUpdate();
+    Y_UNUSED(Manager->DrainTasks());
 }
 
-void TDistributor::HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev) {
-    auto query = std::move(ev->Get()->Query);
-    if (!query) {
-        return;
-    }
-    const auto& fullPoolId = query->GetFullPoolId();
-    const TSchedulerQueryIdentity identity{
-        .DatabaseId = fullPoolId.DatabaseId,
-        .PoolId = fullPoolId.PoolId,
-        .QueryId = std::get<NKqp::NScheduler::NHdrf::TQueryId>(query->GetId()),
-    };
-    if (Manager->SetQuery(identity, std::move(query))) {
-        Y_UNUSED(Manager->DrainTasks());
+void TDistributor::TryReleaseQuery(const TSchedulerQueryIdentity& identity) {
+    if (Manager->TryReleaseQuery(identity) && !identity.IsServiceQuery) {
+        auto removeQuery = MakeHolder<NKqp::NScheduler::TEvRemoveQuery>();
+        removeQuery->QueryId = identity.QueryId;
+        Send(NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQuery.Release());
     }
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto& event = *ev->Get();
     LWPROBE(UnregisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetInternalProcessId());
-    Manager->UnregisterProcess(event.GetCategory(), event.GetInternalProcessId());
+    const auto identity = Manager->UnregisterProcess(event.GetCategory(), event.GetInternalProcessId());
+    TryReleaseQuery(identity);
+    TryApplyUpdate();
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
@@ -225,6 +241,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
     cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
+    TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }

@@ -1,6 +1,8 @@
 #include "kqp_node_service.h"
 #include "kqp_query_control_plane.h"
 
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -305,6 +307,11 @@ public:
 
         ui64 taskCount = 0;
         if (!State_->UpdateRequest(executerId, txId, query, now, deadline, tasks, taskCount)) {
+            if (query) {
+                auto removeQuery = MakeHolder<NScheduler::TEvRemoveQuery>();
+                removeQuery->QueryId = txId;
+                Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQuery.Release());
+            }
             co_return ReplyError(msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
                 ev->Cookie, "Request was cancelled");
         }
@@ -456,10 +463,14 @@ public:
             cpuLimits.DeserializeFromProto(msg).Validate();
         }
 
+        std::optional<NScheduler::NHdrf::TFullPoolId> schedulerPool;
+        if (query) {
+            schedulerPool = query->GetFullPoolId();
+        }
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
+                    m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), schedulerPool, txId, lockTxId, lockNodeId, lockMode,
                     CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(m.TraceId), cpuLimits,
                     msg.GetUseBatchPool()));
             }

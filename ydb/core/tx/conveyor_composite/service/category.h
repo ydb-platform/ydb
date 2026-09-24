@@ -46,6 +46,7 @@ public:
     void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope,
         const TSchedulerQueryIdentity& schedulerQueryIdentity);
     TSchedulerQueryIdentity UnregisterProcess(ui64 processId);
+    ui64 MoveProcessesToService(const TSchedulerQueryIdentity& identity);
 
     ESpecialTaskCategory GetCategory() const {
         return Category;

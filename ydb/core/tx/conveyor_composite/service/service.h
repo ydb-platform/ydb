@@ -31,9 +31,8 @@ private:
 
     bool IsUpdateInProcess = false;
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
-    void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
+    void HandleMain(TEvExecution::TEvRegisterProcess::TPtr ev);
     void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
-    void HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
     void HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
@@ -46,6 +45,7 @@ private:
     TConclusion<NConfig::TConfig> ParseAndValidateConfig(const NKikimrConfig::TCompositeConveyorConfig& config) const;
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void TryApplyUpdate();
+    void TryReleaseQuery(const TSchedulerQueryIdentity& identity);
 
 public:
     STATEFN(StateMain) {
@@ -56,7 +56,6 @@ public:
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
-            hFunc(NKqp::NScheduler::TEvQueryResponse, HandleMain);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleMain);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);

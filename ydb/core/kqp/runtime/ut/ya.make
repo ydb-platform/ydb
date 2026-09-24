@@ -19,6 +19,7 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
+    ydb/core/kqp/node_service
     ydb/core/kqp/ut/common
     ydb/core/testlib/basics/pg
     ydb/services/workload_manager/ut/common

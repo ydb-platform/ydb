@@ -30,7 +30,7 @@ private:
     std::optional<TMonotonic> FinishInstant;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
     const ui64 PathId;
-    const std::optional<NConveyorComposite::TSchedulerQueryIdentity> SchedulerQueryIdentity;
+    const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> SchedulerPool;
 
 public:
     virtual void PassAway() override;
@@ -47,7 +47,7 @@ public:
         const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
         std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0,
-        std::optional<NConveyorComposite::TSchedulerQueryIdentity> schedulerQueryIdentity = std::nullopt);
+        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt);
 
     void Bootstrap(const TActorContext& ctx);
 

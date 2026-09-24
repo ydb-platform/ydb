@@ -5,11 +5,13 @@
 namespace NKikimr::NConveyorComposite {
 
 TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
-    std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId)
+    std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId,
+    const TSchedulerQueryIdentity& identity)
     : ForwardSendDuration(forwardSendDuration)
     , Results(std::move(results))
     , WorkerIdx(workerIdx)
-    , WorkersPoolId(workersPoolId) {
+    , WorkersPoolId(workersPoolId)
+    , QueryIdentity(identity) {
     AFL_VERIFY(Results.size());
 }
 

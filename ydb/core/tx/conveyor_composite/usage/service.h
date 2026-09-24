@@ -44,7 +44,8 @@ public:
     }
     static TProcessGuard StartProcess(
         const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits,
-        const std::optional<TSchedulerQueryIdentity>& schedulerQueryIdentity = std::nullopt, const bool useBatchPool = false);
+        ui64 txId = 0, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt,
+        const bool useBatchPool = false);
 };
 
 class TInsertServiceOperator {
@@ -77,7 +78,8 @@ public:
 
     static TProcessGuard StartProcess(
         const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits,
-        const std::optional<TSchedulerQueryIdentity>& schedulerQueryIdentity = std::nullopt, const bool useBatchPool = false);
+        ui64 txId = 0, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt,
+        const bool useBatchPool = false);
 };
 
 class TDeduplicationServiceOperator {

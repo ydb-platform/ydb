@@ -64,16 +64,15 @@ NConveyorComposite::TCPULimitsConfig TTxScan::GetCpuLimits() const {
     return cpuLimits;
 }
 
-std::optional<NConveyorComposite::TSchedulerQueryIdentity> TTxScan::GetSchedulerQueryIdentity() const {
+std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> TTxScan::GetSchedulerPool() const {
     const auto& request = Ev->Get()->Record;
     if (!request.HasDatabaseId() || request.GetDatabaseId().empty() || !request.HasPoolId() || request.GetPoolId().empty() ||
         !request.HasTxId()) {
         return std::nullopt;
     }
-    return NConveyorComposite::TSchedulerQueryIdentity{
+    return NKqp::NScheduler::NHdrf::TFullPoolId{
         .DatabaseId = request.GetDatabaseId(),
         .PoolId = request.GetPoolId(),
-        .QueryId = request.GetTxId(),
     };
 }
 
@@ -224,7 +223,7 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
             Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
             request.GetScanId(), request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(),
             TDuration::MilliSeconds(request.GetTimeoutMs()), readMetadataRange, request.GetDataFormat(), Self->Counters.GetScanCounters(),
-            cpuLimits, std::move(orbit), rawPathId, GetSchedulerQueryIdentity()), TMailboxType::HTSwap, scanPoolId);
+            cpuLimits, std::move(orbit), rawPathId, GetSchedulerPool()), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",

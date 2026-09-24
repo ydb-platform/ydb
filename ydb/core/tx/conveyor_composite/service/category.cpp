@@ -8,7 +8,7 @@ namespace NKikimr::NConveyorComposite {
 TProcessCategory::TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
     : Category(config.GetCategory()) {
     Counters = counters.GetCategorySignals(Category);
-    RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)), TSchedulerQueryIdentity{});
+    RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)), kServiceQueryIdentity);
     Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
 }
 
@@ -27,7 +27,6 @@ TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId
     auto it = Processes.find(processId);
     AFL_VERIFY(it != Processes.end());
     Y_ENSURE(it->second->GetTasksCount() == 0, "cannot unregister process with queued tasks");
-    Y_ENSURE(it->second->GetInProgressTasksCount() == 0, "cannot unregister process with in-progress tasks");
     const auto identity = it->second->GetSchedulerQueryIdentity();
     Y_UNUSED(RemoveWeightedProcess(it->second));
     if (it->second->GetScope()->DecProcesses()) {
@@ -39,6 +38,17 @@ TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId
 
 bool TProcessCategory::HasTasks() const {
     return WeightedProcesses.size();
+}
+
+ui64 TProcessCategory::MoveProcessesToService(const TSchedulerQueryIdentity& identity) {
+    ui64 count = 0;
+    for (const auto& process : Processes | std::views::values) {
+        if (process->GetSchedulerQueryIdentity() == identity) {
+            process->MoveToServiceQuery();
+            ++count;
+        }
+    }
+    return count;
 }
 
 bool TProcessCategory::HasTasks(const TSchedulerQueryIdentity& identity) const {

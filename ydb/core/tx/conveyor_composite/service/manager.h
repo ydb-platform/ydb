@@ -60,8 +60,11 @@ public:
 
     bool RegisterProcess(const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId,
         const TCPULimitsConfig& cpuLimits, const TSchedulerQueryIdentity& identity);
-    void UnregisterProcess(ESpecialTaskCategory category, ui64 internalProcessId);
+    TSchedulerQueryIdentity UnregisterProcess(ESpecialTaskCategory category, ui64 internalProcessId);
     bool SetQuery(const TSchedulerQueryIdentity& identity, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query);
+    void MovePendingQueryToService(const TSchedulerQueryIdentity& identity);
+    void ApplyPreparedQueryCapacity(const TSchedulerQueryIdentity& identity);
+    bool TryReleaseQuery(const TSchedulerQueryIdentity& identity);
 };
 
 }   // namespace NKikimr::NConveyorComposite

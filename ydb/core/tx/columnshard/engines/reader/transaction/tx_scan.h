@@ -23,7 +23,7 @@ private:
     bool GetDeduplicationEnabled(const TSnapshot& snapshot) const;
     TString GetReaderName() const;
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
-    std::optional<NConveyorComposite::TSchedulerQueryIdentity> GetSchedulerQueryIdentity() const;
+    std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> GetSchedulerPool() const;
     const TVersionedPresetSchemas& GetPresetSchemas() const;
     std::optional<ESourcesSorting> GetCursorSourcesSorting() const;
 

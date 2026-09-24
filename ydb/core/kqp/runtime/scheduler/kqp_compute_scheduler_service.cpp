@@ -208,9 +208,11 @@ public:
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
         const auto& queryId = ev->Get()->QueryId;
-        if (!Scheduler->RemoveQuery(queryId)) {
-            YDB_LOG_ERROR("Trying to remove unknown",
-                {"query", queryId});
+        const bool isForceRemove = ev->Get()->IsForceRemove;
+        if (!Scheduler->RemoveQuery(queryId, isForceRemove)) {
+            YDB_LOG_ERROR("Trying to remove unknown query",
+                {"queryId", queryId},
+                {"isForceRemove", isForceRemove});
         } else {
             YDB_LOG_DEBUG("Remove query",
                 {"txId", queryId});
@@ -313,18 +315,20 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     Y_ENSURE(pool, "Pool not found: " << poolId);
 
     Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
-    TQueryPtr query;
-
-    query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId));
-    if (query) {
-        query->Update(attrs);
-    } else {
-        bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
-        query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
-        pool->AddQuery(query);
-        Y_ENSURE(Queries.emplace(queryId, query).second);
+    if (auto it = Queries.find(queryId); it != Queries.end()) {
+        auto& state = it->second;
+        const auto fullPoolId = state.Query->GetFullPoolId();
+        Y_ENSURE(fullPoolId.DatabaseId == databaseId && fullPoolId.PoolId == poolId,
+            "Query is already registered in a different pool: " << queryId);
+        state.Query->Update(attrs);
+        ++state.RegisterLinksCount;
+        return state.Query;
     }
 
+    bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
+    auto query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
+    pool->AddQuery(query);
+    Y_ENSURE(Queries.emplace(queryId, TQueryState{1, query}).second);
     return query;
 }
 
@@ -342,12 +346,16 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
     return {};
 }
 
-bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
+bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool isForceRemove) {
     TWriteGuard lock(Mutex);
 
     if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
-        queryIt->second->GetParent()->RemoveQuery(queryId);
-        Queries.erase(queryIt);
+        auto& state = queryIt->second;
+        Y_ENSURE(state.RegisterLinksCount > 0, "Query has no registrations: " << queryId);
+        if (isForceRemove || --state.RegisterLinksCount == 0) {
+            state.Query->GetParent()->RemoveQuery(queryId);
+            Queries.erase(queryIt);
+        }
         return true;
     }
 

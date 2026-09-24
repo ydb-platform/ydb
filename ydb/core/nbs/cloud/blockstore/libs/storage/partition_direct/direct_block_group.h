@@ -256,7 +256,8 @@ public:
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
-    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const = 0;
 
     // Requests balancing of DDisks in this DBG using the strategy.
     virtual void BalanceDDisks(EDDiskBalanceStrategy strategy) = 0;

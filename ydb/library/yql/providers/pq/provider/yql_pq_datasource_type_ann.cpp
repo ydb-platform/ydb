@@ -211,7 +211,7 @@ public:
             const TCoLambda lambda(watermark);
             const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
             const auto lambdaBody = lambda.Body();
-            if (!TestExprForPushdown(lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
+            if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
                 ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
                     << "Bad watermark expression"));
                 return TStatus::Error;

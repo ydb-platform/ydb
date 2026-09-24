@@ -776,11 +776,12 @@ void CollectPredicates(
 }
 
 [[nodiscard]] bool TestExprForPushdown(
+    TExprContext& ctx,
     const TExprBase& lambdaArg,
     const TExprBase& lambdaBody,
     const TSettings& settings
 ) {
-    TPredicateMarkup markup(lambdaArg, settings);
+    TPredicateMarkup markup(lambdaArg, settings, ctx);
     return markup.CheckExpressionNodeForPushdown(lambdaBody);
 }
 

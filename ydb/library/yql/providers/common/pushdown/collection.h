@@ -18,6 +18,7 @@ void CollectPredicates(
 );
 
 [[nodiscard]] bool TestExprForPushdown(
+    TExprContext& ctx,
     const NNodes::TExprBase& lambdaArg,
     const NNodes::TExprBase& lambdaBody,
     const TSettings& settings

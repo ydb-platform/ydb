@@ -181,8 +181,6 @@ message StreamWriteMessage {
             DeferredPublishIdentity deferred_publish = 9;
         }
 
-        repeated string partition_key = 12;
-
         message MessageData {
             // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
             // Starts at 1
@@ -214,6 +212,9 @@ message StreamWriteMessage {
             int64 messages_count = 3;
             int64 min_seq_no = 4;
             int64 max_seq_no = 5;
+
+            repeated string partition_keys_sample = 6;
+            OffsetsRange offsets = 7;
         }
     }
 

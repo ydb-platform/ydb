@@ -232,33 +232,42 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         const auto serviceEdge = runtime.AllocateEdgeActor();
         runtime.RegisterService(serviceId, serviceEdge);
 
-        THashSet<ui64> registrations;
-        THashSet<ui64> tasks;
-        THashSet<ui64> unregistrations;
+        THashMap<ui64, ui32> registrations;
+        THashMap<ui64, ui32> tasks;
+        THashMap<ui64, ui32> unregistrations;
+        const NKqp::NScheduler::NHdrf::TFullPoolId pool{"database", "pool"};
         auto registrationObserver = runtime.AddObserver<TEvExecution::TEvRegisterProcess>([&](auto& ev) {
             if (ev->Recipient == serviceId) {
-                registrations.emplace(ev->Get()->GetInternalProcessId());
+                const auto& request = *ev->Get();
+                ++registrations[request.GetInternalProcessId()];
+                if (request.GetScopeId() == "active") {
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetTxId(), 42);
+                    UNIT_ASSERT(request.GetSchedulerPool() == pool);
+                } else {
+                    UNIT_ASSERT(!request.GetSchedulerPool());
+                }
             }
         });
         auto taskObserver = runtime.AddObserver<TEvExecution::TEvNewTask>([&](auto& ev) {
             if (ev->Recipient == serviceId) {
-                tasks.emplace(ev->Get()->GetInternalProcessId());
+                ++tasks[ev->Get()->GetInternalProcessId()];
             }
         });
         auto unregistrationObserver = runtime.AddObserver<TEvExecution::TEvUnregisterProcess>([&](auto& ev) {
             if (ev->Recipient == serviceId) {
-                unregistrations.emplace(ev->Get()->GetInternalProcessId());
+                ++unregistrations[ev->Get()->GetInternalProcessId()];
             }
         });
 
         TAtomicCounter taskCounter;
         ui64 activeProcessId = 0;
         ui64 finishedProcessId = 0;
+        ui64 sharedProcessId = 0;
+        std::shared_ptr<TProcessGuard> callbackGuard;
         UNIT_ASSERT(runtime.RunCall([&] {
             {
-                TProcessGuard guard(ESpecialTaskCategory::Scan, "active", 1, TCPULimitsConfig(), serviceId);
+                TProcessGuard guard(ESpecialTaskCategory::Scan, "active", 1, TCPULimitsConfig(), serviceId, 42, pool);
                 activeProcessId = guard.GetInternalProcessId();
-
                 TProcessGuard movedGuard(std::move(guard));
                 UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), activeProcessId);
                 movedGuard.SendTaskToExecute(std::make_shared<TSleepTask>(TDuration::Zero(), taskCounter));
@@ -268,24 +277,39 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
                 TProcessGuard guard(ESpecialTaskCategory::Scan, "finished", 2, TCPULimitsConfig(), serviceId);
                 finishedProcessId = guard.GetInternalProcessId();
                 guard.Finish();
-
                 TProcessGuard movedGuard(std::move(guard));
                 UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), finishedProcessId);
+            }
+            auto owner = std::make_shared<TProcessGuard>(
+                ESpecialTaskCategory::Scan, "shared", 3, TCPULimitsConfig(), serviceId);
+            sharedProcessId = owner->GetInternalProcessId();
+            callbackGuard = owner;
+            owner.reset();
+            NActors::TActorContext::AsActorContext().Send(serviceEdge, new NActors::TEvents::TEvWakeup());
+            return true;
+        }));
+        runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(serviceEdge);
+        UNIT_ASSERT_VALUES_EQUAL(registrations.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.at(activeProcessId), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unregistrations.size(), 2);
+        UNIT_ASSERT(!unregistrations.contains(sharedProcessId));
+
+        UNIT_ASSERT(runtime.RunCall([&] {
+            {
+                TProcessGuard movedGuard(std::move(*callbackGuard));
+                UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetInternalProcessId(), sharedProcessId);
+                callbackGuard.reset();
             }
             NActors::TActorContext::AsActorContext().Send(serviceEdge, new NActors::TEvents::TEvWakeup());
             return true;
         }));
-
         runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(serviceEdge);
-
-        UNIT_ASSERT_VALUES_EQUAL(registrations.size(), 2);
-        UNIT_ASSERT(registrations.contains(activeProcessId));
-        UNIT_ASSERT(registrations.contains(finishedProcessId));
-        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT(tasks.contains(activeProcessId));
-        UNIT_ASSERT_VALUES_EQUAL(unregistrations.size(), 2);
-        UNIT_ASSERT(unregistrations.contains(activeProcessId));
-        UNIT_ASSERT(unregistrations.contains(finishedProcessId));
+        UNIT_ASSERT_VALUES_EQUAL(unregistrations.size(), 3);
+        for (ui64 id : {activeProcessId, finishedProcessId, sharedProcessId}) {
+            UNIT_ASSERT_VALUES_EQUAL(registrations.at(id), 1);
+            UNIT_ASSERT_VALUES_EQUAL(unregistrations.at(id), 1);
+        }
     }
 
     class TTestingExecutor10xDistribution: public TTestingExecutor {

@@ -86,6 +86,8 @@ def build_html_dashboard(
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
+    .tz-hover .hoverlayer g.legend {{ display: none !important; }}
+    #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
     .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
     .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
     .clickbox table {{ width: 100%; border-collapse: collapse; }}
@@ -199,6 +201,7 @@ def build_html_dashboard(
   </style>
 </head>
 <body>
+  <div id="chartTip"></div>
   <div id="dashboardHeader" style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border-radius:8px;border:1px solid #e2e8f0;">
     <div id="headerRow1" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;font-size:14px;line-height:1.5;">
       <span id="headerPr" style="display:none;"></span>
@@ -714,9 +717,7 @@ def build_html_dashboard(
         tickmode: tickVals ? 'array' : 'auto',
         tickvals: tickVals || undefined,
         ticktext: tickText || undefined,
-        // Empty text is falsy, so Plotly falls back to a UTC title. A fixed token is always drawn and rewritten to the selected zone.
         hoverformat: '',
-        unifiedhovertitle: {{ text: 'TIME' }},
       }};
     }}
     function applyTimezoneToAllCharts() {{
@@ -742,7 +743,6 @@ def build_html_dashboard(
           'xaxis.tickvals': ax.tickvals,
           'xaxis.ticktext': ax.ticktext,
           'xaxis.hoverformat': '',
-          'xaxis.unifiedhovertitle.text': 'TIME',
           'hoverdistance': -1,
           'spikedistance': -1,
         }});
@@ -1726,14 +1726,65 @@ def build_html_dashboard(
       return 0.0;
     }}
 
+    let chartTipHideTimer = null;
+    function hoverPointLine(p) {{
+      const tpl = String((p && p.data && p.data.hovertemplate) || '');
+      if (!tpl || (p.data.hoverinfo === 'none')) return '';
+      const y = Number(p.y);
+      let s = tpl.replace(/<extra>[\\s\\S]*<\\/extra>/g, '');
+      s = s.replace(/%\\{{y:\\.(\\d+)f\\}}/g, (_, d) => (Number.isFinite(y) ? y.toFixed(Number(d)) : ''));
+      s = s.replace(/%\\{{fullData\\.name\\}}/g, p.data.name || '');
+      s = s.replace(/%\\{{y\\}}/g, () => (Number.isFinite(y) ? String(y) : ''));
+      return s.trim();
+    }}
+    function positionChartTip(ev) {{
+      const tip = document.getElementById('chartTip');
+      const e = ev && ev.event;
+      if (!tip || !e || !Number.isFinite(e.clientX)) return;
+      const pad = 14;
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      const w = tip.offsetWidth;
+      const h = tip.offsetHeight;
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      if (x + w > window.innerWidth - 8) x = e.clientX - w - pad;
+      if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+      tip.style.left = Math.max(8, x) + 'px';
+      tip.style.top = Math.max(8, y) + 'px';
+    }}
+    function showChartTip(ev) {{
+      const tip = document.getElementById('chartTip');
+      if (!tip || !ev || !ev.points || !ev.points.length) return;
+      clearTimeout(chartTipHideTimer);
+      const label = formatPointTime(ev.points[0]);
+      const seen = new Set();
+      const lines = [];
+      for (const p of ev.points) {{
+        const line = hoverPointLine(p);
+        if (!line || seen.has(line)) continue;
+        seen.add(line);
+        lines.push(line);
+      }}
+      tip.textContent = [label].concat(lines).join('\\n');
+      tip.style.display = 'block';
+      positionChartTip(ev);
+    }}
+    function hideChartTipSoon() {{
+      clearTimeout(chartTipHideTimer);
+      chartTipHideTimer = setTimeout(() => {{
+        const tip = document.getElementById('chartTip');
+        if (tip) tip.style.display = 'none';
+      }}, 40);
+    }}
     function attachSortedHover(plotId, panelId, unit) {{
       const plot = document.getElementById(plotId);
       const panel = document.getElementById(panelId);
       if (!plot || !panel) return;
+      plot.classList.add('tz-hover');
       plot.on('plotly_hover', (ev) => {{
         if (!ev || !ev.points || !ev.points.length) return;
         const point = ev.points[0];
-        const t = point.x;
         const label = formatPointTime(point);
         const eps = minVisibleValue(unit);
         const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
@@ -1745,19 +1796,11 @@ def build_html_dashboard(
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
         panel.textContent = `t=${{label}}\\n` + lines.join('\\n');
-        const paint = () => {{
-          plot.querySelectorAll('.hoverlayer text, .hoverlayer tspan').forEach((node) => {{
-            if (node.childElementCount) return;
-            if ((node.textContent || '').trim() === 'TIME') node.textContent = label;
-          }});
-        }};
-        paint();
-        requestAnimationFrame(paint);
-        setTimeout(paint, 0);
-        setTimeout(paint, 50);
+        showChartTip(ev);
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
+        hideChartTipSoon();
       }});
     }}
 

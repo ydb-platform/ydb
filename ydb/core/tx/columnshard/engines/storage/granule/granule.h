@@ -177,6 +177,10 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const TInstant now) {
+        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, InsertedPortionsById, now);
+    }
+
     TInsertWriteId BuildNextInsertWriteId() {
         return (TInsertWriteId)AtomicIncrement(LastInsertWriteId);
     }
@@ -247,6 +251,8 @@ public:
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
+        // Actualizers never see a portion that carries a remove snapshot, so the move session learns of the abort here.
+        ActualizationIndex->OnUncommittedPortionAborted(GetInsertedPortionVerifiedPtr(insertWriteId)->GetPortionId());
         CommitPortionOnComplete(insertWriteId, engine);
     }
 
@@ -266,6 +272,19 @@ public:
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshScheme(context);
+    }
+
+    void StartMoveData(const THashSet<ui32>& targetGroups) {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->StartMoveData(targetGroups, context, InsertedPortionsById);
+    }
+
+    void StopMoveData() {
+        ActualizationIndex->StopMoveData();
+    }
+
+    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
+        return ActualizationIndex->GetMoveDataQueueSizes();
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
@@ -290,7 +309,8 @@ public:
         return OptimizerPlanner->GetBucketPositions();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
+    void BuildActualizationTasks(
+        NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const bool moveDataOnly = false) const;
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

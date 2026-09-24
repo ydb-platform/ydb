@@ -73,7 +73,12 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
 }
 
 void TCleanupPortionsColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    self.BackgroundController.StartCleanupPortions();
+    // Portions dropped with their table carry no remove snapshot, so a table drop counts as the oldest.
+    TInstant oldestRemove = PortionsToRemove.GetPortionsToRemove().empty() ? TInstant::Max() : TInstant::Zero();
+    for (const auto& portion : PortionsToDrop) {
+        oldestRemove = Min(oldestRemove, portion->GetRemoveSnapshotVerified().GetPlanInstant());
+    }
+    self.BackgroundController.StartCleanupPortions(oldestRemove);
 }
 
 void TCleanupPortionsColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

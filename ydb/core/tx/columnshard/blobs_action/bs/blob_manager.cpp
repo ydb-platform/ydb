@@ -3,9 +3,12 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
@@ -241,7 +244,7 @@ public:
     void InitializeFirst(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo) {
         // Clear all possibly not kept trash in channel's groups: create an event for each group
         // TODO: we need only actual channel history here
-        for (ui32 channelIdx = 2; channelIdx < tabletInfo->Channels.size(); ++channelIdx) {
+        for (ui32 channelIdx = NBlobOperations::TGlobal::FirstDataChannel; channelIdx < tabletInfo->Channels.size(); ++channelIdx) {
             const auto& channelHistory = tabletInfo->ChannelInfo(channelIdx)->History;
             for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
                 PerGroupGCListsInFlight[TBlobAddress(it->GroupID, channelIdx)];
@@ -407,14 +410,16 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
+    GCTaskInFlight = true;
     return result;
 }
 
 TBlobBatch TBlobManager::StartBlobBatch() {
     AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
-    AFL_VERIFY(TabletInfo->Channels.size() > 2);
-    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];
+    constexpr ui32 firstDataChannel = NBlobOperations::TGlobal::FirstDataChannel;
+    AFL_VERIFY(TabletInfo->Channels.size() > firstDataChannel);
+    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - firstDataChannel)) + firstDataChannel];
     ++CountersUpdate.BatchesStarted;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({ CurrentGen, CurrentStep });
     AllocatedGenSteps.push_back(genStepRef);
@@ -507,12 +512,26 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
     return result;
 }
 
+bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
+    // A built GC task drains BlobsToDelete before its rows leave the local DB, so the queues alone lie.
+    if (GCTaskInFlight) {
+        return true;
+    }
+    const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
+        const ui32 groupId = TabletInfo->GroupFor(blob.Channel(), blob.Generation());
+        return groupId != Max<ui32>() && groups.contains(groupId);
+    };
+    const auto deletedBlobInGroups = [&groups](const auto& blob) {
+        return groups.contains(blob.first.GetDsGroup());
+    };
+    return AnyOf(BlobsToKeep, keptBlobInGroups) || AnyOf(BlobsToDelete, deletedBlobInGroups) || AnyOf(BlobsToDeleteDelayed, deletedBlobInGroups);
+}
+
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
     // We assume here that all the channels have the same group type.
-    // We get [2] because it is the first channel where we store data.
     // So, just in case, in the future 0, 1 channels be different from the rest, the code will still work.
-    if (TabletInfo && TabletInfo->Channels.size() > 2) {
-        return TabletInfo->Channels[2].Type;
+    if (TabletInfo && TabletInfo->Channels.size() > NBlobOperations::TGlobal::FirstDataChannel) {
+        return TabletInfo->Channels[NBlobOperations::TGlobal::FirstDataChannel].Type;
     }
     return TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone);
 }
@@ -524,6 +543,7 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 }
 
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
+    GCTaskInFlight = false;
     if (genStep) {
         LastCollectedGenStep = *genStep;
         AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);

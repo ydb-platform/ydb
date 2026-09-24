@@ -27,6 +27,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
+    YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMoveDataAdmissionWindow);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
@@ -287,6 +288,10 @@ protected:
 
     virtual TDuration DoGetMaxReadStaleness(const TDuration def) const override {
         return OverrideMaxReadStaleness.value_or(def);
+    }
+
+    virtual TDuration DoGetMoveDataAdmissionWindow(const TDuration def) const override {
+        return OverrideMoveDataAdmissionWindow.value_or(def);
     }
 
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 /* def */) const override {

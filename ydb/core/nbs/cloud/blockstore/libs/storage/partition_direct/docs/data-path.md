@@ -62,9 +62,10 @@ primaries is an initial value, not a maximum. Request code must use
 
 ## Record identity
 
-[TFastPathService::GenerateLsn](../fast_path_service.cpp) increments an atomic
-counter shared by this partition's DBGs. Each new vChunk write registers a
-pending record before sending I/O. Its
+[TFastPathService::OnWriteStarted](../fast_path_service.cpp) increments an
+atomic LSN counter shared by this partition's DBGs and a disk-wide in-flight
+write counter. Each new vChunk write registers a pending record before sending
+I/O. Its
 [TPBufferKey](../../../common/pbuffer_key.h) is `(Generation, Lsn)`, ordered
 lexicographically; the tablet generation separates new writes after restart
 from restored records. Do not replace a restored key's generation with the
@@ -83,6 +84,17 @@ registers a pending write, and creates a
 [TWriteRequestExecutor](../write_request.cpp). The executor snapshots the
 vChunk configuration and obtains its write mode and timing from the oracle.
 It requires at least three desired PB hosts before starting.
+
+The oracle chooses the mode from the disk-wide in-flight write count.
+It reads that count from
+[IDiskStateProvider](../model/disk_state_provider.h), implemented by
+[TFastPathService](../fast_path_service.cpp). The current write is already
+included because `OnWriteStarted` ran first. When
+`MaxInflightWritesForDirectWrite` is unset the default is 16, so adaptive
+mode is on. Explicit 0 keeps the configured static `WriteMode`; `WriteMode`
+applies only when the threshold is 0. Otherwise a count at or below the
+threshold selects `DirectWrite` for low-load latency, and a higher count
+selects `IndirectWrite`.
 
 - `DirectWrite` sends individual writes from the partition to desired PBs.
 - `IndirectWrite` selects a coordinator with `SelectBestPBufferHost` and
@@ -134,9 +146,9 @@ writes and incomplete records found during recovery are distinct states.
 
 DDisk masks normally contain desired, enabled hosts that can read the whole
 range. [TDDiskState::CanReadFromDDisk](../dirty_map/ddisk_state.cpp) rejects
-disabled DDisks, ranges beyond a fresh disk's watermark, and ranges marked
-outdated in its behind map. The ahead map helps repair accounting but does
-not currently make above-watermark ranges eligible for this read check.
+disabled DDisks and ranges outside the continuous prefix before the first
+Behind range. A successful flush can extend this prefix by removing its range
+from Behind.
 PB masks start from confirmed replicas and also exclude disabled hosts.
 If filtering empties the mask, `MakeReadRangeHint` currently falls back to
 the desired DDisk host positions, keeping the hint's original PB/DDisk source

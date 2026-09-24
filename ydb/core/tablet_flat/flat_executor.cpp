@@ -377,8 +377,7 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
-    Y_ASSERT(yellowChannels);
-    if (Owner->ReassignChannelsEnabled()) {
+    if (Owner->ReassignChannelsEnabled() && !yellowChannels.empty()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
             if (auto logl = Logger->Log(ELnLev::Notice)) {

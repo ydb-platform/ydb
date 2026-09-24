@@ -10,6 +10,7 @@
 #include <util/system/progname.h>
 
 #include <functional>
+#include <memory>
 
 namespace NMonitoring {
     class TMonService2: public TMtHttpServer {
@@ -17,7 +18,7 @@ namespace NMonitoring {
         const TString Title;
         char StartTime[26];
         TIntrusivePtr<TIndexMonPage> IndexMonPage;
-        THolder<IAuthProvider> AuthProvider_;
+        std::unique_ptr<IAuthProvider> AuthProvider_;
 
     public:
         static THttpServerOptions HttpServerOptions(ui16 port, const TString& host, ui32 threads) {
@@ -43,6 +44,10 @@ namespace NMonitoring {
         explicit TMonService2(ui16 port, const TString& host, ui32 threads, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
         explicit TMonService2(const THttpServerOptions& options, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
         explicit TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
+
+        // Auth comes first to keep legacy nullptr and {} calls unambiguous.
+        explicit TMonService2(std::unique_ptr<IAuthProvider> auth, const THttpServerOptions& options, const TString& title = GetProgramName());
+        explicit TMonService2(std::unique_ptr<IAuthProvider> auth, const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title = GetProgramName());
 
         ~TMonService2() override {
             Stop();

@@ -100,6 +100,7 @@ YT_DEFINE_ERROR_ENUM(
     ((HunkStoreAllocationFailed)              (1746))
     ((TabletResharded)                        (1747))
     ((ReadOnlySmoothMovementStage)            (1748))
+    ((CellHasNoLeader)                        (1749))
 
     // Test error codes.
     ((TestingFailureBeforeWrite)              (1798))

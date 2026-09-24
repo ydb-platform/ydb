@@ -830,9 +830,9 @@
     ],
     "test.test[list_from_range_decimal-different_types-default.txt-Debug]": [
         {
-            "checksum": "e6cb6f31b74f127c6e92016dbae4cd17",
-            "size": 1558,
-            "uri": "https://{canondata_backend}/995452/729ad136f3e79b4deca8b619169c8cc70a99a0ed/resource.tar.gz#test.test_list_from_range_decimal-different_types-default.txt-Debug_/opt.yql"
+            "checksum": "41867c5bcf0cab8320fb676e1e826bbe",
+            "size": 1446,
+            "uri": "https://{canondata_backend}/1814674/a4feab7f2a90a96cd350e389b5ff3dd4de56c6bc/resource.tar.gz#test.test_list_from_range_decimal-different_types-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[list_from_range_decimal-different_types-default.txt-Results]": [

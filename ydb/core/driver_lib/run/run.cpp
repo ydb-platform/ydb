@@ -240,7 +240,13 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
         server->Stop();
     }
 
-    wrapper->Servers.clear();
+    // Do not destroy TGRpcServer objects here.
+    // KikimrStop() calls StopGRpcServers() before ActorSystem->Stop(), so destroying the
+    // servers here would leave dangling TServer* pointers in any
+    // TGRpcStreamingRequest objects that are still alive when the actor system
+    // destroys their holding actors. The servers are destroyed later when
+    // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
+    // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
 }
 
 } // anonymous namespace
@@ -2497,6 +2503,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (ActorSystem) {
         ActorSystem->Cleanup();
     }
+
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+    // Disconnect tasks posted during actor shutdown have run on the NBS
+    // executors. Join those threads before ~TKikimrRunner frees TActorSystem.
+    NYdb::NBS::NBlockStore::StopNbsExecutors();
+#endif
 
     if (YdbDriver) {
         YdbDriver->Stop(true);

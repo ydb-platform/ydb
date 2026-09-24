@@ -15,9 +15,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 CpuBurstUsage = 0;
         ui64 CpuBurstThrottle = 0;
         ui64 ReadBurstUsage = 0;
-        std::optional<float> Satisfaction;
-
-        const TMonotonic Timestamp = TMonotonic::Now();
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
@@ -25,7 +22,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
         virtual void AccountSnapshotDuration(const TDuration& period);
         virtual void UpdateBottomUp(ui64 totalLimit);
-        void UpdateTopDown(ELeafFairShare fairShareMode);
+        void UpdateTopDown();
+
+    private:
+        void DistributeFairShare();
     };
 
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::SNAPSHOT>, public std::enable_shared_from_this<TQuery> {
@@ -61,6 +61,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         TDatabasePtr GetDatabase(const TDatabaseId& databaseId) const;
 
         void AccountPreviousSnapshot(const TRootPtr& snapshot);
+
+    public:
+        const TMonotonic Timestamp = TMonotonic::Now();
     };
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

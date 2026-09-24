@@ -701,7 +701,8 @@ public:
             return result;
         }
 
-        bool isReplicated = false;
+        bool hasLegacyReplicationStream = false;
+        bool hasSchemaReplicationStream = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -711,8 +712,17 @@ public:
                     continue;
                 }
 
-                if (isReplicated = childPath->AsyncReplication.IsDefined()) {
-                    break;
+                if (!childPath->AsyncReplication.IsDefined()) {
+                    continue;
+                }
+
+                Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
+                const auto& stream = context.SS->CdcStreams.at(childPathId);
+                if (stream->SchemaChanges) {
+                    hasSchemaReplicationStream = true;
+                } else {
+                    // A legacy stream will not receive the column DDL record.
+                    hasLegacyReplicationStream = true;
                 }
             }
         }
@@ -733,7 +743,7 @@ public:
             return result;
         }
 
-        if (isReplicated) {
+        if (hasLegacyReplicationStream) {
             for (const auto& [id, column] : alterData->Columns) {
                 if (column.CreateVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot add columns to replicated table");
@@ -741,6 +751,24 @@ public:
                 }
                 if (column.DeleteVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
+                    return result;
+                }
+            }
+        }
+
+        // CDC schema records contain the resulting column name/type/key
+        // snapshot, but cannot reproduce defaults or NOT NULL transitions.
+        if (hasSchemaReplicationStream) {
+            for (const auto& column : alter.GetColumns()) {
+                const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
+                    != TTableInfo::InvalidColumnId;
+                if (column.HasDefaultFromLiteral() || column.HasDefaultFromSequence()
+                    || column.HasDefaultFromExpression() || column.HasEmptyDefault()
+                    || (column.HasSetNotNullInProgress() && column.GetSetNotNullInProgress())
+                    || (column.HasNotNull() && (column.GetNotNull() || altersExistingColumn)))
+                {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot alter column defaults or NOT NULL on replicated table");
                     return result;
                 }
             }

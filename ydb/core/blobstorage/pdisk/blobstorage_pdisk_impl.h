@@ -399,7 +399,7 @@ public:
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
             bool forHousekeeping = false);
     void ChunkReserve(TChunkReserve &evChunkReserve);
-    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
+    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation

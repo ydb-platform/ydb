@@ -5,13 +5,10 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExecute(
+TConclusion<TExecutionResult> THeaderCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto source = context.GetDataSource().lock();
-    if (!source) {
-        return TConclusionStatus::Fail("source was destroyed before (header check start)");
-    }
-    auto conclusion = source->CheckHeader(context, HeaderContext);
+    auto& source = context.GetDataSource();
+    auto conclusion = source.CheckHeader(context, HeaderContext);
     if (conclusion.IsFail()) {
         return conclusion;
     }
@@ -24,7 +21,7 @@ TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExe
     } else {
         context.MutableResources().AddFilter(*conclusion);
     }
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

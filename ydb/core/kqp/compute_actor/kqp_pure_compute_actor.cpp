@@ -2,14 +2,15 @@
 
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_TASKS_RUNNER
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
     auto* settings = actorSystem->LoggerSettings();
@@ -34,6 +35,7 @@ TKqpComputeActor::TKqpComputeActor(
     , UserToken(std::move(userToken))
     , Database(database)
 {
+    ComputeCtx.SetQueryContext(Database, UserToken);
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
@@ -42,6 +44,9 @@ TKqpComputeActor::TKqpComputeActor(
         YQL_ENSURE(!Meta->GetReads()[0].GetKeyRanges().empty());
         YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewInfo());
     }
+
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpComputeActor"));
 }
 
 void TKqpComputeActor::DoBootstrap() {
@@ -116,6 +121,7 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
+    ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };
@@ -236,6 +242,10 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst,
+            RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL);
+    }
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
 
@@ -384,5 +394,4 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
         settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(schedulableOptions), mode, std::move(userToken), database);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

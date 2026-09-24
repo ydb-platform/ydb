@@ -7,9 +7,10 @@
 #include <yql/essentials/sql/v1/ide/completion/antlr4/c3t.h>
 #include <yql/essentials/sql/v1/ide/completion/antlr4/vocabulary.h>
 
-#include <yql/essentials/sql/v1/ide/completion/syntax/ansi.h>
 #include <yql/essentials/sql/v1/ide/completion/syntax/format.h>
 #include <yql/essentials/sql/v1/ide/completion/syntax/grammar.h>
+
+#include <yql/essentials/sql/v1/ide/pure_ast/ansi.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -424,7 +425,7 @@ public:
     }
 
     TLocalSyntaxContext Analyze(TCompletionInput input) const override {
-        auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
+        auto isAnsiLexer = NSQLPureAST::IsAnsiQuery(TString(input.Text));
         auto& engine = GetSpecializedEngine(isAnsiLexer);
         return engine.Analyze(input);
     }

@@ -88,7 +88,7 @@ The gates in [TBlocksDirtyMap](../dirty_map/dirty_map.cpp) and
 6. A record becomes flushed only after every desired enabled destination
    confirms and at least three confirmations exist. A failure clears that
    destination's requested bit and requeues the record.
-7. PB locks postpone erase. Erase also waits for durable ahead/behind state
+7. PB locks postpone erase. Erase also waits for durable behind state
    when the record overlaps a tracked outdated range.
 
 Write completion starts flush work. Flush completion starts erase and state
@@ -105,16 +105,19 @@ erases, compact erase records and barriers, use the shared PB page.
 
 ## Persisted DDisk state and repair
 
-[TDDiskState](../dirty_map/ddisk_state.cpp) combines an operational watermark
-with two range sets:
+[TDDiskState](../dirty_map/ddisk_state.cpp) keeps the ranges that do not have
+up-to-date data in its Behind field. Only the continuous prefix before the
+first Behind range can be read. Successful flush and copy operations remove
+their ranges from Behind, while a flush missed by a lagging DDisk adds its
+range.
 
-- Ahead ranges have newer data beyond the normal copied prefix.
-- Behind ranges missed a flush and contain outdated data.
-
-The configuration watermark initializes a fresh DDisk. Flush results update
-the range sets, incrementing the dirty-map state generation. `DoPersistDirtyMap`
-sends that state to
-[part_updatedirtymapstate.cpp](../../partition_direct_tablet/part_updatedirtymapstate.cpp).
+For a touched vChunk, adding a DDisk initializes its Behind field to the full
+range; for an untouched vChunk, it starts empty. A configuration change and
+the corresponding Behind state are committed atomically. Flush results
+update the Behind field, incrementing the dirty-map state generation.
+`DoPersistDirtyMap` sends standalone state updates through the same ordered
+transaction queue in
+[part_updatevchunkstate.cpp](../../partition_direct_tablet/part_updatevchunkstate.cpp).
 Only transaction completion advances the dirty map's persisted generation.
 `CheckEraseAbility` records which generation must be durable before an
 overlapping PB record can be erased. This preserves the information needed
@@ -137,7 +140,7 @@ one peer-to-peer DDisk wire sync.
 
 Host health and vChunk configuration are separate: temporary unavailability
 does not itself remove a host's DDisk role. Promotion, demotion and evacuation
-update masks and watermarks; new/fresh destinations need repair before they
+update host roles; new/fresh destinations need repair before they
 can serve their full range.
 
 [part_add_host_to_dbg.cpp](../../partition_direct_tablet/part_add_host_to_dbg.cpp)

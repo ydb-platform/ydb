@@ -258,7 +258,6 @@ private:
     const TDuration SocketTimeout_;
 
     TInstant StartTime_;
-    TString LoggedAttributes_;
 
     TConnectionPtr Connection_;
 
@@ -267,6 +266,7 @@ private:
     std::unique_ptr<TSocketInput> SocketInput_;
     std::unique_ptr<THttpResponse> Input_;
 
+    bool IncludeParameters_ = false;
     bool LogResponse_ = false;
 };
 

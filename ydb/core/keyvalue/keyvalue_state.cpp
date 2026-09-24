@@ -1303,6 +1303,14 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
     Y_ABORT_UNLESS(oldIter != Index.end());
     TIndexRecord& source = oldIter->second;
 
+    // a rename onto itself changes nothing; the generic path would trash the value and erase the record
+    if (request.OldKey == request.NewKey) {
+        if (legacyResponse) {
+            legacyResponse->SetStatus(NKikimrProto::OK);
+        }
+        return;
+    }
+
     TIndexRecord& dest = Index[request.NewKey];
     Dereference(dest, db);
     dest.Chain = std::move(source.Chain);

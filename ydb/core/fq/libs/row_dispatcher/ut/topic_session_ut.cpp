@@ -1,28 +1,28 @@
-#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
+#include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
 #include <mutex>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
 
+#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/purecalc/common/interface.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -758,6 +758,30 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+    Y_UNIT_TEST_TWIN_F(ReadOffsetBeforeCommittedFails, ZeroOffset, TRealTopicFixture) {
+        const TString topicName = TStringBuilder() << "ReadOffsetBeforeCommittedFails" << ZeroOffset;
+        PQCreateStream(topicName);
+        Init(topicName);
+        PQWrite({Json1, Json2, Json3});
+        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
+            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        const auto commit = client.CommitOffset(topicName, 0, DefaultPqConsumer, 3).GetValueSync();
+        UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+
+        const ui64 readOffset = ZeroOffset ? 0 : 1;
+        StartSession(ReadActorId1, BuildSource(true), readOffset);
+        ExpectSessionError(ReadActorId1, EStatusId::BAD_REQUEST,
+            TStringBuilder() << "trying to read from position that is less than committed: read " << readOffset << " committed 3");
+
+        const auto describe = client.DescribeConsumer(topicName, DefaultPqConsumer,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto& partitions = describe.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+        UNIT_ASSERT_VALUES_EQUAL(partitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), 3);
     }
 
     Y_UNIT_TEST_F(TwoSessionsWithOffsets, TRealTopicFixture) {

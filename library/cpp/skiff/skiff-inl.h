@@ -21,6 +21,12 @@ constexpr auto TUnderlyingIntegerType<wireType>::F() {
         return i32{};
     } else if constexpr (wireType == EWireType::Int64) {
         return i64{};
+
+    } else if constexpr (wireType == EWireType::VarInt32) {
+        return i32{};
+    } else if constexpr (wireType == EWireType::VarInt64) {
+        return i64{};
+
     } else if constexpr (wireType == EWireType::Uint8) {
         return ui8{};
     } else if constexpr (wireType == EWireType::Uint16) {

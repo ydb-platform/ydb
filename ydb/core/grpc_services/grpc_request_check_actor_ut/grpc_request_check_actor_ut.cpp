@@ -68,7 +68,6 @@ struct TTestSetup {
         authConfig.SetUseStaff(false);
 
         auto settings = TServerSettings(KikimrPort, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(true);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         return settings;

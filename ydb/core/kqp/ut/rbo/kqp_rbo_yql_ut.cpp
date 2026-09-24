@@ -1436,11 +1436,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         THashSet<i64> simplifiedOperatorIds;
         CollectOperatorIds(planMap.at("Plan"), executionOperatorIds);
         CollectOperatorIds(simplifiedPlan, simplifiedOperatorIds);
-        UNIT_ASSERT_C(!simplifiedOperatorIds.empty(), plan);
-        for (const auto operatorId : simplifiedOperatorIds) {
-            UNIT_ASSERT_C(executionOperatorIds.contains(operatorId),
-                "OperatorId " << operatorId << " is missing from the execution plan\n" << plan);
-        }
+        UNIT_ASSERT_C(executionOperatorIds.empty(), plan);
+        UNIT_ASSERT_C(simplifiedOperatorIds.empty(), plan);
+    }
+
+    Y_UNIT_TEST(ExplainHidesOperatorIds) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        const auto plan = ExecuteExplain(session, "SELECT a FROM `/Root/t1`;");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto& planMap = planJson.GetMapSafe();
+        const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TableFullScan"), plan);
+
+        THashSet<i64> operatorIds;
+        CollectOperatorIds(planMap.at("Plan"), operatorIds);
+        CollectOperatorIds(simplifiedPlan, operatorIds);
+        UNIT_ASSERT_C(operatorIds.empty(), plan);
     }
 
     Y_UNIT_TEST(ExplainStageConnections) {
@@ -2292,6 +2306,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(QualifiedStarSubqueryFallsBackToYqlOptimizer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `doc` (
+                `id` String,
+                `flag` Bool,
+                PRIMARY KEY (`id`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("disabled")
+            .AddMember("flag").Bool(false)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("enabled")
+            .AddMember("flag").Bool(true)
+            .EndStruct();
+        rows.EndList();
+
+        auto upsertResult = tableClient.BulkUpsert("/Root/doc", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto compileCountersBefore = GetNewRBOCompileCounters(kikimr);
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[["enabled"]]])");
+        UNIT_ASSERT_C(result.GetStats().has_value(), "Missing full query statistics");
+        UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing query plan in full statistics");
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        UNIT_ASSERT_C(planJson.GetMapSafe().contains("SimplifiedPlan"), plan);
+        const auto& planRoot = planJson.GetMapSafe().at("Plan").GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(planRoot.at("Node Type").GetStringSafe(), "Query", plan);
+        UNIT_ASSERT_C(planRoot.contains("Stats"), plan);
+
+        const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
+    }
+
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -2513,6 +2589,101 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(Params, ColumnStore) {
         TestParams(ColumnStore);
+    }
+
+    Y_UNIT_TEST_TWIN(AsTable, EnablePeepholeNewRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(EnablePeepholeNewRbo);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        const auto params = TParamsBuilder()
+            .AddParam("$param")
+                .BeginList()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(1)
+                        .AddMember("value").String("one")
+                    .EndStruct()
+                .EndList()
+            .Build()
+            .Build();
+
+        const TString query = R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT id, value FROM AS_TABLE($param);
+        )";
+
+        auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetAst(), "Missing final AST");
+        UNIT_ASSERT_STRING_CONTAINS(*explain.GetStats()->GetAst(),
+            EnablePeepholeNewRbo ? "ToFlow $param" : "Iterator $param");
+        UNIT_ASSERT_C(explain.GetStats()->GetPlan(), "Missing explain plan");
+        const TString plan = *explain.GetStats()->GetPlan();
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* source = FindOperatorByStringField(simplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(source, plan);
+        UNIT_ASSERT_VALUES_EQUAL(GetStringField(*source, "Parameter"), "$param");
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[1;"one"]])");
+
+        const auto moreParams = TParamsBuilder()
+            .AddParam("$param")
+                .BeginList()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(3)
+                        .AddMember("value").String("three")
+                    .EndStruct()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(1)
+                        .AddMember("value").String("one")
+                    .EndStruct()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(2)
+                        .AddMember("value").String("two")
+                    .EndStruct()
+                .EndList()
+            .Build()
+            .Build();
+
+        const TString filteredQuery = R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT p.id, p.value || "!" AS marked
+            FROM AS_TABLE($param) AS p
+            WHERE p.id >= 2
+            ORDER BY p.id;
+        )";
+
+        auto filteredExplain = session.ExecuteQuery(filteredQuery, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(filteredExplain.IsSuccess(), filteredExplain.GetIssues().ToString());
+        UNIT_ASSERT_C(filteredExplain.GetStats() && filteredExplain.GetStats()->GetPlan(), "Missing filtered explain plan");
+        const TString filteredPlan = *filteredExplain.GetStats()->GetPlan();
+        const auto filteredSimplifiedPlan = GetSimplifiedPlan(filteredPlan);
+        const auto* filteredSource = FindOperatorByStringField(filteredSimplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(filteredSource, filteredPlan);
+        UNIT_ASSERT_VALUES_EQUAL(GetStringField(*filteredSource, "Parameter"), "$param");
+        UNIT_ASSERT_C(FindOperatorByStringField(filteredSimplifiedPlan, "Name", "Filter"), filteredPlan);
+
+        result = session.ExecuteQuery(filteredQuery, NYdb::NQuery::TTxControl::NoTx(), moreParams).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[2;"two!"];[3;"three!"]])");
+
+        result = session.ExecuteQuery(R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT p.id FROM AS_TABLE($param) AS p WHERE p.id > 10;
+        )", NYdb::NQuery::TTxControl::NoTx(), moreParams).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[]");
     }
 
     constexpr std::array<i64, 7> SqlInLookupValues = {-1, 0, 1, 2, 3, 10, 2147483648LL};
@@ -10203,12 +10374,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    // Compiled 94 from 99.
+    // Compiled 97 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
                         {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, /*17,*/ 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-                        41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
+                        41, 42, 43, /*44,*/ 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
                         61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
                         81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,

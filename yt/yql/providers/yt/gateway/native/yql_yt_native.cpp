@@ -2542,7 +2542,7 @@ private:
                                     securityTagsNode] (const auto& f) mutable
             {
                 if (f.GetValue()) {
-                    execCtx->QueryCacheItem.Destroy();
+                    execCtx->QueryCacheItem.reset();
                     return MakeFuture();
                 }
                 // Use explicit columns for source tables to cut aux columns
@@ -3668,7 +3668,7 @@ private:
                 bool cacheHit = f.GetValue();
                 TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
-                    execCtx->QueryCacheItem.Destroy();
+                    execCtx->QueryCacheItem.reset();
                     return MakeFuture();
                 }
 
@@ -3710,7 +3710,7 @@ private:
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->SetNodeExecProgress("Preparing");
             auto entry = execCtx->GetEntry();
-            execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtCopy
+            execCtx->QueryCacheItem.reset(); // Don't use cache for YtCopy
             TOutputInfo& out = execCtx->OutTables_.front();
 
             entry->DeleteAtFinalize(out.Path);
@@ -3782,7 +3782,7 @@ private:
                 bool cacheHit = f.GetValue();
                 TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
-                    execCtx->QueryCacheItem.Destroy();
+                    execCtx->QueryCacheItem.reset();
                     return MakeFuture();
                 }
 
@@ -3859,7 +3859,7 @@ private:
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->SetNodeExecProgress("Preparing");
             auto entry = execCtx->GetEntry();
-            execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtPersist
+            execCtx->QueryCacheItem.reset(); // Don't use cache for YtPersist
             TOutputInfo& out = execCtx->OutTables_.front();
 
             const bool remote = entry->Cluster != execCtx->InputTables_.front().Cluster;
@@ -3934,7 +3934,7 @@ private:
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
                     execCtx->ReportFullCaptureCacheHit();
-                    execCtx->QueryCacheItem.Destroy();
+                    execCtx->QueryCacheItem.reset();
                     return MakeFuture();
                 }
             }
@@ -4108,7 +4108,7 @@ private:
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
                     execCtx->ReportFullCaptureCacheHit();
-                    execCtx->QueryCacheItem.Destroy();
+                    execCtx->QueryCacheItem.reset();
                     return MakeFuture();
                 }
             }
@@ -5763,7 +5763,7 @@ private:
             .Apply([execCtx, entry, mapOpSpec = std::move(mapOpSpec), job, tmpTable, lambda, extraUsage, tmpFiles] (const TFuture<bool>& f) {
                 if (f.GetValue()) {
                     execCtx->ReportFullCaptureCacheHit();
-                    execCtx->QueryCacheItem.Destroy();
+                    execCtx->QueryCacheItem.reset();
                     return MakeFuture();
                 }
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);

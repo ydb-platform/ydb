@@ -83,7 +83,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
         TMapElement mapElement = mapElements[mapIndex];
         if (inMapIndices[projectionIndex] == mapIndex) {
             const auto& [colName, projection, replace, olapOperation] = projectionCandidates[projectionIndex++];
-            Y_ENSURE(colName.find("__kqp_olap_projection") == TString::npos, "Multiple projections for same column is not supported");
+            Y_ENSURE(colName.find(NOpt::KqpOlapProjectionNamePrefix) == TString::npos, "Multiple projections for same column is not supported");
             if (!notSuitableToPushMembers.count(colName)) {
                 olapOperationsForProjections.emplace_back(NOpt::GetOlapColumnName(colName, /*stripAliasPrefix=*/true), olapOperation);
                 // Replace old expression with new.

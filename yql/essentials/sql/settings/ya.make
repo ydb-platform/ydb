@@ -25,4 +25,5 @@ END()
 
 RECURSE(
     flags
+    ut
 )

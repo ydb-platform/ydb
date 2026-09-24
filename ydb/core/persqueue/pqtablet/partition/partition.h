@@ -23,12 +23,15 @@
 #include <ydb/core/persqueue/pqtablet/quota/quota.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <variant>
+#include <deque>
+#include <optional>
 
 namespace NKikimr::NPQ {
 
@@ -177,6 +180,7 @@ public:
         ReadBlobsForCompaction = 0,
         WriteBlobsForCompaction,
         CompactificationWrite,
+        ReadBlobForResetOffset,
         End
     };
 
@@ -357,7 +361,6 @@ private:
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;
-    size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
@@ -442,6 +445,7 @@ private:
 
 
     void ScheduleReplyOk(const ui64 dst, bool internal);
+    void ScheduleReplyOk(const TEvPQ::TEvSetClientInfo& act);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                         const i64 offset,
                                         const TInstant writeTimestamp,
@@ -449,6 +453,9 @@ private:
                                         bool consumerHasAnyCommits,
                                         const std::optional<TString>& committedMetadata=std::nullopt);
     void ScheduleReplyError(const ui64 dst, bool internal,
+                            NPersQueue::NErrorCode::EErrorCode errorCode,
+                            const TString& error);
+    void ScheduleReplyError(const TEvPQ::TEvSetClientInfo& act,
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
@@ -671,6 +678,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+            hFuncTraced(TEvPQ::TEvResetOffsetRequest, HandleOnInit);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
@@ -756,6 +764,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+            hFuncTraced(TEvPQ::TEvResetOffsetRequest, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             LOG_E("Unexpected",
@@ -1129,7 +1138,9 @@ private:
     // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
     // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
-    // Writing blob with topic quota variables
+    // Writing blob with topic quota variables.
+    // BlobQuotaSize / MessagesQuotaSize belong to TopicQuotaRequestCookie, not to the KV write
+    // cycle. The next quota request may already be in flight when HandleWriteResponse runs.
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
@@ -1267,6 +1278,9 @@ private:
 
     ui64 GetStartOffset() const;
     ui64 GetEndOffset() const;
+    // EndOffset is the last persisted offset. Accepted writes can sit in NewHead
+    // before persist; ResetOffset must be able to commit up to that exclusive end.
+    ui64 GetAcceptedEndOffset() const;
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
@@ -1309,6 +1323,7 @@ private:
     void HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
+    void HandleOnInit(TEvPQ::TEvResetOffsetRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
@@ -1317,6 +1332,7 @@ private:
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
     void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
+    void Handle(TEvPQ::TEvResetOffsetRequest::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
@@ -1357,6 +1373,47 @@ private:
 
 
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
+
+    ui64 ResolveResetOffset(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
+    TInstant ResetOffsetTimestamp(const NKikimrPQ::TEvResetOffsetRequest& rec) const;
+    bool TryScheduleResetOffsetReply(const TEvPQ::TEvSetClientInfo& act, Ydb::StatusIds::StatusCode status, const TString& error);
+    void ProcessResetOffsetPendingEvents();
+    void BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev);
+    void FinishResetOffset(const TActorId& sender, ui64 cookie, ui32 partitionId, const TString& consumer, ui64 offset);
+    void ReplyResetOffset(const TActorId& sender, ui32 partitionId, Ydb::StatusIds::StatusCode status, TString message, ui64 cookie);
+    void RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev, TInstant timestamp);
+    void HandleResetOffsetBlobResponse(TEvPQ::TEvBlobResponse::TPtr& ev);
+    TMaybe<ui64> ScanHeadForResetOffset(const THead& head, TInstant timestamp) const;
+    TMaybe<ui64> ScanRequestedBlobsForResetOffset(const TVector<TRequestedBlob>& blobs, ui32 begin, ui32 end, TInstant timestamp) const;
+    static Ydb::StatusIds::StatusCode PqErrorToYdbStatus(NPersQueue::NErrorCode::EErrorCode errorCode);
+
+    std::deque<TEvPQ::TEvResetOffsetRequest::TPtr> ResetOffsetPendingEvents;
+
+    struct TResetOffsetBlobRead {
+        struct TKeyRef {
+            ui64 Offset = 0;
+            TInstant Timestamp;
+            TMaybe<ui32> RequestedIndex;
+        };
+
+        TActorId Sender;
+        ui64 Cookie = 0;
+        ui32 PartitionId = 0;
+        TString Consumer;
+        TInstant Timestamp;
+        TVector<TKeyRef> CompactionKeys;
+        TVector<TKeyRef> FastWriteKeys;
+        // Holds blob-key tokens for the duration of the async KV read so compaction
+        // cannot delete those blobs until HandleResetOffsetBlobResponse completes.
+        TBlobKeyTokens BlobKeyTokens;
+    };
+    std::optional<TResetOffsetBlobRead> ResetOffsetBlobRead;
+
+    TMaybe<ui64> ResolveResetOffsetFromWrittenAt(
+        const TVector<TResetOffsetBlobRead::TKeyRef>& compactionRefs,
+        const TVector<TResetOffsetBlobRead::TKeyRef>& fastWriteRefs,
+        const TVector<TRequestedBlob>* blobs,
+        TInstant timestamp) const;
 
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
 

@@ -421,7 +421,7 @@ runs:
           rm -f "$RESOURCES_JSONL"
           python3 .github/scripts/utils/metrics/monitor_resources.py \
             --output "$RESOURCES_JSONL" \
-            --interval 1 &
+            --interval 3 &
           MONITOR_RESOURCES_PID=$!
 
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
@@ -506,7 +506,7 @@ runs:
           for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
           TRY_LINKS="${TRY_LINKS%,}"
           DASHBOARD_OK=0
-          if python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
+          if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
             --report "$CURRENT_REPORT" \
             --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --top-n 500 \

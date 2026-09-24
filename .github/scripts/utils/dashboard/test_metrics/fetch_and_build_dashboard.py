@@ -314,6 +314,8 @@ def main() -> None:
             continue
 
         report_url, evlog_url, resources_url = find_report_evlog_resources(try_html, try_base)
+        if resources_url is None:
+            resources_url = urljoin(try_base + "/", "tests_metrics/resources_monitor.jsonl")
         if not report_url or not evlog_url:
             print(f"{try_name}: missing report.json or ya_evlog.jsonl (report={report_url!s}, evlog={evlog_url!s})", file=sys.stderr)
             continue
@@ -333,7 +335,11 @@ def main() -> None:
         if resources_url:
             resources_path = out_dir / "resources_monitor.jsonl"
             print(f"Downloading {try_name} resources_monitor.jsonl ...")
-            download_file(resources_url, resources_path)
+            try:
+                download_file(resources_url, resources_path)
+            except Exception as e:
+                print(f"{try_name}: no resources overlay ({e})", file=sys.stderr)
+                resources_path = None
 
         out_html = out_dir / "dashboard.html"
         cmd = [

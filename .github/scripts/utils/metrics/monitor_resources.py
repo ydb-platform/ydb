@@ -261,8 +261,6 @@ def run_monitor(
             ya_pids = find_ya_process_tree(process_snapshot)
             pid_data = list(process_snapshot.values())
 
-            # CPU per process + ya aggregates (ALL ya tree, no top-N limit)
-            cpu_per_pid: list[dict] = []
             cpu_ya_jiffies = 0
             ram_ya_kb = 0
             ya_read_delta = 0
@@ -283,19 +281,10 @@ def run_monitor(
                 ya_read_delta += delta_r
                 ya_write_delta += delta_w
                 delta_total = cpu_delta_jiffies(prev_pid_cpu.get(ident), p["utime"], p["stime"])
-                cpu_pct = 100.0 * delta_total / total_delta if total_delta > 0 and delta_total > 0 else 0.0
                 if delta_total > 0:
                     cpu_ya_jiffies += delta_total
-                cpu_per_pid.append({
-                    "pid": pid,
-                    "comm": p["comm"],
-                    "cpu_pct": round(cpu_pct, 2),
-                    "utime": p["utime"],
-                    "stime": p["stime"],
-                })
             prev_pid_cpu = next_pid_cpu
             prev_pid_io = next_pid_io
-            cpu_per_pid.sort(key=lambda x: x["cpu_pct"], reverse=True)
             cpu_ya_pct = 100.0 * cpu_ya_jiffies / total_delta if total_delta > 0 else 0.0
 
             disk_ya_read_mb = ya_read_delta / (1024 * 1024)
@@ -322,7 +311,6 @@ def run_monitor(
                 "dt_sec": round(dt, 6),
                 "cpu_total_pct": round(cpu_total_pct, 2),
                 "cpu_ya_pct": round(cpu_ya_pct, 2),
-                "cpu_per_pid": cpu_per_pid,
                 "ram_used_kb": ram_used_kb,
                 "ram_ya_kb": ram_ya_kb,
                 "disk_read_sectors": curr_disk[0],

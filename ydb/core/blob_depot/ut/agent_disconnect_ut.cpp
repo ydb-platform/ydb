@@ -63,12 +63,13 @@ struct TTestEnv {
         UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5)), "BlobDepot did not apply the test configuration");
     }
 
-    TAgent Connect(ui32 nodeIndex, ui64 instanceId = 1) {
+    TAgent Connect(ui32 nodeIndex, ui64 instanceId = 1, bool supportsIdRangeExpiry = false) {
         const auto edge = Runtime.AllocateEdgeActor(nodeIndex);
         const auto pipe = Runtime.ConnectToPipe(TabletId, edge, nodeIndex, GetPipeConfigWithRetries());
         const TAgent agent{edge, pipe, nodeIndex};
         auto request = std::make_unique<TEvBlobDepot::TEvRegisterAgent>();
         request->Record.SetAgentInstanceId(instanceId);
+        request->Record.SetSupportsIdRangeExpiry(supportsIdRangeExpiry);
         Send(agent, request.release());
         UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRegisterAgentResult>(edge, TDuration::Seconds(1)), "BlobDepot did not register the test agent");
         return agent;
@@ -83,6 +84,29 @@ struct TTestEnv {
     void Disconnect(const TAgent& agent) {
         Runtime.ClosePipe(agent.Pipe, agent.Edge, agent.NodeIndex);
         Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+
+    void AllocateIds(const TAgent& agent) {
+        Send(agent, new TEvBlobDepot::TEvAllocateIds(NKikimrBlobDepot::TChannelKind::Data, 100));
+        const auto response = Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvAllocateIdsResult>(
+            agent.Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT(response->Get()->Record.GetGivenIdRange().ChannelRangesSize());
+    }
+
+    ui64 AgentsBlockingGC() {
+        const auto edge = Runtime.AllocateEdgeActor();
+        Runtime.SendToPipe(TabletId, edge, new TEvTablet::TEvGetCounters, 0, GetPipeConfigWithRetries());
+        const auto response = Runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(
+            edge, TDuration::Seconds(1));
+        UNIT_ASSERT(response);
+        for (const auto& counter : response->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+            if (counter.GetName() == "BlobDepot/AgentsBlockingGC") {
+                return counter.GetValue();
+            }
+        }
+        UNIT_FAIL("AgentsBlockingGC counter is missing");
+        return 0;
     }
 
     void Prepare(const TAgent& agent, ui64 cookie) {
@@ -161,6 +185,67 @@ void CheckReconnectReleasesWrites(ui64 newInstanceId) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
+    Y_UNIT_TEST(GCBlockingCounterTracksReconnects) {
+        TTestEnv env;
+        const auto owner = env.Connect(0);
+        const auto other = env.Connect(1);
+        const auto empty = env.Connect(2);
+        env.AllocateIds(owner);
+        env.AllocateIds(other);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 0);
+
+        env.Disconnect(empty);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 0);
+        env.Disconnect(owner);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+        env.Disconnect(other);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 2);
+
+        const auto reconnected = env.Connect(0);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+        env.Disconnect(reconnected);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 2);
+
+        // A new instance releases its predecessor's ranges; reconnect and reset must decrement only once.
+        const auto restarted = env.Connect(0, 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+        env.Disconnect(restarted);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+    }
+
+    Y_UNIT_TEST(GCBlockingCounterIgnoresSupersededPipe) {
+        TTestEnv env;
+        const auto oldAgent = env.Connect(0);
+        env.AllocateIds(oldAgent);
+        const auto replacement = env.Connect(0);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 0);
+
+        env.Disconnect(oldAgent);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 0);
+        env.Disconnect(replacement);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+    }
+
+    Y_UNIT_TEST(GCBlockingCounterDropsExpiredRanges) {
+        TTestEnv env;
+        const auto expiring = env.Connect(0, 1, true);
+        const auto legacy = env.Connect(1);
+        env.AllocateIds(expiring);
+        env.AllocateIds(legacy);
+        env.Disconnect(expiring);
+        env.Disconnect(legacy);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 2);
+
+        env.Runtime.SimulateSleep(TDuration::Minutes(2));
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+        const auto reconnected = env.Connect(0, 1, true);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+        env.Disconnect(reconnected);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 1);
+        env.Connect(1);
+        UNIT_ASSERT_VALUES_EQUAL(env.AgentsBlockingGC(), 0);
+    }
+
     Y_UNIT_TEST(DisconnectReleasesS3WriteSlots) {
         TTestEnv env;
         const auto owner = env.Connect(0);

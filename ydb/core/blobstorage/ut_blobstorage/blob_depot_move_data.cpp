@@ -1,27 +1,14 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
-#include <ydb/core/testlib/tablet_helpers.h>
 
 #include "blob_depot_event_managers.h"
+#include "blob_depot_test_helpers.h"
 #include "blob_depot_test_env.h"
 
 using namespace NKikimr;
 
 namespace {
-
-ui64 GetBlobDepotTabletId(TEnvironmentSetup& env, ui32 groupId) {
-    const auto baseConfig = env.FetchBaseConfig();
-    for (const auto& group : baseConfig.GetGroup()) {
-        if (group.GetGroupId() == groupId) {
-            const ui64 tabletId = group.GetVirtualGroupInfo().GetBlobDepotId();
-            UNIT_ASSERT_C(tabletId, "virtual group has no BlobDepot tablet");
-            return tabletId;
-        }
-    }
-    UNIT_FAIL("virtual group not found in base config");
-    return 0;
-}
 
 TIntrusivePtr<TTabletStorageInfo> GetTabletStorageInfo(TEnvironmentSetup& env, ui64 tabletId) {
     auto& runtime = *env.Runtime;
@@ -93,16 +80,6 @@ TReassignment ReassignAllChannels(TBlobDepotTestEnvironment& tenv, ui64 tabletId
     return {};
 }
 
-void RestartTablet(TBlobDepotTestEnvironment& tenv, ui64 tabletId) {
-    auto& env = *tenv.Env;
-    auto& runtime = *env.Runtime;
-    auto edge = runtime.AllocateEdgeActor(1);
-    runtime.WrapInActorContext(edge, [&] {
-        TActivationContext::Register(CreateTabletKiller(tabletId));
-    });
-    runtime.DestroyActor(edge);
-}
-
 NKikimrTabletBase::TEvMoveDataResponse::EStatus MoveData(
         TEnvironmentSetup& env, ui64 tabletId, const TVector<ui32>& groups)
 {
@@ -126,7 +103,7 @@ struct TMoveDataTest {
         : TEnv(1, 12)
         , Env(*TEnv.Env)
         , VirtualGroup(TEnv.BlobDepot)
-        , BlobDepotTabletId(GetBlobDepotTabletId(Env, VirtualGroup))
+        , BlobDepotTabletId(NBlobDepotTest::GetBlobDepotTabletId(Env, VirtualGroup))
     {
         Blobs.reserve(64);
 
@@ -160,7 +137,7 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
         test.Put(blob);
 
         const auto reassignment = ReassignAllChannels(test.TEnv, test.BlobDepotTabletId);
-        RestartTablet(test.TEnv, test.BlobDepotTabletId);
+        NBlobDepotTest::RestartTablet(test.TEnv, test.BlobDepotTabletId);
 
         const auto status = MoveData(test.Env, test.BlobDepotTabletId, reassignment.OldGroups);
         UNIT_ASSERT(status == NKikimrTabletBase::TEvMoveDataResponse::Success);
@@ -174,7 +151,7 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
         test.Put(oldBlob);
 
         const auto reassignment = ReassignAllChannels(test.TEnv, test.BlobDepotTabletId);
-        RestartTablet(test.TEnv, test.BlobDepotTabletId);
+        NBlobDepotTest::RestartTablet(test.TEnv, test.BlobDepotTabletId);
 
         auto& newBlob = test.AddBlob(2);
         test.Put(newBlob);
@@ -193,7 +170,7 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
         }
 
         const auto reassignment = ReassignAllChannels(test.TEnv, test.BlobDepotTabletId);
-        RestartTablet(test.TEnv, test.BlobDepotTabletId);
+        NBlobDepotTest::RestartTablet(test.TEnv, test.BlobDepotTabletId);
 
         const auto status = MoveData(test.Env, test.BlobDepotTabletId, reassignment.OldGroups);
         UNIT_ASSERT(status == NKikimrTabletBase::TEvMoveDataResponse::Success);

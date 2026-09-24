@@ -198,6 +198,7 @@ public:
 
         if (writeTxId) {
             txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
+            Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, TRowVersion::Min(), writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
             if (!MvccVersion) {
@@ -206,6 +207,7 @@ public:
 
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
             txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccVersion);
+            Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, *MvccVersion);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 

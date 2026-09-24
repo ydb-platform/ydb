@@ -5,6 +5,7 @@ ADDINCL(
 )
 
 SRCS(
+    datashard_hnsw.cpp
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h

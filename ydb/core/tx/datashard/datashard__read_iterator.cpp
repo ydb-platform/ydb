@@ -10,6 +10,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
@@ -31,6 +32,17 @@ using namespace NTabletFlatExecutor;
 namespace {
 
 bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
+    // ANN candidate reads cannot observe conflicts on rows they did not visit.
+    if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
+        return false;
+    }
+    if (AppData()->DataShardConfig.GetEnableHnswMvcc()) {
+        if (!shard.IsFollower()) {
+            return !state.ReadVersion.IsMax();
+        }
+        const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
+        return repeatable && state.ReadVersion <= edge;
+    }
     if (!shard.IsFollower()) {
         return state.IsHeadRead;
     }
@@ -1285,18 +1297,16 @@ private:
     // over-fetch until Limit unique neighbors have been found.
     THnswSearchResult SearchHnswDistinct(const TTableRange& range) const {
         const auto& topK = *State.VectorTopK;
-        // Each overlay entry may be invisible at this read's MVCC version.
-        // Bounded over-fetch compensates for all such entries without turning
-        // a single mutation into a full-graph search.
+        // Search resolves vector versions and tombstones before selecting K.
+        // Only posting-key deduplication may require additional candidates here.
         const size_t maxCandidates = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
         size_t requested = Min(maxCandidates, static_cast<size_t>(topK.Limit));
-        requested += Min(topK.HnswIndex->ChangeCount(), maxCandidates - requested);
         if (!topK.DistinctColumns.empty()) {
             requested = Min(maxCandidates, Max<size_t>(requested * 2, 32));
         }
 
         while (true) {
-            auto candidates = topK.HnswIndex->Search(topK.Target, requested);
+            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
 
             THnswSearchResult inRange;
             for (auto& candidate : candidates.Results) {
@@ -1330,7 +1340,7 @@ private:
             if (!keysOnly) {
                 // This is not expected for vector-index plans. Search all rows
                 // so MaterializeHnswResults can safely deduplicate by values.
-                return topK.HnswIndex->Search(topK.Target, maxCandidates);
+                return topK.HnswIndex->Search(topK.Target, maxCandidates, State.ReadVersion);
             }
 
             THnswSearchResult unique;
@@ -1365,6 +1375,7 @@ private:
         if (!topK.FollowerHnswSnapshot
                 || topK.FollowerHnswSnapshot->first != txc.DB.Head(TableInfo.LocalTid)
                 || topK.FollowerHnswSnapshot->second != State.ReadVersion
+                || !topK.HnswIndex->CanRead(State.ReadVersion)
                 || topK.HnswIndex->HasChanges()) {
             return false;
         }
@@ -1391,7 +1402,7 @@ private:
             const TSerializedCellVec key(serializedKey);
             TString vector;
             if (key.GetCells().size() != TableInfo.KeyColumnCount
-                    || !topK.HnswIndex->GetVector(serializedKey, vector)) {
+                    || !topK.HnswIndex->GetVector(serializedKey, vector, State.ReadVersion)) {
                 return false;
             }
             TVector<TCell> cells;
@@ -1480,9 +1491,18 @@ private:
         // restricted prefix/range. A range covering the entire local shard is
         // safe: a distributed full scan is clipped to each shard's key bounds.
         if (CanUseHnsw(*Self, State) && State.VectorTopK && State.VectorTopK->HnswIndex
+                && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)
                 && TableInfo.CoversFullShard(tableRange)) {
             auto results = SearchHnswDistinct(tableRange);
-            return MaterializeHnswResults(results, txc);
+            // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
+            // the exact path when it cannot supply enough visible neighbors.
+            if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
+                return MaterializeHnswResults(results, txc);
+            }
+            Self->RegisterHnswFallback(TableInfo.LocalTid, TDataShard::EHnswFallback::Candidates);
+        } else if (State.VectorTopK && State.VectorTopK->HnswIndex
+                && !TableInfo.CoversFullShard(tableRange)) {
+            Self->RegisterHnswFallback(TableInfo.LocalTid, TDataShard::EHnswFallback::PartialRange);
         }
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();
@@ -2800,15 +2820,17 @@ public:
                 hnswSettings = *TableInfo.HnswSettings;
             }
             const bool canUseHnsw = CanUseHnsw(*Self, state);
+            if (!canUseHnsw) {
+                Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
+            }
             if (canUseHnsw && Self->IsFollower()) {
                 Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion);
             }
-            // A head-built graph cannot provide candidates that existed only
-            // at an older MVCC version. Snapshot reads therefore stay on the
-            // exact table iterator path.
+            // Select a generation whose base and committed journal cover this read.
+            Self->PruneHnswIndexes();
             if (canUseHnsw) {
                 if (auto cached = Self->GetHnswIndex(localTid, vectorColumnTag,
-                        hnswSettings, useCachedHnswParameters)) {
+                        hnswSettings, useCachedHnswParameters, state.ReadVersion)) {
                     Self->RegisterHnswCacheLookup(localTid, true);
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                         Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
@@ -2821,40 +2843,50 @@ public:
                     Self->RegisterHnswCacheLookup(localTid, false);
                 }
             }
+            const auto buildVersion = Self->IsFollower() ? state.ReadVersion : Self->GetHnswBuildVersion();
             if (!topState->HnswIndex
                     && canUseHnsw
+                    && (Self->IsFollower() || !Self->GetHnswIndex(localTid, vectorColumnTag,
+                        hnswSettings, useCachedHnswParameters))
+                    && (Self->IsFollower() || buildVersion < Self->Pipeline.GetUnreadableEdge())
                     && Self->GetHnswCacheMemoryLimit() != 0
                     && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
-                        hnswSettings)) {
-                // Compatibility/restart path: eager construction only runs at
-                // index finalization, so an index created before deployment or
-                // lost on tablet restart must be reconstructed on demand.
-                bool pageFault = false;
-                ui64 reservedBytes = 0;
-                std::shared_ptr<void> memoryReservation;
-                auto vectors = ScanVectorColumnForHnsw(
-                    txc, TableInfo, vectorColumnTag, hnswSettings,
-                    *Self, memoryReservation, reservedBytes, pageFault,
-                    Self->IsFollower() ? state.ReadVersion : TRowVersion::Max());
-                if (pageFault) {
-                    Self->DeferHnswIndexBuild(localTid, TDuration::MilliSeconds(500));
-                } else if (!memoryReservation) {
-                    // Splits and replica builds can temporarily retain other
-                    // graphs. Retry after their reservations are released.
-                    Self->DeferHnswIndexBuild(localTid, TDuration::Seconds(5));
-                } else if (vectors.empty()
-                        || vectors.size() < GetHnswMinRows(hnswSettings)) {
-                    Self->DisableHnswIndexBuild(localTid);
+                        hnswSettings, buildVersion)) {
+                Self->TrackHnswOpenTransactions(localTid, txc.DB);
+                if (!Self->IsFollower() && AppData()->DataShardConfig.GetEnableHnswMvcc()) {
+                    Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
                 } else {
-                    const ui64 rowCount = vectors.size();
-                    auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
-                        vectorColumnTag, rowCount,
-                        hnswSettings, std::move(vectors),
-                        std::move(memoryReservation), reservedBytes);
-                    const TActorId actorId = ctx.Register(
-                        actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
-                    Self->Actors.insert(actorId);
+                    // Compatibility/restart path: eager construction only runs at
+                    // index finalization, so an index created before deployment or
+                    // lost on tablet restart must be reconstructed on demand.
+                    bool pageFault = false;
+                    ui64 reservedBytes = 0;
+                    std::shared_ptr<void> memoryReservation;
+                    auto vectors = ScanVectorColumnForHnsw(
+                        txc, TableInfo, vectorColumnTag, hnswSettings,
+                        *Self, memoryReservation, reservedBytes, pageFault,
+                        buildVersion);
+                    if (pageFault) {
+                        Self->DeferHnswIndexBuild(localTid, TDuration::MilliSeconds(500));
+                    } else if (!memoryReservation) {
+                        // Splits and replica builds can temporarily retain other
+                        // graphs. Retry after their reservations are released.
+                        Self->DeferHnswIndexBuild(localTid, TDuration::Seconds(5));
+                    } else if (vectors.empty()
+                            || vectors.size() < GetHnswMinRows(hnswSettings)) {
+                        Self->DisableHnswIndexBuild(localTid);
+                    } else {
+                        const ui64 rowCount = vectors.size();
+                        auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
+                            vectorColumnTag, rowCount,
+                            hnswSettings, std::move(vectors),
+                            std::move(memoryReservation), reservedBytes, buildVersion,
+                            Self->GetHnswBuildToken(localTid));
+                        const TActorId actorId = ctx.Register(
+                            actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
+                        Self->Actors.insert(actorId);
+                    }
                 }
             }
             state.VectorTopK = std::move(topState);

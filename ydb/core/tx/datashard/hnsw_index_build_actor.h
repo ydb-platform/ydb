@@ -24,7 +24,7 @@ NActors::IActor* CreateHnswIndexBuildWorker(
     std::vector<std::pair<TString, TString>> keysAndVectors,
     std::shared_ptr<void> memoryReservation,
     ui64 maxMemoryBytes,
-    THnswIndexBuildCallback callback);
+    THnswIndexBuildCallback callback, bool allowEmpty = false);
 
 NActors::IActor* CreateHnswIndexBuildActor(
     const NActors::TActorId& replyTo,
@@ -34,6 +34,7 @@ NActors::IActor* CreateHnswIndexBuildActor(
     const Ydb::Table::VectorIndexSettings& settings,
     std::vector<std::pair<TString, TString>> keysAndVectors,
     std::shared_ptr<void> memoryReservation,
-    ui64 maxMemoryBytes);
+    ui64 maxMemoryBytes,
+    TRowVersion baseVersion, ui64 buildToken, bool allowEmpty = false);
 
 } // namespace NKikimr::NDataShard

@@ -1880,6 +1880,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             "HNSW labeled counter names are missing: " << counterNames);
         UNIT_ASSERT_C(misses > 0, "HnswCacheMisses was not incremented");
         UNIT_ASSERT_C(hits > 0, "HnswCacheHits was not incremented");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswGenerations");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswDeltaVersions");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswRebuilds");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswCandidateFallbacks");
         UNIT_ASSERT_STRING_CONTAINS(counterGroup, "%2FRoot%2FHnswCounters");
         UNIT_ASSERT_STRING_CONTAINS(counterGroup, "%2FRoot%2FHnswCounters%2Findex");
 
@@ -2266,6 +2270,70 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 (3, "malformed");
         )"));
         UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[4]]");
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMvccPendingCommitAndRollback, Commit) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableDataShardConfig()->SetEnableHnswMvcc(true);
+        appConfig.MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto reader = db.CreateSession().GetValueSync().GetSession();
+        auto writer = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            auto result = reader.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswPending` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));
+        )"));
+        auto initial = reader.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswPending` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(initial.IsSuccess(), initial.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswPending` ADD INDEX index GLOBAL USING vector_kmeans_tree ON (emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                    levels=1, clusters=2, hnsw_min_rows=1);
+        )"));
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswPending` VIEW index
+                ORDER BY Knn::CosineDistance(emb, $target) LIMIT 1;
+        )"));
+        auto nearest = [&] {
+            auto result = reader.ExecuteDataQuery(search,
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[1]]");
+        auto pending = writer.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswPending` (pk, emb) VALUES
+                (3, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+        UNIT_ASSERT_C(pending.IsSuccess(), pending.GetIssues().ToString());
+        auto tx = pending.GetTransaction();
+        UNIT_ASSERT(tx);
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[1]]");
+        // Own writes use the transaction-aware table path until ANN conflict
+        // observation supports this context.
+        auto own = writer.ExecuteDataQuery(search, TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_C(own.IsSuccess(), own.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(own.GetResultSet(0)), "[[3]]");
+        if (Commit) {
+            const auto result = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            const auto result = tx->Rollback().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), Commit ? "[[3]]" : "[[1]]");
     }
 
     Y_UNIT_TEST(HnswCacheBypassedForMvccSnapshot) {

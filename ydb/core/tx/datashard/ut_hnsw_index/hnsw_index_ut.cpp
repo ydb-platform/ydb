@@ -482,14 +482,14 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         TString vector;
         UNIT_ASSERT(!index->GetVector("a", vector));
 
-        // The immutable graph retains erased keys. DataShard subsequently
-        // validates every candidate against the MVCC-visible posting table.
+        // Graph navigation retains the node, but a visible tombstone removes
+        // it from the result set before top-K selection.
         const auto result = index->Search(SerializeFloatVector({0.0f, 0.0f}), 2);
         THashSet<TString> keys;
         for (const auto& [key, _] : result.Results) {
             keys.insert(key);
         }
-        UNIT_ASSERT(keys.contains("a"));
+        UNIT_ASSERT(!keys.contains("a"));
         UNIT_ASSERT(keys.contains("b"));
     }
 
@@ -541,6 +541,146 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "a");
         UNIT_ASSERT_DOUBLES_EQUAL(result.Results.front().second, 0.0, 1e-6);
     }
+    Y_UNIT_TEST(MvccIntermediateInsertSurvivesLaterDelete) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        auto index = THnswIndex::Build(settings, {{"base", SerializeFloatVector({10, 10})}}, 0, error);
+        UNIT_ASSERT_C(index, error);
+        auto changes = std::make_shared<THnswIndexChanges>();
+        index->SetSnapshot({100, 0}, changes);
+        const auto near = SerializeFloatVector({0, 0});
+        changes->Set("inserted", {120, 0}, near);
+        changes->Set("inserted", {160, 0}, std::nullopt);
+        UNIT_ASSERT(!index->Search(near, 1, {99, 0}).Covered);
+        UNIT_ASSERT_VALUES_EQUAL(index->Search(near, 1, {119, 0}).Results.front().first, "base");
+        UNIT_ASSERT_VALUES_EQUAL(index->Search(near, 1, {120, 0}).Results.front().first, "inserted");
+        UNIT_ASSERT_VALUES_EQUAL(index->Search(near, 1, {159, 0}).Results.front().first, "inserted");
+        UNIT_ASSERT_VALUES_EQUAL(index->Search(near, 1, {160, 0}).Results.front().first, "base");
+        TString vector;
+        UNIT_ASSERT(index->GetVector("inserted", vector, {150, 0}));
+        UNIT_ASSERT_VALUES_EQUAL(vector, near);
+        UNIT_ASSERT(!index->GetVector("inserted", vector, {170, 0}));
+    }
+
+    Y_UNIT_TEST(MvccRanksOnlyVisibleVector) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        const auto target = SerializeFloatVector({0, 0});
+        auto index = THnswIndex::Build(settings,
+            {{"a", target}, {"b", SerializeFloatVector({1, 0})}}, 0, error);
+        UNIT_ASSERT_C(index, error);
+        index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
+        UNIT_ASSERT(index->Upsert("a", SerializeFloatVector({20, 0}), {120, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(index->Search(target, 1, {120, 0}).Results.front().first, "a");
+        UNIT_ASSERT_VALUES_EQUAL(index->Search(target, 1, {120, 1}).Results.front().first, "b");
+        index->Erase("b", {140, 0});
+        const auto results = index->Search(target, 1, {150, 0});
+        UNIT_ASSERT_VALUES_EQUAL(results.Results.front().first, "a");
+        UNIT_ASSERT_DOUBLES_EQUAL(results.Results.front().second, 20, 1e-5);
+    }
+
+    Y_UNIT_TEST(MvccOutOfOrderAndSameVersionWrites) {
+        THnswIndexChanges changes;
+        changes.Set("key", {120, 2}, TString("second"));
+        changes.Set("key", {120, 1}, TString("first"));
+        changes.Set("key", {120, 2}, TString("replacement"));
+        UNIT_ASSERT_VALUES_EQUAL(changes.Rows.at("key").size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(changes.GetVersionCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(changes.GetEstimatedBytes(),
+            THnswIndexChanges::EstimateBytes("key", 5) + THnswIndexChanges::EstimateBytes("key", 11));
+        UNIT_ASSERT_VALUES_EQUAL(*changes.Find("key", {120, 1}, {100, 0})->Vector, "first");
+        UNIT_ASSERT_VALUES_EQUAL(*changes.Find("key", {120, 2}, {100, 0})->Vector, "replacement");
+        UNIT_ASSERT(!changes.Find("key", {120, 0}, {100, 0}));
+        UNIT_ASSERT(!changes.Find("key", {120, 2}, {120, 2}));
+    }
+
+    Y_UNIT_TEST(MvccGenerationsShareHistoryAndRespectCoverage) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        const auto oldVector = SerializeFloatVector({10, 0});
+        const auto newVector = SerializeFloatVector({0, 0});
+        TString error;
+        auto old = THnswIndex::Build(settings, {{"a", oldVector}}, 0, error);
+        auto current = THnswIndex::Build(settings, {{"a", newVector}}, 0, error);
+        UNIT_ASSERT(old && current);
+        auto changes = std::make_shared<THnswIndexChanges>();
+        old->SetSnapshot({100, 0}, changes);
+        changes->Set("a", {120, 0}, newVector);
+        current->SetSnapshot({150, 0}, changes);
+        changes->Set("a", {170, 0}, std::nullopt);
+        TString vector;
+        UNIT_ASSERT(old->GetVector("a", vector, {110, 0}));
+        UNIT_ASSERT_VALUES_EQUAL(vector, oldVector);
+        UNIT_ASSERT(old->GetVector("a", vector, {140, 0}));
+        UNIT_ASSERT_VALUES_EQUAL(vector, newVector);
+        UNIT_ASSERT(!current->CanRead({140, 0}));
+        UNIT_ASSERT(current->GetVector("a", vector, {160, 0}));
+        UNIT_ASSERT_VALUES_EQUAL(vector, newVector);
+        old.reset();
+        changes->PruneThrough({150, 0});
+        UNIT_ASSERT_VALUES_EQUAL(changes->Rows.at("a").size(), 1);
+        UNIT_ASSERT(current->GetVector("a", vector, {160, 0}));
+        UNIT_ASSERT(!current->GetVector("a", vector, {170, 0}));
+        changes->Valid = false;
+        UNIT_ASSERT(!current->CanRead({160, 0}));
+    }
+
+    Y_UNIT_TEST(MvccRebuildThresholdCountsDistinctKeys) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        const auto vector = SerializeFloatVector({0, 0});
+        auto index = THnswIndex::Build(settings, {{"a", vector}, {"b", vector}}, 0, error);
+        UNIT_ASSERT_C(index, error);
+        index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
+        UNIT_ASSERT(!index->NeedsRebuild(0));
+        index->Upsert("new", vector, {120, 0});
+        UNIT_ASSERT(!index->NeedsRebuild(50));
+        UNIT_ASSERT(index->NeedsRebuild(49));
+        index->Upsert("new", vector, {130, 0});
+        UNIT_ASSERT_VALUES_EQUAL(index->ChangeCount(), 1);
+        UNIT_ASSERT(!index->NeedsRebuild(50));
+        index->Erase("a", {140, 0});
+        UNIT_ASSERT(index->NeedsRebuild(50));
+    }
+
+    Y_UNIT_TEST(MvccPruneReleasesVersionReservations) {
+        THnswIndexChanges changes;
+        auto reservation = std::make_shared<int>(0);
+        std::weak_ptr<int> weak = reservation;
+        changes.Set("key", {120, 0}, TString("vector"), std::move(reservation));
+        changes.Set("key", {140, 0}, std::nullopt);
+        changes.PruneThrough({119, 0});
+        UNIT_ASSERT(!weak.expired());
+        changes.PruneThrough({120, 0});
+        UNIT_ASSERT(weak.expired());
+        UNIT_ASSERT(!changes.Find("key", {140, 0}, {120, 0})->Vector);
+        changes.PruneThrough({140, 0});
+        UNIT_ASSERT(changes.Rows.empty());
+        UNIT_ASSERT_VALUES_EQUAL(changes.GetVersionCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(changes.GetEstimatedBytes(), 0);
+    }
+
+    Y_UNIT_TEST(MvccEmptyGenerationAcceptsNewVectors) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        auto index = THnswIndex::Build(settings, {}, 0, error, true);
+        UNIT_ASSERT_C(index, error);
+        index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
+        const auto target = SerializeFloatVector({1, 0});
+        UNIT_ASSERT(index->Search(target, 1, {100, 0}).Results.empty());
+        UNIT_ASSERT(index->Upsert("new", target, {120, 0}));
+        UNIT_ASSERT(index->Search(target, 1, {119, 0}).Results.empty());
+        const auto results = index->Search(target, 1, {120, 0});
+        UNIT_ASSERT_VALUES_EQUAL(results.Results.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(results.Results[0].first, "new");
+        UNIT_ASSERT(index->NeedsRebuild(99));
+        UNIT_ASSERT(!index->NeedsRebuild(100));
+    }
+
 }
 
 } // namespace NKikimr::NDataShard

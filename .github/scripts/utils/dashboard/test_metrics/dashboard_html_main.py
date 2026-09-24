@@ -601,6 +601,24 @@ def build_html_dashboard(
       if (!Number.isFinite(ms)) return String(xDisp);
       return _getFormatter(true).format(new Date(ms));
     }}
+    function hoverInstantMs(point) {{
+      if (!point) return null;
+      const idx = Number(point.pointNumber);
+      const xs = point.data && Array.isArray(point.data.x) ? point.data.x : null;
+      if (xs && Number.isFinite(idx) && idx >= 0 && idx < xs.length) {{
+        const fromTrace = _toMs(xs[Math.floor(idx)]);
+        if (fromTrace != null) return fromTrace;
+      }}
+      const raw = String(point.x || '').trim();
+      if (!raw) return null;
+      if (raw.endsWith('Z') || raw.includes('T')) return _toMs(raw);
+      return _toMs(raw.replace(' ', 'T') + 'Z');
+    }}
+    function formatPointTime(point) {{
+      const ms = hoverInstantMs(point);
+      if (ms == null) return formatTimeLabel(point && point.x);
+      return _getFormatter(true).format(new Date(ms));
+    }}
     function formatAbsSecLabel(sec) {{
       const n = Number(sec);
       if (!Number.isFinite(n)) return '';
@@ -696,9 +714,9 @@ def build_html_dashboard(
         tickmode: tickVals ? 'array' : 'auto',
         tickvals: tickVals || undefined,
         ticktext: tickText || undefined,
-        // Plotly formats date hovers in UTC. The title is replaced in plotly_hover.
+        // Empty text is falsy, so Plotly falls back to a UTC title. A fixed token is always drawn and rewritten to the selected zone.
         hoverformat: '',
-        unifiedhovertitle: {{ text: '' }},
+        unifiedhovertitle: {{ text: 'TIME' }},
       }};
     }}
     function applyTimezoneToAllCharts() {{
@@ -724,7 +742,7 @@ def build_html_dashboard(
           'xaxis.tickvals': ax.tickvals,
           'xaxis.ticktext': ax.ticktext,
           'xaxis.hoverformat': '',
-          'xaxis.unifiedhovertitle.text': '',
+          'xaxis.unifiedhovertitle.text': 'TIME',
           'hoverdistance': -1,
           'spikedistance': -1,
         }});
@@ -736,23 +754,6 @@ def build_html_dashboard(
       applyMarkersToCharts();
       if (window.renderSuggestionsTable) {{
         window.renderSuggestionsTable();
-      }}
-      if (data.resources_overlay) {{
-        setTimeout(() => {{
-          for (const id of ['cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite']) {{
-            const el = document.getElementById(id);
-            if (!el || !el.data || !window.Plotly) continue;
-            const indices = [];
-            const customdatas = [];
-            el.data.forEach((tr, i) => {{
-              if (tr && tr.name === 'hover-time' && Array.isArray(tr.x)) {{
-                indices.push(i);
-                customdatas.push((tr.x || []).map(v => formatTimeLabel(v)));
-              }}
-            }});
-            if (indices.length) Plotly.restyle(el, {{ customdata: customdatas }}, indices);
-          }}
-        }}, 0);
       }}
     }}
     document.getElementById('stats').textContent = JSON.stringify(data.stats, null, 2);
@@ -1686,16 +1687,7 @@ def build_html_dashboard(
     function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
       const names = Object.keys(tracks);
       const xDisp = (xs || []).map(xToDisplay);
-      const traces = [{{
-        x: xDisp,
-        y: xDisp.map(() => 0),
-        customdata: xDisp.map(formatTimeLabel),
-        mode: 'markers',
-        marker: {{ size: 0, color: 'rgba(0,0,0,0)' }},
-        name: 'hover-time',
-        showlegend: false,
-        hovertemplate: '%{{customdata}}<extra></extra>',
-      }}].concat(names.map((n) => {{
+      const traces = names.map((n) => {{
         const c = colorForTrack(n);
         return {{
           x: xDisp,
@@ -1708,7 +1700,7 @@ def build_html_dashboard(
           stackgroup: 'one',
           hoverinfo: 'none',
         }};
-      }}));
+      }});
       Plotly.newPlot(divId, traces, {{
         title,
         xaxis: axisLayout(xDisp),
@@ -1740,7 +1732,9 @@ def build_html_dashboard(
       if (!plot || !panel) return;
       plot.on('plotly_hover', (ev) => {{
         if (!ev || !ev.points || !ev.points.length) return;
-        const t = ev.points[0].x;
+        const point = ev.points[0];
+        const t = point.x;
+        const label = formatPointTime(point);
         const eps = minVisibleValue(unit);
         const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
         const isMonitor = (n) => n && n.includes('(monitor)');
@@ -1750,17 +1744,17 @@ def build_html_dashboard(
           .sort((a, b) => b.y - a.y);
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
-        panel.textContent = `t=${{formatTimeLabel(t)}}\\n` + lines.join('\\n');
+        panel.textContent = `t=${{label}}\\n` + lines.join('\\n');
         const paint = () => {{
-          const label = formatTimeLabel(t);
           plot.querySelectorAll('.hoverlayer text, .hoverlayer tspan').forEach((node) => {{
             if (node.childElementCount) return;
-            const raw = (node.textContent || '').trim();
-            if (/\\d{{1,2}}:\\d{{2}}:\\d{{2}}/.test(raw) && /\\d{{4}}/.test(raw)) node.textContent = label;
+            if ((node.textContent || '').trim() === 'TIME') node.textContent = label;
           }});
         }};
         paint();
+        requestAnimationFrame(paint);
         setTimeout(paint, 0);
+        setTimeout(paint, 50);
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
@@ -1790,7 +1784,7 @@ def build_html_dashboard(
       return Number.isFinite(v) ? v : null;
     }}
 
-    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null, totalAtClick=null, tSecAtClick=null) {{
+    function renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick=null, totalAtClick=null, tSecAtClick=null, timeLabel=null) {{
       const panel = document.getElementById(panelId);
       if (!panel) return;
       const top = rows.slice(0, 100);
@@ -1856,7 +1850,7 @@ def build_html_dashboard(
       const summaryBlock = (unit === 'active' || unit === 'tests') ? totalsHtml : (runningLine + totalsHtml);
       const testsHeaderHtml = showTestsColumn ? '<th>tests in active chunks</th>' : '';
       panel.innerHTML =
-        '<div><b>t=' + formatTimeLabel(t) + '</b> | rows: ' + top.length + '</div>' +
+        '<div><b>t=' + escapeHtml(timeLabel || formatTimeLabel(t)) + '</b> | rows: ' + top.length + '</div>' +
         summaryBlock +
         '<table><thead><tr><th>#</th><th>suite+chunk</th>' + testsHeaderHtml + '<th>value</th></tr></thead><tbody>' + htmlRows + '</tbody></table>';
     }}
@@ -1880,7 +1874,7 @@ def build_html_dashboard(
         const totalAtClick = unit === 'active'
           ? rows.reduce((acc, r) => acc + Number(r.y || 0), 0)
           : Number(ev.points[0]?.y);
-        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick, totalAtClick, tSecAtClick);
+        renderClickTable(plotId, panelId, rows, t, unit, monitorAtClick, totalAtClick, tSecAtClick, formatPointTime(ev.points[0]));
       }});
     }}
 
@@ -1906,7 +1900,7 @@ def build_html_dashboard(
           const t = ev.points[0].x;
           const y = Number(ev.points[0].y);
           const n = Number.isFinite(y) ? Math.round(y) : activeCountAtTime(t);
-          panel.innerHTML = '<b>t=' + formatTimeLabel(t) + '</b>: ' + (n != null ? n + ' tests (chunks) running' : '—');
+          panel.innerHTML = '<b>t=' + formatPointTime(ev.points[0]) + '</b>: ' + (n != null ? n + ' tests (chunks) running' : '—');
         }});
       }}
     }})();

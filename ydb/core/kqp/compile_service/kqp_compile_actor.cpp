@@ -5,6 +5,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/common/compilation/warmup_metadata.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
@@ -686,9 +687,20 @@ private:
         }
         meta["parameters"] = parameters;
         if (UserToken && !UserToken->GetUserSID().empty()) {
-            NJson::TJsonValue groups(NJson::JSON_ARRAY);
-            for (const auto& sid : UserToken->GetGroupSIDs()) {
-                groups.AppendValue(sid);
+            const auto groupSids = UserToken->GetGroupSIDs();
+            // Null prohibits warmup; an absent field is reserved for legacy metadata.
+            NJson::TJsonValue groups(NJson::JSON_NULL);
+            if (groupSids.size() <= MaxWarmupGroupSids) {
+                groups.SetType(NJson::JSON_ARRAY);
+                size_t bytes = 0;
+                for (const auto& sid : groupSids) {
+                    if (sid.size() > MaxWarmupGroupSidsBytes - bytes) {
+                        groups = NJson::TJsonValue(NJson::JSON_NULL);
+                        break;
+                    }
+                    bytes += sid.size();
+                    groups.AppendValue(sid);
+                }
             }
             meta["user_group_sids"] = std::move(groups);
         }

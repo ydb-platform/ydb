@@ -14,6 +14,7 @@ namespace NACLib {
 #define BUILTIN_SYSTEM_DOMAIN "system"
 
 #define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
+#define BUILTIN_ACL_WARMUP "warmup@" BUILTIN_SYSTEM_DOMAIN
 #define BUILTIN_ACL_TMP "tmp@" BUILTIN_SYSTEM_DOMAIN
 #define BUILTIN_ACL_BASIC_OWNER "owner@" BUILTIN_SYSTEM_DOMAIN
 
@@ -27,6 +28,7 @@ class TUserToken;
 class TSystemUsers {
 public:
     static const TUserToken& Metadata();
+    static const TUserToken& Warmup();
     static const TUserToken& Tmp();
 };
 

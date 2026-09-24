@@ -1,5 +1,7 @@
 #include "compile_cache.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/auth.h>
@@ -183,7 +185,7 @@ private:
             bool isDatabaseAdmin = AppData()->FeatureFlags.GetEnableDatabaseAdmin()
                 && IsDatabaseAdministrator(UserToken.Get(), DatabaseOwner);
             IsAdmin = isClusterAdmin || isDatabaseAdmin;
-            IsMetadataUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID();
+            IsWarmupUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Warmup().GetUserSID();
         }
 
         if (!MissingSchemaColumns.empty()) {
@@ -459,18 +461,11 @@ private:
     }
 
     bool CanAccessEntry(const TCompileCacheQuery& entry) const {
-        if (!UserToken || IsAdmin) {
-            return true;
-        }
-
-        // Filter by database: user can only see queries from their own database
-        if (entry.HasDatabase() && entry.GetDatabase() != DatabaseName) {
+        if (!entry.HasDatabase() || entry.GetDatabase() != DatabaseName) {
             return false;
         }
 
-        // Internal compile cache warmup fetches queries on behalf of all users
-        // in this database using the metadata system token.
-        if (IsMetadataUser) {
+        if (!UserToken || IsAdmin || IsWarmupUser) {
             return true;
         }
 
@@ -482,10 +477,19 @@ private:
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
 
-        for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
-            const auto& entry = LastResponse.GetCacheCacheQueries(idx);
+        for (auto& entry : *LastResponse.MutableCacheCacheQueries()) {
             if (!CanAccessEntry(entry)) {
                 continue;
+            }
+
+            if (!IsWarmupUser && entry.HasMetaInfo()) {
+                NJson::TJsonValue metadata;
+                if (NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata, false) && metadata.IsMap()) {
+                    metadata.EraseValue("user_group_sids");
+                    entry.SetMetaInfo(NJson::WriteJson(metadata, false));
+                } else {
+                    entry.ClearMetaInfo();
+                }
             }
 
             TVector<TCell> cells;
@@ -552,7 +556,7 @@ private:
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IsAdmin = false;
-    bool IsMetadataUser = false;
+    bool IsWarmupUser = false;
 
     static constexpr TDuration NodeRequestTimeout = TDuration::Seconds(10);
 

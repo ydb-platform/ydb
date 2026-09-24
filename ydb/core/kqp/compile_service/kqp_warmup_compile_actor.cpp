@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/compilation/events.h>
+#include <ydb/core/kqp/common/compilation/warmup_metadata.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -17,7 +18,10 @@
 
 #include <util/random/shuffle.h>
 
+#include <optional>
+
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -106,7 +110,8 @@ TString BuildNodeIdInClause(const TVector<ui32>& nodeIds) {
 class TFetchCacheActor : public TQueryBase {
 public:
     TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds)
-        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, false, true,
+            NACLib::TSystemUsers::Warmup().SerializeAsString())
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
         , NodeIds(nodeIds)
@@ -184,7 +189,8 @@ private:
 class TFetchTruncatedCountActor : public TQueryBase {
 public:
     TFetchTruncatedCountActor(const TString& database, const TVector<ui32>& nodeIds)
-        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, false, true,
+            NACLib::TSystemUsers::Warmup().SerializeAsString())
         , NodeIds(nodeIds)
     {}
 
@@ -224,38 +230,50 @@ private:
 
 namespace {
 
-TVector<NACLib::TSID> GetGroupSidsFromMetadata(
+std::optional<TVector<NACLib::TSID>> GetGroupSidsFromMetadata(
     const TString& metadata, const TString& database, const TString& userSid, bool& warningLogged)
 {
     auto warn = [&](const TString& reason) {
-        YDB_LOG(warningLogged ? PRI_DEBUG : PRI_WARN, "Invalid warmup group metadata; discarding group SIDs",
+        YDB_LOG(warningLogged ? PRI_DEBUG : PRI_WARN, "Invalid or oversized warmup group metadata; skipping query",
             {"database", database}, {"user", userSid}, {"reason", reason});
         warningLogged = true;
     };
     if (metadata.empty()) {
-        return {};
+        return TVector<NACLib::TSID>{};
     }
 
     NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(metadata, &json, false)) {
+    if (!NJson::ReadJsonTree(metadata, &json, false) || !json.IsMap()) {
         warn("Invalid JSON");
         return {};
     }
     if (!json.Has("user_group_sids")) {
-        return {};
+        return TVector<NACLib::TSID>{};
     }
     if (!json["user_group_sids"].IsArray()) {
         warn("user_group_sids is not an array");
         return {};
     }
 
+    if (json["user_group_sids"].GetArray().size() > MaxWarmupGroupSids) {
+        warn("Too many group SIDs");
+        return {};
+    }
+
     TVector<NACLib::TSID> groups;
+    size_t bytes = 0;
     for (const auto& sid : json["user_group_sids"].GetArray()) {
         if (!sid.IsString()) {
             warn(TStringBuilder() << "user_group_sids[" << groups.size() << "] is not a string");
             return {};
         }
-        groups.push_back(sid.GetString());
+        const auto& value = sid.GetString();
+        if (value.size() > MaxWarmupGroupSidsBytes - bytes) {
+            warn("Group SIDs exceed byte limit");
+            return {};
+        }
+        bytes += value.size();
+        groups.push_back(value);
     }
     return groups;
 }
@@ -608,20 +626,15 @@ private:
                 YDB_LOG_DEBUG("Query compiled successfully",
                     {"logPrefix", LogPrefix()},
                     {"user", query.UserSID},
-                    {"hasMetadata", !query.Metadata.empty()},
-                    {"queryPreview", query.QueryText.substr(0, 200)},
-                    {"queryTruncated", query.QueryText.size() > 200});
+                    {"hasMetadata", !query.Metadata.empty()});
             } else {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-                YDB_LOG(EntriesFailed ? PRI_DEBUG : PRI_WARN, "Query compilation failed",
+                const bool firstStatus = LoggedCompilationErrors.insert(record.GetYdbStatus()).second;
+                YDB_LOG(firstStatus ? PRI_WARN : PRI_DEBUG, "Query compilation failed",
                     {"logPrefix", LogPrefix()},
                     {"user", query.UserSID},
                     {"hasMetadata", !query.Metadata.empty()},
                     {"status", Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())},
-                    {"error", issues.ToOneLineString()},
-                    {"queryPreview", query.QueryText.substr(0, 200)},
-                    {"queryTruncated", query.QueryText.size() > 200});
+                    {"issueCount", record.GetResponse().GetQueryIssues().size()});
             }
             PendingQueriesByCookie.erase(it);
         } else {
@@ -682,9 +695,12 @@ private:
     {
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
+        auto groups = GetGroupSidsFromMetadata(metadata, database, userSid, InvalidGroupMetadataLogged);
+        if (!groups) {
+            return {};
+        }
         if (!userSid.empty()) {
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid,
-                GetGroupSidsFromMetadata(metadata, database, userSid, InvalidGroupMetadataLogged));
+            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, *groups);
             record.SetUserToken(userToken->SerializeAsString());
         }
 
@@ -706,15 +722,18 @@ private:
     }
 
     void SendPrepareRequest(const TEvPrivate::TQueryToCompile& query) {
-        ui64 cookie = NextCookie++;
-        PendingQueriesByCookie[cookie] = query;
-
         auto remaining = HardDeadlineTimestamp - TActivationContext::Now();
         auto timeout = std::min(Config.SoftDeadline, remaining);
         if (timeout <= TDuration::Zero()) {
             timeout = TDuration::MilliSeconds(100);
         }
 
+        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID,
+                                            timeout, query.Metadata, query.QueryType, query.Syntax);
+        if (!request) {
+            ++EntriesFailed;
+            return;
+        }
         YDB_LOG_DEBUG("Sending PREPARE request for query",
             {"logPrefix", LogPrefix()},
             {"user", query.UserSID},
@@ -722,8 +741,9 @@ private:
             {"hasMetadata", !query.Metadata.empty()},
             {"timeout", timeout});
 
-        auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID,
-                                            timeout, query.Metadata, query.QueryType, query.Syntax);
+        ui64 cookie = NextCookie++;
+        PendingQueriesByCookie[cookie] = query;
+        ++PendingCompilations;
         request->Record.MutableRequest()->SetKeepSession(false);
 
         Send(MakeKqpProxyID(SelfId().NodeId()), request.release(), 0, cookie);
@@ -735,7 +755,6 @@ private:
             QueriesToCompile.pop_front();
 
             SendPrepareRequest(query);
-            PendingCompilations++;
         }
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
@@ -831,6 +850,7 @@ private:
 
     std::deque<TEvPrivate::TQueryToCompile> QueriesToCompile;
     THashMap<ui64, TEvPrivate::TQueryToCompile> PendingQueriesByCookie;
+    THashSet<Ydb::StatusIds::StatusCode> LoggedCompilationErrors;
     ui64 NextCookie = 0;
     ui32 PendingCompilations = 0;
     ui32 FetchAttempts = 0;

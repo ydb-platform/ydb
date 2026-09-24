@@ -1594,6 +1594,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 auto m = parser.ColumnParser("Metadata").GetOptionalUtf8().value_or("");
                 NJson::TJsonValue json;
                 if (!m.empty() && NJson::ReadJsonTree(m, &json) && json.Has("parameters")) {
+                    UNIT_ASSERT(!json.Has("user_group_sids"));
                     paramsByQuery[q] = NJson::WriteJson(json["parameters"], /*formatOutput=*/false, /*sortKeys=*/true);
                 }
             }

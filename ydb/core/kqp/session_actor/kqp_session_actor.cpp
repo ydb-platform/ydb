@@ -2551,17 +2551,15 @@ public:
         }
     }
 
-    void MarkCurrentQueryStatsUpdated() {
-        QueryState->CurrentQueryStatsWindow.MarkUpdated();
-        if (!QueryState->CurrentQueryStatsPublishScheduled) {
-            QueryState->CurrentQueryStatsPublishScheduled = true;
-            Schedule(QueryState->CurrentQueryStatsInterval, new TEvents::TEvWakeup(QueryState->QueryId));
+    void ScheduleCurrentQueryStatsPublish() {
+        if (QueryState->RuntimeStats.SchedulePublish()) {
+            Schedule(QueryState->RuntimeStats.GetInterval(), new TEvents::TEvWakeup(QueryState->QueryId));
         }
     }
 
     void UpdateCurrentQueryStats(const TCurrentExecStatsReport& report) {
-        if (QueryState->CurrentQueryStats.Update(QueryState->CurrentExecutionStats, report)) {
-            MarkCurrentQueryStatsUpdated();
+        if (QueryState->RuntimeStats.Update(report)) {
+            ScheduleCurrentQueryStatsPublish();
         }
     }
 
@@ -2570,21 +2568,18 @@ public:
         if (!QueryState || ev->Get()->Tag != QueryState->QueryId) {
             return;
         }
-        QueryState->CurrentQueryStatsPublishScheduled = false;
-        if (auto current = QueryState->CurrentQueryStats.Get()) {
-            auto publish = QueryState->CurrentQueryStatsWindow.Publish(*current, TMonotonic::Now());
+        if (auto publish = QueryState->RuntimeStats.Publish(TMonotonic::Now())) {
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,
-                ++QueryState->CurrentQueryStatsSequenceNo, std::move(publish.Snapshot)));
-            if (publish.ScheduleStaleCheck) {
-                QueryState->CurrentQueryStatsPublishScheduled = true;
-                Schedule(QueryState->CurrentQueryStatsInterval, new TEvents::TEvWakeup(QueryState->QueryId));
+                publish->SequenceNo, std::move(publish->Stats)));
+            if (publish->ScheduleStaleCheck) {
+                Schedule(QueryState->RuntimeStats.GetInterval(), new TEvents::TEvWakeup(QueryState->QueryId));
             }
         }
     }
 
     void FinishCurrentExecutionStats() {
-        if (QueryState->CurrentQueryStats.Finish(QueryState->CurrentExecutionStats)) {
-            MarkCurrentQueryStatsUpdated();
+        if (QueryState->RuntimeStats.Finish()) {
+            ScheduleCurrentQueryStatsPublish();
         }
     }
 

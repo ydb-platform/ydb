@@ -1583,7 +1583,12 @@ TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
     if (finished) {
         current.ComputeMemoryBytes = 0;
     }
-    return {current, ++CurrentStatsSequenceNo};
+    return {{
+        .CpuTimeUs = current.CpuTimeUs,
+        .ComputeMemoryBytes = current.ComputeMemoryBytes,
+        .ReadIngressBytes = current.ReadIngressBytes,
+        .ObservedPeakComputeMemoryBytes = current.ObservedPeakComputeMemoryBytes,
+    }, ++CurrentStatsSequenceNo};
 }
 
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {

@@ -100,7 +100,7 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View() const {
 
 TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View(TInstant now) const {
     const TDuration promotionTime = TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
-    return View(PromotionCutoffStep(now, promotionTime));
+    return ViewPromotedUpToStep(PromotionCutoffStep(now, promotionTime));
 }
 
 TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::ViewPromotedUpToStep(ui64 maxSnapshotStep) const {

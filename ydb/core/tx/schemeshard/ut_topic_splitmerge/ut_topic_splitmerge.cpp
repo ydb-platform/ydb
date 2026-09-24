@@ -1984,10 +1984,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         UNIT_ASSERT_VALUES_EQUAL(4, topicDone.PartitionsSize());
     } // Y_UNIT_TEST(DescribeDuringMergeAlterKeepsOpenEndedActive)
 
-    // A partition can be version-visible (CreateVersion / AlterVersion at or below the
-    // committed topic version) while its id is already >= NextPartitionId. Describe used
-    // to Y_VERIFY and kill SchemeShard. It must omit those ids and keep the committed range.
-    Y_UNIT_TEST(DescribeOmitsPartitionsAtOrPastNextPartitionId) {
+    // A committed partition can have PqId >= NextPartitionId when the counter lags.
+    // Describe used to Y_VERIFY and kill SchemeShard. Dropping those ids instead leaves
+    // no open-ended range and moves the crash into TBoundaryChooser on the writer.
+    // Keep every version-visible partition so routing stays complete.
+    Y_UNIT_TEST(DescribeKeepsCommittedPartitionsWhenNextPartitionIdLags) {
         TTestBasicRuntime runtime;
         TSchemeShard* schemeshard = nullptr;
         TTestEnvOptions opts;
@@ -2016,17 +2017,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
 
         auto described = DescribeTopic(runtime);
         UNIT_ASSERT_VALUES_EQUAL(1, described.GetNextPartitionId());
-        UNIT_ASSERT_VALUES_EQUAL(1, described.PartitionsSize());
-        UNIT_ASSERT_VALUES_EQUAL(0, described.GetPartitions(0).GetPartitionId());
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
-            static_cast<int>(described.GetPartitions(0).GetStatus()));
-        for (const auto& p : described.GetPartitions()) {
-            UNIT_ASSERT_C(p.GetPartitionId() < described.GetNextPartitionId(),
-                "describe published partition " << p.GetPartitionId()
-                << " at or past NextPartitionId " << described.GetNextPartitionId());
+        UNIT_ASSERT_VALUES_EQUAL(before.PartitionsSize(), described.PartitionsSize());
+        THashSet<ui32> beforeIds;
+        THashSet<ui32> describedIds;
+        for (const auto& p : before.GetPartitions()) {
+            beforeIds.insert(p.GetPartitionId());
         }
-    } // Y_UNIT_TEST(DescribeOmitsPartitionsAtOrPastNextPartitionId)
+        for (const auto& p : described.GetPartitions()) {
+            describedIds.insert(p.GetPartitionId());
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                static_cast<int>(p.GetStatus()));
+        }
+        UNIT_ASSERT_C(beforeIds == describedIds,
+            "lagging NextPartitionId must not drop committed partitions");
+        ValidateDescribeUsableByBoundaryChooser(described);
+    } // Y_UNIT_TEST(DescribeKeepsCommittedPartitionsWhenNextPartitionIdLags)
 
     // Split a bounded partition. The open-ended tail must stay Active, and children
     // allocated at NextPartitionId must stay hidden until FinishAlter.

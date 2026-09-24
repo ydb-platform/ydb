@@ -19,37 +19,33 @@
 
 namespace NYql {
 
-struct TDqStageStats {
-    i64 InputRows = 0;
-    i64 OutputRows = 0;
-    i64 InputBytes = 0;
-    i64 OutputBytes = 0;
-    i64 IngressRows = 0;
-    i64 IngressBytes = 0;
-    i64 EgressRows = 0;
-    i64 EgressBytes = 0;
-
-    THashMap<TString, i64> ToMap() const {
-        return {
-            {"input_rows", InputRows},
-            {"output_rows", OutputRows},
-            {"input_bytes", InputBytes},
-            {"output_bytes", OutputBytes},
-            {"ingress_rows", IngressRows},
-            {"ingress_bytes", IngressBytes},
-            {"egress_rows", EgressRows},
-            {"egress_bytes", EgressBytes},
-        };
-    }
-
-    bool operator == (const TDqStageStats& other) const = default;
-};
-
-std::unordered_map<ui64, TDqStageStats> ExtractDqStagesStats(const TOperationStatistics& statistics);
-
 class IDqGateway : public TThrRefBase {
 public:
-    using TStageStats = TDqStageStats;
+    struct TStageStats {
+        i64 InputRows = 0;
+        i64 OutputRows = 0;
+        i64 InputBytes = 0;
+        i64 OutputBytes = 0;
+        i64 IngressRows = 0;
+        i64 IngressBytes = 0;
+        i64 EgressRows = 0;
+        i64 EgressBytes = 0;
+
+        THashMap<TString, i64> ToMap() const {
+            return {
+                {"input_rows", InputRows},
+                {"output_rows", OutputRows},
+                {"input_bytes", InputBytes},
+                {"output_bytes", OutputBytes},
+                {"ingress_rows", IngressRows},
+                {"ingress_bytes", IngressBytes},
+                {"egress_rows", EgressRows},
+                {"egress_bytes", EgressBytes},
+            };
+        }
+
+        bool operator == (const TStageStats& other) const = default;
+    };
 
     using TPtr = TIntrusivePtr<IDqGateway>;
     using TFileResource = Yql::DqsProto::TFile;
@@ -125,5 +121,7 @@ public:
 
     virtual void Stop() { }
 };
+
+std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOperationStatistics& statistics);
 
 } // namespace NYql

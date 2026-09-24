@@ -11,8 +11,8 @@ namespace NYql {
 
 using namespace std::string_view_literals;
 
-std::unordered_map<ui64, TDqStageStats> ExtractDqStagesStats(const TOperationStatistics& statistics) {
-    std::unordered_map<ui64, TDqStageStats> ret;
+std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOperationStatistics& statistics) {
+    std::unordered_map<ui64, IDqGateway::TStageStats> ret;
     for (const auto& entry : statistics.Entries) {
         if (!entry.Sum) {
             continue;

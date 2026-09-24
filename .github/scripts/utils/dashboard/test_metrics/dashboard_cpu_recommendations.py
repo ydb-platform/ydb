@@ -19,19 +19,6 @@ def _status_bucket() -> dict[str, int]:
     return {"total": 0, "passed": 0, "errors": 0, "timeouts": 0, "muted": 0, "muted_timeouts": 0, "fails_total": 0, "skipped": 0}
 
 
-def _round_cpu_tier(cores: float) -> int:
-    """Round up to runner-friendly tier: 1, 2, 4, 8, 16."""
-    if cores <= 1:
-        return 1
-    if cores <= 2:
-        return 2
-    if cores <= 4:
-        return 4
-    if cores <= 8:
-        return 8
-    return 16
-
-
 def _round_cpu_up(cores: float, tiers: tuple[int, ...]) -> int:
     """Round a fractional core count up to the next allowed cpu tier."""
     for tier in tiers:
@@ -390,7 +377,7 @@ def build_cpu_recommendations(
             }
             test_status = _status_bucket()
 
-        base_recommended = _round_cpu_tier(p95_c)
+        base_recommended = _round_cpu_up(p95_c, mem_cpu_tiers)
         req = (requirements_cache or {}).get(suite, {})
         ya_cpu = req.get("cpu_cores")
         ya_ram = req.get("ram_gb")
@@ -405,15 +392,9 @@ def build_cpu_recommendations(
         size_u_cap = str(ya_size or "").upper()
         long_test_threshold_sec = _size_duration_threshold_sec(size_u_cap)
         max_test_duration_sec = float((max_test_duration_sec_by_suite or {}).get(suite, 0.0) or 0.0)
-        # Long test duration and timeouts drive SPLIT, not CPU. CPU is derived only
-        # from observed p95 cores per chunk. long_test_boost_applied is kept as a
-        # "long test present" flag for size-cap hints and the optional maximize
-        # policy, but it no longer changes the recommended CPU tier.
         long_test_boost_applied = max_test_duration_sec >= float(long_test_threshold_sec)
         recommended = base_recommended
         timeout_tests_count = int(test_status.get("timeouts", 0) or 0)
-        # Timeouts no longer inflate CPU; kept False for output compatibility.
-        timeout_2x_boost_applied = False
         small_cap_applied = size_u_cap == "SMALL" and recommended > 1
         medium_cap_applied = size_u_cap == "MEDIUM" and recommended > 4
         if small_cap_applied:
@@ -966,7 +947,6 @@ def build_cpu_recommendations(
             "recommended_cpu": recommended_req,
             "recommended_cpu_base": base_recommended,
             "recommended_cpu_timeout_boost": long_test_boost_applied,
-            "recommended_cpu_timeout_2x_boost": timeout_2x_boost_applied,
             "recommended_cpu_timeout_max_policy_applied": timeout_max_policy_applied,
             "recommended_cpu_timeout_max_policy_value": timeout_max_value,
             "recommended_cpu_small_cap_applied": small_cap_applied,

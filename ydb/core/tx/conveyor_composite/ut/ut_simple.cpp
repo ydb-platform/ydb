@@ -225,6 +225,10 @@ public:
 
 Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     Y_UNIT_TEST(ProcessGuardMovePreservesProcessState) {
+        THashMap<ui64, ui32> registrations;
+        THashMap<ui64, ui32> tasks;
+        THashMap<ui64, ui32> unregistrations;
+        const NKikimr::NKqp::NScheduler::NHdrf::TFullPoolId pool{"database", "pool"};
         NActors::TTestActorRuntime runtime;
         runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
@@ -232,13 +236,13 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         const auto serviceEdge = runtime.AllocateEdgeActor();
         runtime.RegisterService(serviceId, serviceEdge);
 
-        THashMap<ui64, ui32> registrations;
-        THashMap<ui64, ui32> tasks;
-        THashMap<ui64, ui32> unregistrations;
-        const NKqp::NScheduler::NHdrf::TFullPoolId pool{"database", "pool"};
-        auto registrationObserver = runtime.AddObserver<TEvExecution::TEvRegisterProcess>([&](auto& ev) {
-            if (ev->Recipient == serviceId) {
-                const auto& request = *ev->Get();
+        // Count sends: edge-mailbox observers can see the same queued event repeatedly.
+        runtime.SetEventFilter([&, serviceId](NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle>& ev) {
+            if (ev->Recipient != serviceId) {
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvExecution::TEvRegisterProcess::EventType) {
+                const auto& request = *ev->Get<TEvExecution::TEvRegisterProcess>();
                 ++registrations[request.GetInternalProcessId()];
                 if (request.GetScopeId() == "active") {
                     UNIT_ASSERT_VALUES_EQUAL(request.GetTxId(), 42);
@@ -246,17 +250,12 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
                 } else {
                     UNIT_ASSERT(!request.GetSchedulerPool());
                 }
+            } else if (ev->GetTypeRewrite() == TEvExecution::TEvNewTask::EventType) {
+                ++tasks[ev->Get<TEvExecution::TEvNewTask>()->GetInternalProcessId()];
+            } else if (ev->GetTypeRewrite() == TEvExecution::TEvUnregisterProcess::EventType) {
+                ++unregistrations[ev->Get<TEvExecution::TEvUnregisterProcess>()->GetInternalProcessId()];
             }
-        });
-        auto taskObserver = runtime.AddObserver<TEvExecution::TEvNewTask>([&](auto& ev) {
-            if (ev->Recipient == serviceId) {
-                ++tasks[ev->Get()->GetInternalProcessId()];
-            }
-        });
-        auto unregistrationObserver = runtime.AddObserver<TEvExecution::TEvUnregisterProcess>([&](auto& ev) {
-            if (ev->Recipient == serviceId) {
-                ++unregistrations[ev->Get()->GetInternalProcessId()];
-            }
+            return false;
         });
 
         TAtomicCounter taskCounter;

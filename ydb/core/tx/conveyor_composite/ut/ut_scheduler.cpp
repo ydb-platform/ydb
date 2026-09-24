@@ -130,8 +130,7 @@ namespace NKikimr::NConveyorComposite {
                 Runtime.SetEventFilter([this](NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle>& ev) {
                     using namespace NKqp::NScheduler;
                     const auto type = ev->GetTypeRewrite();
-                    HdrfEvents += type == TEvAddDatabase::EventType || type == TEvAddPool::EventType
-                        || type == TEvAddQuery::EventType || type == TEvRemoveQuery::EventType;
+                    HdrfEvents += type == TEvAddDatabase::EventType || type == TEvAddPool::EventType || type == TEvAddQuery::EventType || type == TEvRemoveQuery::EventType;
                     if (type == TEvAddQuery::EventType) {
                         ++Adds[ev->Get<TEvAddQuery>()->QueryId];
                     } else if (type == TEvRemoveQuery::EventType) {
@@ -152,8 +151,7 @@ namespace NKikimr::NConveyorComposite {
             void RegisterProcess(const ui64 processId, const TSchedulerQueryIdentity& identity,
                                  const ESpecialTaskCategory category = ESpecialTaskCategory::Scan, const TString& scopeId = "scope", double scopeLimit = 1000) {
                 const auto schedulerPool = identity.IsServiceQuery ? std::nullopt : std::make_optional(MakeSchedulerPool());
-                Runtime.Send(Distributor, Sink, new TEvExecution::TEvRegisterProcess(
-                    TCPULimitsConfig(scopeLimit), category, scopeId, processId, identity.QueryId, schedulerPool));
+                Runtime.Send(Distributor, Sink, new TEvExecution::TEvRegisterProcess(TCPULimitsConfig(scopeLimit), category, scopeId, processId, identity.QueryId, schedulerPool));
             }
 
             void SendQueryResponse(const NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr& query) {
@@ -183,7 +181,7 @@ namespace NKikimr::NConveyorComposite {
                 auto& result = *results.front()->Get();
                 // Feed a deterministic delivery estimate through the normal accounting event.
                 auto delayed = MakeHolder<TEvInternal::TEvTaskProcessedResult>(result.DetachResults(),
-                    TDuration::Seconds(1), result.GetWorkerIdx(), result.GetWorkersPoolId(), result.GetQueryIdentity());
+                                                                               TDuration::Seconds(1), result.GetWorkerIdx(), result.GetWorkersPoolId(), result.GetQueryIdentity());
                 Runtime.Send(Distributor, results.front()->Sender, delayed.Release());
                 results.Stop().clear();
             }
@@ -264,22 +262,23 @@ namespace NKikimr::NConveyorComposite {
             fixture.WaitFor([&] { return results.size() == 1; });
             UNIT_ASSERT_VALUES_EQUAL(results.front()->Get()->GetWorkerIdx(), 0);
             fixture.UpdateConfig(BuildConfig({3, 2}, {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}}));
-            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 3);
             fixture.Submit(executed, 1);
             fixture.WaitFor([&] { return query.Query->CpuThrottle.load() == 1; });
 
             fixture.UpdateConfig(initial);
-            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 1);
             UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), 1);
             UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuThrottle.load(), 0);
             results.Stop().Unblock();
             fixture.WaitFor([&] { return executed.Val() == 2 && query.Query->GetParent()->CpuUsage.load() == 0; });
 
             fixture.UpdateConfig(BuildConfig({1, 2}, {{{ESpecialTaskCategory::Insert, 1}}, {{ESpecialTaskCategory::Scan, 1}}}));
-            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 2);
+            const auto targetPool = ParseConfig(initial).GetCategoryConfig(ESpecialTaskCategory::Insert).GetWorkerPools().front();
             ui64 received = 0;
             auto observer = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetWorkersPoolId(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetWorkersPoolId(), targetPool);
                 ++received;
             });
             fixture.Submit(executed, 1);
@@ -297,13 +296,13 @@ namespace NKikimr::NConveyorComposite {
             for (ui64 i = 0; i < workers; ++i) {
                 fixture.Submit(executed, 1);
             }
-            NActors::TBlockEvents<TEvInternal::TEvNewTask> batches(fixture.Runtime);
+            NActors::TBlockEvents<TEvInternal::TEvTaskProcessedResult> batches(fixture.Runtime);
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT(batches.empty());
             UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 0);
             fixture.SendQueryResponse(query.Query);
             fixture.WaitFor([&] { return batches.size() == workers; });
-            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), workers);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), workers);
             UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), workers);
             for (const auto& batch : batches) {
                 UNIT_ASSERT(batch->Get()->GetQueryIdentity() == identity);
@@ -316,7 +315,7 @@ namespace NKikimr::NConveyorComposite {
             fixture.WaitFor([&] { return executed.Val() == workers && query.Query->GetParent()->CpuUsage.load() == 0; });
             fixture.UnregisterProcess(1);
             fixture.WaitFor([&] { return fixture.Removes[identity.QueryId] == 1; });
-            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 0);
         }
 
         Y_UNIT_TEST(RegistrationsAreSharedPerDistributorNotPerProcess) {
@@ -350,25 +349,25 @@ namespace NKikimr::NConveyorComposite {
             fixture.WaitFor([&] {
                 return counter.Val() == 1;
             });
-            UNIT_ASSERT_VALUES_EQUAL(query->CpuDemand.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(query->CpuMaxDemand.load(), 1);
             const auto firstDistributor = fixture.Distributor;
             const auto secondDistributor = fixture.Runtime.Register(CreateService(ParseConfig(proto), MakeIntrusive<NMonitoring::TDynamicCounters>()));
             fixture.Runtime.EnableScheduleForActor(secondDistributor, true);
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
             fixture.Distributor = secondDistributor;
             fixture.RegisterProcess(3, identity);
-            fixture.WaitFor([&] { return query->CpuDemand.load() == 2; });
+            fixture.WaitFor([&] { return query->CpuMaxDemand.load() == 2; });
             fixture.Distributor = firstDistributor;
             fixture.UnregisterProcess(1);
             fixture.UnregisterProcess(2);
-            fixture.WaitFor([&] { return query->CpuDemand.load() == 1; });
+            fixture.WaitFor([&] { return query->CpuMaxDemand.load() == 1; });
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT(query->GetParent()->GetQuery(identity.QueryId) == query);
             fixture.Distributor = secondDistributor;
             fixture.Submit(counter, 3);
             fixture.WaitFor([&] { return counter.Val() == 2 && query->GetParent()->CpuUsage.load() == 0; });
             fixture.UnregisterProcess(3);
-            fixture.WaitFor([&] { return query->CpuDemand.load() == 0; });
+            fixture.WaitFor([&] { return query->CpuMaxDemand.load() == 0; });
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[identity.QueryId], 2);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], 2);
@@ -416,7 +415,7 @@ namespace NKikimr::NConveyorComposite {
 
         Y_UNIT_TEST_TWIN(NullResponsePreservesProcessesScopesAndAccounting, ZeroTxId) {
             TSchedulerRuntimeFixture fixture(BuildConfig({2, 1},
-                {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}}));
+                                                         {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}}));
             fixture.SetLocalSchedulerEnabled(true);
             const auto identity = MakeIdentity(ZeroTxId ? 0 : 42);
             TAtomicCounter busy, scans, inserts, service;
@@ -509,11 +508,14 @@ namespace NKikimr::NConveyorComposite {
             for (const auto now : {TMonotonic::MicroSeconds(100), TMonotonic::FromValue(Max<ui64>() - 1000)}) {
                 auto first = MakeSchedulerQuery(MakeIdentity(1), TDuration::MicroSeconds(100), 0);
                 auto second = MakeSchedulerQuery(MakeIdentity(2), TDuration::MicroSeconds(201), 0);
+                auto readyWithoutDeadline = MakeSchedulerQuery(MakeIdentity(3));
                 TQueryRegistry registry;
                 UNIT_ASSERT_VALUES_EQUAL(registry.GetAverageWakeUpDeadline(now), now);
                 for (ui64 id : {1, 2, 3}) {
                     registry.RegisterProcess(MakeIdentity(id));
                 }
+                registry.SetQuery(MakeIdentity(3), readyWithoutDeadline.Query);
+                SetCapacity(registry, MakeIdentity(3), 1);
                 for (ui64 id : {1, 2}) {
                     registry.SetQuery(MakeIdentity(id), id == 1 ? first.Query : second.Query);
                     SetCapacity(registry, MakeIdentity(id), 1);
@@ -539,18 +541,18 @@ namespace NKikimr::NConveyorComposite {
                 leases.emplace_back(std::get<TSchedulerLease>(registry.GetStateVerified(MakeIdentity(1)).TryStart(TMonotonic::Now())));
             }
             registry.PrepareWorkCapacity(MakeIdentity(1), 1);
-            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuDemand.load(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuMaxDemand.load(), 3);
             registry.ApplyWorkCapacity(MakeIdentity(1));
-            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuDemand.load(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuMaxDemand.load(), 3);
             leases.pop_back();
             leases.pop_back();
             registry.ApplyWorkCapacity(MakeIdentity(1));
             registry.ApplyWorkCapacity(MakeIdentity(1));
-            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuDemand.load(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(second.Query->CpuDemand.load(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuMaxDemand.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Query->CpuMaxDemand.load(), 3);
             registry.PrepareWorkCapacity(MakeIdentity(1), 100);
             registry.ApplyWorkCapacity(MakeIdentity(1));
-            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuDemand.load(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(first.Query->CpuMaxDemand.load(), 100);
             UNIT_ASSERT_VALUES_EQUAL(first.Query->GetParent()->CpuUsage.load(), 1);
             leases.clear();
             UNIT_ASSERT_VALUES_EQUAL(first.Query->GetParent()->CpuUsage.load(), 0);
@@ -591,16 +593,22 @@ namespace NKikimr::NConveyorComposite {
                     fixture.Submit(executed, processes + 1);
                     UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[identity.QueryId], 1);
                 }
+                auto observer = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+                    for (const auto& task : ev->Get()->GetResults()) {
+                        if (task.GetProcessId() > processes) {
+                            UNIT_ASSERT(task.GetScope() != scope);
+                        }
+                    }
+                });
                 results.Stop().Unblock();
-                fixture.WaitFor([&] { return executed.Val() == processes + ReRegister
-                    && query.Query->GetParent()->CpuUsage.load() == 0; });
+                fixture.WaitFor([&] { return std::cmp_equal(executed.Val(), processes + ReRegister) && query.Query->GetParent()->CpuUsage.load() == 0; });
                 UNIT_ASSERT_VALUES_EQUAL(scope->GetCountInFlight(), 0);
                 if (ReRegister) {
                     UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], 0);
                     fixture.UnregisterProcess(processes + 1);
                 }
                 fixture.WaitFor([&] { return fixture.Removes[identity.QueryId] == 1; });
-                UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 0);
             }
         }
 
@@ -620,7 +628,8 @@ namespace NKikimr::NConveyorComposite {
                 if (stateAtReply == 2) {
                     fixture.RegisterProcess(3, identity);
                 }
-                const ui64 survivor = stateAtReply == 1 ? 2 : stateAtReply == 2 ? 3 : 0;
+                const ui64 survivor = stateAtReply == 1 ? 2 : stateAtReply == 2 ? 3
+                                                                                : 0;
                 TAtomicCounter executed;
                 if (survivor) {
                     fixture.Submit(executed, survivor);
@@ -645,7 +654,7 @@ namespace NKikimr::NConveyorComposite {
                 }
                 fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], NullResponse ? 0 : 1);
-                UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuDemand.load(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 0);
                 // Cleanup must remove the old key, including after an empty migration.
                 fixture.SetLocalSchedulerEnabled(true);
                 fixture.RegisterProcess(4, identity);
@@ -692,6 +701,9 @@ namespace NKikimr::NConveyorComposite {
                 && query2.Query->GetParent()->CpuUsage.load() == 0; });
             UNIT_ASSERT_VALUES_EQUAL(batchedQueries.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(scope->GetCountInFlight(), 0);
+            fixture.UnregisterProcess(1);
+            fixture.UnregisterProcess(2);
+            fixture.WaitFor([&] { return fixture.Removes[first.QueryId] == 1 && fixture.Removes[second.QueryId] == 1; });
         }
 
         Y_UNIT_TEST_TWIN(PendingPoolUpdateDoesNotBlockIndependentQuery, RemovePool) {
@@ -711,23 +723,22 @@ namespace NKikimr::NConveyorComposite {
             fixture.RegisterProcess(1, first);
             fixture.SendQueryResponse(query1.Query);
 
-            NActors::TBlockEvents<TEvInternal::TEvNewTask> batches(fixture.Runtime,
-                [&](const auto& ev) { return ev->Get()->GetQueryIdentity() == first; });
+            NActors::TBlockEvents<TEvInternal::TEvTaskProcessedResult> batches(fixture.Runtime,
+                                                                               [&](const auto& ev) { return ev->Get()->GetQueryIdentity() == first; });
             TAtomicCounter counter1;
             TAtomicCounter counter2;
             fixture.Submit(counter1, 1);
             fixture.WaitFor([&] { return batches.size() == 1; });
             fixture.UpdateConfig(target);
-            UNIT_ASSERT_VALUES_EQUAL(query1.Query->CpuDemand.load(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(query1.Query->CpuMaxDemand.load(), 5);
             fixture.RegisterProcess(2, second, ESpecialTaskCategory::Insert);
             fixture.Submit(counter2, 2, ESpecialTaskCategory::Insert);
             fixture.SendQueryResponse(query2.Query);
             fixture.WaitFor([&] { return counter2.Val() == 1 && query2.Query->GetParent()->CpuUsage.load() == 0; });
-            UNIT_ASSERT_VALUES_EQUAL(query2.Query->CpuDemand.load(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(query1.Query->CpuDemand.load(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(query2.Query->CpuMaxDemand.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(query1.Query->CpuMaxDemand.load(), 5);
             batches.Stop().Unblock();
-            fixture.WaitFor([&] { return counter1.Val() == 1 && query1.Query->CpuDemand.load() == 3
-                && query1.Query->GetParent()->CpuUsage.load() == 0; });
+            fixture.WaitFor([&] { return counter1.Val() == 1 && query1.Query->CpuMaxDemand.load() == 3 && query1.Query->GetParent()->CpuUsage.load() == 0; });
         }
 
         Y_UNIT_TEST(DrainSchedulesOneMinimumWakeupEvenWithoutNewAttempts) {

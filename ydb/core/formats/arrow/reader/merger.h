@@ -100,7 +100,7 @@ private:
                 builder->SkipRecord(SortHeap.Current());
             }
             //            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                              {"keySkip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
+            //                {"keySkip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             auto& anotherIterator = SortHeap.Current();
             if (PossibleSameVersionFlag) {
                 AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)

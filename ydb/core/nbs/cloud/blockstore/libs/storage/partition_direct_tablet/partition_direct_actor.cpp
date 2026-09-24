@@ -831,6 +831,7 @@ void TPartitionActor::HandleUpdateVChunkConfig(
         {.VChunkIndex = vChunkIndex,
          .VChunkConfig = std::move(msg->VChunkConfig),
          .DirtyMapState = std::move(msg->DirtyMapState),
+         .DeletedDDiskIds = std::move(msg->DeletedDDiskIds),
          .UpdateCompleted = std::move(msg->UpdateCompleted)},
         ctx);
 }

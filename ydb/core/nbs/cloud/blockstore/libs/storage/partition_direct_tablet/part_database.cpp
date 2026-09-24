@@ -247,6 +247,66 @@ void TPartitionDatabase::StoreTouchedVChunkMask(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAllDeletedDDisks(
+    TVector<TDeletedDDiskRecordProto>& out)
+{
+    using TTable = TPartitionSchema::DeletedDDisks;
+
+    auto it = Table<TTable>()
+                  .Range()
+                  .Select<TTable::RecordId, TTable::Record>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::Record>()) {
+            const auto& record = it.GetValue<TTable::Record>();
+            Y_ABORT_UNLESS(
+                record.GetRecordId() == it.GetValue<TTable::RecordId>());
+            out.push_back(record);
+        }
+        if (!it.Next()) {
+            return false;   // not ready
+        }
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::AddDeletedDDisk(
+    const TDeletedDDiskRecordProto& record)
+{
+    WriteDeletedDDisk(record);
+}
+
+void TPartitionDatabase::UpdateDeletedDDisk(
+    const TDeletedDDiskRecordProto& record)
+{
+    WriteDeletedDDisk(record);
+}
+
+void TPartitionDatabase::DeleteDeletedDDisk(const TVector<ui64>& recordIds)
+{
+    using TTable = TPartitionSchema::DeletedDDisks;
+    for (ui64 recordId: recordIds) {
+        Table<TTable>().Key(recordId).Delete();
+    }
+}
+
+void TPartitionDatabase::WriteDeletedDDisk(
+    const TDeletedDDiskRecordProto& record)
+{
+    using TTable = TPartitionSchema::DeletedDDisks;
+
+    Table<TTable>()
+        .Key(record.GetRecordId())
+        .Update(NKikimr::NIceDb::TUpdate<TTable::Record>(record));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool TPartitionDatabase::ReadAddHostInProgress(
     TMaybe<TAddHostInProgress>& addHostInProgress)
 {

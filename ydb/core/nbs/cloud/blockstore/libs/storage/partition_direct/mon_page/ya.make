@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     mon_render_chaos.cpp
     mon_render_dbg.cpp
+    mon_render_deleted_ddisks.cpp
     mon_render_local_db.cpp
     mon_render_memory.cpp
     mon_render_overview.cpp

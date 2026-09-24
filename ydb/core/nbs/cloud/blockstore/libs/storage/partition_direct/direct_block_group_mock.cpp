@@ -481,6 +481,12 @@ ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host) const
     return host + 10;
 }
 
+NKikimr::NBsController::TDDiskId TDirectBlockGroupMock::GetDDiskId(
+    THostIndex host) const
+{
+    return NKikimr::NBsController::TDDiskId(GetNodeId(host), 1, host);
+}
+
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();

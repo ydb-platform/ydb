@@ -9,6 +9,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
+#include <ydb/core/mind/bscontroller/types.h>
+
 #include <ydb/core/base/events.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -57,14 +59,17 @@ struct TEvPartitionDirectPrivate
     {
         TVChunkConfig VChunkConfig;
         TDirtyMapStateProto DirtyMapState;
+        TVector<NKikimr::NBsController::TDDiskId> DeletedDDiskIds;
         TPersistResultPromise UpdateCompleted =
             NThreading::NewPromise<EPersistResult>();
 
         TEvUpdateVChunkConfig(
             TVChunkConfig cfg,
-            TDirtyMapStateProto dirtyMapState)
-            : VChunkConfig(std::move(cfg))
+            TDirtyMapStateProto dirtyMapState,
+            TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds = {})
+            : VChunkConfig(cfg)
             , DirtyMapState(std::move(dirtyMapState))
+            , DeletedDDiskIds(std::move(deletedDDiskIds))
         {}
     };
 

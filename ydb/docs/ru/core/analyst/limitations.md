@@ -126,7 +126,8 @@ SELECT * FROM $base WHERE event_ts > CurrentUtcTimestamp()
 
 #### EXISTS
 
-Преобразование коррелированного `EXISTS` → `LEFT SEMI JOIN`.
+Преобразование коррелированного `EXISTS` → `LEFT SEMI JOIN` или `INNER JOIN`
+с уникальными ключами справа.
 
 Оригинальный запрос:
 
@@ -136,7 +137,7 @@ SELECT a.* FROM A a WHERE EXISTS (
 );
 ```
 
-##### Решение
+##### Решение с LEFT SEMI JOIN
 
 ```yql
 $B_match = (
@@ -148,6 +149,27 @@ $B_match = (
 SELECT a.*
 FROM A AS a
 LEFT SEMI JOIN $B_match AS b
+ON b.key = a.key;
+```
+
+##### Альтернатива с INNER JOIN
+
+Перед соединением удалите повторяющиеся ключи с правой стороны. Тогда несколько
+подходящих строк не будут дублировать строку слева. Применять `DISTINCT` к
+колонкам левой стороны не требуется: он может объединить одинаковые строки
+внешней выборки.
+
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+  GROUP BY key
+);
+
+SELECT a.*
+FROM A AS a
+INNER JOIN $B_match AS b
 ON b.key = a.key;
 ```
 

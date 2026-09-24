@@ -12,7 +12,7 @@ subqueries.
 | An uncorrelated subquery in `FROM` or `IN` | Supported | Use the subquery directly |
 | An uncorrelated `EXISTS (SELECT ...)` | Supported; returns `true` if the subquery contains at least one row | Use directly when the condition does not depend on an outer row |
 | An uncorrelated `NOT EXISTS (SELECT ...)` | Supported; returns `true` if the subquery is empty | Use directly when the condition does not depend on an outer row |
-| `EXISTS` referring to an outer column | Not supported | `LEFT SEMI JOIN` |
+| `EXISTS` referring to an outer column | Not supported | `LEFT SEMI JOIN`, or `INNER JOIN` with unique right-side keys |
 | `NOT EXISTS` referring to an outer column | Not supported | `LEFT ONLY JOIN` |
 | A correlated scalar or aggregate subquery | Not supported | Precompute the result and use `JOIN` |
 
@@ -59,6 +59,26 @@ ON o.client_id = c.client_id;
 `LEFT SEMI JOIN` returns columns from the left side only. Several matching rows
 on the right side do not duplicate a row from the left side, so this rewrite
 preserves the existence-check semantics.
+
+Alternatively, use `INNER JOIN` after deduplicating the matching keys on the
+right side:
+
+```yql
+$order_clients = (
+    SELECT client_id
+    FROM orders
+    GROUP BY client_id
+);
+
+SELECT c.client_id, c.name
+FROM clients AS c
+INNER JOIN $order_clients AS o
+ON o.client_id = c.client_id;
+```
+
+The right side contains at most one row for each key, so the join does not
+duplicate rows from the left side. Applying `DISTINCT` to the left-side columns
+is unnecessary and can collapse equal rows from the outer input.
 
 For a single non-optional key, `IN` is another possible rewrite:
 

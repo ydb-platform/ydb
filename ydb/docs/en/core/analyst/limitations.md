@@ -133,7 +133,8 @@ The complete support matrix and rewrite rules are available in [Correlated subqu
 
 #### EXISTS
 
-Transformation of correlated `EXISTS` → `LEFT SEMI JOIN`.
+Transformation of correlated `EXISTS` → `LEFT SEMI JOIN` or `INNER JOIN`
+with unique keys on the right side.
 
 Original query:
 
@@ -145,7 +146,7 @@ SELECT a.* FROM A a WHERE EXISTS (
 ```
 
 
-##### Solution
+##### Solution with LEFT SEMI JOIN
 
 
 ```yql
@@ -158,6 +159,27 @@ $B_match = (
 SELECT a.*
 FROM A AS a
 LEFT SEMI JOIN $B_match AS b
+ON b.key = a.key;
+```
+
+##### Alternative with INNER JOIN
+
+Deduplicate the matching keys on the right side before joining. This prevents
+several matching rows from duplicating a row from the left side. Applying
+`DISTINCT` to the left-side columns is unnecessary and can collapse equal rows
+from the outer input.
+
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+  GROUP BY key
+);
+
+SELECT a.*
+FROM A AS a
+INNER JOIN $B_match AS b
 ON b.key = a.key;
 ```
 

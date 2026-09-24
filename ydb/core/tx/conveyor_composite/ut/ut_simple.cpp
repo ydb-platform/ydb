@@ -768,8 +768,68 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         UNIT_ASSERT_VALUES_EQUAL(compaction.GetName(), "compaction");
         UNIT_ASSERT_VALUES_EQUAL(compaction.GetMaxBatchSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(compaction.GetWorkersCount(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(compaction.GetDefaultFractionOfThreadsCount(), 0.33);
+        UNIT_ASSERT(!compaction.HasDefaultFractionOfThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(0).GetHeavyLimits().size(), 1);
+    }
+
+    Y_UNIT_TEST(OverlayPoolSizeAnyOf) {
+        NKikimrConfig::TCompositeConveyorConfig defaults;
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("scan");
+            pool->SetWorkersCount(16);
+            auto* link = pool->AddLinks();
+            link->SetCategory("scan");
+            link->SetWeight(1);
+        }
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("compaction");
+            pool->SetDefaultFractionOfThreadsCount(0.33);
+            auto* link = pool->AddLinks();
+            link->SetCategory("compaction");
+            link->SetWeight(1);
+        }
+
+        NKikimrConfig::TCompositeConveyorConfig yaml;
+        {
+            auto* pool = yaml.AddWorkerPools();
+            pool->SetName("scan");
+            pool->SetDefaultFractionOfThreadsCount(0.5);
+        }
+        {
+            auto* pool = yaml.AddWorkerPools();
+            pool->SetName("compaction");
+            pool->SetWorkersCount(8);
+        }
+
+        auto overlaid = NConfig::TConfig::OverlayYamlOnDefaults(defaults, yaml).DetachResult();
+        const auto& scan = overlaid.GetWorkerPools(0);
+        UNIT_ASSERT_VALUES_EQUAL(scan.GetDefaultFractionOfThreadsCount(), 0.5);
+        UNIT_ASSERT(!scan.HasWorkersCount());
+        UNIT_ASSERT_VALUES_EQUAL(scan.GetLinks().size(), 1);
+        const auto& compaction = overlaid.GetWorkerPools(1);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetWorkersCount(), 8);
+        UNIT_ASSERT(!compaction.HasDefaultFractionOfThreadsCount());
+
+        NKikimrConfig::TCompositeConveyorConfig withLinks;
+        {
+            auto* pool = withLinks.AddWorkerPools();
+            pool->SetName("scan");
+            pool->SetDefaultFractionOfThreadsCount(0.25);
+            auto* link = pool->AddLinks();
+            link->SetCategory("scan");
+            link->SetWeight(1);
+        }
+        {
+            auto* pool = withLinks.AddWorkerPools();
+            pool->SetName("compaction");
+            pool->SetWorkersCount(4);
+        }
+        auto linked = NConfig::TConfig::OverlayYamlOnDefaults(defaults, withLinks).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(linked.GetWorkerPools(0).GetDefaultFractionOfThreadsCount(), 0.25);
+        UNIT_ASSERT(!linked.GetWorkerPools(0).HasWorkersCount());
+        UNIT_ASSERT_VALUES_EQUAL(linked.GetWorkerPools(0).GetLinks().size(), 1);
     }
 
     Y_UNIT_TEST(NoHeavyLimitsUsesWorkersBeyondLimit) {

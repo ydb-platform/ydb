@@ -136,6 +136,21 @@ TString THeavyLimit::DebugString() const {
     return sb;
 }
 
+namespace {
+// WorkersCount and DefaultFractionOfThreadsCount are any_of. DeserializeFromProto keeps
+// WorkersCount when both are set, so a yaml value must drop the other field inherited from defaults.
+void ApplyPoolSizeAnyOf(NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& target,
+    const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& yamlPool) {
+    if (yamlPool.HasWorkersCount()) {
+        target.SetWorkersCount(yamlPool.GetWorkersCount());
+        target.ClearDefaultFractionOfThreadsCount();
+    } else if (yamlPool.HasDefaultFractionOfThreadsCount()) {
+        target.ClearWorkersCount();
+        target.SetDefaultFractionOfThreadsCount(yamlPool.GetDefaultFractionOfThreadsCount());
+    }
+}
+}
+
 TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefaults(
     const NKikimrConfig::TCompositeConveyorConfig& defaults, const NKikimrConfig::TCompositeConveyorConfig& yaml) {
     bool allHaveLinks = yaml.GetWorkerPools().size() > 0;
@@ -190,11 +205,13 @@ TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefau
         if (yamlPool.GetLinks().size()) {
             if (existing) {
                 auto merged = yamlPool;
-                if (!merged.HasWorkersCount() && existing->HasWorkersCount()) {
-                    merged.SetWorkersCount(existing->GetWorkersCount());
-                }
-                if (!merged.HasDefaultFractionOfThreadsCount() && existing->HasDefaultFractionOfThreadsCount()) {
-                    merged.SetDefaultFractionOfThreadsCount(existing->GetDefaultFractionOfThreadsCount());
+                ApplyPoolSizeAnyOf(merged, yamlPool);
+                if (!yamlPool.HasWorkersCount() && !yamlPool.HasDefaultFractionOfThreadsCount()) {
+                    if (existing->HasWorkersCount()) {
+                        merged.SetWorkersCount(existing->GetWorkersCount());
+                    } else if (existing->HasDefaultFractionOfThreadsCount()) {
+                        merged.SetDefaultFractionOfThreadsCount(existing->GetDefaultFractionOfThreadsCount());
+                    }
                 }
                 if (!merged.HasMaxBatchSize() && existing->HasMaxBatchSize()) {
                     merged.SetMaxBatchSize(existing->GetMaxBatchSize());
@@ -222,12 +239,7 @@ TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefau
         if (yamlPool.GetHeavyLimits().size()) {
             existing->MutableHeavyLimits()->CopyFrom(yamlPool.GetHeavyLimits());
         }
-        if (yamlPool.HasWorkersCount()) {
-            existing->SetWorkersCount(yamlPool.GetWorkersCount());
-        }
-        if (yamlPool.HasDefaultFractionOfThreadsCount()) {
-            existing->SetDefaultFractionOfThreadsCount(yamlPool.GetDefaultFractionOfThreadsCount());
-        }
+        ApplyPoolSizeAnyOf(*existing, yamlPool);
         if (yamlPool.HasMaxBatchSize()) {
             existing->SetMaxBatchSize(yamlPool.GetMaxBatchSize());
         }
@@ -287,6 +299,10 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
                 return TConclusionStatus::Fail("heavy_limits thread_limit must be strictly decreasing");
             }
         }
+        // Absolute workers_count is rejected here when thread_limit does not fit.
+        // A pool sized only by default_fraction_of_threads_count is not checked:
+        // the worker count is fraction * GetPossibleMaxLimitThreads() and is unknown at parse time.
+        // An oversized thread_limit on such a pool is a silent no-op and stays the operator's responsibility.
         if (proto.HasWorkersCount() && limit.GetThreadLimit() >= static_cast<ui32>(std::ceil(proto.GetWorkersCount()))) {
             return TConclusionStatus::Fail("heavy_limits thread_limit must be less than workers_count");
         }

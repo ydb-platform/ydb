@@ -482,7 +482,11 @@ class IRequestProxyCtx
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 public:
+    IRequestProxyCtx();
     virtual ~IRequestProxyCtx() = default;
+
+    const TMaybe<TString> GetDatabaseName() const override;
+    void InitRootPath(const TAppData* appData);
 
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
@@ -510,6 +514,8 @@ public:
     virtual bool Validate(TString& error) = 0;
 
     // counters
+    void CountRequestPaths() const;
+    void CountDatabasePath(TStringBuf path) const;
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
     virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
@@ -544,6 +550,17 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+protected:
+    TMaybe<TString> ResolveDatabaseName(const TMaybe<TString>& database) const;
+    virtual void CountRequestBodyPaths() const {}
+    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
+    mutable TMaybe<TString> DatabaseName;
+
+private:
+    TString RootPath;
+    bool RelativePathsEnabled_ = false;
+    mutable bool RelativeDatabaseCounted_ = false;
 };
 
 // Request context
@@ -629,12 +646,13 @@ class TRefreshTokenImpl
 public:
     TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, const TString& traceId, TActorId from)
         : Token_(token)
-        , Database_(database)
         , PeerName_(peerName)
         , From_(from)
         , TraceId_(traceId)
         , State_(true)
-    { }
+    {
+        DatabaseName = database;
+    }
 
     const TMaybe<TString> GetYdbToken() const override {
         return Token_;
@@ -656,10 +674,6 @@ public:
 
     bool HasClientCapability(const TString&) const override {
         return false;
-    }
-
-    const TMaybe<TString> GetDatabaseName() const override {
-        return Database_;
     }
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
@@ -823,7 +837,6 @@ public:
 
 private:
     const TString Token_;
-    const TString Database_;
     const TString PeerName_;
     const TActorId From_;
     const TString TraceId_;
@@ -944,10 +957,6 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
-    }
-
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         auto& s = Ctx_->GetAuthState();
         s.State = state;
@@ -1013,6 +1022,10 @@ public:
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     TVector<TStringBuf> FindClientCertPropertyValues() const override {
@@ -1295,10 +1308,6 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
-    }
-
     TString GetRpcMethodName() const override {
         return Ctx_->GetRpcMethodName();
     }
@@ -1378,12 +1387,24 @@ public:
         Counters = counters;
     }
 
+    void CountRequestBodyPaths() const override {
+        if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
+            if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
+                this->CountDatabasePath(request->database());
+            }
+        }
+    }
+
     IGRpcProxyCounters::TPtr GetCounters() const override {
         return Counters;
     }
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
@@ -1968,7 +1989,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    Database,
+                    GetDatabaseName().GetOrElse(TString()),
                     YdbToken,
                     UserToken,
                     GetAuditLogParts(),
@@ -2024,7 +2045,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        Database = database;
+        DatabaseName = database;
     }
 
     void SetRespHook(TRespHook&& /*hook*/) override {
@@ -2069,7 +2090,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return Database ? TMaybe<TString>(Database) : Nothing();
+        return ResolveDatabaseName(Database ? TMaybe<TString>(Database) : Nothing());
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {

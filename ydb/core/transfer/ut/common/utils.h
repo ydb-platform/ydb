@@ -728,7 +728,7 @@ struct MainTestCase {
         TReplicationClient client(Driver);
         TDescribeTransferSettings settings;
         settings.IncludeStats(includeStats);
-        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
+        return client.DescribeTransfer(GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
     }
 
     auto DescribeConsumer(const std::string& consumerName) {
@@ -788,7 +788,7 @@ struct MainTestCase {
         TDescribeReplicationSettings settings;
         settings.IncludeStats(true);
 
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + name, settings).ExtractValueSync();
+        return client.DescribeReplication(GetEnv("YDB_DATABASE") + "/" + name, settings).ExtractValueSync();
     }
 
     auto DescribeReplication() {

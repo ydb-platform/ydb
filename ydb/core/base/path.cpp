@@ -175,6 +175,13 @@ bool IsPathUnderDatabase(TStringBuf database, TStringBuf path) {
 
 } // namespace
 
+TString PrependDomainIfNeeded(TStringBuf domainRoot, TStringBuf databasePath) {
+    if (databasePath.empty() || databasePath.StartsWith('/')) {
+        return TString{databasePath};
+    }
+    return TStringBuilder() << domainRoot << '/' << databasePath;
+}
+
 TString NormalizePath(TStringBuf database, TStringBuf path) {
     if (database == path || IsPathUnderDatabase(database, path)) {
         return TString{path};

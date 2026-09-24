@@ -999,7 +999,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     .SetEndpoint(endpoint)
                     .SetDatabase("/" + settings.DomainName);
                 auto driver = NYdb::TDriver(driverConfig);
-                Client = TDerived::MakeClient(driver, database);
+                Client = TDerived::MakeClient(driver, "/" + database);
             }
         }
 

@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             .SetDatabase("/" + serverSettings.DomainName);
         auto driver = NYdb::TDriver(driverConfig);
 
-        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database("/" + databaseName));
 
         // add consumer
         const TString consumerName{"user"};
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         // get records
         auto reader = client->CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
-            .AppendTopics(std::string(JoinPath({databaseName, tableName, streamName})))
+            .AppendTopics(std::string("/" + JoinPath({databaseName, tableName, streamName})))
             .ConsumerName(consumerName)
             .DisableClusterDiscovery(true)
         );

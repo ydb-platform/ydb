@@ -30,6 +30,7 @@ RECURSE(
     scheme_shard
     scheme_tests
     script_execution
+    sdk/cpp/relative_database
     sdk/cpp/sdk_credprovider
     secrets
     security

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    base.cpp
     base_service.h
     base.h
     http_database_access_verdict.h

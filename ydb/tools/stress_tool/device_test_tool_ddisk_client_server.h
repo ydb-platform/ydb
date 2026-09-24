@@ -161,7 +161,9 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                     "ddisk_pool");
                 NDDisk::TPersistentBufferFormat pbFormat{
                     TBase::Cfg.PersistentBufferChunks,
-                    TBase::Cfg.PersistentBufferChunks,
+                    // Allocate PB chunks on demand so initialization does not
+                    // compete with direct DDisk client workloads.
+                    0,
                     128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
                 TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
                     NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),

@@ -52,8 +52,13 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
-                    "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
+                if (Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute).Kick()) {
+                    YDB_LOG_ERROR_CTX(ctx, "TTxWrite:: errors while proposing transaction",
+                        {"txId", TxId},
+                        {"tabletId", Self->TabletID()},
+                        {"status", status},
+                        {"error", errMessage});
+                }
 
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
 

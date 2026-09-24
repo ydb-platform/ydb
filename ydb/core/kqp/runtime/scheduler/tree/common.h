@@ -178,6 +178,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
     struct TPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Limit;
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
+        NMonitoring::TDynamicCounters::TCounterPtr ActualDemand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
         NMonitoring::TDynamicCounters::TCounterPtr Read;

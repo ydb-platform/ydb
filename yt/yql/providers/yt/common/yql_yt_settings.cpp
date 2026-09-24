@@ -541,6 +541,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, _EnforceRegexpProbabilityFail);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
+    REGISTER_SETTING(*this, PassOptLLVMToDqCodecs);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
     REGISTER_SETTING(*this, BlockReaderSupportedTypes);

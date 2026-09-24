@@ -17,7 +17,7 @@ namespace NKikimr {
         // LogoBlobs
         ///////////////////////////////////////////////////////////////////////////////////////
         template <>
-        EAction TStrategy<TKeyLogoBlob, TMemRecLogoBlob>::Select() {
+        EAction TStrategy<TKeyLogoBlob, TMemRecLogoBlob>::SelectAction() {
             EAction action = ActNothing;
 
             using TStrategyExplicit = NHullComp::TStrategyExplicit<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -96,7 +96,7 @@ namespace NKikimr {
         // Blocks
         ///////////////////////////////////////////////////////////////////////////////////////
         template <>
-        EAction TStrategy<TKeyBlock, TMemRecBlock>::Select() {
+        EAction TStrategy<TKeyBlock, TMemRecBlock>::SelectAction() {
             using TStrategyBalance = ::NKikimr::NHullComp::TStrategyBalance<TKeyBlock, TMemRecBlock>;
             using TStrategyPromoteSsts = ::NKikimr::NHullComp::TStrategyPromoteSsts<TKeyBlock, TMemRecBlock>;
 
@@ -135,7 +135,7 @@ namespace NKikimr {
         // Barriers
         ///////////////////////////////////////////////////////////////////////////////////////
         template <>
-        EAction TStrategy<TKeyBarrier, TMemRecBarrier>::Select() {
+        EAction TStrategy<TKeyBarrier, TMemRecBarrier>::SelectAction() {
             using TStrategyBalance = ::NKikimr::NHullComp::TStrategyBalance<TKeyBarrier, TMemRecBarrier>;
             using TStrategyPromoteSsts = ::NKikimr::NHullComp::TStrategyPromoteSsts<TKeyBarrier, TMemRecBarrier>;
 

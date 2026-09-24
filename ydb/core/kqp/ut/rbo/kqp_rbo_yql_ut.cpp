@@ -1436,11 +1436,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         THashSet<i64> simplifiedOperatorIds;
         CollectOperatorIds(planMap.at("Plan"), executionOperatorIds);
         CollectOperatorIds(simplifiedPlan, simplifiedOperatorIds);
-        UNIT_ASSERT_C(!simplifiedOperatorIds.empty(), plan);
-        for (const auto operatorId : simplifiedOperatorIds) {
-            UNIT_ASSERT_C(executionOperatorIds.contains(operatorId),
-                "OperatorId " << operatorId << " is missing from the execution plan\n" << plan);
-        }
+        UNIT_ASSERT_C(executionOperatorIds.empty(), plan);
+        UNIT_ASSERT_C(simplifiedOperatorIds.empty(), plan);
+    }
+
+    Y_UNIT_TEST(ExplainHidesOperatorIds) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        const auto plan = ExecuteExplain(session, "SELECT a FROM `/Root/t1`;");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto& planMap = planJson.GetMapSafe();
+        const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TableFullScan"), plan);
+
+        THashSet<i64> operatorIds;
+        CollectOperatorIds(planMap.at("Plan"), operatorIds);
+        CollectOperatorIds(simplifiedPlan, operatorIds);
+        UNIT_ASSERT_C(operatorIds.empty(), plan);
     }
 
     Y_UNIT_TEST(ExplainStageConnections) {
@@ -2292,6 +2306,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(QualifiedStarSubqueryFallsBackToYqlOptimizer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `doc` (
+                `id` String,
+                `flag` Bool,
+                PRIMARY KEY (`id`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("disabled")
+            .AddMember("flag").Bool(false)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("enabled")
+            .AddMember("flag").Bool(true)
+            .EndStruct();
+        rows.EndList();
+
+        auto upsertResult = tableClient.BulkUpsert("/Root/doc", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto compileCountersBefore = GetNewRBOCompileCounters(kikimr);
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[["enabled"]]])");
+        UNIT_ASSERT_C(result.GetStats().has_value(), "Missing full query statistics");
+        UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing query plan in full statistics");
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        UNIT_ASSERT_C(planJson.GetMapSafe().contains("SimplifiedPlan"), plan);
+        const auto& planRoot = planJson.GetMapSafe().at("Plan").GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(planRoot.at("Node Type").GetStringSafe(), "Query", plan);
+        UNIT_ASSERT_C(planRoot.contains("Stats"), plan);
+
+        const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
+    }
+
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -2513,6 +2589,101 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(Params, ColumnStore) {
         TestParams(ColumnStore);
+    }
+
+    Y_UNIT_TEST_TWIN(AsTable, EnablePeepholeNewRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(EnablePeepholeNewRbo);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        const auto params = TParamsBuilder()
+            .AddParam("$param")
+                .BeginList()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(1)
+                        .AddMember("value").String("one")
+                    .EndStruct()
+                .EndList()
+            .Build()
+            .Build();
+
+        const TString query = R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT id, value FROM AS_TABLE($param);
+        )";
+
+        auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetAst(), "Missing final AST");
+        UNIT_ASSERT_STRING_CONTAINS(*explain.GetStats()->GetAst(),
+            EnablePeepholeNewRbo ? "ToFlow $param" : "Iterator $param");
+        UNIT_ASSERT_C(explain.GetStats()->GetPlan(), "Missing explain plan");
+        const TString plan = *explain.GetStats()->GetPlan();
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* source = FindOperatorByStringField(simplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(source, plan);
+        UNIT_ASSERT_VALUES_EQUAL(GetStringField(*source, "Parameter"), "$param");
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[1;"one"]])");
+
+        const auto moreParams = TParamsBuilder()
+            .AddParam("$param")
+                .BeginList()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(3)
+                        .AddMember("value").String("three")
+                    .EndStruct()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(1)
+                        .AddMember("value").String("one")
+                    .EndStruct()
+                    .AddListItem().BeginStruct()
+                        .AddMember("id").Int32(2)
+                        .AddMember("value").String("two")
+                    .EndStruct()
+                .EndList()
+            .Build()
+            .Build();
+
+        const TString filteredQuery = R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT p.id, p.value || "!" AS marked
+            FROM AS_TABLE($param) AS p
+            WHERE p.id >= 2
+            ORDER BY p.id;
+        )";
+
+        auto filteredExplain = session.ExecuteQuery(filteredQuery, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(filteredExplain.IsSuccess(), filteredExplain.GetIssues().ToString());
+        UNIT_ASSERT_C(filteredExplain.GetStats() && filteredExplain.GetStats()->GetPlan(), "Missing filtered explain plan");
+        const TString filteredPlan = *filteredExplain.GetStats()->GetPlan();
+        const auto filteredSimplifiedPlan = GetSimplifiedPlan(filteredPlan);
+        const auto* filteredSource = FindOperatorByStringField(filteredSimplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(filteredSource, filteredPlan);
+        UNIT_ASSERT_VALUES_EQUAL(GetStringField(*filteredSource, "Parameter"), "$param");
+        UNIT_ASSERT_C(FindOperatorByStringField(filteredSimplifiedPlan, "Name", "Filter"), filteredPlan);
+
+        result = session.ExecuteQuery(filteredQuery, NYdb::NQuery::TTxControl::NoTx(), moreParams).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[2;"two!"];[3;"three!"]])");
+
+        result = session.ExecuteQuery(R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT p.id FROM AS_TABLE($param) AS p WHERE p.id > 10;
+        )", NYdb::NQuery::TTxControl::NoTx(), moreParams).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[]");
     }
 
     constexpr std::array<i64, 7> SqlInLookupValues = {-1, 0, 1, 2, 3, 10, 2147483648LL};
@@ -5511,6 +5682,86 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(LeftJoinInequalityOnClause) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows1;
+        rows1.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rows1.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows1.EndList();
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows2;
+        rows2.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rows2.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows2.EndList();
+        resultUpsert = db.BulkUpsert("/Root/t2", rows2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b, t2.a, t2.b
+            FROM `/Root/t1` AS t1
+            LEFT JOIN `/Root/t2` AS t2 ON t1.a > t2.b
+            ORDER BY t1.a, t2.a;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explain = session.ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+
+        const auto plan = TString{*explain.GetStats()->GetPlan()};
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* crossJoin = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Cross");
+        UNIT_ASSERT_C(crossJoin, plan);
+        const auto filters = crossJoin->GetMapSafe().find("Filters");
+        UNIT_ASSERT_C(filters != crossJoin->GetMapSafe().end() && filters->second.IsArray(), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(filters->second.GetArraySafe().size(), 1, plan);
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[0];[1]];[3;[4];[0];[1]];[3;[4];[1];[2]]])"
+        );
+    }
+
     Y_UNIT_TEST(JoinFiltersAdvanced) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -7644,6 +7895,53 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns.empty());
                 UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()));
             }
+        }
+    }
+
+    Y_UNIT_TEST(DistinctShuffleEliminationPreservesRenamedKeys) {
+        struct TCase {
+            bool Enabled;
+            TVector<TInfoUnit> ShuffledBy;
+            TVector<TInfoUnit> Keys;
+            TVector<TInfoUnit> Expected;
+        };
+        const TInfoUnit id("id"), k("k"), intermediateId("_intermediate_id"), intermediateK("_intermediate_k");
+        const TVector<TCase> cases = {
+            {true, {id}, {id}, {intermediateId}},
+            {true, {id}, {id, k}, {intermediateId}},
+            {true, {k, id}, {id, k}, {intermediateK, intermediateId}},
+            {true, {id, k}, {id}, {}},
+            {true, {}, {id}, {}},
+            {false, {id}, {id}, {}},
+        };
+
+        for (const auto& testCase : cases) {
+            TMapRuleTestContext testContext;
+            testContext.Config->OptShuffleElimination = testCase.Enabled;
+            TPlanProps planProps;
+            const auto pos = NYql::TPositionHandle();
+
+            auto read = MakeTestRead({id, k}, pos);
+            read->Props.Metadata = TRBOMetadata();
+            read->Props.Metadata->ShuffledByColumns = testCase.ShuffledBy;
+
+            TVector<TOpAggregationTraits> traits;
+            TVector<TOpAggregationTraits> finalTraits;
+            TVector<TInfoUnit> finalKeys;
+            for (const auto& key : testCase.Keys) {
+                const auto intermediateKey = key == id ? intermediateId : intermediateK;
+                traits.emplace_back(key, "distinct", intermediateKey);
+                finalTraits.emplace_back(intermediateKey, "distinct", key);
+                finalKeys.push_back(intermediateKey);
+            }
+            auto aggregate = MakeIntrusive<TOpAggregate>(read, traits, testCase.Keys, EOpPhase::Intermediate, true, pos);
+            aggregate->ComputeMetadata(testContext.RboCtx, planProps);
+            UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns == testCase.Expected);
+
+            auto finalAggregate = MakeIntrusive<TOpAggregate>(aggregate, finalTraits, finalKeys, EOpPhase::Final, true, pos);
+            finalAggregate->ComputeMetadata(testContext.RboCtx, planProps);
+            const auto expectedFinal = testCase.Expected.empty() ? TVector<TInfoUnit>{} : testCase.ShuffledBy;
+            UNIT_ASSERT(finalAggregate->Props.Metadata->ShuffledByColumns == expectedFinal);
         }
     }
 
@@ -10076,12 +10374,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    // Compiled 94 from 99.
+    // Compiled 96 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
                         {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, /*17,*/ 18, 19, 20,
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-                        41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
+                        41, 42, 43, /*44,*/ 45, 46, 47, 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, 57, 58, 59, 60,
                         61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
                         81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
@@ -12962,6 +13260,98 @@ PRAGMA ydb.OptimizerHints = '
             TString("ColumnShardHashV1"),
             TStringBuilder() << "The remaining shuffle must match the preserved source hash: "
                              << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST_TWIN(DistinctShuffleEliminationTPCHQ4, CompositePartitionKey) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(true);
+        config->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        config->SetDefaultCostBasedOptimizationLevel(4);
+        config->SetDefaultEnableShuffleElimination(true);
+        config->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({MakeTPCHStatsSetting()});
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE TABLE `/Root/lineitem` (
+                l_orderkey Int64 NOT NULL,
+                l_linenumber Int32 NOT NULL,
+                l_commitdate Date NOT NULL,
+                l_receiptdate Date NOT NULL,
+                PRIMARY KEY (l_orderkey, l_linenumber)
+            )
+            PARTITION BY HASH(%s)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 8);
+
+            CREATE TABLE `/Root/orders` (
+                o_orderkey Int64 NOT NULL,
+                o_orderpriority Utf8 NOT NULL,
+                o_orderdate Date NOT NULL,
+                PRIMARY KEY (o_orderkey)
+            )
+            PARTITION BY HASH(o_orderkey)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )", CompositePartitionKey ? "l_orderkey, l_linenumber" : "l_orderkey")).GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        const auto july = TInstant::ParseIso8601("1993-07-01T00:00:00Z");
+        const auto october = TInstant::ParseIso8601("1993-10-01T00:00:00Z");
+        NYdb::TValueBuilder orders, lineitems;
+        orders.BeginList();
+        lineitems.BeginList();
+        for (i64 id = 1; id <= 32; ++id) {
+            orders.AddListItem().BeginStruct()
+                .AddMember("o_orderkey").Int64(id)
+                .AddMember("o_orderpriority").Utf8(id % 2 ? "HIGH" : "LOW")
+                .AddMember("o_orderdate").Date(id <= 16 ? july : october)
+                .EndStruct();
+            // Two qualifying line items per matching order must count only once.
+            for (i32 line = 1; line <= 3; ++line) {
+                lineitems.AddListItem().BeginStruct()
+                    .AddMember("l_orderkey").Int64(id)
+                    .AddMember("l_linenumber").Int32(line)
+                    .AddMember("l_commitdate").Date(july)
+                    .AddMember("l_receiptdate").Date(id % 4 && line < 3 ? october : july)
+                    .EndStruct();
+            }
+        }
+        orders.EndList();
+        lineitems.EndList();
+        for (auto& [table, rows] : TVector<std::pair<TString, NYdb::TValue>>{
+                 {"/Root/orders", orders.Build()}, {"/Root/lineitem", lineitems.Build()}}) {
+            const auto upsert = tableClient.BulkUpsert(table, std::move(rows)).GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        std::string query = NResource::Find("resfs/file/tpch/queries/yql/q4.sql");
+        Replace(query, "{% include 'header.sql.jinja' %}", "PRAGMA YqlSelect = 'force';");
+        Replace(query, "{{orders}}", "`/Root/orders`");
+        Replace(query, "{{lineitem}}", "`/Root/lineitem`");
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const auto plan = TString{*explain.GetStats()->GetPlan()};
+        const auto shuffles = CollectHashShuffleDescriptions(plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(shuffles.size(), CompositePartitionKey ? 3 : 2, plan);
+        // Identify the DISTINCT exchange by its intermediate order-key alias,
+        // separately from the join and priority-aggregation exchanges.
+        const auto distinctShuffles = std::count_if(shuffles.begin(), shuffles.end(), [](const TString& shuffle) {
+            return shuffle.Contains("_intermediate_") && shuffle.Contains("l_orderkey");
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(distinctShuffles, CompositePartitionKey ? 1 : 0, plan);
+
+        const auto execute = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(execute.GetResultSet(0)), R"([["HIGH";8u];["LOW";4u]])");
     }
 
     Y_UNIT_TEST(ShuffleEliminationColumnShardHashPreservedInPhysicalAst) {

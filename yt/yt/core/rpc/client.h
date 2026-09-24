@@ -201,7 +201,7 @@ public:
     std::string GetMethod() const override;
 
     //! Fluent request annotation: |request->Annotate().With("Key", value)|.
-    NLogging::TLoggingTagListBuilder Annotate();
+    NLogging::TLoggingTagListBuilderGuard<> Annotate();
 
     const NLogging::TLoggingTagList& GetLoggingTags() const override;
 

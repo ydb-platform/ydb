@@ -63,23 +63,25 @@ def inferred_settings_strategy(strategy, monkeypatch):
     return strategy
 
 
-@pytest.mark.parametrize('expected_slot_count, slot_count, overpopulated', [(8, 16, False), (16, 8, True)])
-def test_source_metrics_slot_count_precedence(inferred_settings_strategy, expected_slot_count, slot_count, overpopulated):
+@pytest.mark.parametrize('expected_slot_count, metrics_expected_slot_count, overpopulated', [(8, 16, False), (16, 8, True)])
+def test_source_metrics_expected_slot_count_precedence(
+    inferred_settings_strategy, expected_slot_count, metrics_expected_slot_count, overpopulated,
+):
     strategy = inferred_settings_strategy
     source = balance.common.fetch_base_config().PDisk[0]
     source.ExpectedSlotCount = expected_slot_count
-    source.PDiskMetrics.SlotCount = slot_count
+    source.PDiskMetrics.ExpectedSlotCount = metrics_expected_slot_count
     strategy.cluster_info = balance.ClusterInfo.collect_cluster_info()
     strategy.calculate_extra_info()
     assert strategy.cluster_info.pdisk_usage[1, 1] == 9
-    assert strategy.cluster_info.expected_slot_count_map[1, 1] == slot_count
+    assert strategy.cluster_info.expected_slot_count_map[1, 1] == metrics_expected_slot_count
     assert ((1, 1) in strategy.overpopulated_pdisks) == overpopulated
 
 
-def test_destination_metrics_slot_count_precedence(inferred_settings_strategy, monkeypatch):
+def test_destination_metrics_expected_slot_count_precedence(inferred_settings_strategy, monkeypatch):
     strategy = inferred_settings_strategy
     destination = balance.common.fetch_base_config().PDisk[1]
-    destination.PDiskMetrics.SlotCount = 10
+    destination.PDiskMetrics.ExpectedSlotCount = 10
     strategy.cluster_info = balance.ClusterInfo.collect_cluster_info()
     strategy.calculate_extra_info()
     assert strategy.cluster_info.expected_slot_count_map[3, 1] == 10

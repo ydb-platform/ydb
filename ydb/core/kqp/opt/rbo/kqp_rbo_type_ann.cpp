@@ -137,6 +137,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpEmptySource> emptySource, TRBOContext & ctx) {
+    if (emptySource->Input) {
+        emptySource->Type = emptySource->Input->GetTypeAnn();
+        return TStatus::Ok;
+    }
+
     TVector<const TItemExprType*> resultItems;
     auto resultType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);
 

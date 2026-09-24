@@ -683,13 +683,7 @@ alter_streaming_query_action:
 alter_streaming_query_set_settings: SET streaming_query_settings;
 
 streaming_query_settings: LPAREN streaming_query_setting (COMMA streaming_query_setting)* COMMA? RPAREN;
-streaming_query_setting: an_id_or_type EQUALS streaming_query_setting_value;
-streaming_query_setting_value:
-    id_or_type
-  | STRING_VALUE
-  | bool_value
-  | streaming_query_settings
-;
+streaming_query_setting: an_id_or_type EQUALS expr;
 
 streaming_query_definition: AS DO inline_action;
 
@@ -967,8 +961,9 @@ table_setting_value:
 ;
 
 ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;
+// The optional suffix is an object key prefix, not a cluster-qualified object_ref.
 ttl_tier_action:
-      TO EXTERNAL DATA SOURCE an_id
+      TO EXTERNAL DATA SOURCE an_id (DOT an_id)?
     | DELETE
 ;
 

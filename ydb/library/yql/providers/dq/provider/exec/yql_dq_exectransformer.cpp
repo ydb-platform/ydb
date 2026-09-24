@@ -71,6 +71,12 @@ namespace {
 
 using TUploadList = IDqGateway::TUploadList;
 
+struct TPreparedUploadFile {
+    TString Path;
+    TString ObjectId;
+    TString ContentMd5;
+};
+
 // TODO: move this to separate file
 class TLocalExecutor: public TCounters
 {
@@ -493,12 +499,16 @@ private:
         return ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream", ctx.WrapByCallableIf(data, "Just", std::move(node)));
     }
 
-    std::tuple<TString, TString> GetPathAndObjectId(const TString& path, const TString& objectId, const TString& md5) const {
+    TPreparedUploadFile PrepareFile(const TString& path, const TString& objectId, const TString& md5) const {
         if (path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)
             || !State->Settings->EnableStrip.Get() || !State->Settings->EnableStrip.Get().GetOrElse(false))
         {
             UploadCache_->ModulesMapping.emplace(objectId, path);
-            return std::make_tuple(path, objectId);
+            // Static modules are not uploaded; for unstripped files, MD5 may predate the snapshot.
+            return {
+                .Path = path,
+                .ObjectId = objectId,
+            };
         }
 
         TFileLinkPtr& fileLink = UploadCache_->FileLinks[objectId];
@@ -508,14 +518,18 @@ private:
 
         UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied(), path);
 
-        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied());
+        return {
+            .Path = fileLink->GetPath(),
+            .ObjectId = objectId + DqStrippedSuffied(),
+            .ContentMd5 = fileLink->GetMd5(),
+        };
     }
 
-    std::tuple<TString, TString> GetPathAndObjectId(const TFilePathWithMd5& pathWithMd5) const {
+    TPreparedUploadFile PrepareFile(const TFilePathWithMd5& pathWithMd5) const {
         if (pathWithMd5.Md5.empty()) {
             YQL_CLOG(WARN, ProviderDq) << "Empty md5 for " << pathWithMd5.Path;
         }
-        return GetPathAndObjectId(pathWithMd5.Path,
+        return PrepareFile(pathWithMd5.Path,
             (pathWithMd5.Md5.empty() && !pathWithMd5.Path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix))
             ? MD5::File(pathWithMd5.Path) /* used for local run only */
             : pathWithMd5.Md5,
@@ -572,13 +586,15 @@ private:
             } else {
                 auto f = IDqGateway::TFileResource();
                 f.SetName("dq_vanilla_job.lite");
-                TString path = State->VanillaJobPath;
-                TString objectId = GetProgramCommitId();
-                std::tie(path, objectId) = GetPathAndObjectId(path, objectId, State->VanillaJobMd5);
-                f.SetObjectId(objectId);
-                f.SetLocalPath(path);
+                const auto preparedFile = PrepareFile(
+                    State->VanillaJobPath,
+                    GetProgramCommitId(),
+                    State->VanillaJobMd5);
+                f.SetObjectId(preparedFile.ObjectId);
+                f.SetLocalPath(preparedFile.Path);
                 f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
-                f.SetSize(TFile(path, OpenExisting | RdOnly).GetLength());
+                f.SetSize(TFile(preparedFile.Path, OpenExisting | RdOnly).GetLength());
+                f.SetContentMd5(preparedFile.ContentMd5);
                 uploadList->emplace(f);
             }
         }
@@ -693,19 +709,20 @@ private:
                         TMaybe<TFilePathWithMd5> udfPathWithMd5 = State->TypeCtx->UdfResolver->GetSystemModulePath(moduleName);
                         YQL_ENSURE(udfPathWithMd5.Defined());
 
-                        TString filePath, objectId;
-                        std::tie(filePath, objectId) = GetPathAndObjectId(*udfPathWithMd5);
+                        const auto preparedFile = PrepareFile(*udfPathWithMd5);
 
-                        YQL_CLOG(DEBUG, ProviderDq) << "File|Md5 " << filePath << "|" << objectId;
+                        YQL_CLOG(DEBUG, ProviderDq) << "File|Md5 "
+                            << preparedFile.Path << "|" << preparedFile.ObjectId;
 
-                        if (!filePath.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)) {
+                        if (!preparedFile.Path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)) {
                             auto f = IDqGateway::TFileResource();
-                            f.SetLocalPath(filePath);
+                            f.SetLocalPath(preparedFile.Path);
                             f.SetName(ToString(moduleName));
-                            f.SetObjectId(objectId);
+                            f.SetObjectId(preparedFile.ObjectId);
                             f.SetObjectType(IDqGateway::TFileResource::EUDF_FILE);
-                            f.SetSize(TFile(filePath, OpenExisting | RdOnly).GetLength());
+                            f.SetSize(TFile(preparedFile.Path, OpenExisting | RdOnly).GetLength());
                             f.SetCustomUdfPrefix(customUdfPrefix);
+                            f.SetContentMd5(preparedFile.ContentMd5);
                             uploadList->emplace(f);
                         }
 

@@ -65,9 +65,6 @@ void TStepAction::CacheSourceStats() {
     CachedFilteredRows = source.GetFilteredRowsCount();
     CachedTotalRows = source.GetRecordsCountOptional().value_or(0);
     CachedTotalReservedBytes = source.GetReservedMemory();
-    CachedCacheBytes = source.ExtractCacheBytesRead();
-    CachedBsBytes = source.ExtractBsBytesRead();
-    CachedTierBytes = source.ExtractTierBytesRead();
 }
 
 TStepAction::TStepAction(std::unique_ptr<TDataSourceLease> sourceLease, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,

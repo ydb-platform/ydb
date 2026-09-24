@@ -48,18 +48,6 @@ public:
         return 0;
     }
 
-    virtual ui64 GetCacheBytes() const {
-        return 0;
-    }
-
-    virtual ui64 GetBsBytes() const {
-        return 0;
-    }
-
-    virtual ui64 GetTierBytes() const {
-        return 0;
-    }
-
     virtual ~IApplyAction() = default;
 };
 

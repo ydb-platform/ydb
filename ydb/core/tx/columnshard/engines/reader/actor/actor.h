@@ -217,9 +217,6 @@ private:
     ui64 TotalPartialSourcesCount = 0;
     ui64 TotalBlobBytes = 0;
     ui64 TotalRawBytes = 0;
-    ui64 TotalCacheBytes = 0;
-    ui64 TotalBsBytes = 0;
-    ui64 TotalTierBytes = 0;
     ui64 TotalRowsCount = 0;
     ui32 PageFaults = 0;
     TInstant StartWaitTime;

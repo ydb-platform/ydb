@@ -165,13 +165,10 @@ public:
             const ui64 rawBytes = source.GetAs<IDataSource>()->GetUsedRawBytes();
             const ui32 totalRows = source.GetRecordsCount();
             const ui64 reservedMemory = source.GetReservedMemory();
-            const ui64 cacheBytes = source.ExtractCacheBytesRead();
-            const ui64 bsBytes = source.ExtractBsBytesRead();
-            const ui64 tierBytes = source.ExtractTierBytesRead();
             auto applyAction = std::make_shared<TApplySourceResult>(std::move(sourceLease), Step);
             NActors::TActivationContext::AsActorContext().Send(
                 scanActorId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::move(applyAction), std::move(guard), sourceId, blobBytes,
-                                 rawBytes, RecordsCount, totalRows, reservedMemory, cacheBytes, bsBytes, tierBytes));
+                                 rawBytes, RecordsCount, totalRows, reservedMemory));
         }
     };
 

@@ -1,7 +1,5 @@
 #include "read.h"
 
-#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
-
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/join.h>
@@ -56,13 +54,6 @@ void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& d
     AFL_VERIFY(WaitingRangesCount >= 0);
     Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
     AFL_VERIFY(data.size() == range.Size)("data", data.size())("range", range.ToString())("from_cache", fromCache);
-    if (fromCache) {
-        CacheBytes += range.Size;
-    } else if (!GetStorageId() || GetStorageId() == NBlobOperations::TGlobal::DefaultStorageId) {
-        BsBytes += range.Size;
-    } else {
-        TierBytes += range.Size;
-    }
     for (auto&& i : it->second) {
         AFL_VERIFY(static_cast<ui64>(i.Offset) + i.GetBlobSize() <= static_cast<ui64>(range.Offset) + data.size())
         ("group", range.ToString())("sub", i.ToString())("data", data.size());

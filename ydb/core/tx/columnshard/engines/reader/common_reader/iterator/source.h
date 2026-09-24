@@ -169,9 +169,6 @@ protected:
     TMonotonic SourceCreatedTimestamp;
     TDuration TotalExecutionDuration;
     ui64 TotalBytesRead = 0;
-    ui64 TotalCacheBytesRead = 0;
-    ui64 TotalBsBytesRead = 0;
-    ui64 TotalTierBytesRead = 0;
     std::unique_ptr<TFetchedResult> StageResult;
     virtual ui32 GetRecordsCountVirtual() const;
 
@@ -221,12 +218,6 @@ public:
         TotalBytesRead += bytes;
     }
 
-    void AddReadIoBytes(const ui64 cacheBytes, const ui64 bsBytes, const ui64 tierBytes) {
-        TotalCacheBytesRead += cacheBytes;
-        TotalBsBytesRead += bsBytes;
-        TotalTierBytesRead += tierBytes;
-    }
-
     void OnStartProcessing();
 
     TDuration GetTotalDuration() const {
@@ -244,42 +235,6 @@ public:
     ui64 ExtractTotalBytesRead() {
         const ui64 result = TotalBytesRead;
         TotalBytesRead = 0;
-        return result;
-    }
-
-    NO_SANITIZE_THREAD
-    ui64 GetCacheBytesRead() const {
-        return TotalCacheBytesRead;
-    }
-
-    NO_SANITIZE_THREAD
-    ui64 GetBsBytesRead() const {
-        return TotalBsBytesRead;
-    }
-
-    NO_SANITIZE_THREAD
-    ui64 GetTierBytesRead() const {
-        return TotalTierBytesRead;
-    }
-
-    NO_SANITIZE_THREAD
-    ui64 ExtractCacheBytesRead() {
-        const ui64 result = TotalCacheBytesRead;
-        TotalCacheBytesRead = 0;
-        return result;
-    }
-
-    NO_SANITIZE_THREAD
-    ui64 ExtractBsBytesRead() {
-        const ui64 result = TotalBsBytesRead;
-        TotalBsBytesRead = 0;
-        return result;
-    }
-
-    NO_SANITIZE_THREAD
-    ui64 ExtractTierBytesRead() {
-        const ui64 result = TotalTierBytesRead;
-        TotalTierBytesRead = 0;
         return result;
     }
 

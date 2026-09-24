@@ -178,9 +178,6 @@ private:
     bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
     YDB_ACCESSOR(bool, CacheAfterRead, true);
-    ui64 CacheBytes = 0;
-    ui64 BsBytes = 0;
-    ui64 TierBytes = 0;
 
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
@@ -194,18 +191,6 @@ protected:
     virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const = 0;
 
 public:
-    ui64 GetCacheBytes() const {
-        return CacheBytes;
-    }
-
-    ui64 GetBsBytes() const {
-        return BsBytes;
-    }
-
-    ui64 GetTierBytes() const {
-        return TierBytes;
-    }
-
     void RetryRead(const TBlobRange& range) {
         DoRetryRead(range);
     }

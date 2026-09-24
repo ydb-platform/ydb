@@ -291,7 +291,7 @@ private:
             HFunc(TEvPrivate::TEvNbs2MaintenanceResult, Handle);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
-            HFunc(TEvCms::TEvManageRequestRequest, Handle);
+            HFunc(TEvCms::TEvManageRequestRequest, CheckAndEnqueueRequest);
             HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
@@ -492,12 +492,15 @@ private:
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
+    void ProcessManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev,
+        const TActorContext &ctx, const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
     void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
     void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx);
+    void CheckAndEnqueueRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvConditionalPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvNotification::TPtr &ev, const TActorContext &ctx);
     void ProcessQueue();

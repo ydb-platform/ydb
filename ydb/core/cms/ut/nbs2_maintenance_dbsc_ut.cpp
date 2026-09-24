@@ -187,6 +187,56 @@ Y_UNIT_TEST_SUITE(TCmsNbs2RealDbsControllerTest) {
         env.CheckDbsc(3, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
     }
 
+    Y_UNIT_TEST(ManualApprovalWithRealDbsController) {
+        TRealDbsControllerEnv env;
+        env.UpdateMap(PartitionId, {0, 1, 2, 3, 4});
+
+        const auto first = env.CheckMaintenanceTaskCreate("manual-blocker", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE, 1u, env.LockGroup(0));
+        env.CheckDbsc(1, {0}, NDbsc::NProto::ALLOW);
+        env.CheckActions(first, {0}, true);
+
+        const auto pending = env.CheckMaintenanceTaskCreate("manual-task", Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE, 1u, env.LockGroup(1));
+        env.CheckDbsc(2, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+        env.CheckActions(pending, {1}, false, ToString(PartitionId));
+        const auto scheduled = env.CheckListRequests("test-user", 1);
+        const auto requestId = scheduled.GetRequests(0).GetRequestId();
+
+        auto config = env.GetCmsConfig();
+        config.SetDisableMaintenance(true);
+        env.SetCmsConfig(config);
+
+        // Manual approval bypasses DisableMaintenance, but not NBS2 safety.
+        const auto denied = env.CheckApproveRequest("test-user", requestId, false, NKikimrCms::TStatus::DISALLOW_TEMP);
+        env.CheckDbsc(3, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+        UNIT_ASSERT_VALUES_EQUAL(denied.ManuallyApprovedPermissionsSize(), 0);
+        UNIT_ASSERT_C(denied.GetStatus().GetReason().Contains(ToString(PartitionId)), denied.ShortDebugString());
+        env.CheckListPermissions("test-user", 1);
+        env.CheckActions(env.CheckMaintenanceTaskGet("manual-task", Ydb::StatusIds::SUCCESS),
+            {1}, false, ToString(PartitionId));
+        const auto unchanged = env.CheckGetRequest("test-user", requestId);
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetRequests(0).SerializeAsString(), unchanged.GetRequests(0).SerializeAsString());
+
+        env.CheckCompleteAction(first.action_group_states(0).action_states(0).action_uid(), Ydb::StatusIds::SUCCESS);
+        const auto allowed = env.CheckApproveRequest("test-user", requestId);
+        env.CheckDbsc(4, {1}, NDbsc::NProto::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(allowed.ManuallyApprovedPermissionsSize(), 1);
+        const auto& permission = allowed.GetManuallyApprovedPermissions(0);
+        UNIT_ASSERT_VALUES_EQUAL(permission.GetAction().GetHost(), ToString(env.GetNodeId(1)));
+        UNIT_ASSERT(permission.GetDeadline() > env.GetCurrentTime().MicroSeconds());
+        const auto stored = env.CheckMaintenanceTaskGet("manual-task", Ydb::StatusIds::SUCCESS);
+        env.CheckActions(stored, {1}, true);
+        UNIT_ASSERT_VALUES_EQUAL(stored.action_group_states(0).action_states(0).action_uid().action_id(), permission.GetId());
+        env.CheckListPermissions("test-user", 1);
+
+        // Approval persists through the same transaction as ordinary grants.
+        env.RestartCms();
+        env.CheckActions(env.CheckMaintenanceTaskGet("manual-task", Ydb::StatusIds::SUCCESS), {1}, true);
+        env.CheckListPermissions("test-user", 1);
+        env.CheckDbsc(4, {1}, NDbsc::NProto::ALLOW);
+    }
+
     Y_UNIT_TEST(ExistingLocksRefreshAndRestart) {
         TRealDbsControllerEnv env;
         env.UpdateMap(PartitionId, {0, 1, 2, 3, 4});

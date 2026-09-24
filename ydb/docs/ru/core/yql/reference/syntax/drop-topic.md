@@ -2,11 +2,18 @@
 
 С помощью оператора `DROP TOPIC` можно удалить [топик](../../../concepts/datamodel/topic.md).
 
+Обозначения в блоке синтаксиса описаны в [{#T}](../syntax-conventions.md).
+
 ## Синтаксис
 
 ```yql
-DROP TOPIC topic_path;
+DROP TOPIC [IF EXISTS] <topic_path>
 ```
+
+### Параметры
+
+* `IF EXISTS` — если топика с указанным именем нет, команда не возвращает ошибку.
+* `<topic_path>` — путь удаляемого топика. Допускается запись в виде абсолютного пути или имени в текущей базе данных.
 
 ## Примеры
 
@@ -14,6 +21,12 @@ DROP TOPIC topic_path;
 
 ```yql
 DROP TOPIC `my_topic`;
+```
+
+Если топик может отсутствовать:
+
+```yql
+DROP TOPIC IF EXISTS `my_topic`;
 ```
 
 ## См. также

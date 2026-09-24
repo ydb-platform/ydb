@@ -54,76 +54,22 @@ inline ESpillResult Wait() {
 }
 
 NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page);
-
-class TProbeMatchState {
-  public:
-    static constexpr size_t NoOffset = std::numeric_limits<size_t>::max();
-
-    TProbeMatchState() = default;
-    TProbeMatchState(const TProbeMatchState&) = delete;
-    TProbeMatchState& operator=(const TProbeMatchState&) = delete;
-
-    TProbeMatchState(TProbeMatchState&& other) noexcept
-        : Size_(std::exchange(other.Size_, 0))
-        , ActivePages_(std::exchange(other.ActivePages_, 0))
-    {
-        Bits_.Swap(other.Bits_);
-    }
-
-    TProbeMatchState& operator=(TProbeMatchState&& other) noexcept {
-        if (this != &other) {
-            Bits_.Swap(other.Bits_);
-            Size_ = std::exchange(other.Size_, 0);
-            ActivePages_ = std::exchange(other.ActivePages_, 0);
-        }
-        return *this;
-    }
-
-    size_t AddPage(TDynBitMap& pageBits, size_t rows) {
-        MKQL_ENSURE(rows > 0, "registering empty probe page match state");
-        const size_t offset = Size_;
-        MKQL_ENSURE(rows <= NoOffset - Size_, "probe match bitmap size overflow");
-        Size_ += rows;
-        Bits_.Reserve(Size_);
-        for (size_t row = 0; row < rows; ++row) {
-            if (pageBits.Get(row)) {
-                Bits_.Set(offset + row);
-            }
-        }
-        pageBits.Clear();
-        ++ActivePages_;
-        return offset;
-    }
-
-    bool Get(size_t offset, size_t row) const {
-        MKQL_ENSURE(offset < Size_ && row < Size_ - offset, "probe match bit index out of bounds");
-        return Bits_.Get(offset + row);
-    }
-
-    void Set(size_t offset, size_t row, bool value) {
-        MKQL_ENSURE(offset < Size_ && row < Size_ - offset, "probe match bit index out of bounds");
-        Bits_[offset + row] = value;
-    }
-
-    void ReleasePage() {
-        MKQL_ENSURE(ActivePages_ > 0, "releasing unknown probe page match state");
-        --ActivePages_;
-    }
-
-    bool AllPagesReleased() const {
-        return ActivePages_ == 0;
-    }
-
-  private:
-    TDynBitMap Bits_;
-    size_t Size_ = 0;
-    size_t ActivePages_ = 0;
-};
+NThreading::TFuture<ISpiller::TKey> SpillMatchBits(ISpiller& spiller, const TDynBitMap& bits, size_t rows);
+void ParseMatchBits(NYql::TChunkedBuffer&& buffer, TDynBitMap& bits, size_t expectedRows);
 
 struct TSpillingPage {
+    void StartSpilling(ISpiller& spiller) {
+        if (ProbeMatchBits) {
+            MatchWrite = SpillMatchBits(spiller, *ProbeMatchBits, Page.NTuples);
+            ProbeMatchBits.reset();
+        }
+        Write = SpillPage(spiller, std::move(Page));
+    }
+
     TPackResult Page;
     NThreading::TFuture<ISpiller::TKey> Write;
-    size_t ProbeMatchBitsOffset = TProbeMatchState::NoOffset;
+    std::optional<NThreading::TFuture<ISpiller::TKey>> MatchWrite;
+    std::unique_ptr<TDynBitMap> ProbeMatchBits;
     ESide Side;
     int BucketIndex;
 };
@@ -258,8 +204,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     struct State {
         TMKQLVector<Bucket> Buckets;
         TMKQLVector<TSpillingPage> InMemoryPages;
-        TProbeMatchState ProbeMatches;
-        TMKQLVector<TMKQLVector<size_t>> ProbeMatchOffsets;
+        TMKQLVector<TMKQLVector<ISpiller::TKey>> ProbeMatchKeys;
     };
 
     TProbeSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, State state)
@@ -269,7 +214,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     {
         BuildingMatchBits_.resize(State_.Buckets.size());
         BuildingMatchRows_.resize(State_.Buckets.size());
-        State_.ProbeMatchOffsets.resize(State_.Buckets.size());
+        State_.ProbeMatchKeys.resize(State_.Buckets.size());
         FlushBuildingPages();
     }
 
@@ -277,7 +222,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         while (condition() || SpillingPages_.has_value()) {
             if (SpillingPages_.has_value()) {
                 for (auto& page : *SpillingPages_) {
-                    if (!page.Write.IsReady()) {
+                    if (!page.Write.IsReady() || (page.MatchWrite && !page.MatchWrite->IsReady())) {
                         return Wait();
                     }
                 }
@@ -287,9 +232,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                     MKQL_ENSURE(thisBucket, "spilling page from in memory bucket?");
                     const ISpiller::TKey key = page.Write.ExtractValueSync();
                     thisBucket->SelectSide(page.Side).SpilledPages->push_back(key);
-                    if (page.ProbeMatchBitsOffset != TProbeMatchState::NoOffset) {
+                    if (page.MatchWrite) {
                         MKQL_ENSURE(page.Side == ESide::Probe, "build page has probe match state");
-                        State_.ProbeMatchOffsets[page.BucketIndex].push_back(page.ProbeMatchBitsOffset);
+                        State_.ProbeMatchKeys[page.BucketIndex].push_back(page.MatchWrite->ExtractValueSync());
                     }
                 }
                 SpillingPages_ = std::nullopt;
@@ -300,7 +245,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                 SpillingPages_.emplace();
                 for (int index = 0; index < Settings.SpillingPagesAtTime; ++index) {
                     auto page = *GetBackOrNull(State_.InMemoryPages);
-                    page.Write = SpillPage(*Spiller_, std::move(page.Page));
+                    page.StartSpilling(*Spiller_);
                     SpillingPages_->push_back(std::move(page));
                 }
             }
@@ -367,8 +312,8 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                 MKQL_ENSURE(pages.size() == 1, "match bits belong to exactly one building page");
                 MKQL_ENSURE(BuildingMatchRows_[index] == static_cast<size_t>(result.Page.NTuples),
                             "match bitmap must contain one bit per tuple");
-                result.ProbeMatchBitsOffset =
-                    State_.ProbeMatches.AddPage(BuildingMatchBits_[index], BuildingMatchRows_[index]);
+                result.ProbeMatchBits = std::make_unique<TDynBitMap>();
+                result.ProbeMatchBits->Swap(BuildingMatchBits_[index]);
                 BuildingMatchRows_[index] = 0;
             }
             State_.InMemoryPages.push_back(std::move(result));

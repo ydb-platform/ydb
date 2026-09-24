@@ -9,6 +9,18 @@ NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& p
     return spiller.Put(Serialize(std::move(page)));
 }
 
+NThreading::TFuture<ISpiller::TKey> SpillMatchBits(ISpiller& spiller, const TDynBitMap& bits, size_t rows) {
+    MKQL_ENSURE(rows > 0 && bits.Size() >= rows, "invalid probe match bitmap");
+
+    NYql::TChunkedBuffer buffer;
+    NYql::TChunkedBufferOutput output(buffer);
+    ::Save(&output, ui8(sizeof(TDynBitMap::TChunk)));
+    ::Save(&output, ui64(rows));
+    const size_t chunks = (rows + sizeof(TDynBitMap::TChunk) * 8 - 1) / (sizeof(TDynBitMap::TChunk) * 8);
+    ::SavePodArray(&output, bits.GetChunks(), chunks);
+    return spiller.Put(std::move(buffer));
+}
+
 NYql::TChunkedBuffer Serialize(TPackResult&& result) {
     MKQL_ENSURE(!result.Empty(), "spilling empty page?");
     NYql::TChunkedBuffer buff{};
@@ -29,6 +41,33 @@ struct OutputStreamTo: public IOutputStream{
         To = To.subspan(len);
     }
 };
+
+struct TChunkedBufferInput final : public IInputStream {
+    explicit TChunkedBufferInput(NYql::TChunkedBuffer&& buffer)
+        : Buffer(std::move(buffer))
+    {}
+
+    size_t DoRead(void* data, size_t len) override {
+        const size_t toRead = Min(len, Buffer.Size());
+        OutputStreamTo output;
+        output.To = std::span<char>{static_cast<char*>(data), toRead};
+        const size_t read = Buffer.CopyTo(output, toRead);
+        Buffer.Erase(read);
+        return read;
+    }
+
+    NYql::TChunkedBuffer Buffer;
+};
+
+void ParseMatchBits(NYql::TChunkedBuffer&& buffer, TDynBitMap& bits, size_t expectedRows) {
+    TChunkedBufferInput input(std::move(buffer));
+    TDynBitMap parsed;
+    parsed.Load(&input);
+    MKQL_ENSURE(input.Buffer.Empty(), "unexpected trailing data in probe match bitmap");
+    MKQL_ENSURE(expectedRows > 0 && parsed.Size() >= expectedRows && parsed.Size() - expectedRows < 64,
+                "probe page and match bitmap sizes differ");
+    bits.Swap(parsed);
+}
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout) {
     TPackResult res;

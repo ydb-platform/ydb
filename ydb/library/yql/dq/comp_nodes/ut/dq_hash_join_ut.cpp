@@ -2828,6 +2828,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
     }
 
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
+    }
+
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinSpillingRightIsBuild, BlockJoin) {
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftSemi), BlockJoin);
     }

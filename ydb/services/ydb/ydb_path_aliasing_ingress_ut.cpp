@@ -103,7 +103,9 @@ namespace NKikimr::NGRpcService {
 
             explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true)
                 : Server(MakeConfig(useSimpleProxy, enablePathAliasing), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
-                    settings.AddStoragePoolType("hdd");
+                    settings.StoragePoolTypes.clear();
+                    settings.AddStoragePool("hdd");
+                    settings.StoragePoolTypes.at("hdd").SetStoragePoolId(0);
                     settings.RegisterGrpcService<TKeyValueGRpcServiceV1>("keyvalue");
                 })
                 , Channel(grpc::CreateChannel(TStringBuilder() << "localhost:" << Server.GetPort(), grpc::InsecureChannelCredentials()))

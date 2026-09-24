@@ -256,8 +256,11 @@ public:
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
+    // VChunk details are included only for the requested positional range.
+    // A zero count builds a summary without per-VChunk details.
     virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
-        EDbgMonSnapshotDetail detail) const = 0;
+        size_t vChunkFrom,
+        size_t vChunkCount) const = 0;
 
     // Requests balancing of DDisks in this DBG using the strategy.
     virtual void BalanceDDisks(EDDiskBalanceStrategy strategy) = 0;

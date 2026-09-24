@@ -381,23 +381,37 @@ public:
 
 class TTtlVersions {
 private:
-    THashMap<TInternalPathId, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
+    struct TTableTtlData {
+        std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>> Versions;
+        std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> LastSettingsProto;   // Last TTL settings proto as saved to DB (for carry-over on TRUNCATE)
+    };
 
-    void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
-        auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
-        AFL_VERIFY(inserted || it->second == ttl)("snapshot", snapshot);
-    }
+    THashMap<TInternalPathId, TTableTtlData> Ttl;
 
 public:
     void AddVersionFromProto(
-        const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings) {
+        const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo) {
         std::optional<NOlap::TTiering> ttlVersion;
-        if (ttlSettings.HasEnabled()) {
+        if (versionInfo.HasTtlSettings() && versionInfo.GetTtlSettings().HasEnabled()) {
             NOlap::TTiering deserializedTtl;
-            AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
+            AFL_VERIFY(deserializedTtl.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).IsSuccess());
             ttlVersion.emplace(std::move(deserializedTtl));
         }
-        AddVersion(pathId, snapshot, ttlVersion);
+        auto& data = Ttl[pathId];
+        if (!data.Versions.empty()) {
+            AFL_VERIFY(snapshot > data.Versions.rbegin()->first)("snapshot", snapshot)("last", data.Versions.rbegin()->first);
+        }
+        auto [it, inserted] = data.Versions.emplace(snapshot, ttlVersion);
+        AFL_VERIFY(inserted || it->second == ttlVersion)("snapshot", snapshot);
+        data.LastSettingsProto = versionInfo.HasTtlSettings() ? std::optional(versionInfo.GetTtlSettings()) : std::nullopt;
+    }
+
+    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlSettingsProto(const TInternalPathId pathId) const {
+        auto it = Ttl.find(pathId);
+        if (it == Ttl.end()) {
+            return std::nullopt;
+        }
+        return it->second.LastSettingsProto;
     }
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
@@ -405,8 +419,9 @@ public:
         if (!findTable) {
             return std::nullopt;
         }
-        const auto findTtl = findTable->upper_bound(snapshot);
-        if (findTtl == findTable->begin()) {
+        const auto& versions = findTable->Versions;
+        const auto findTtl = versions.upper_bound(snapshot);
+        if (findTtl == versions.begin()) {
             return std::nullopt;
         }
         return std::prev(findTtl)->second;
@@ -414,8 +429,8 @@ public:
 
     ui64 GetMemoryUsage() const {
         ui64 memory = 0;
-        for (const auto& [_, ttlVersions] : Ttl) {
-            memory += ttlVersions.size() * sizeof(NOlap::TTiering);
+        for (const auto& [_, ttlData] : Ttl) {
+            memory += ttlData.Versions.size() * sizeof(NOlap::TTiering);
         }
         return memory;
     }
@@ -505,7 +520,6 @@ private:
         const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
 
     TInternalPathId GenerateNextInternalPathId();
-    NKikimrTxColumnShard::TTableVersionInfo LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const;
 
     friend class TTxInit;
 
@@ -618,6 +632,10 @@ public:
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         return Ttl.GetTableTtl(pathId, snapshot);
+    }
+
+    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlSettingsProto(const TInternalPathId pathId) const {
+        return Ttl.GetTableTtlSettingsProto(pathId);
     }
 
     const std::map<NOlap::TSnapshot, THashSet<TInternalPathId>>& GetPathsToDrop() const {

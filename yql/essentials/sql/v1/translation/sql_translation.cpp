@@ -3415,38 +3415,49 @@ TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
     }
 }
 
-TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
+namespace {
+template <auto F>
+TNodePtr TypeNameTagImpl(TSqlTranslation* self, TContext& ctx, const TRule_type_name_tag& node) {
     switch (node.Alt_case()) {
         case TRule_type_name_tag::kAltTypeNameTag1: {
-            auto content = Id(node.GetAlt_type_name_tag1().GetRule_id1(), *this);
-            auto atom = TDeferredAtom(Ctx_.Pos(), content);
+            auto content = Id(node.GetAlt_type_name_tag1().GetRule_id1(), *self);
+            auto atom = TDeferredAtom(ctx.Pos(), content);
             return atom.Build();
         }
         case TRule_type_name_tag::kAltTypeNameTag2: {
-            auto value = Token(node.GetAlt_type_name_tag2().GetToken1());
-            auto parsed = StringContentOrIdContent(Ctx_, Ctx_.Pos(), value);
+            auto value = self->Token(node.GetAlt_type_name_tag2().GetToken1());
+            auto parsed = StringContentOrIdContent(ctx, ctx.Pos(), value);
             if (!parsed) {
                 return {};
             }
-            auto atom = TDeferredAtom(Ctx_.Pos(), parsed->Content);
+            auto atom = TDeferredAtom(ctx.Pos(), parsed->Content);
             return atom.Build();
         }
         case TRule_type_name_tag::kAltTypeNameTag3: {
             TString bindName;
-            if (!NamedNodeImpl(node.GetAlt_type_name_tag3().GetRule_bind_parameter1(), bindName, *this)) {
+            if (!NamedNodeImpl(node.GetAlt_type_name_tag3().GetRule_bind_parameter1(), bindName, *self)) {
                 return {};
             }
-            auto namedNode = GetNamedNode(bindName);
+            auto namedNode = self->GetNamedNode(bindName);
             if (!namedNode) {
                 return {};
             }
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx_.Pos(), Ctx_, namedNode, atom);
+            F(ctx.Pos(), ctx, namedNode, atom, {});
             return atom.Build();
         }
         case TRule_type_name_tag::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
+}
+} // namespace
+
+TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
+    return TypeNameTagImpl<MakeTableFromExpression>(this, Ctx_, node);
+}
+
+TNodePtr TSqlTranslation::RuntimeTypeNameTag(const TRule_type_name_tag& node) {
+    return TypeNameTagImpl<MakeRuntimeTableFromExpression>(this, Ctx_, node);
 }
 
 TNodePtr TSqlTranslation::TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed) {
@@ -4051,15 +4062,21 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             }
             TVector<TNodePtr> hint_val;
             if (alt.HasBlock2()) {
+                std::function<TNodePtr(const TRule_type_name_tag& node)> mapper;
+                if (idLower == "user_attrs" && Ctx_.RuntimeUserAttrs) {
+                    mapper = [this](auto& node) { return this->RuntimeTypeNameTag(node); };
+                } else {
+                    mapper = [this](auto& node) { return this->TypeNameTag(node); };
+                }
                 auto& tags = alt.GetBlock2().GetBlock2();
                 switch (tags.Alt_case()) {
                     case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt1:
-                        hint_val.push_back(TypeNameTag(tags.GetAlt1().GetRule_type_name_tag1()));
+                        hint_val.push_back(mapper(tags.GetAlt1().GetRule_type_name_tag1()));
                         break;
                     case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt2: {
-                        hint_val.push_back(TypeNameTag(tags.GetAlt2().GetRule_type_name_tag2()));
+                        hint_val.push_back(mapper(tags.GetAlt2().GetRule_type_name_tag2()));
                         for (auto& tag : tags.GetAlt2().GetBlock3()) {
-                            hint_val.push_back(TypeNameTag(tag.GetRule_type_name_tag2()));
+                            hint_val.push_back(mapper(tag.GetRule_type_name_tag2()));
                         }
                         break;
                     }

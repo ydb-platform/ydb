@@ -4212,6 +4212,10 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         "ExceptIntersectBefore202503",
         ExceptIntersectBefore202503,
         /*isYqlSelectCompatible=*/false),
+    PAIRED_TABLE_ELEM(
+        "RuntimeUserAttrs",
+        RuntimeUserAttrs,
+        /*isYqlSelectCompatible=*/false),
 
     // TODO DqEngine/blockengine
     PAIRED_TABLE_ELEM(

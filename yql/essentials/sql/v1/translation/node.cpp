@@ -3588,18 +3588,25 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
     return BuildTableSource(node->GetPos(), table);
 }
 
-void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
+bool MakeTableIfConstant(TNodePtr node, TDeferredAtom& table, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
         table = TDeferredAtom(node->GetPos(), prefix + *literal);
-        return;
+        return true;
     }
 
     if (auto access = node->GetAccessNode()) {
         auto ret = access->TryMakeTable();
         if (ret) {
             table = TDeferredAtom(node->GetPos(), prefix + *ret);
-            return;
+            return true;
         }
+    }
+    return false;
+}
+
+void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
+    if (MakeTableIfConstant(node, table, prefix)) {
+        return;
     }
 
     if (!prefix.empty()) {
@@ -3610,6 +3617,18 @@ void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDefer
                                                   node});
 
     table = TDeferredAtom(wrappedNode, ctx);
+}
+
+void MakeRuntimeTableFromExpression(TPosition /*pos*/, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
+    if (MakeTableIfConstant(node, table, prefix)) {
+        return;
+    }
+
+    if (!prefix.empty()) {
+        node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
+    }
+
+    table = TDeferredAtom(node, ctx);
 }
 
 TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix) {

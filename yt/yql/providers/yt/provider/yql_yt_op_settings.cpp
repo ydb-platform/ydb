@@ -796,28 +796,31 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
-            if (!EnsureAtom(setting->Tail(), ctx)) {
-                return false;
-            }
-            NYT::TNode mapNode;
-            try {
-                mapNode = NYT::NodeFromYsonString(setting->Tail().Content());
-            } catch (const std::exception& e) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                    << "Failed to parse Yson: " << e.what()));
-                return false;
-            }
-            if (!mapNode.IsMap()) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                    << "Expected Yson map, got: " << mapNode.GetType()));
-                return false;
-            }
-            const auto& map = mapNode.AsMap();
-            for (auto it = map.cbegin(); it != map.cend(); ++it) {
-                if (!it->second.HasValue()) {
+            if (setting->Tail().IsAtom()) {
+                NYT::TNode mapNode;
+                try {
+                    mapNode = NYT::NodeFromYsonString(setting->Tail().Content());
+                } catch (const std::exception& e) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                        << "Expected Yson map key having value: "
-                        << it->first.Quote()));
+                        << "Failed to parse Yson: " << e.what()));
+                    return false;
+                }
+                if (!mapNode.IsMap()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Expected Yson map, got: " << mapNode.GetType()));
+                    return false;
+                }
+                const auto& map = mapNode.AsMap();
+                for (auto it = map.cbegin(); it != map.cend(); ++it) {
+                    if (!it->second.HasValue()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                            << "Expected Yson map key having value: "
+                            << it->first.Quote()));
+                        return false;
+                    }
+                }
+            } else {
+                if (!EnsureSpecificDataType(*setting->Child(1), EDataSlot::String, ctx, true)) {
                     return false;
                 }
             }

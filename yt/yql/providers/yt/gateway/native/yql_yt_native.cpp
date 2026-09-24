@@ -933,8 +933,28 @@ public:
             for (const auto& setting : publish.Settings().Ref().Children()) {
                 const auto settingType = FromString<EYtSettingType>(setting->Head().Content());
                 if (setting->ChildrenSize() == 2) {
-                    TString value = TString{setting->Tail().Content()};
-                    if (EYtSettingType::ColumnGroups == settingType) {
+                    TString value;
+                    if (EYtSettingType::UserAttrs == settingType) {
+                        if (setting->Tail().IsCallable("Nothing")) {
+                            YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                                << "Failed to parse user attributes Yson: String evaluated to null";
+                        }
+                        if (setting->Tail().IsCallable("String")) {
+                            YQL_ENSURE(setting->Tail().ChildrenSize() == 1);
+                            YQL_ENSURE(setting->Tail().Head().IsAtom());
+                            value = setting->Tail().Head().Content();
+                        } else if (setting->Tail().IsCallable("Just")) {
+                            YQL_ENSURE(setting->Tail().ChildrenSize() == 1);
+                            YQL_ENSURE(setting->Tail().Head().IsCallable("String"));
+                            YQL_ENSURE(setting->Tail().Head().ChildrenSize() == 1);
+                            YQL_ENSURE(setting->Tail().Head().Head().IsAtom());
+                            value = setting->Tail().Head().Head().Content();
+                        } else {
+                            YQL_ENSURE(setting->Tail().IsAtom());
+                            value = setting->Tail().Content();
+                        }
+                    } else if (EYtSettingType::ColumnGroups == settingType) {
+                        value = setting->Tail().Content();
                         bool groupDiff = false;
                         if (srcColumnGroupAlts.empty()) {
                             groupDiff = true;
@@ -952,6 +972,8 @@ public:
                             forceMerge = forceTransform = true;
                             YQL_CLOG(INFO, ProviderYt) << "Column groups diff forces merge";
                         }
+                    } else {
+                        value = setting->Tail().Content();
                     }
                     strOpts.emplace(settingType, value);
                 } else if (setting->ChildrenSize() == 1) {
@@ -2552,7 +2574,17 @@ private:
 
         const auto userAttrsIt = strOpts.find(EYtSettingType::UserAttrs);
         if (userAttrsIt != strOpts.cend()) {
-            const NYT::TNode mapNode = NYT::NodeFromYsonString(userAttrsIt->second);
+            NYT::TNode mapNode;
+            try {
+                mapNode = NYT::NodeFromYsonString(userAttrsIt->second);
+            } catch (const ::NYson::TYsonException& e) {
+                YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                    << "Failed to parse user attributes Yson: " << e.what();
+            }
+            if (!mapNode.IsMap()) {
+                YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                    << "Failed to parse user attributes Yson: Expected Yson map, got " << mapNode.GetType();
+            }
             const auto& map = mapNode.AsMap();
             for (auto it = map.cbegin(); it != map.cend(); ++it) {
                 yqlAttrs[it->first] = it->second;

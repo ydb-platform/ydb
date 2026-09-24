@@ -1,0 +1,17 @@
+/* dq can not */
+/* dqfile can not */
+use plato;
+PRAGMA RuntimeUserAttrs;
+
+
+INSERT INTO @a SELECT "WORK"||key as key FROM Input1;
+COMMIT;
+INSERT INTO @b SELECT a.key || b.key as key FROM Input2 as a CROSS JOIN @a as b;
+INSERT INTO @c SELECT b.key || b.key || a.key as key FROM Input3 as a CROSS JOIN Input4 as b;
+COMMIT;
+INSERT INTO @d SELECT b.key as key FROM @b as a CROSS JOIN @c as b WHERE a.key <> b.key;
+COMMIT;
+$b = SELECT max(key) FROM @d;
+$a = "{SOMETHING=a" || $b || "}";
+INSERT INTO Output WITH USER_ATTRS=$a SELECT "WORK"||key FROM Input1;
+

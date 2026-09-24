@@ -58,6 +58,7 @@ public:
                 }
             } else if (TMaybeNode<TYtPublish>(input)) {
                 ScanForUsedOutputTables(input->Child(TYtPublish::idx_Input), usedNodeIds);
+                ScanForUsedOutputTables(input->Child(TYtPublish::idx_Settings), usedNodeIds);
             } else if (TMaybeNode<TYtStatOut>(input)) {
                 ScanForUsedOutputTables(input->Child(TYtStatOut::idx_Input), usedNodeIds);
             }
@@ -459,6 +460,7 @@ public:
                 }
             } else if (TMaybeNode<TYtPublish>(&node)) {
                 ScanPlanDependencies(node.ChildPtr(TYtPublish::idx_Input), children);
+                ScanPlanDependencies(node.ChildPtr(TYtPublish::idx_Settings), children);
             } else if (TMaybeNode<TYtStatOut>(&node)) {
                 ScanPlanDependencies(node.ChildPtr(TYtStatOut::idx_Input), children);
             }

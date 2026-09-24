@@ -551,6 +551,12 @@ private:
 
         auto config = State_->Configuration->GetSettingsForNode(*input);
 
+        TExprNode::TListType needCalc = GetNodesToCalculate(input);
+        if (!needCalc.empty()) {
+            YQL_CLOG(DEBUG, ProviderYt) << "Calculating nodes for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+            return CalculateNodes(State_, input, cluster, needCalc, ctx);
+        }
+
         const auto mode = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode);
         const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
 

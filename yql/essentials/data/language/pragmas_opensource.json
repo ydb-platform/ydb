@@ -1068,6 +1068,9 @@
     "name": "DisableRotateJoinTree"
   },
   {
+    "name": "DisableRuntimeUserAttrs"
+  },
+  {
     "name": "DisableSeqMode"
   },
   {
@@ -1240,6 +1243,9 @@
   },
   {
     "name": "RuntimeLogLevel"
+  },
+  {
+    "name": "RuntimeUserAttrs"
   },
   {
     "name": "SampleSelect"

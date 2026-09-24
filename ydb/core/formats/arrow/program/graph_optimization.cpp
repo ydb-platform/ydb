@@ -250,18 +250,22 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     } else if (dataAddresses.size() == 1) {
         nodeFetch = dataAddresses.front();
     }
-    if (nodeFetch) {
+    const auto attachReserveMemory = [&](TGraphNode* fetchNode) {
         std::shared_ptr<IMemoryCalculationPolicy> policy;
         if (baseNode->Is(EProcessorType::Filter) || baseNode->Is(EProcessorType::DistinctMarker)) {
             policy = std::make_shared<TFilterCalculationPolicy>();
         } else if (baseNode->Is(EProcessorType::Projection)) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
         }
-        auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*nodeFetch->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
+        AFL_VERIFY(policy);
+        auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
         auto nodeReserve = AddNode(reserveMemory);
         nodeReserve->GetProcessor()->AddOutput(0);
-        nodeFetch->GetProcessor()->AddInput(0);
-        AddEdge(nodeReserve.get(), nodeFetch, 0);
+        fetchNode->GetProcessor()->AddInput(0);
+        AddEdge(nodeReserve.get(), fetchNode, 0);
+    };
+    if (nodeFetch) {
+        attachReserveMemory(nodeFetch);
     }
 
     if (indexes.size() + headers.size() > 1) {
@@ -296,7 +300,12 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
             }
             RemoveNode(i->GetIdentifier());
         }
+        if (ReserveIndexMemory && !indexes.empty()) {
+            attachReserveMemory(nodeFetch.get());
+        }
         changed = true;
+    } else if (ReserveIndexMemory && indexes.size() == 1 && headers.empty()) {
+        attachReserveMemory(indexes.front());
     }
     return changed;
 }

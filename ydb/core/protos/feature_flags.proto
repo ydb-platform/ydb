@@ -405,4 +405,6 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
+    // Reserves scan memory for skip-index payloads. Off leaves index reads outside the scan memory limiter.
+    optional bool EnableCsIndexReadMemoryTracking = 338 [default = false];
 }

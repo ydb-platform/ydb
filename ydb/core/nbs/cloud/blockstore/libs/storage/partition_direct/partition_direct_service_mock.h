@@ -32,6 +32,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
         TDirtyMapStateProto Proto;
+        TVector<NKikimr::NBsController::TDDiskId> DeletedDDiskIds;
         TPersistResultPromise Promise;
     };
 
@@ -89,11 +90,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
 
     TPersistResultFuture UpdateVChunkState(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg,
-        TDirtyMapStateProto state) override
+        TDirtyMapStateProto state,
+        TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds)
+        override
     {
         UpdateConfigRequests.emplace_back(TUpdateConfigRequest{
             .Config = cfg,
             .Proto = std::move(state),
+            .DeletedDDiskIds = std::move(deletedDDiskIds),
             .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateConfigRequests.back().Promise.GetFuture();
     }

@@ -134,6 +134,8 @@ namespace NKikimr {
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
+        // Max<ui32>() generation block alone lets us drop all data of the tablet, see IsCompleteTabletDeletionBlock
+        const bool CollectByCompleteDeletionBlock;
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
@@ -157,7 +159,8 @@ namespace NKikimr {
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,
                 ui32 hullCompLevel0MaxSstsAtOnce,
-                ui32 hullCompSortedPartsNum
+                ui32 hullCompSortedPartsNum,
+                bool collectByCompleteDeletionBlock = false
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

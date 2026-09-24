@@ -2179,7 +2179,7 @@ Y_UNIT_TEST_TWIN(InsertConflictWithReturning, EnableIndexStreamWrite) {
 
     {
         const auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES (1u, "original");
+            UPSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES (101u, "original");
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
@@ -2188,7 +2188,7 @@ Y_UNIT_TEST_TWIN(InsertConflictWithReturning, EnableIndexStreamWrite) {
         // Single conflicting row: INSERT must fail with the key conflict, and the failed
         // query must not deliver the RETURNING row (the row was never written).
         auto it = kikimr.GetQueryClient().StreamExecuteQuery(Q_(R"(
-            INSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES (1u, "new") RETURNING *;
+            INSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES (101u, "new") RETURNING *;
         )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -2210,7 +2210,7 @@ Y_UNIT_TEST_TWIN(InsertConflictWithReturning, EnableIndexStreamWrite) {
         // Multiple rows with one conflict: no partial RETURNING rows may be delivered either.
         auto it = kikimr.GetQueryClient().StreamExecuteQuery(Q_(R"(
             INSERT INTO `/Root/ReturningConflictTable` (key, value) VALUES
-                (100u, "ok"), (1u, "conflict"), (101u, "ok2")
+                (1u, "ok"), (101u, "conflict"), (102u, "ok2")
             RETURNING *;
         )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2235,7 +2235,7 @@ Y_UNIT_TEST_TWIN(InsertConflictWithReturning, EnableIndexStreamWrite) {
             SELECT key, value FROM `/Root/ReturningConflictTable` ORDER BY key;
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[[1u];["original"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[101u];["original"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

@@ -88,6 +88,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "memory") {
         return EMonPage::Memory;
     }
+    if (page == "deletedddisks") {
+        return EMonPage::DeletedDDisks;
+    }
     return EMonPage::Overview;
 }
 
@@ -138,6 +141,15 @@ std::optional<ui32> ParseSelectedVChunk(const TCgiParameters& cgi)
         return vchunkIndex;
     }
     return std::nullopt;
+}
+
+size_t ParseDeletedDDiskPage(const TCgiParameters& cgi)
+{
+    size_t page = 0;
+    if (cgi.Has("ddisk_page") && TryFromString(cgi.Get("ddisk_page"), page)) {
+        return page;
+    }
+    return 0;
 }
 
 ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
@@ -300,9 +312,20 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         .SelectedPercentile = ParseSelectedPercentile(cgi),
         .SelectedLatencyOperation = ParseSelectedLatencyOperation(cgi)};
 
+    data.DeletedDDiskRecords = DeletedDDiskStorage.GetRecords();
+    data.DeletedDDiskPage = ParseDeletedDDiskPage(cgi);
+
     // The not-yet-ready tablet renders synchronously.
     if (!FastPathService) {
         data.RuntimeError = "tablet is still initializing";
+        ctx.Send(
+            ev->Sender,
+            new NMon::TEvRemoteHttpInfoRes(
+                RenderMonPage(data, VChunkConfigs, TouchedVChunks)));
+        return true;
+    }
+
+    if (page == EMonPage::DeletedDDisks) {
         ctx.Send(
             ev->Sender,
             new NMon::TEvRemoteHttpInfoRes(

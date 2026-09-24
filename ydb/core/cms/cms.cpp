@@ -406,7 +406,7 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
 void TCms::StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
     const TPermissionRequest &permissionRequest, const TString &requestId,
     TVector<ui32> nodeIds, TDuration timeout,
-    TNbs2MaintenanceContinuation continuation, const TActorContext &ctx)
+    TNbs2MaintenanceContinuation continuation)
 {
     Y_ABORT_UNLESS(!PendingNbs2MaintenanceCheck);
     Y_ABORT_UNLESS(request && !nodeIds.empty() && continuation);
@@ -504,6 +504,12 @@ void TCms::Handle(TEvPrivate::TEvNbs2MaintenanceResult::TPtr &ev, const TActorCo
         result.BlockingPartitionIds.clear();
     }
 
+    if (result.Status == TStatus::ALLOW) {
+        ClusterInfo->ApplyNodeLimits(
+            State->Config.ClusterLimits.GetDisabledNodesLimit(), State->Config.ClusterLimits.GetDisabledNodesRatioLimit(),
+            State->Config.TenantLimits.GetDisabledNodesLimit(), State->Config.TenantLimits.GetDisabledNodesRatioLimit());
+    }
+
     pending->Continue(pending->Request, result, ctx);
     ResumeQueue();
 }
@@ -523,7 +529,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                                   TPermissionResponse &response,
                                   TPermissionRequest &scheduled,
                                   const TString &requestId,
-                                  const TActorContext &ctx)
+                                  const TActorContext &ctx,
+                                  const TErrorInfo *precheckError)
 {
     static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({
         TStatus::DISALLOW_TEMP,
@@ -589,6 +596,25 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                                 EAvailabilityMode_Name(request.GetAvailabilityMode()).data()));
         return false;
     };
+
+    if (precheckError) {
+        // DBSC rejects the whole batch. Keep all actions pending without
+        // running per-action checks or trying smaller subsets of nodes.
+        response.MutableStatus()->SetCode(precheckError->Code);
+        response.MutableStatus()->SetReason(precheckError->Reason.GetMessage());
+        response.SetDeadline(precheckError->Deadline.GetValue());
+        if (schedule) {
+            scheduled.MutableActions()->CopyFrom(request.GetActions());
+            size_t storedIssues = 0;
+            for (auto &action : *scheduled.MutableActions()) {
+                action.ClearIssue();
+                if (storedIssues++ < MAX_ISSUES_TO_STORE) {
+                    *action.MutableIssue() = ConvertIssue(precheckError->Reason);
+                }
+            }
+        }
+        return false;
+    }
 
     auto point = ClusterInfo->PushRollbackPoint();
     size_t storedIssues = 0;
@@ -2893,11 +2919,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
     }
 
-    TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
-    TRequestInfo scheduled;
     auto &rec = ev->Get()->Record;
-
-    auto requestStartTime = TInstant::Now();
+    const auto requestStartTime = TInstant::Now();
 
     auto actions(std::move(*rec.MutableActions()));
     rec.ClearActions();
@@ -2921,6 +2944,56 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     }
 
     SortActionsBySysTabletPriority(rec);
+
+    if (IsNbs2MaintenanceChecksEnabled(ctx)) {
+        TVector<ui32> nodeIds;
+        TErrorInfo error;
+        if (!CollectNbs2MaintenanceNodes(rec, nodeIds, error, ctx)) {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
+        }
+        if (!nodeIds.empty()) {
+            // Reuse the CMS budget for waiting on external cluster information.
+            StartNbs2MaintenanceCheck(ev.Release(), rec, {}, std::move(nodeIds), State->Config.InfoCollectionTimeout,
+                [this, requestStartTime](TAutoPtr<IEventHandle> &request,
+                    const TEvPrivate::TEvNbs2MaintenanceResult &result, const TActorContext &ctx)
+                {
+                    TEvCms::TEvPermissionRequest::TPtr ev(
+                        static_cast<TEvCms::TEvPermissionRequest::THandle *>(request.Release()));
+                    ProcessPermissionRequest(ev, requestStartTime, ctx, &result);
+                });
+            return;
+        }
+    }
+
+    ProcessPermissionRequest(ev, requestStartTime, ctx);
+}
+
+void TCms::ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
+    TInstant requestStartTime, const TActorContext &ctx, const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result)
+{
+    auto &rec = ev->Get()->Record;
+    // The uid may have been claimed since enqueueing or while waiting for
+    // DBSC. Even an outdated ERROR_TEMP must not overwrite the existing task.
+    if (nbs2Result && rec.HasMaintenanceTaskId() && State->MaintenanceTasks.contains(rec.GetMaintenanceTaskId())) {
+        return ReplyWithError<TEvCms::TEvPermissionResponse>(ev,
+            TStatus::ERROR_TEMP, "Maintenance task already exists; retry the request", ctx);
+    }
+
+    TErrorInfo error;
+    const TErrorInfo *precheckError = nullptr;
+    if (nbs2Result && nbs2Result->Status != TStatus::ALLOW) {
+        error.Code = nbs2Result->Status;
+        TString reason = nbs2Result->Reason;
+        if (!nbs2Result->BlockingPartitionIds.empty()) {
+            reason += TStringBuilder() << "; BlockingPartitionIds: " << JoinSeq(", ", nbs2Result->BlockingPartitionIds);
+        }
+        error.Reason = reason;
+        error.Deadline = ctx.Now() + State->Config.DefaultRetryTime;
+        precheckError = &error;
+    }
+
+    TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
+    TRequestInfo scheduled;
 
     if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {
@@ -2951,7 +3024,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     auto reqId = user + "-r-" + ToString(State->NextRequestId + 1);
 
     ClusterInfo->SetPriorityToCheck(priority);
-    bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, reqId, ctx);
+    bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, reqId, ctx, precheckError);
     ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 

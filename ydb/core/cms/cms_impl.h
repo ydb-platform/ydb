@@ -382,15 +382,19 @@ private:
     void StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
         const NKikimrCms::TPermissionRequest &permissionRequest, const TString &requestId,
         TVector<ui32> nodeIds, TDuration timeout,
-        TNbs2MaintenanceContinuation continuation, const TActorContext &ctx);
+        TNbs2MaintenanceContinuation continuation);
     bool IsNbs2MaintenanceRequestCurrent(const TPendingNbs2MaintenanceCheck &pending) const;
     // Tablet shutdown: discard the continuation without resuming the queue.
     void CancelNbs2MaintenanceCheck(const TActorContext &ctx);
+    void ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
+        TInstant requestStartTime, const TActorContext &ctx,
+        const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,
         const TString &requestId,
-        const TActorContext &ctx);
+        const TActorContext &ctx,
+        const TErrorInfo *precheckError = nullptr);
     bool IsActionHostValid(const NKikimrCms::TAction &action, TErrorInfo &error) const;
     bool ParseServices(const NKikimrCms::TAction &action, TServices &services, TErrorInfo &error) const;
 

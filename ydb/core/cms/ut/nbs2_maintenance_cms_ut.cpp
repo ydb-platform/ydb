@@ -45,7 +45,9 @@ struct TAttempt {
 // reply can be held while other client requests and transactions are processed.
 class TCmsFixture {
 public:
-    TCmsFixture() {
+    explicit TCmsFixture(ui32 vdisks = 1)
+        : Env(16, vdisks)
+    {
         Cms = ResolveTablet(Env, Env.CmsId);
         Controller = Env.Register(new TFakeDbsController(State));
         SetIntegration(true);
@@ -86,7 +88,11 @@ public:
     }
 
     TClient Send(IEventBase* request) {
-        const TClient client{Env.AllocateEdgeActor(), ++NextCookie};
+        return Send(request, ++NextCookie);
+    }
+
+    TClient Send(IEventBase* request, ui64 cookie) {
+        const TClient client{Env.AllocateEdgeActor(), cookie};
         Responses[client.Actor];
         Env.SendAsync(new IEventHandle(Cms, client.Actor, request, 0, client.Cookie));
         return client;
@@ -108,7 +114,7 @@ public:
     }
 
     template <typename TEvent>
-    auto Response(const TClient& client, TStatus::ECode status) {
+    auto ResponseRecord(const TClient& client) {
         Await([&] { return HasResponse(client); }, "CMS did not reply to the client");
         const auto& responses = Responses.at(client.Actor);
         UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
@@ -116,16 +122,28 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvent::EventType);
         UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), client.Actor);
         UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, client.Cookie);
-        const auto& record = ev->Get<TEvent>()->Record;
+        return ev->Get<TEvent>()->Record;
+    }
+
+    template <typename TEvent>
+    auto Response(const TClient& client, TStatus::ECode status) {
+        auto record = ResponseRecord<TEvent>(client);
         UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus().GetCode(), status, record.ShortDebugString());
+        return record;
+    }
+
+    template <typename TEvent>
+    auto Response(const TClient& client, Ydb::StatusIds::StatusCode status) {
+        auto record = ResponseRecord<TEvent>(client);
+        UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), status, record.ShortDebugString());
         return record;
     }
 
     TAttempt WaitForCheck(size_t count, const TClient& client) {
         Await([&] { return State.Requests.size() >= count || HasResponse(client); },
             "CMS neither started the NBS2 check nor replied to the client");
-        // This is the expected RED assertion until the public handlers call
-        // StartNbs2MaintenanceCheck. Do not skip the test or wait indefinitely.
+        // Refresh and manual approval remain RED until their handlers call
+        // StartNbs2MaintenanceCheck. Fail explicitly instead of waiting forever.
         UNIT_ASSERT_VALUES_EQUAL_C(State.Requests.size(), count,
             "CMS replied without starting the NBS2 check; wire the public handler to DBSController");
         UNIT_ASSERT_C(!HasResponse(client), "CMS must wait for DBSC before replying");
@@ -251,7 +269,7 @@ public:
     TControllerState State;
     THashMap<TActorId, TVector<TAutoPtr<IEventHandle>>> Responses;
     THashMap<TActorId, TInstant> WakeupDeadlines;
-    TCmsTestEnv Env{16};
+    TCmsTestEnv Env;
     TActorId Cms;
     TActorId Controller;
     const TString User = "nbs2-test";
@@ -479,6 +497,220 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.at(next.Actor).size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 3);
         fixture.Permissions(2);
+    }
+
+    Y_UNIT_TEST(PermissionBatchAndLegacyPaths) {
+        for (const auto outcome : {EOutcome::Allow, EOutcome::Deny, EOutcome::Timeout}) {
+            TCmsFixture fixture;
+            auto request = MakePermissionRequest(TRequestOptions(fixture.User, true, false, true),
+                fixture.Shutdown(2), fixture.Shutdown(0), fixture.Shutdown(1));
+            request->Record.SetAvailabilityMode(NKikimrCms::MODE_FORCE_RESTART);
+            request->Record.SetMaxPermissionCount(1);
+            const auto client = fixture.Send(request.Release());
+            const auto attempt = fixture.WaitForCheck(1, client);
+            // DBSC sees the whole request before the local limit selects one action.
+            fixture.CheckNodes(0, {0, 1, 2});
+            fixture.Permissions(0);
+            fixture.Complete(attempt, outcome);
+
+            const auto response = fixture.Response<TEvCms::TEvPermissionResponse>(client,
+                outcome == EOutcome::Allow ? TStatus::ALLOW_PARTIAL : PermissionStatus(outcome));
+            const size_t granted = outcome == EOutcome::Allow ? 1 : 0;
+            UNIT_ASSERT_VALUES_EQUAL(response.PermissionsSize(), granted);
+            UNIT_ASSERT(!response.GetRequestId().empty());
+            fixture.Permissions(granted);
+
+            const auto pending = fixture.GetRequest(response.GetRequestId());
+            UNIT_ASSERT_VALUES_EQUAL(pending.RequestsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).ActionsSize(), 3 - granted);
+            TVector<TString> targets;
+            for (const auto& permission : response.GetPermissions()) {
+                targets.push_back(permission.GetAction().GetHost());
+            }
+            for (const auto& action : pending.GetRequests(0).GetActions()) {
+                targets.push_back(action.GetHost());
+                if (outcome == EOutcome::Deny) {
+                    UNIT_ASSERT_C(action.GetIssue().GetMessage().Contains("101"), action.ShortDebugString());
+                }
+            }
+            Sort(targets);
+            TVector<TString> expected = {
+                ToString(fixture.Env.GetNodeId(0)), ToString(fixture.Env.GetNodeId(1)),
+                ToString(fixture.Env.GetNodeId(2)),
+            };
+            Sort(expected);
+            UNIT_ASSERT_VALUES_EQUAL(targets, expected);
+            if (outcome == EOutcome::Deny) {
+                UNIT_ASSERT_C(response.GetStatus().GetReason().Contains("101"), response.ShortDebugString());
+            }
+            // Neither DENY nor a transport error triggers checks of subsets.
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+        }
+
+        {
+            TCmsFixture fixture(0);
+            // Establish that both nodes pass the ordinary local checks when
+            // cluster limits are disabled. Dry-run must leave no locks behind.
+            fixture.SetIntegration(false);
+            auto baseline = MakePermissionRequest(TRequestOptions(fixture.User, true, true, true),
+                fixture.Shutdown(10), fixture.Shutdown(11));
+            baseline->Record.SetAvailabilityMode(NKikimrCms::MODE_KEEP_AVAILABLE);
+            const auto allowed = fixture.Response<TEvCms::TEvPermissionResponse>(
+                fixture.Send(baseline.Release()), TStatus::ALLOW);
+            UNIT_ASSERT_VALUES_EQUAL(allowed.PermissionsSize(), 2);
+            fixture.Permissions(0);
+            fixture.SetIntegration(true);
+
+            auto request = MakePermissionRequest(TRequestOptions(fixture.User, true, false, true),
+                fixture.Shutdown(10), fixture.Shutdown(11));
+            request->Record.SetAvailabilityMode(NKikimrCms::MODE_KEEP_AVAILABLE);
+            const auto client = fixture.Send(request.Release());
+            const auto attempt = fixture.WaitForCheck(1, client);
+            fixture.CheckNodes(0, {10, 11});
+
+            auto config = MakeHolder<TEvCms::TEvSetConfigRequest>();
+            *config->Record.MutableConfig() = fixture.Config();
+            auto* limits = config->Record.MutableConfig()->MutableClusterLimits();
+            UNIT_ASSERT_VALUES_EQUAL(limits->GetDisabledNodesLimit(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(limits->GetDisabledNodesRatioLimit(), 0);
+            limits->SetDisabledNodesLimit(1);
+            fixture.Response<TEvCms::TEvSetConfigResponse>(fixture.Send(config.Release()), TStatus::OK);
+            UNIT_ASSERT(!fixture.HasResponse(client));
+            fixture.Permissions(0);
+
+            // The cached cluster snapshot must use the updated limits after
+            // DBSC replies, without another DBSC check or a subset request.
+            fixture.Complete(attempt, EOutcome::Allow);
+            const auto response = fixture.Response<TEvCms::TEvPermissionResponse>(client, TStatus::ALLOW_PARTIAL);
+            UNIT_ASSERT_VALUES_EQUAL(response.PermissionsSize(), 1);
+            UNIT_ASSERT(!response.GetRequestId().empty());
+            fixture.Permissions(1);
+            const auto pending = fixture.GetRequest(response.GetRequestId());
+            UNIT_ASSERT_VALUES_EQUAL(pending.RequestsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).ActionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).GetActions(0).GetIssue().GetType(),
+                NKikimrCms::TAction::TIssue::DISABLED_NODES_LIMIT_REACHED);
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+        }
+
+        TCmsFixture fixture;
+        fixture.SetIntegration(false);
+        auto response = fixture.Response<TEvCms::TEvPermissionResponse>(fixture.Request(0), TStatus::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(response.PermissionsSize(), 1);
+        fixture.SetIntegration(true);
+        for (ui32 i = 0; i < fixture.Env.GetNodeCount(); ++i) {
+            fixture.Env.GetAppData(i).NbsEnabled = false;
+        }
+        response = fixture.Response<TEvCms::TEvPermissionResponse>(fixture.Request(1), TStatus::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(response.PermissionsSize(), 1);
+        fixture.Permissions(2);
+        UNIT_ASSERT(fixture.State.Requests.empty());
+
+        fixture.SetIntegration(true);
+        auto invalid = MakePermissionRequest(TRequestOptions(fixture.User),
+            MakeAction(NKikimrCms::TAction::SHUTDOWN_HOST, "unknown-nbs2-host", fixture.Duration.MicroSeconds()));
+        const auto rejected = fixture.Response<TEvCms::TEvPermissionResponse>(
+            fixture.Send(invalid.Release()), TStatus::NO_SUCH_HOST);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.PermissionsSize(), 0);
+        // No resolved targets: preserve normal validation even when other nodes
+        // have locks; do not send a batch containing only those existing locks.
+        UNIT_ASSERT(fixture.State.Requests.empty());
+        fixture.Permissions(2);
+    }
+
+    Y_UNIT_TEST(CreateMaintenanceTaskBatchAndDryRun) {
+        struct TCase {
+            EOutcome Outcome;
+            bool DryRun;
+        };
+        const TVector<TCase> cases = {
+            {EOutcome::Allow, false},
+            {EOutcome::Deny, false},
+            {EOutcome::Allow, true},
+            {EOutcome::Deny, true},
+        };
+        for (const auto& test : cases) {
+            TCmsFixture fixture;
+            const TString taskId = "nbs2-create-task";
+            auto request = MakeHolder<TEvCms::TEvCreateMaintenanceTaskRequest>();
+            request->Record.SetUserSID(fixture.User);
+            auto& apiRequest = *request->Record.MutableRequest();
+            auto& options = *apiRequest.mutable_task_options();
+            options.set_task_uid(taskId);
+            options.set_availability_mode(Ydb::Maintenance::AVAILABILITY_MODE_FORCE);
+            options.set_dry_run(test.DryRun);
+            if (!test.DryRun) {
+                options.set_max_inflight_actions(1);
+            }
+            AddActionGroups(apiRequest,
+                MakeActionGroup(MakeLockAction(fixture.Env.GetNodeId(2), fixture.Duration)),
+                MakeActionGroup(MakeLockAction(fixture.Env.GetNodeId(0), fixture.Duration)),
+                MakeActionGroup(MakeLockAction(fixture.Env.GetNodeId(1), fixture.Duration)));
+
+            // Public API adapters reply with cookie 0; unlike direct CMS
+            // requests, they do not propagate the incoming event's cookie.
+            const auto client = fixture.Send(request.Release(), 0);
+            const auto attempt = fixture.WaitForCheck(1, client);
+            fixture.CheckNodes(0, {0, 1, 2});
+            fixture.Permissions(0);
+            fixture.Complete(attempt, test.Outcome);
+            // Without dry-run, a denied task is created with pending actions;
+            // DISALLOW_TEMP is not a top-level API error in either mode.
+            const auto response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(
+                client, Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResult().task_uid(), taskId);
+
+            const size_t granted = test.Outcome == EOutcome::Allow ? (test.DryRun ? 3 : 1) : 0;
+            auto checkActions = [&](const auto& result) {
+                UNIT_ASSERT_VALUES_EQUAL(result.action_group_states_size(), 3);
+                size_t performed = 0;
+                TVector<ui32> targets;
+                for (const auto& group : result.action_group_states()) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.action_states_size(), 1);
+                    const auto& action = group.action_states(0);
+                    targets.push_back(action.action().lock_action().scope().node_id());
+                    if (action.status() == Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED) {
+                        ++performed;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(action.status(), Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
+                        if (test.Outcome == EOutcome::Deny) {
+                            UNIT_ASSERT_C(TString(action.details()).Contains("101"), action.ShortDebugString());
+                        }
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(performed, granted);
+                Sort(targets);
+                TVector<ui32> expected = {
+                    fixture.Env.GetNodeId(0), fixture.Env.GetNodeId(1), fixture.Env.GetNodeId(2),
+                };
+                Sort(expected);
+                UNIT_ASSERT_VALUES_EQUAL(targets, expected);
+            };
+            if (test.DryRun && test.Outcome == EOutcome::Deny) {
+                UNIT_ASSERT_VALUES_EQUAL(response.GetResult().action_group_states_size(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1);
+                UNIT_ASSERT_C(TString(response.GetIssues(0).message()).Contains("101"), response.ShortDebugString());
+            } else {
+                checkActions(response.GetResult());
+            }
+            fixture.Permissions(test.DryRun ? 0 : granted);
+
+            auto get = MakeHolder<TEvCms::TEvGetMaintenanceTaskRequest>();
+            get->Record.MutableRequest()->set_task_uid(taskId);
+            const auto stored = fixture.Response<TEvCms::TEvGetMaintenanceTaskResponse>(
+                fixture.Send(get.Release(), 0), test.DryRun ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS);
+            if (test.DryRun) {
+                const auto list = fixture.Send(MakeManageRequestRequest(
+                    fixture.User, NKikimrCms::TManageRequestRequest::LIST, false).Release());
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Response<TEvCms::TEvManageRequestResponse>(list, TStatus::OK).RequestsSize(), 0);
+            } else {
+                checkActions(stored.GetResult()); // Waiting actions survive the response.
+            }
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+        }
     }
 }
 

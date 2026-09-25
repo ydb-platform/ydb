@@ -403,7 +403,7 @@ public:
     const TString& GetError() const;
 
     /**
-     * @brief return the internal error occured while watching
+     * @brief return the internal error occurred while watching
      * the command execution. Should be called if execution
      * status is SHELL_INTERNAL_ERROR
      *

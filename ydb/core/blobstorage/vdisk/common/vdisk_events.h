@@ -501,7 +501,8 @@ namespace NKikimr {
 
         template<typename TQueryRecord>
         static inline TInstant GetReceivedTimestamp(const TQueryRecord *queryRecord, TInstant now) {
-            if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()) {
+            if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()
+                    && queryRecord->GetMsgQoS().GetExecTimeStats().HasReceivedTimestamp()) {
                 return TInstant::MicroSeconds(queryRecord->GetMsgQoS().GetExecTimeStats().GetReceivedTimestamp());
             }
             return now;

@@ -6,7 +6,12 @@ SSO в веб-интерфейсе поддерживается с помощь�
 
 ## Компоненты SSO {#sso-components}
 
-В едином входе участвуют браузер пользователя, IdP, Gateway, служебная база данных YDB EM и кластер {{ ydb-short-name }}, к которому обращается пользователь:
+В едином входе участвуют браузер пользователя, IdP, Gateway, служебная база данных YDB EM и кластер {{ ydb-short-name }}, к которому обращается пользователь.
+
+На схеме используются следующие термины:
+
+- [OIDC Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig) — получение конфигурации IdP из JSON-документа по известному адресу. Документ содержит адреса сервисов аутентификации, выдачи токенов и набора ключей.
+- [JWKS (JSON Web Key Set)](https://www.rfc-editor.org/rfc/rfc7517.html#section-5) — набор ключей в формате JSON. IdP публикует в нём открытые ключи, с помощью которых {{ ydb-short-name }} проверяет подпись JWT-токенов.
 
 ```mermaid
 flowchart LR
@@ -43,9 +48,55 @@ flowchart LR
 4. Gateway сохраняет токены в служебной базе данных YDB EM и устанавливает в браузере cookie с непрозрачным идентификатором сессии. Сами токены в cookie не передаются. Cookie имеет префикс `__Host-` и атрибуты `Secure`, `HttpOnly`, `SameSite=Strict`.
 5. При последующих запросах браузер передаёт cookie, а Gateway получает из сессии [токен доступа (access token)](https://www.rfc-editor.org/rfc/rfc6749.html#section-1.4) и использует его как `Bearer`-токен для запросов к {{ ydb-short-name }}. Сервер {{ ydb-short-name }} проверяет JWT-токен и определяет пользователя и его группы для [авторизации](../../security/authorization.md).
 
+Диаграмма показывает успешный вход и последующий запрос к кластеру. Конфигурация IdP и ключи могут использоваться из кеша; их получение показано для случая, когда они ещё не загружены.
+
+```mermaid
+sequenceDiagram
+    participant Browser as Браузер пользователя
+    participant Gateway as Gateway YDB EM
+    participant IdP as Внешний IdP
+    participant Sessions as Служебная БД YDB EM
+    participant Cluster as Кластер YDB
+
+    Note over Browser,Sessions: Вход в YDB EM
+    Browser->>Gateway: /meta/oidc/authorize
+    Gateway->>IdP: Получить Discovery-документ
+    IdP-->>Gateway: Конфигурация IdP
+    Gateway-->>Browser: Перенаправление на IdP<br/>с параметрами PKCE и state
+    Browser->>IdP: Запрос входа и аутентификация
+    IdP-->>Browser: Перенаправление на callback<br/>с кодом авторизации и state
+    Browser->>Gateway: /meta/oidc/callback с кодом и state
+    Gateway->>Gateway: Проверить state
+    Gateway->>IdP: Обменять код на токены:<br/>code_verifier и учётные данные клиента
+    IdP-->>Gateway: Токен доступа и, если выдан, токен обновления
+    Gateway->>Sessions: Сохранить токены сессии
+    Sessions-->>Gateway: Сессия сохранена
+    Gateway-->>Browser: Установить cookie сессии<br/>и вернуть в YDB EM
+
+    Note over Browser,Cluster: Запрос после входа
+    Browser->>Gateway: Запрос с cookie сессии
+    Gateway->>Sessions: Получить токены по идентификатору сессии
+    Sessions-->>Gateway: Токены сессии
+    Gateway->>Cluster: Запрос с Bearer-токеном доступа
+    Cluster->>IdP: Получить Discovery-документ и JWKS
+    IdP-->>Cluster: Конфигурация IdP и открытые ключи
+    Cluster->>Cluster: Проверить токен и права пользователя
+    Cluster-->>Gateway: Результат запроса
+    Gateway-->>Browser: Результат запроса
+```
+
+Префикс и атрибуты cookie ограничивают доступ к идентификатору сессии:
+
+- `__Host-` требует HTTPS, атрибута `Secure`, пути `Path=/` и отсутствия атрибута `Domain`. Cookie привязана к конкретному хосту Gateway; поддомены не могут установить такую cookie для него.
+- `Secure` разрешает передачу cookie только по HTTPS.
+- `HttpOnly` запрещает JavaScript читать или изменять cookie через API браузера, снижая риск кражи идентификатора сессии скриптом.
+- `SameSite=Strict` запрещает отправлять cookie в межсайтовых запросах, снижая риск подделки запросов от имени пользователя (CSRF).
+
+Подробнее см. в разделе [Cookie Security документа OAuth 2.0 for Browser-Based Applications (RFC 10017)](https://www.rfc-editor.org/rfc/rfc10017.html#section-6.1.3.2) и в [описании заголовка `Set-Cookie`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
+
 Если IdP выдал [токен обновления (refresh token)](https://www.rfc-editor.org/rfc/rfc6749.html#section-1.5), Gateway автоматически обновляет истекающий токен доступа. Если сессию нельзя продолжить, пользователю необходимо войти снова.
 
-При выходе через YDB EM Gateway удаляет серверную сессию и cookie и запрашивает отзыв токенов, если IdP предоставляет адрес сервиса отзыва токенов `revocation_endpoint`. Это не завершает браузерную сессию у самого IdP: при следующем входе провайдер может снова аутентифицировать пользователя без ввода пароля.
+При выходе через YDB EM Gateway удаляет серверную сессию и cookie и запрашивает отзыв токенов, если IdP предоставляет адрес сервиса отзыва токенов `revocation_endpoint`.
 
 ## Перед началом работы {#before-start}
 
@@ -96,7 +147,7 @@ security:
     redirect_to_idp_on_unauthorized: true
 ```
 
-Замените `<client-secret>` секретом зарегистрированного клиента. Ограничьте доступ к конфигурационному файлу, поскольку он содержит секрет.
+Замените `<client-secret>` секретом, выданным IdP при регистрации OIDC-клиента YDB EM. Секрет клиента (`client_secret`) — конфиденциальная строка, которой Gateway вместе с `client_id` подтверждает свою подлинность перед IdP при обмене кода на токены и их обновлении. Это учётные данные приложения YDB EM, а не пароль пользователя. Ограничьте доступ к конфигурационному файлу, поскольку он содержит секрет.
 
 | Параметр | Описание |
 | --- | --- |
@@ -155,7 +206,7 @@ auth_config:
 }
 ```
 
-В этом примере `issuer` одинаков в настройках Gateway и кластера и совпадает с `iss` в токене. Значение `audience: "prod"` входит в список `aud`. Параметры `subject_claim_name` и `groups_claim_name` задают поля, из которых {{ ydb-short-name }} получает имя пользователя и его группы. С учётом домена `sso` будут сформированы SID `alice@sso` и `developers@sso`.
+В этом примере `issuer` одинаков в настройках Gateway и кластера и совпадает с `iss` в токене. Значение `audience: "prod"` входит в список `aud`. Параметры `subject_claim_name` и `groups_claim_name` задают поля, из которых {{ ydb-short-name }} получает имя пользователя и его группы. С учётом домена `sso` будут сформированы [SID](../../concepts/glossary.md#access-sid) `alice@sso` и `developers@sso`.
 
 Описание всех параметров и ограничений совместимости приведено в разделе [«Конфигурация аутентификации с использованием внешнего IdP»](../../reference/configuration/auth_config.md#external-idp-auth-config).
 

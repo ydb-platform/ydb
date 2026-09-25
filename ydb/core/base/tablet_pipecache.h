@@ -44,7 +44,7 @@ struct TEvPipeCache {
 
     struct TEvForward : public TEventLocal<TEvForward, EvForward> {
     public:
-        THolder<IEventBase> Ev;
+        std::unique_ptr<IEventBase> Ev;
         const ui64 TabletId;
         const TEvForwardOptions Options;
 

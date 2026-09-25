@@ -18,7 +18,7 @@ public:
     void CreateConsumer(const TString& path);
 
     // namespace NPersQueue = Ydb::PersQueue;
-//    THolder<Ydb::PersQueue::IProducer> StartProducer(const TString& topicPath, bool compress = false);
+//    std::unique_ptr<Ydb::PersQueue::IProducer> StartProducer(const TString& topicPath, bool compress = false);
 
     // Getters
     ui16 GetGrpcPort() const {
@@ -48,8 +48,8 @@ private:
     void WaitWritePQServiceInitialization();
 
 private:
-    THolder<NPersQueue::TTestServer> Server;
-    THolder<TPQDataWriter> PQDataWriter; // For waiting for grpc writer service initialization.
+    std::unique_ptr<NPersQueue::TTestServer> Server;
+    std::unique_ptr<TPQDataWriter> PQDataWriter; // For waiting for grpc writer service initialization.
     double WriteAccountQuota;
     double ReadAccountQuota;
     const TString QuotersRootPath = "/Root/PersQueue/System/Quoters";

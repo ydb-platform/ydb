@@ -83,7 +83,7 @@ class TTablet : public TActor<TTablet> {
 
         ui64 SourceCookie;
 
-        THolder<TFollowerUpdate> FollowerUpdate;
+        std::unique_ptr<TFollowerUpdate> FollowerUpdate;
         TVector<TString> FollowerAuxUpdates;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
@@ -193,7 +193,7 @@ class TTablet : public TActor<TTablet> {
         EFollowerSyncState SyncState;
         TInstant LastSyncAttempt;
         ui64 SyncAttempt;
-        THolder<TSchedulerCookieHolder> SyncCookieHolder;
+        std::unique_ptr<TSchedulerCookieHolder> SyncCookieHolder;
 
         ui64 LastCookie = 0;
 
@@ -226,7 +226,7 @@ class TTablet : public TActor<TTablet> {
     ui32 ActualGeneration;
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
-    THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
+    std::unique_ptr<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
     TString TabletVersionInfo;
     TInstant BoostrapTime;
     TInstant ActivateTime;
@@ -263,7 +263,7 @@ class TTablet : public TActor<TTablet> {
     TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
-    THolder<NTracing::ITrace> IntrospectionTrace;
+    std::unique_ptr<NTracing::ITrace> IntrospectionTrace;
     TActorId RebuildGraphRequest;
 
     // Delayed cancellation reason

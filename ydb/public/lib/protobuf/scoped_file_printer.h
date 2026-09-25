@@ -35,7 +35,7 @@ protected:
     const TString FileName;
     const TString Scope;
 
-    THolder<google::protobuf::io::ZeroCopyOutputStream> Stream;
+    std::unique_ptr<google::protobuf::io::ZeroCopyOutputStream> Stream;
     TMaybe<google::protobuf::io::Printer> Printer;
 }; // TScopedFilePrinter
 

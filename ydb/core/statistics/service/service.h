@@ -11,6 +11,6 @@ struct TStatServiceSettings {
 
 NActors::TActorId MakeStatServiceID(ui32 node);
 
-THolder<NActors::IActor> CreateStatService(const TStatServiceSettings& settings = TStatServiceSettings());
+std::unique_ptr<NActors::IActor> CreateStatService(const TStatServiceSettings& settings = TStatServiceSettings());
 
 } // NKikimr::NStat

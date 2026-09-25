@@ -197,7 +197,7 @@ void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const 
             Name_ = ParametrizedTestName.c_str(); \
         } \
 \
-        static THolder<NUnitTest::TBaseTestCase> Create(ENUM_TYPE value, bool value2) { return ::MakeHolder<TTestCase##N>(value, value2); } \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create(ENUM_TYPE value, bool value2) { return ::std::make_unique<TTestCase##N>(value, value2); } \
         void Execute_(NUnitTest::TTestContext&) override; \
     }; \
     struct TTestRegistration##N { \
@@ -225,7 +225,7 @@ void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const 
             Name_ = ParametrizedTestName.c_str(); \
         } \
 \
-        static THolder<NUnitTest::TBaseTestCase> Create(ENUM_TYPE value) { return ::MakeHolder<TTestCase##N>(value); } \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create(ENUM_TYPE value) { return ::std::make_unique<TTestCase##N>(value); } \
         void Execute_(NUnitTest::TTestContext&) override; \
     }; \
     struct TTestRegistration##N { \

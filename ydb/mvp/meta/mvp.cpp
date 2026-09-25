@@ -199,7 +199,7 @@ void TMVP::TryGetMetaOptionsFromConfig() {
     }
 }
 
-THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
+std::unique_ptr<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
@@ -231,8 +231,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
             ? NActors::CreateStderrBackend()
             : NActors::CreateSysLogBackend("mvp", false, true),
         new NMonitoring::TDynamicCounters());
-    THolder<NActors::TActorSystemSetup> setup =
-        MakeHolder<NActors::TActorSystemSetup>();
+    std::unique_ptr<NActors::TActorSystemSetup> setup =
+        std::make_unique<NActors::TActorSystemSetup>();
     setup->NodeId = 1;
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[3]);
     setup->ExecutorsCount = 3;

@@ -1231,7 +1231,7 @@ Y_UNIT_TEST_SUITE(Http2Integration) {
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->AllowHttp2 = true;
         actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), add.Release()), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
@@ -1384,7 +1384,7 @@ Y_UNIT_TEST_SUITE(Http2Integration) {
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->AllowHttp2 = true;
         actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), add.Release()), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
@@ -3315,7 +3315,7 @@ Y_UNIT_TEST_SUITE(Http2OutgoingIntegration) {
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
         // Start a server with AllowHttp2 = true
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->AllowHttp2 = true;
         actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), add.Release()), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
@@ -3363,7 +3363,7 @@ Y_UNIT_TEST_SUITE(Http2OutgoingIntegration) {
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
         // Server with AllowHttp2 = true (supports both)
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->AllowHttp2 = true;
         actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), add.Release()), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);

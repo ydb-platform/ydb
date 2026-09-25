@@ -33,7 +33,7 @@ public:
             {"request", request.ShortDebugString()},
         );
 
-        auto response = MakeHolder<TEvForcedCompaction::TEvListResponse>();
+        auto response = std::make_unique<TEvForcedCompaction::TEvListResponse>();
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -96,7 +96,7 @@ public:
 
 private:
     void Reply(
-        THolder<TEvForcedCompaction::TEvListResponse> response,
+        std::unique_ptr<TEvForcedCompaction::TEvListResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString())
     {

@@ -187,17 +187,17 @@ namespace NKafka::NTests {
             };
         }
 
-        THolder<TEvKafka::TEvTopicOffsetsResponse> GrabTopicOffsetsResponse(
+        std::unique_ptr<TEvKafka::TEvTopicOffsetsResponse> GrabTopicOffsetsResponse(
             NActors::TTestActorRuntime& runtime,
             const TActorId& edge,
             TDuration waitTimeout)
         {
             auto handle = runtime.GrabEdgeEvent<TEvKafka::TEvTopicOffsetsResponse>(edge, waitTimeout);
             UNIT_ASSERT(handle);
-            return THolder(handle->Release());
+            return std::unique_ptr<TEvKafka::TEvTopicOffsetsResponse>(handle->Release().Release());
         }
 
-        THolder<TEvKafka::TEvTopicOffsetsResponse> RunTopicOffsets(
+        std::unique_ptr<TEvKafka::TEvTopicOffsetsResponse> RunTopicOffsets(
             NActors::TTestActorRuntime& runtime,
             TTopicOffsetsSettings settings,
             TDuration waitTimeout = TDuration::Seconds(30))
@@ -210,7 +210,7 @@ namespace NKafka::NTests {
 
         // Isolated runtime has no cluster timers. Wait until the test observer has
         // fired, jump past the actor retry delay, then grab the reply.
-        THolder<TEvKafka::TEvTopicOffsetsResponse> RunTopicOffsetsAfterInjection(
+        std::unique_ptr<TEvKafka::TEvTopicOffsetsResponse> RunTopicOffsetsAfterInjection(
             NActors::TTestActorRuntime& runtime,
             TTopicOffsetsSettings settings,
             std::function<bool()> injected)

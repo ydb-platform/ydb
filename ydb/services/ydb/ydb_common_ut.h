@@ -194,7 +194,7 @@ public:
 
     TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server_;
-    THolder<Tests::TTenants> Tenants_;
+    std::unique_ptr<Tests::TTenants> Tenants_;
 private:
     TPortManager PortManager;
     ui16 GRpcPort_;

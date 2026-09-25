@@ -74,7 +74,7 @@ NKqp::TEvKqp::TEvQueryResponse::TPtr RunQueryWith(TPreResult preResult, TPostRes
 
     runtime.SetEventFilter(captureEvents);
 
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
     ev->Record.MutableRequest()->SetQuery("SELECT 1;");

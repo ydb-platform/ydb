@@ -9,10 +9,10 @@ namespace NActors {
     /**
      * See `TActorSystem::Ask`.
      */
-    THolder<IActor> MakeAskActor(
+    std::unique_ptr<IActor> MakeAskActor(
         TMaybe<ui32> expectedEventType,
         TActorId recipient,
-        THolder<IEventBase> event,
+        std::unique_ptr<IEventBase> event,
         TDuration timeout,
-        const NThreading::TPromise<THolder<IEventBase>>& promise);
+        const NThreading::TPromise<std::unique_ptr<IEventBase>>& promise);
 }

@@ -84,7 +84,7 @@ ui32 TTopicOperationsScenario::GetTopicMaxPartitionCount() const
     return TopicMaxPartitionCount >= TopicPartitionCount ? TopicMaxPartitionCount : (TopicPartitionCount << 3);
 }
 
-THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(ui32 level)
+std::unique_ptr<TLogBackend> TTopicOperationsScenario::MakeLogBackend(ui32 level)
 {
     return CreateLogBackend("cerr",
                             VerbosityLevelToELogPriority(level));

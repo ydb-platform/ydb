@@ -66,7 +66,7 @@ struct TUserState {
 struct TOperationState {
     TJsonSendToReducer SendToReducer;
     TReduceIndexes Indexes; // we guarantee synchronous access to reducer indexes
-    THolder<TUserState> UserState; // we guarantee synchronous access to user states
+    std::unique_ptr<TUserState> UserState; // we guarantee synchronous access to user states
 };
 
 struct TJsonMergeContext;

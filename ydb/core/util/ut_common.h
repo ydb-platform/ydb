@@ -31,8 +31,8 @@ namespace NKikimr {
             return Time;
         }
 
-        static THolder<TWorkerThread> Spawn(std::function<void()> func) {
-            THolder<TWorkerThread> thread = MakeHolder<TWorkerThread>(std::move(func));
+        static std::unique_ptr<TWorkerThread> Spawn(std::function<void()> func) {
+            std::unique_ptr<TWorkerThread> thread = std::make_unique<TWorkerThread>(std::move(func));
             thread->Start();
             return thread;
         }

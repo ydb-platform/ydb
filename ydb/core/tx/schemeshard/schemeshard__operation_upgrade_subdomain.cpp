@@ -276,7 +276,7 @@ public:
         return descr;
     }
 
-    THolder<TEvSchemeShard::TEvMigrateSchemeShard> NextMessage(TOperationContext& context) {
+    std::unique_ptr<TEvSchemeShard::TEvMigrateSchemeShard> NextMessage(TOperationContext& context) {
         if (!PathsInside) {
             return nullptr;
         }
@@ -285,7 +285,7 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
 
 
-        auto event = MakeHolder<TEvSchemeShard::TEvMigrateSchemeShard>();
+        auto event = std::make_unique<TEvSchemeShard::TEvMigrateSchemeShard>();
         event->Record.SetSchemeShardGeneration(context.SS->Generation());
 
         *event->Record.MutablePath() = DescribePath(context, pathId);
@@ -752,14 +752,14 @@ public:
     }
 
 
-    THolder<TEvDataShard::TEvMigrateSchemeShardRequest> NextRequest(TOperationContext& context) {
+    std::unique_ptr<TEvDataShard::TEvMigrateSchemeShardRequest> NextRequest(TOperationContext& context) {
         if (!DatashardsInside) {
             return nullptr;
         }
 
         TTabletId tabletId = *DatashardsInside.begin();
 
-        auto ev = MakeHolder<TEvDataShard::TEvMigrateSchemeShardRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvMigrateSchemeShardRequest>();
         ev->Record.SetCurrentSchemeShardId(ui64(context.SS->SelfTabletId()));
         ev->Record.SetNewSchemeShardId(ui64(TenantSchemeShardId));
         ev->Record.SetTabletId(ui64(tabletId));
@@ -1015,23 +1015,23 @@ class TUpgradeSubDomain: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
-            return MakeHolder<TWait>(OperationId);
+            return std::make_unique<TWait>(OperationId);
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigure>(OperationId);
+            return std::make_unique<TConfigure>(OperationId);
         case TTxState::PublishTenantReadOnly:
-            return MakeHolder<TPublishTenantReadOnly>(OperationId);
+            return std::make_unique<TPublishTenantReadOnly>(OperationId);
         case TTxState::PublishGlobal:
-            return MakeHolder<TPublishGlobal>(OperationId, UpgradeSubDomainDecision);
+            return std::make_unique<TPublishGlobal>(OperationId, UpgradeSubDomainDecision);
         case TTxState::RewriteOwners:
-            return MakeHolder<TRewriteOwner>(OperationId);
+            return std::make_unique<TRewriteOwner>(OperationId);
         case TTxState::PublishTenant:
-            return MakeHolder<TPublishTenant>(OperationId);
+            return std::make_unique<TPublishTenant>(OperationId);
         case TTxState::DoneMigrateTree:
-            return MakeHolder<TDoneMigrateTree>(OperationId);
+            return std::make_unique<TDoneMigrateTree>(OperationId);
         case TTxState::DeleteTenantSS:
-            return MakeHolder<TDeleteTenantSS>(OperationId);
+            return std::make_unique<TDeleteTenantSS>(OperationId);
         default:
             return nullptr;
         }
@@ -1040,7 +1040,7 @@ class TUpgradeSubDomain: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& info = Transaction.GetUpgradeSubDomain();
@@ -1052,7 +1052,7 @@ public:
             {"path", parentPathStr + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
 
         TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
@@ -1207,7 +1207,7 @@ public:
             TOperation::TPtr operation = context.SS->Operations.at(OperationId.GetTxId());
             Y_ABORT_UNLESS(operation->Parts.size());
 
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
+            std::unique_ptr<TEvPrivate::TEvUndoTenantUpdate> msg = std::make_unique<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
@@ -1273,7 +1273,7 @@ class TUpgradeSubDomainDecision: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Done:
-            return MakeHolder<TDecisionDone>(OperationId);
+            return std::make_unique<TDecisionDone>(OperationId);
         default:
             return nullptr;
         }
@@ -1282,7 +1282,7 @@ class TUpgradeSubDomainDecision: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& info = Transaction.GetUpgradeSubDomain();
@@ -1296,7 +1296,7 @@ public:
             {"decision", NKikimrSchemeOp::TUpgradeSubDomain::EDecision_Name(decision)},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
@@ -1345,14 +1345,14 @@ public:
 
         switch (decision) {
         case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
-            THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
+            std::unique_ptr<TEvPrivate::TEvCommitTenantUpdate> msg = std::make_unique<TEvPrivate::TEvCommitTenantUpdate>();
             TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }
         case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
+            std::unique_ptr<TEvPrivate::TEvUndoTenantUpdate> msg = std::make_unique<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
                 context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);

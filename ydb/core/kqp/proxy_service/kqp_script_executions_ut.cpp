@@ -101,7 +101,7 @@ struct TScriptExecutionsYdbSetup {
 
         MsgBusPort = PortManager.GetPort(2134);
         GrpcPort = PortManager.GetPort(2135);
-        ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort);
+        ServerSettings = std::make_unique<Tests::TServerSettings>(MsgBusPort);
         ServerSettings->SetEnableScriptExecutionOperations(true);
         ServerSettings->SetEnableScriptExecutionBackgroundChecks(enableScriptExecutionBackgroundChecks);
         ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
@@ -109,8 +109,8 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetAppConfig(appConfig);
         ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
         ServerSettings->SetKqpLoggerScope(httpGatewayHolder.LoggerScope);
-        Server = MakeHolder<Tests::TServer>(*ServerSettings);
-        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+        Server = std::make_unique<Tests::TServer>(*ServerSettings);
+        Client = std::make_unique<Tests::TClient>(*ServerSettings);
 
         GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
         GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
@@ -126,11 +126,11 @@ struct TScriptExecutionsYdbSetup {
             .SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort)
             .SetDatabase(Tests::TestDomainName)
             .SetAuthToken(BUILTIN_ACL_ROOT);
-        YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
-        TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
+        YdbDriver = std::make_unique<NYdb::TDriver>(driverCfg);
+        TableClient = std::make_unique<NYdb::NTable::TTableClient>(*YdbDriver);
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();
         UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
-        TableClientSession = MakeHolder<NYdb::NTable::TSession>(createSessionResult.GetSession());
+        TableClientSession = std::make_unique<NYdb::NTable::TSession>(createSessionResult.GetSession());
 
         const auto result = TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
                 GRANT ALL ON `/dc-1` TO `{user}`;
@@ -166,7 +166,7 @@ struct TScriptExecutionsYdbSetup {
     }
 
     TEvKqp::TEvScriptResponse::TPtr RunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl, const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
-        auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
         ev->Record = GetQueryRequest(query);
         ev->ResultsTtl = resultsTtl;
         ev->RetryMapping = retryMapping;
@@ -588,12 +588,12 @@ public:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;
-    THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
-    THolder<Tests::TClient> Client;
-    THolder<NYdb::TDriver> YdbDriver;
-    THolder<NYdb::NTable::TTableClient> TableClient;
-    THolder<NYdb::NTable::TSession> TableClientSession;
+    std::unique_ptr<Tests::TServerSettings> ServerSettings;
+    std::unique_ptr<Tests::TServer> Server;
+    std::unique_ptr<Tests::TClient> Client;
+    std::unique_ptr<NYdb::TDriver> YdbDriver;
+    std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+    std::unique_ptr<NYdb::NTable::TSession> TableClientSession;
 };
 
 } // anonymous namespace

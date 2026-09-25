@@ -33,7 +33,7 @@ public:
         auto encoder = NMonitoring::CreateEncoder(&oss, NMonitoring::EFormat::JSON, nameLabel, {});
 
         Counters->Accept(TString(), TString(), *encoder);
-        THolder<TEvCountersInfoResponse> response = MakeHolder<TEvCountersInfoResponse>();
+        std::unique_ptr<TEvCountersInfoResponse> response = std::make_unique<TEvCountersInfoResponse>();
         auto& record = response->Record;
         TString dataPack;
         TStringOutput output(dataPack);

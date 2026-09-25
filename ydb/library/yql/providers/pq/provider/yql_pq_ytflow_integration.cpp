@@ -171,9 +171,9 @@ private:
 
 } // anonymous namespace
 
-THolder<IYtflowIntegration> CreatePqYtflowIntegration(const TPqState::TPtr& state) {
+std::unique_ptr<IYtflowIntegration> CreatePqYtflowIntegration(const TPqState::TPtr& state) {
     YQL_ENSURE(state);
-    return MakeHolder<TPqYtflowIntegration>(state);
+    return std::make_unique<TPqYtflowIntegration>(state);
 }
 
 } // namespace NYql

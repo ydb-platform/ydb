@@ -346,7 +346,7 @@ TString TTransactionState::Rollback(ui64 shardId) {
         return "<noop>";
     }
 
-    auto req = MakeHolder<NEvents::TDataEvents::TEvWrite>(
+    auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(
         0, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
     for (auto& lock : locks) {

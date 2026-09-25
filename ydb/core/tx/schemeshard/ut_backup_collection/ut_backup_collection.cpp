@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
     void AsyncBackupIncrementalBackupCollection(TTestBasicRuntime& runtime, ui64 txId, const TString& workingDir, const TString& request) {
         TActorId sender = runtime.AllocateEdgeActor();
 
-        auto request2 = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto request2 = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = request2->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection);
         transaction->SetWorkingDir(workingDir);

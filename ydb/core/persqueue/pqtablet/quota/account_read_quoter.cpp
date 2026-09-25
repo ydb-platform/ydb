@@ -222,8 +222,8 @@ void TAccountReadQuoter::InitCountersImpl(const TActorContext& ctx) {
     }
 }
 
-THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdateEvent() {
-    return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, true, User);
+std::unique_ptr<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdateEvent() {
+    return std::make_unique<NAccountQuoterEvents::TEvCounters>(Counters, true, User);
 }
 
 TStructuredMessage TAccountReadQuoter::BuildLogPrefix() const {
@@ -281,8 +281,8 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 void TAccountWriteQuoter::InitCountersImpl(const TActorContext&) {
 }
 
-THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpdateEvent() {
-    return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
+std::unique_ptr<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpdateEvent() {
+    return std::make_unique<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
 }
 
 TStructuredMessage TAccountWriteQuoter::BuildLogPrefix() const {

@@ -296,7 +296,7 @@ public:
             ResultSet.set_truncated(true);
         }
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetEnough(truncated);
         resp->Record.SetFreeSpace(ResultSetBytesLimit);
         ctx.Send(ev->Sender, resp.Release());
@@ -370,7 +370,7 @@ public:
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             if (record.MutableResponse()->GetYdbResults().size()) {
                 // Send result sets to RPC actor TStreamExecuteYqlScriptRPC
-                auto evStreamPart = MakeHolder<NKqp::TEvKqp::TEvDataQueryStreamPart>();
+                auto evStreamPart = std::make_unique<NKqp::TEvKqp::TEvDataQueryStreamPart>();
                 ActorIdToProto(this->SelfId(), evStreamPart->Record.MutableGatewayActorId());
 
                 for (int i = 0; i < record.MutableResponse()->MutableYdbResults()->size(); ++i) {
@@ -569,7 +569,7 @@ public:
             }
         }
 
-        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto response = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(SizeLimit && SizeLimit < std::numeric_limits<i64>::max() ? SizeLimit : std::numeric_limits<i64>::max());
         Send(ev->Sender, response.Release());
     }
@@ -814,7 +814,7 @@ public:
                 return InvalidCluster<TListPathResult>(cluster);
             }
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -864,7 +864,7 @@ public:
         using TConfigResponse = NConsole::TEvConfigsDispatcher::TEvGetConfigResponse;
 
         ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
-        auto ev = MakeHolder<TConfigRequest>(configKind);
+        auto ev = std::make_unique<TConfigRequest>(configKind);
 
         auto profilesPromise = NewPromise<TKqpTableProfilesResult>();
 
@@ -908,7 +908,7 @@ public:
     TFuture<TGenericResult> ModifyScheme(NKikimrSchemeOp::TModifyScheme&& modifyScheme) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         ev->Record.SetDatabaseName(Database);
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -957,7 +957,7 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1189,7 +1189,7 @@ public:
                 }
             }
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1233,7 +1233,7 @@ public:
                 }
             }
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1315,7 +1315,7 @@ public:
                 promises.push_back(NewPromise<TGenericResult>());
                 futures.push_back(promises.back().GetFuture());
 
-                auto ev = MakeHolder<TRequest>();
+                auto ev = std::make_unique<TRequest>();
                 auto& record = ev->Record;
                 record.SetDatabaseName(Database);
                 if (UserToken) {
@@ -1404,7 +1404,7 @@ public:
 
             auto createUserPromise = NewPromise<TGenericResult>();
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1448,7 +1448,7 @@ public:
 
             auto alterUserPromise = NewPromise<TGenericResult>();
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1500,7 +1500,7 @@ public:
 
             auto dropUserPromise = NewPromise<TGenericResult>();
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1700,7 +1700,7 @@ public:
 
             auto createGroupPromise = NewPromise<TGenericResult>();
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1750,7 +1750,7 @@ public:
                 (TString&& groupName, NYql::TAlterGroupSettings::EAction action, std::vector<TString>&& rolesToSend)
                 mutable
             {
-                auto ev = MakeHolder<TRequest>();
+                auto ev = std::make_unique<TRequest>();
                 ev->Record.SetDatabaseName(database);
                 if (UserToken) {
                     ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1832,7 +1832,7 @@ public:
 
             TPromise<TGenericResult> renameGroupPromise = NewPromise<TGenericResult>();
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1885,7 +1885,7 @@ public:
 
             auto dropGroupPromise = NewPromise<TGenericResult>();
 
-            auto ev = MakeHolder<TRequest>();
+            auto ev = std::make_unique<TRequest>();
             ev->Record.SetDatabaseName(database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -1957,7 +1957,7 @@ public:
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -1989,7 +1989,7 @@ public:
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -2029,7 +2029,7 @@ public:
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
         auto q = query;
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_AST_SCAN,
             target,
@@ -2062,7 +2062,7 @@ public:
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -2090,7 +2090,7 @@ public:
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -2126,7 +2126,7 @@ public:
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -2165,7 +2165,7 @@ public:
     {
         YQL_ENSURE(cluster == Cluster);
 
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
 
         if (traceId) {
             ev->Record.SetTraceId(*traceId);
@@ -2186,7 +2186,7 @@ public:
     TFuture<TQueryResult> ExplainGenericQuery(const TString& cluster, const TString& query) override {
         YQL_ENSURE(cluster == Cluster);
 
-        return RunGenericQuery(query, NKikimrKqp::QUERY_ACTION_EXPLAIN, MakeHolder<TEvKqp::TEvQueryRequest>());
+        return RunGenericQuery(query, NKikimrKqp::QUERY_ACTION_EXPLAIN, std::make_unique<TEvKqp::TEvQueryRequest>());
     }
 
     TFuture<TQueryResult> StreamExecGenericQuery(const TString& cluster, const TString& query,
@@ -2199,7 +2199,7 @@ public:
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -2353,7 +2353,7 @@ private:
         });
     }
 
-    TFuture<TQueryResult> RunGenericQuery(const TString& query, NKikimrKqp::EQueryAction action, THolder<TEvKqp::TEvQueryRequest> ev) {
+    TFuture<TQueryResult> RunGenericQuery(const TString& query, NKikimrKqp::EQueryAction action, std::unique_ptr<TEvKqp::TEvQueryRequest> ev) {
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
         }

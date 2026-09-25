@@ -27,7 +27,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpGet : public TTxBase {
             {"tabletId", Self->TabletID()},
             {"opId", operationId.Quote()});
 
-        auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpGetResponse>();
+        auto response = std::make_unique<TEvStatistics::TEvAnalyzeOpGetResponse>();
         auto& rec = response->Record;
 
         auto* op = Self->ForceTraversalOperation(operationId);

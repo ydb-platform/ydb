@@ -18,8 +18,8 @@ struct TAuthActorData {
         Json
     };
 
-    THolder<NKikimrClient::TSqsRequest> SQSRequest;
-    THolder<IReplyCallback> HTTPCallback;
+    std::unique_ptr<NKikimrClient::TSqsRequest> SQSRequest;
+    std::unique_ptr<IReplyCallback> HTTPCallback;
     std::function<void(TString)> UserSidCallback;
     bool EnableQueueLeader;
     // Used by private API only
@@ -28,7 +28,7 @@ struct TAuthActorData {
     TStringBuf CloudID;
     TStringBuf ResourceID;
     TCloudAuthCounters * Counters; //nullptr when constructed from public API
-    THolder<TAwsRequestSignV4> AWSSignature;
+    std::unique_ptr<TAwsRequestSignV4> AWSSignature;
     // Used only by private API for which AWSSignature is empty.
 
     TStringBuf IAMToken;

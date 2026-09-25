@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state);
+std::unique_ptr<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state);
 
 }

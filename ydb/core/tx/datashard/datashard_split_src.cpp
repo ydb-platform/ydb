@@ -261,7 +261,7 @@ public:
             if (!rowset.IsReady()) \
                 return false; \
             TStringStream str; \
-            THolder<NScheme::TTypeRegistry> tr; \
+            std::unique_ptr<NScheme::TTypeRegistry> tr; \
             while (!rowset.EndOfSet()) { \
                 if (!tr) \
                     tr.Reset(new NScheme::TTypeRegistry()); \

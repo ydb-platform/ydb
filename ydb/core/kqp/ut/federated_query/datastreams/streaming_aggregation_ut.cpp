@@ -62,7 +62,7 @@ public:
             const auto& request = *ev->Get<TEvKqp::TEvQueryRequest>();
             if (request.GetQuery().Contains("DECLARE $key")
                 && request.GetQuery().Contains(TStringBuilder() << '`' << TablePath << '`')) {
-                auto response = MakeHolder<TEvKqp::TEvQueryResponse>(MakeIntrusive<NActors::TProtoArenaHolder>());
+                auto response = std::make_unique<TEvKqp::TEvQueryResponse>(MakeIntrusive<NActors::TProtoArenaHolder>());
                 if (Handler(request, *response)) {
                     Send(ev->Sender, response.Release(), 0, ev->Cookie);
                     return;
@@ -184,7 +184,7 @@ private:
             }
             const auto [recipient, cookie] = Replies.at(ev->Cookie);
             Replies.erase(ev->Cookie);
-            auto reply = MakeHolder<IEventHandle>(recipient, ev->Sender, ev->ReleaseBase().Release(), 0, cookie);
+            auto reply = std::make_unique<IEventHandle>(recipient, ev->Sender, ev->ReleaseBase().Release(), 0, cookie);
             if (BlockCommit) {
                 PendingCommit.emplace_back(std::move(reply));
             } else {
@@ -215,8 +215,8 @@ private:
     bool BlockCommit = true;
     ui64 NextCookie = 0;
     THashMap<ui64, std::pair<TActorId, ui64>> Replies;
-    TVector<THolder<IEventHandle>> PendingCreation;
-    TVector<THolder<IEventHandle>> PendingCommit;
+    TVector<std::unique_ptr<IEventHandle>> PendingCreation;
+    TVector<std::unique_ptr<IEventHandle>> PendingCommit;
 };
 
 class TScopedPendingCommitCheckpointProxy {

@@ -16,7 +16,7 @@ public:
 
     virtual THashMap<TString, TString> GetTaskParams(const THashMap<TString, TString>& graphParams, const THashMap<TString, TString>& secureParams) = 0;
     virtual void Finish(bool success) = 0;
-    virtual THolder<IDqFullResultWriter> CreateFullResultWriter() = 0;
+    virtual std::unique_ptr<IDqFullResultWriter> CreateFullResultWriter() = 0;
 };
 
 using TDqTaskPreprocessorFactory = std::function<IDqTaskPreprocessor::TPtr()>;

@@ -1801,7 +1801,7 @@ protected:
     std::unique_ptr<TStore> Store;
     bool StoreContainsPackedRecords = true;
     TSegmentedArena::TIterator DrainArenaIterator;
-    THolder<TMap> Map;
+    std::unique_ptr<TMap> Map;
     std::vector<TUnboxedValuePod> TempKeyBuffer;
     TUnboxedValueVector InputBuffer;
     size_t StatesOffset;

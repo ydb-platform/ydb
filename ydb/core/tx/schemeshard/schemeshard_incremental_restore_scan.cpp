@@ -530,7 +530,7 @@ private:
 
         Self->DispatchPendingIncrementalRestoreTables(state, OperationId, db, ctx);
 
-        auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
+        auto progressEvent = std::make_unique<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
         Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
     }
 
@@ -539,7 +539,7 @@ private:
             {"operationId", OperationId},
         );
 
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
 
         auto& transaction = *record.AddTransaction();
@@ -949,7 +949,7 @@ void TSchemeShard::SendIncrementalRestoreShardRequest(
     TPathId dstPathId,
     const TActorContext& ctx)
 {
-    auto req = MakeHolder<TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+    auto req = std::make_unique<TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
     auto& rec = req->Record;
     rec.SetOperationId(ui64(restoreOpId));
     rec.SetSubOpTxId(ui64(subOpId.GetTxId()));
@@ -1128,7 +1128,7 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
     }
     auto& state = stateIt->second;
 
-    auto tableRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+    auto tableRequest = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
     auto& tableRecord = tableRequest->Record;
 
     auto& tableTx = *tableRecord.AddTransaction();
@@ -1390,7 +1390,7 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     }
     auto& state = stateIt->second;
 
-    auto indexRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+    auto indexRequest = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
     auto& indexRecord = indexRequest->Record;
 
     auto& indexTx = *indexRecord.AddTransaction();
@@ -1425,7 +1425,7 @@ void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId
             {"incrementalRestoreId", incrementalRestoreId},
         );
 
-        auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(incrementalRestoreId);
+        auto progressEvent = std::make_unique<TEvPrivate::TEvProgressIncrementalRestore>(incrementalRestoreId);
         ctx.Send(ctx.SelfID, progressEvent.Release());
     }
 }
@@ -1435,7 +1435,7 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
     TIncrementalRestoreState& state,
     TIncrementalRestoreState::TItem::EKind kind,
     TPathId tablePathId,
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> request,
     NIceDb::TNiceDb& db,
     const TActorContext& ctx,
     TPathId srcTablePathId)

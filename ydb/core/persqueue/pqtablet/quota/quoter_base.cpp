@@ -9,13 +9,13 @@ namespace NKikimr::NPQ {
 
 TRequestContext::TRequestContext() = default;
 
-TRequestContext::TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor)
+TRequestContext::TRequestContext(std::unique_ptr<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor)
     : Request(std::move(request))
     , PartitionActor(partitionActor)
 {
 }
 
-TRequestContext::TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor, const TDuration& accountWaitTime, TInstant now)
+TRequestContext::TRequestContext(std::unique_ptr<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor, const TDuration& accountWaitTime, TInstant now)
     : Request(std::move(request))
     , AccountQuotaWaitTime(accountWaitTime)
     , PartitionQuotaWaitStart(std::move(now))
@@ -32,7 +32,7 @@ TAccountQuoterHolder::TAccountQuoterHolder(const TActorId& actor, const TTabletC
 
 
 TConsumerReadQuota::TConsumerReadQuota(
-    THolder<TAccountQuoterHolder> accountQuotaTracker,
+    std::unique_ptr<TAccountQuoterHolder> accountQuotaTracker,
     ui64 readQuotaBurst,
     ui64 readQuotaSpeed,
     ui64 readMessageQuotaBurst,

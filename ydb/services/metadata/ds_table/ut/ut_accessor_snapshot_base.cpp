@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TDSAccessorPathDrift) {
                 Cerr << "Sender: " << ev->Sender << Endl;
                 Cerr << "Recipient: " << ev->Recipient << Endl;
 
-                auto nav = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+                auto nav = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
                 auto& entry = nav->ResultSet.emplace_back();
                 entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                 entry.Kind   = NSchemeCache::TSchemeCacheNavigate::EKind::KindTable;

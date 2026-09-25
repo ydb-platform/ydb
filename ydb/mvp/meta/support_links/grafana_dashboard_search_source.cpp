@@ -43,7 +43,7 @@ public:
         NHttp::THttpOutgoingRequestPtr request = NHttp::THttpOutgoingRequest::CreateRequestGet(BuildSearchUrl());
         request->Set("Authorization", authHeaderValue);
 
-        auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
+        auto event = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
         Send(Context.HttpProxyId, event.Release());
         Become(&TGrafanaDashboardSearchActor::StateWork);
     }

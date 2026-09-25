@@ -44,8 +44,8 @@ struct TTestServer {
     void Init() {
         Settings = MakeIntrusive<Tests::TServerSettings>(Pm.GetPort());
         Settings->SetGrpcPort(Pm.GetPort());
-        Server = MakeHolder<Tests::TServer>(Settings);
-        Client = MakeHolder<Tests::TClient>(*Settings);
+        Server = std::make_unique<Tests::TServer>(Settings);
+        Client = std::make_unique<Tests::TClient>(*Settings);
         Client->InitRootScheme(Tests::TestDomainName);
 
         Client->CreateTable(Tests::TestDomainName, R"(
@@ -72,8 +72,8 @@ struct TTestServer {
         return RunQueryActorAsync<TQueryActor>(std::forward<TParams>(params)...).ExtractValueSync();
     }
 
-    THolder<Tests::TServer> Server;
-    THolder<Tests::TClient> Client;
+    std::unique_ptr<Tests::TServer> Server;
+    std::unique_ptr<Tests::TClient> Client;
     TIntrusivePtr<Tests::TServerSettings> Settings;
     TPortManager Pm;
 };

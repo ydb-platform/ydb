@@ -63,7 +63,7 @@ public:
         , TabletId(tabletId)
     {
         if (DataFormat == NKikimrDataEvents::FORMAT_ARROW) {
-            BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>();
+            BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>();
             TVector<std::pair<TString, NScheme::TTypeInfo>> schema;
             if (!Tags.empty()) {
                 Types.reserve(Tags.size());
@@ -360,7 +360,7 @@ private:
             {"abortEvent", (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>"))});
 
         if (status != EStatus::Done || AbortEvent) {
-            auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
+            auto ev = std::make_unique<TEvKqpCompute::TEvScanError>(Generation, TabletId);
 
             if (AbortEvent) {
                 ev->Record.SetStatus(NYql::NDq::DqStatusToYdbStatus(AbortEvent->Record.GetStatusCode()));
@@ -387,7 +387,7 @@ private:
                 // TODO:
                 // Result->CpuTime = CpuTime;
             } else {
-                Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
+                Result = std::make_unique<TEvKqpCompute::TEvScanData>(ScanId, Generation);
             }
             auto send = SendResult(Result->PageFault, true);
             Y_DEBUG_ABORT_UNLESS(send);
@@ -416,7 +416,7 @@ private:
 
     void MakeResult() {
         if (!Result) {
-            Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
+            Result = std::make_unique<TEvKqpCompute::TEvScanData>(ScanId, Generation);
             switch (DataFormat) {
                 case NKikimrDataEvents::FORMAT_UNSPECIFIED:
                 case NKikimrDataEvents::FORMAT_CELLVEC: {
@@ -566,8 +566,8 @@ private:
     TActorId TimeoutActorId;
     TAutoPtr<TEvKqp::TEvAbortExecution> AbortEvent;
 
-    THolder<NArrow::TArrowBatchBuilder> BatchBuilder;
-    THolder<TEvKqpCompute::TEvScanData> Result;
+    std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
+    std::unique_ptr<TEvKqpCompute::TEvScanData> Result;
     ui64 Rows = 0;
     ui64 CellvecBytes = 0;
     ui32 PageFaults = 0;
@@ -617,7 +617,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     auto infoIt = TableInfos.find(request.GetLocalPathId());
 
     auto reportError = [this, scanComputeActor, generation] (const NYql::TIssuesIds_EIssueCode issueCode, const TString& detailedReason) {
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
+        auto ev = std::make_unique<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
         auto issue = NYql::YqlIssue({}, issueCode, detailedReason);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
@@ -669,7 +669,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
             << " Unexpected process program in datashard scan at " << TabletID();
         YDB_LOG_ERROR(msg);
 
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
+        auto ev = std::make_unique<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::DEFAULT_ERROR, msg);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());

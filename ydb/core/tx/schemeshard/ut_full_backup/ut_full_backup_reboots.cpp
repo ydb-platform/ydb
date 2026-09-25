@@ -79,7 +79,7 @@ NKikimrBackup::TEvGetFullBackupResponse GetFullBackup(
     const TString& db = "/MyRoot")
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<NKikimr::NSchemeShard::TEvBackup::TEvGetFullBackupRequest>(db, backupId);
+    auto req = std::make_unique<NKikimr::NSchemeShard::TEvBackup::TEvGetFullBackupRequest>(db, backupId);
     runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, req.Release(), 0, GetPipeConfigWithRetries());
     TAutoPtr<IEventHandle> handle;
     auto* response = runtime.GrabEdgeEventRethrow<NKikimr::NSchemeShard::TEvBackup::TEvGetFullBackupResponse>(handle);
@@ -94,7 +94,7 @@ NKikimrBackup::TEvForgetFullBackupResponse ForgetFullBackup(
     const TString& db = "/MyRoot")
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<NKikimr::NSchemeShard::TEvBackup::TEvForgetFullBackupRequest>(forgetTxId, db, backupId);
+    auto req = std::make_unique<NKikimr::NSchemeShard::TEvBackup::TEvForgetFullBackupRequest>(forgetTxId, db, backupId);
     runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, req.Release(), 0, GetPipeConfigWithRetries());
     TAutoPtr<IEventHandle> handle;
     auto* response = runtime.GrabEdgeEventRethrow<NKikimr::NSchemeShard::TEvBackup::TEvForgetFullBackupResponse>(handle);

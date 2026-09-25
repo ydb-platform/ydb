@@ -59,11 +59,11 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    THolder<TEvDataShard::TEvUploadRowsRequest> MakeUploadRows(ui64 tableId,
+    std::unique_ptr<TEvDataShard::TEvUploadRowsRequest> MakeUploadRows(ui64 tableId,
             const TVector<ui32>& keyTags, const TVector<ui32>& valueTags,
             TVector<std::pair<TString, TString>>&& serializedRows)
     {
-        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableId);
 
         auto& scheme = *ev->Record.MutableRowScheme();
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
                 return TTestActorRuntime::DefaultObserverFunc(ev);
             });
 
-            TVector<THolder<IEventHandle>> enqueued;
+            TVector<std::unique_ptr<IEventHandle>> enqueued;
             runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                     enqueued.emplace_back(ev.Release());

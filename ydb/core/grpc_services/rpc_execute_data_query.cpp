@@ -148,7 +148,7 @@ public:
             }
         }
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>(
             queryAction,
             queryType,
             SelfId(),

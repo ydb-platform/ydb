@@ -33,7 +33,7 @@ inline std::shared_ptr<TTopicSdkTestSetup> CreateMeteringSetup(const char* name 
 }
 
 inline void AssertStatus(
-    const THolder<TEvSchemaResponse>& result,
+    const std::unique_ptr<TEvSchemaResponse>& result,
     Ydb::StatusIds::StatusCode expected,
     const TString& substring = {})
 {
@@ -44,7 +44,7 @@ inline void AssertStatus(
     }
 }
 
-inline THolder<TEvSchemaResponse> DoCreate(
+inline std::unique_ptr<TEvSchemaResponse> DoCreate(
     NActors::TTestActorRuntime& runtime,
     Ydb::Topic::CreateTopicRequest request,
     const TString& database = "/Root",
@@ -63,7 +63,7 @@ inline THolder<TEvSchemaResponse> DoCreate(
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
 }
 
-inline THolder<TEvSchemaResponse> DoAlter(
+inline std::unique_ptr<TEvSchemaResponse> DoAlter(
     NActors::TTestActorRuntime& runtime,
     Ydb::Topic::AlterTopicRequest request,
     const TString& database = "/Root",
@@ -82,7 +82,7 @@ inline THolder<TEvSchemaResponse> DoAlter(
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
 }
 
-inline THolder<TEvSchemaResponse> DoDrop(
+inline std::unique_ptr<TEvSchemaResponse> DoDrop(
     NActors::TTestActorRuntime& runtime,
     const TString& path,
     const TString& database = "/Root",
@@ -142,7 +142,7 @@ inline NThreading::TFuture<TSchemaResponse> DoAlterViaPromise(
     return future;
 }
 
-inline THolder<TEvSchemaResponse> DoAddConsumer(
+inline std::unique_ptr<TEvSchemaResponse> DoAddConsumer(
     NActors::TTestActorRuntime& runtime,
     const TString& path,
     Ydb::Topic::Consumer consumer,
@@ -159,7 +159,7 @@ inline THolder<TEvSchemaResponse> DoAddConsumer(
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
 }
 
-inline THolder<TEvSchemaResponse> DoRemoveConsumer(
+inline std::unique_ptr<TEvSchemaResponse> DoRemoveConsumer(
     NActors::TTestActorRuntime& runtime,
     const TString& path,
     const TString& consumerName,

@@ -13,7 +13,7 @@ namespace NKikimr::NBsController {
             const bool SelfHeal;
             const bool GroupLayoutSanitizer;
             std::optional<THostRecordMap> EnforceHostRecords;
-            THolder<TEvBlobStorage::TEvControllerConfigResponse> Ev;
+            std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Ev;
             NKikimrBlobStorage::TConfigResponse *Response;
             std::optional<TConfigState> State;
             bool Success = true;

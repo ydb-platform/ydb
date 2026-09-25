@@ -106,7 +106,7 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
             GetServiceCounters(counters, "pqproxy|writeSession"),
             GetLabels(TopicConverter), {}, {"MirrorerErrors" + suffix}, true
         );
-        MirrorerTimeLags = THolder<TPercentileCounter>(new TPercentileCounter(
+        MirrorerTimeLags = std::unique_ptr<TPercentileCounter>(new TPercentileCounter(
             GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
             GetLabels(TopicConverter),
             {{"sensor", "TimeLags" + suffix}},
@@ -191,7 +191,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {
         MirrorerErrors.Inc(1);
     }
 
-    THolder<TEvPersQueue::TEvReportPartitionError> request = MakeHolder<TEvPersQueue::TEvReportPartitionError>();
+    std::unique_ptr<TEvPersQueue::TEvReportPartitionError> request = std::make_unique<TEvPersQueue::TEvReportPartitionError>();
     auto& record = request->Record;
     record.SetTimestamp(ctx.Now().Seconds());
     record.SetService(NKikimrServices::PQ_MIRRORER);
@@ -429,7 +429,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
         return;
     }
 
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    std::unique_ptr<TEvPersQueue::TEvRequest> request = std::make_unique<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
     req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
@@ -474,7 +474,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         LOG_W("Split-merge operation has no child partitions");
         return;
     }
-    THolder request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>();
+    std::unique_ptr request = std::make_unique<TEvPQ::TEvPartitionScaleStatusChanged>();
     request->Record.SetPartitionId(Partition);
     request->Record.SetScaleStatus(NKikimrPQ::EScaleStatus::NEED_SPLIT);
     auto* relation = request->Record.MutableParticipatingPartitions();
@@ -501,7 +501,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
             actorSystem = ctx.ActorSystem(),
             selfId = SelfId()
         ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
-            THolder<TEvPQ::TEvCredentialsCreated> ev;
+            std::unique_ptr<TEvPQ::TEvCredentialsCreated> ev;
             if (result.HasException()) {
                 TString error;
                 try {
@@ -509,9 +509,9 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
                 } catch(...) {
                     error = CurrentExceptionMessage();
                 }
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(error);
+                ev = std::make_unique<TEvPQ::TEvCredentialsCreated>(error);
             } else {
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
+                ev = std::make_unique<TEvPQ::TEvCredentialsCreated>(result.GetValue());
             }
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
         }
@@ -539,7 +539,7 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
 void TMirrorer::RetryWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteRequestInFlight);
 
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    std::unique_ptr<TEvPersQueue::TEvRequest> request = std::make_unique<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
     req->CopyFrom(WriteRequestInFlight.value());
 
@@ -586,7 +586,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
 
-    TLog log(MakeHolder<TDeferredActorLogBackend>(
+    TLog log(std::make_unique<TDeferredActorLogBackend>(
         factory->GetSharedActorSystem(),
         NKikimrServices::PQ_MIRRORER
     ));
@@ -669,7 +669,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
         return;
     }
     LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
-    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    std::unique_ptr<TEvPersQueue::TEvRequest> request = std::make_unique<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
     req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
@@ -838,7 +838,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         if (PartitionStream
             && PartitionStream->GetPartitionSessionId() == streamStatus->GetPartitionSession()->GetPartitionSessionId()
         ) {
-            StreamStatus = MakeHolder<TPersQueueReadEvent::TPartitionSessionStatusEvent>(*streamStatus);
+            StreamStatus = std::make_unique<TPersQueueReadEvent::TPartitionSessionStatusEvent>(*streamStatus);
             TryRewindCommittedOffset(ctx);
             ctx.Schedule(TDuration::Seconds(1), new TEvPQ::TEvRequestPartitionStatus);
             TryUpdateWriteTimetsamp(ctx);

@@ -9,8 +9,8 @@ namespace NActors {
         static constexpr size_t MaxEvents = 256;
 
         std::list<TEventHolder> FreeQueue;
-        TStackVec<THolder<IEventBase>, MaxEvents> Events;
-        TStackVec<THolder<TEventSerializedData>, MaxEvents> Buffers;
+        TStackVec<std::unique_ptr<IEventBase>, MaxEvents> Events;
+        TStackVec<std::unique_ptr<TEventSerializedData>, MaxEvents> Buffers;
         std::shared_ptr<std::atomic<TAtomicBase>> Counter;
         ui64 NumBytes = sizeof(TEvFreeItems);
 
@@ -35,11 +35,11 @@ namespace NActors {
     };
 
     class TEventHolderPool {
-        using TDestroyCallback = std::function<void(THolder<IEventBase>)>;
+        using TDestroyCallback = std::function<void(std::unique_ptr<IEventBase>)>;
 
         TIntrusivePtr<TInterconnectProxyCommon> Common;
         std::list<TEventHolder> Cache;
-        THolder<TEvFreeItems> PendingFreeEvent;
+        std::unique_ptr<TEvFreeItems> PendingFreeEvent;
         TDestroyCallback DestroyCallback;
 
     public:
@@ -72,7 +72,7 @@ namespace NActors {
             bool trim = false;
 
             // release held event, if any
-            if (THolder<IEventBase> ev = std::move(event->Event)) {
+            if (std::unique_ptr<IEventBase> ev = std::move(event->Event)) {
                 auto p = GetPendingEvent();
                 p->NumBytes += event->EventSerializedSize;
                 auto& events = p->Events;

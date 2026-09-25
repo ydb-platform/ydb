@@ -792,7 +792,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
         auto pCtx = std::make_shared<NPDisk::TPDiskCtx>();
-        THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+        std::unique_ptr<NPDisk::IPDisk> pDisk = std::make_unique<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
 
@@ -1058,7 +1058,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
-        auto pdisk = MakeHolder<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg,
+        auto pdisk = std::make_unique<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg,
             MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto sink = pdisk->MakeUringSampleSink();
         auto completionSink = pdisk->MakeUringCompletionSink();
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        auto pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+        auto pDisk = std::make_unique<NPDisk::TPDisk>(pCtx, cfg, counters);
 
         pDisk->CheckSharedUringRouter();
         UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
@@ -1753,7 +1753,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             );
 
             const auto& sender = ev->Sender;
-            THolder<NPDisk::TUndelivered> req{testCtx.GetPDisk()->ReqCreator.CreateFromEv<NPDisk::TUndelivered>(ev, sender)};
+            std::unique_ptr<NPDisk::TUndelivered> req{testCtx.GetPDisk()->ReqCreator.CreateFromEv<NPDisk::TUndelivered>(ev, sender)};
         }
     }
 
@@ -2453,7 +2453,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::OK);
         };
 
-        THolder<NPDisk::TEvCheckSpaceResult> space;
+        std::unique_ptr<NPDisk::TEvCheckSpaceResult> space;
         for (int i = 0; i < 100000; ++i) {
             space = checkSpace();
             const auto color = StatusFlagToSpaceColor(space->StatusFlags);
@@ -2492,7 +2492,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::OK);
         };
 
-        THolder<NPDisk::TEvCheckSpaceResult> space;
+        std::unique_ptr<NPDisk::TEvCheckSpaceResult> space;
         for (int i = 0; i < 100000; ++i) {
             space = checkSpace();
             const auto color = StatusFlagToSpaceColor(space->StatusFlags);
@@ -3254,7 +3254,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 4);
     }
 
-    THolder<NPDisk::TEvCheckSpaceResult> CheckEvCheckSpace(
+    std::unique_ptr<NPDisk::TEvCheckSpaceResult> CheckEvCheckSpace(
         TActorTestContext& testCtx,
         const TVDiskMock& vdisk,
         ui32 expectedFreeChunks,
@@ -4836,7 +4836,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
     using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
-    THolder<NPDisk::TEvYardInitResult> RestartPDisk(TActorTestContext& testCtx, ui32 pdiskId, TVDiskMock& vdisk, TCurrent* newInfo) {
+    std::unique_ptr<NPDisk::TEvYardInitResult> RestartPDisk(TActorTestContext& testCtx, ui32 pdiskId, TVDiskMock& vdisk, TCurrent* newInfo) {
         TCompatibilityInfoTest::Reset(newInfo);
         Y_UNUSED(pdiskId);
         testCtx.GracefulPDiskRestart();
@@ -5076,7 +5076,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
                 return new Request(std::forward<decltype(unpackedArgs)>(unpackedArgs)...);
             }, args);
 
-            THolder<Response> res = testCtx.TestResponse<Response>(req);
+            std::unique_ptr<Response> res = testCtx.TestResponse<Response>(req);
 
             UNIT_ASSERT_VALUES_EQUAL(res->Status, ExpectedStatus);
             UNIT_ASSERT_STRING_CONTAINS(res->ErrorReason, "PDisk is in read-only mode");
@@ -5174,7 +5174,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         ui64 shredGeneration = 1;
         TActorTestContext testCtx{{}};
         TVDiskMock vdisk(&testCtx);
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(new NPDisk::TEvShredPDisk(shredGeneration), NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(new NPDisk::TEvShredPDisk(shredGeneration), NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -5187,7 +5187,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -5200,7 +5200,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
 
@@ -5217,7 +5217,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
 
@@ -5243,7 +5243,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
             vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         }
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -5254,10 +5254,10 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.InitFull();
         vdisk.SendEvLogSync();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
-        THolder<NPDisk::TEvPreShredCompactVDisk> evReq = testCtx.Recv<NPDisk::TEvPreShredCompactVDisk>();
+        std::unique_ptr<NPDisk::TEvPreShredCompactVDisk> evReq = testCtx.Recv<NPDisk::TEvPreShredCompactVDisk>();
         UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
         vdisk.PerformHarakiri();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(
             nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
@@ -5274,11 +5274,11 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         if (NPDisk::TPDisk::IS_SHRED_ENABLED) {
-            THolder<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();
+            std::unique_ptr<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();
             UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
         }
         vdisk.PerformHarakiri();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(
             nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
@@ -5313,7 +5313,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         }
         vdisk.RespondToCutLog();
         vdisk2.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -5327,7 +5327,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.CommitReservedChunks();
         vdisk.MarkCommitedChunksDirty();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
-        THolder<NPDisk::TEvPreShredCompactVDisk> evReq = testCtx.Recv<NPDisk::TEvPreShredCompactVDisk>();
+        std::unique_ptr<NPDisk::TEvPreShredCompactVDisk> evReq = testCtx.Recv<NPDisk::TEvPreShredCompactVDisk>();
         UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -5336,7 +5336,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
             vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         }
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -5352,7 +5352,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         if (NPDisk::TPDisk::IS_SHRED_ENABLED) {
-            THolder<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();
+            std::unique_ptr<NPDisk::TEvShredVDisk> evReq = testCtx.Recv<NPDisk::TEvShredVDisk>();
             UNIT_ASSERT_VALUES_UNEQUAL(evReq.Get(), nullptr);
         }
         vdisk.InitFull();
@@ -5361,7 +5361,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
             vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         }
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res->ShredGeneration, shredGeneration);
     }
@@ -5376,7 +5376,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.MarkCommitedChunksDirty();
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::ERROR, "");
-        THolder<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(res1->ShredGeneration, shredGeneration);
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
@@ -5384,7 +5384,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
             vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         }
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res2->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
@@ -5401,7 +5401,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         if (NPDisk::TPDisk::IS_SHRED_ENABLED) {
             vdisk.RespondToShred(shredGeneration, NKikimrProto::ERROR, "");
-            THolder<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
+            std::unique_ptr<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
             UNIT_ASSERT_VALUES_EQUAL(res1->ShredGeneration, shredGeneration);
 
             testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
@@ -5409,7 +5409,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
             vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         }
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res2->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
@@ -5427,7 +5427,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToPreShredCompact(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToShred(shredGeneration, NKikimrProto::ERROR, "");
-        THolder<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res1 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(res1->ShredGeneration, shredGeneration);
         testCtx.RestartPDiskSync();
         vdisk.InitFull();
@@ -5435,7 +5435,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         testCtx.Send(new NPDisk::TEvShredPDisk(shredGeneration));
         vdisk.RespondToShred(shredGeneration, NKikimrProto::OK, "");
         vdisk.RespondToCutLog();
-        THolder<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
+        std::unique_ptr<NPDisk::TEvShredPDiskResult> res2 = testCtx.TestResponse<NPDisk::TEvShredPDiskResult>(nullptr, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res2->ErrorReason, "");
         UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
@@ -5471,7 +5471,7 @@ Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
 
     struct TPdt {
         TActorTestContext* TestCtx;
-        THolder<TVDiskMock> VDisk;
+        std::unique_ptr<TVDiskMock> VDisk;
 
         // Member variables moved from Run()
         ui64 ChunkSize;
@@ -5585,7 +5585,7 @@ Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
         }
 
         void Init() {
-            VDisk = MakeHolder<TVDiskMock>(TestCtx);
+            VDisk = std::make_unique<TVDiskMock>(TestCtx);
             VDisk->InitFull();
             VDisk->SendEvLogSync();
             ChunkSize = VDisk->PDiskParams->ChunkSize;
@@ -5679,7 +5679,7 @@ Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
             auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
             TMemoryConsumer consumer(counter);
             TTrackableBuffer pdiskWriteBuf(std::move(consumer), pdiskTestData.data(), pdiskTestData.size());
-            auto evWrite = MakeHolder<NPDisk::TEvChunkWrite>(
+            auto evWrite = std::make_unique<NPDisk::TEvChunkWrite>(
                 VDisk->PDiskParams->Owner, VDisk->PDiskParams->OwnerRound,
                 chunkIdx, sectorIdx * AppendBlockSize,
                 MakeIntrusive<NPDisk::TEvChunkWrite::TBufBackedUpParts>(std::move(pdiskWriteBuf)),
@@ -5849,7 +5849,7 @@ Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
             auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
             TMemoryConsumer consumer(counter);
             TTrackableBuffer writeBuf(std::move(consumer), writeData.data(), writeData.size());
-            auto evWrite = MakeHolder<NPDisk::TEvChunkWrite>(
+            auto evWrite = std::make_unique<NPDisk::TEvChunkWrite>(
                 VDisk->PDiskParams->Owner, VDisk->PDiskParams->OwnerRound,
                 chunkInfo.ChunkIdx, sectorOffset * AppendBlockSize,
                 MakeIntrusive<NPDisk::TEvChunkWrite::TBufBackedUpParts>(std::move(writeBuf)),

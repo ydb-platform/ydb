@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
 
-        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        auto client = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         client->InitRoot();
         client->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
 
-        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        auto client = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         client->InitRoot();
         client->InitSourceIds();
 

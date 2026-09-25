@@ -111,7 +111,7 @@ namespace NLongTxService {
         };
 
         struct TProxyPendingRequest {
-            THolder<IEventHandle> Ev;
+            std::unique_ptr<IEventHandle> Ev;
             TProxyRequestState* Request = nullptr;
         };
 
@@ -513,7 +513,7 @@ namespace NLongTxService {
         void SendReplyUnavailable(ERequestType type, TActorId sender, ui64 cookie, TStringBuf details);
 
         TProxyNodeState& ConnectProxyNode(ui32 nodeId);
-        void SendProxyRequest(ui32 nodeId, ERequestType type, THolder<IEventHandle> ev);
+        void SendProxyRequest(ui32 nodeId, ERequestType type, std::unique_ptr<IEventHandle> ev);
         // Precondition: the node is not in the Disconnected state.
         TProxyLockState& SubscribeToProxyLock(TProxyNodeState& node, ui64 lockId);
 

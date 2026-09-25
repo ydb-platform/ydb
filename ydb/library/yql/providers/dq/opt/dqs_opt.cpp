@@ -48,7 +48,7 @@ namespace NYql::NDqs {
 
     using TStatus = IGraphTransformer::TStatus;
 
-    THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer(TTypeAnnotationContext& typesCtx) {
+    std::unique_ptr<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer(TTypeAnnotationContext& typesCtx) {
         return CreateFunctorTransformer([&typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             TOptimizeExprSettings optSettings{nullptr};
             optSettings.VisitLambdas = true;
@@ -68,7 +68,7 @@ namespace NYql::NDqs {
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(TTypeAnnotationContext& typesCtx) {
+    std::unique_ptr<IGraphTransformer> CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(TTypeAnnotationContext& typesCtx) {
         return CreateFunctorTransformer([&typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             TOptimizeExprSettings optSettings{nullptr};
             optSettings.VisitLambdas = true;
@@ -107,7 +107,7 @@ namespace NYql::NDqs {
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx) {
+    std::unique_ptr<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx) {
         return CreateFunctorTransformer([&typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             TOptimizeExprSettings settings(&typesCtx);
             settings.VisitChecker = [&](const TExprNode& node) {
@@ -212,7 +212,7 @@ namespace NYql::NDqs {
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer() {
+    std::unique_ptr<IGraphTransformer> CreateDqsFinalizingOptTransformer() {
         return CreateFunctorTransformer(
             [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 auto status = NDq::DqReplicateStageMultiOutput(input, output, ctx);

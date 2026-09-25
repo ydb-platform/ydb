@@ -183,8 +183,8 @@ private:
     ui64 Checksum = 0;
 };
 
-THolder<TActorSystemSetup> BuildLocalActorSystemSetup(ui32 nodeId, ui32 threads) {
-    auto setup = MakeHolder<TActorSystemSetup>();
+std::unique_ptr<TActorSystemSetup> BuildLocalActorSystemSetup(ui32 nodeId, ui32 threads) {
+    auto setup = std::make_unique<TActorSystemSetup>();
 
     setup->NodeId = nodeId;
     setup->ExecutorsCount = 1;
@@ -195,13 +195,13 @@ THolder<TActorSystemSetup> BuildLocalActorSystemSetup(ui32 nodeId, ui32 threads)
     return setup;
 }
 
-THolder<TActorSystemSetup> BuildInterconnectActorSystemSetup(
+std::unique_ptr<TActorSystemSetup> BuildInterconnectActorSystemSetup(
         ui32 nodeId,
         ui32 threads,
         ui16 portBase,
         NMonitoring::TDynamicCounters& counters)
 {
-    auto setup = MakeHolder<TActorSystemSetup>();
+    auto setup = std::make_unique<TActorSystemSetup>();
 
     setup->NodeId = nodeId;
     setup->ExecutorsCount = 1;
@@ -270,7 +270,7 @@ double CalcActorCpuUtilPct(ui64 actorCpuUs, double seconds, ui32 totalThreads) {
 template <class TTraits>
 TBenchResult RunLocalBenchmark(const TBenchConfig& config) {
     const ui64 window = TTraits::EffectiveWindow(config.Window);
-    THolder<TActorSystemSetup> setup = BuildLocalActorSystemSetup(Node1, config.Threads);
+    std::unique_ptr<TActorSystemSetup> setup = BuildLocalActorSystemSetup(Node1, config.Threads);
     TActorSystem actorSystem(setup);
     actorSystem.Start();
 
@@ -303,8 +303,8 @@ TBenchResult RunInterconnectBenchmark(const TBenchConfig& config) {
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters1 = new NMonitoring::TDynamicCounters();
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters2 = new NMonitoring::TDynamicCounters();
 
-    THolder<TActorSystemSetup> setup2 = BuildInterconnectActorSystemSetup(Node2, config.Threads, config.PortBase, *counters2);
-    THolder<TActorSystemSetup> setup1 = BuildInterconnectActorSystemSetup(Node1, config.Threads, config.PortBase, *counters1);
+    std::unique_ptr<TActorSystemSetup> setup2 = BuildInterconnectActorSystemSetup(Node2, config.Threads, config.PortBase, *counters2);
+    std::unique_ptr<TActorSystemSetup> setup1 = BuildInterconnectActorSystemSetup(Node1, config.Threads, config.PortBase, *counters1);
     TActorSystem node2(setup2);
     TActorSystem node1(setup1);
 

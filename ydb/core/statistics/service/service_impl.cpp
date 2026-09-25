@@ -1224,8 +1224,8 @@ private:
     TActorId MonitoringActorId;
 };
 
-THolder<IActor> CreateStatService(const TStatServiceSettings&) {
-    return MakeHolder<TStatService>();
+std::unique_ptr<IActor> CreateStatService(const TStatServiceSettings&) {
+    return std::make_unique<TStatService>();
 }
 
 

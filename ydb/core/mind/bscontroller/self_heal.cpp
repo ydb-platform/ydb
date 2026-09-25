@@ -198,7 +198,7 @@ namespace NKikimr::NBsController {
                 return;
             }
 
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
             request->SetIgnoreGroupReserve(true);
@@ -1107,7 +1107,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::InitializeSelfHealState() {
-        auto ev = MakeHolder<TEvControllerUpdateSelfHealInfo>();
+        auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
         for (const auto& [groupId, group] : GroupMap) {
             if (group->VDisksInGroup) {
                 ev->GroupsToUpdate.emplace(groupId, TEvControllerUpdateSelfHealInfo::TGroupContent());

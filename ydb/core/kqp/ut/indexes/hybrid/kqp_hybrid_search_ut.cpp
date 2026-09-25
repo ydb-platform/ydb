@@ -434,7 +434,7 @@ void UpdateHybridSearchConfig(TKikimrRunner& kikimr, bool enabled) {
     for (const auto& service : {
             MakeKqpProxyID(runtime.GetNodeId()),
             MakeKqpCompileServiceID(runtime.GetNodeId())}) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         *request->Record.MutableConfig() = config;
         runtime.Send(service, edgeActor, request.Release());
         auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(

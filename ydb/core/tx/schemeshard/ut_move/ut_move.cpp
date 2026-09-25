@@ -16,7 +16,7 @@ using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NTableIndex::NKMeans;
 
 void SetEnableMoveIndex(TTestActorRuntime &runtime, TTestEnv&, ui64 schemeShard, bool value) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     NKikimrConfig::TFeatureFlags features;
     features.SetEnableMoveIndex(value);
@@ -1663,7 +1663,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         AsyncBuildIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "Sync", {"value0"});
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto id = txId;
 
         auto observer = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvBuildIndexCreateRequest::EventType);
@@ -2207,7 +2207,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         UNIT_ASSERT(req1.GetErrors().empty());
 
         {
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto defObserver = SetSuppressObserver(runtime, suppressed, NDataShard::TEvChangeExchange::EvApplyRecords);
 
             req1.Plan(TTestTxConfig::Coordinator);

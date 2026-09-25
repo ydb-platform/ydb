@@ -135,7 +135,7 @@ TShardedTableOptions SimpleTable() {
 }
 
 TMaybe<TPathId> GetTablePathId(TTestActorRuntime& runtime, TActorId sender, TString path) {
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
 
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         runtime.EnableScheduleForActor(changeSenderActor);
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvServe>(edgeActor);
 
-        auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();
+        auto request = std::make_unique<TEvIncrementalRestoreScan::TEvNoMoreData>();
         runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
 
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(edgeActor);
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         TDataShardId sourceDatashard{};
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+            auto request = std::make_unique<TEvDataShard::TEvGetInfoRequest>();
             runtime.SendToPipe(srcShards[0], edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(edgeActor);
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
                 TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
                 records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
 
-                auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>(records);
+                auto request = std::make_unique<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>(records);
                 runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
             }
 
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
                 TVector<TChangeRecord::TPtr> records;
                 records.emplace_back(recordPtr);
 
-                auto request = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRecords>(records);
+                auto request = std::make_unique<NChangeExchange::TEvChangeExchange::TEvRecords>(records);
                 runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
             }
 
@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         // there is a race here between noMoreData and all senders is ready or unint right now
 
         {
-            auto request = MakeHolder<TEvIncrementalRestoreScan::TEvNoMoreData>();
+            auto request = std::make_unique<TEvIncrementalRestoreScan::TEvNoMoreData>();
             runtime.Send(new IEventHandle(changeSenderActor, edgeActor, request.Release()));
 
             runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(edgeActor);

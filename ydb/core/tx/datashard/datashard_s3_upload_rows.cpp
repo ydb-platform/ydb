@@ -33,7 +33,7 @@ bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActor
 
 void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
     TActorId target;
-    THolder<IEventBase> event;
+    std::unique_ptr<IEventBase> event;
     ui64 cookie;
     TCommonUploadOps::GetResult(Self, target, event, cookie);
 

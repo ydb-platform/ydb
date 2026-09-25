@@ -13,9 +13,9 @@ namespace NYql {
 namespace NYql::NDqs {
     class TDatabaseManager;
 
-    THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer();
-    THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer(TTypeAnnotationContext& typesCtx);
-    THolder<IGraphTransformer> CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(TTypeAnnotationContext& typesCtx);
-    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx);
+    std::unique_ptr<IGraphTransformer> CreateDqsFinalizingOptTransformer();
+    std::unique_ptr<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer(TTypeAnnotationContext& typesCtx);
+    std::unique_ptr<IGraphTransformer> CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(TTypeAnnotationContext& typesCtx);
+    std::unique_ptr<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx);
 
 } // namespace NYql::NDqs

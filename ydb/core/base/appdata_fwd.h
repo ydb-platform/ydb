@@ -252,7 +252,7 @@ struct TAppData {
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
-    THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
+    std::unique_ptr<NKikimrCms::TCmsConfig> DefaultCmsConfig;
 
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;

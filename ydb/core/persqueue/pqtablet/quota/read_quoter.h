@@ -52,14 +52,14 @@ public:
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
     void HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) override;
-    TAccountQuoterHolder* GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) override;
+    TAccountQuoterHolder* GetAccountQuotaTracker(const std::unique_ptr<TEvPQ::TEvRequestQuota>& request) override;
     void OnAccountQuotaApproved(TRequestContext&& request) override;
     ui64 GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     void UpdateCounters(const TActorContext& ctx) override;
     void HandleWakeUpImpl() override;
     bool CanExaust(TInstant now) override;
-    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
+    std::unique_ptr<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
 
     TString Description() const override { return "Read quoter"; }
     STFUNC(ProcessEventImpl) override

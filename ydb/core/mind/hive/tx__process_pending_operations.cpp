@@ -18,7 +18,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxProcessPendingOperations::Execute processing pending operations",
             {"logPrefix", GetLogPrefix()});
         for (auto& [owner, pendingCreateTablet] : Self->PendingCreateTablets) {
-            THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
+            std::unique_ptr<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
             evCreateTablet->Record = pendingCreateTablet.CreateTablet;
             YDB_LOG_DEBUG("THive::TTxProcessPendingOperations::Execute retrying pending create tablet",
                 {"logPrefix", GetLogPrefix()});

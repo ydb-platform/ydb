@@ -172,7 +172,7 @@ namespace NDiscovery {
         }
     }
 
-    void TCachedMessageData::UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+    void TCachedMessageData::UpdateCache(const std::unique_ptr<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
                                          const TBridgeInfo::TPtr& bridgeInfo,
                                          const TString& endpointId,
                                          const TSet<TString>& services) {
@@ -277,7 +277,7 @@ namespace NDiscoveryPrivate {
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages; // when subscriptions are disabled
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CachedNotAvailable; // for subscriptions
 
-        THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
+        std::unique_ptr<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
         TBridgeInfo::TPtr BridgeInfo;
 
         struct TWaiter {
@@ -338,7 +338,7 @@ namespace NDiscoveryPrivate {
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 return;
             }
-            THolder<TEvStateStorage::TEvBoardInfoUpdate> msg = ev->Release();
+            std::unique_ptr<TEvStateStorage::TEvBoardInfoUpdate> msg = ev->Release();
             const auto& path = msg->Path;
 
             if (msg->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
@@ -362,7 +362,7 @@ namespace NDiscoveryPrivate {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle",
                 {"ev", ev->Get()->ToString()});
 
-            THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
+            std::unique_ptr<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
 
             if (auto it = BoardLookupStartTime.find(ev->Cookie); it != BoardLookupStartTime.end()) {
                 auto duration = TMonotonic::Now() - it->second;
@@ -549,8 +549,8 @@ class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
     const TActorId ReplyTo;
     const TActorId CacheId;
 
-    THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
-    THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> SchemeCacheResponse;
+    std::unique_ptr<TEvDiscovery::TEvDiscoveryData> LookupResponse;
+    std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> SchemeCacheResponse;
 
     bool ResolveResources = false;
     ui64 LookupCookie = 0;
@@ -745,7 +745,7 @@ public:
         YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY, "Navigate",
             {"path", id});
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
 
         auto& entry = request->ResultSet.emplace_back();

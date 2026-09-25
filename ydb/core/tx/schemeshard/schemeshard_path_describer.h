@@ -64,37 +64,37 @@ public:
         return Params;
     }
 
-    THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Describe(const TActorContext& ctx);
+    std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Describe(const TActorContext& ctx);
 
 private:
     TSchemeShard* Self;
     NKikimrSchemeOp::TDescribePath Params;
 
-    THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
+    std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
 
 }; // TPathDescriber
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId,
     const NKikimrSchemeOp::TDescribeOptions& opts
 );
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId
 );
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     const TString& path,
     const NKikimrSchemeOp::TDescribeOptions& opts
 );
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     const TString& path

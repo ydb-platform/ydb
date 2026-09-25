@@ -82,10 +82,10 @@ void TMakeSnapshotUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateMakeSnapshotUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateMakeSnapshotUnit(TDataShard &dataShard,
                                                TPipeline &pipeline)
 {
-    return THolder(new TMakeSnapshotUnit(dataShard, pipeline));
+    return std::unique_ptr<TMakeSnapshotUnit>(new TMakeSnapshotUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

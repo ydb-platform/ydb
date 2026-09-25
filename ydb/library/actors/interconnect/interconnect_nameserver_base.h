@@ -66,11 +66,11 @@ namespace NActors {
         void Handle(TEvInterconnect::TEvGetNode::TPtr& ev,
                     const TActorContext& ctx) {
             ui32 nodeId = ev->Get()->NodeId;
-            THolder<TEvInterconnect::TEvNodeInfo>
+            std::unique_ptr<TEvInterconnect::TEvNodeInfo>
                 reply(new TEvInterconnect::TEvNodeInfo(nodeId));
             auto it = NodeTable.find(nodeId);
             if (it != NodeTable.end()) {
-                reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+                reply->Node = std::make_unique<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
                                                                      it->second.Host, it->second.ResolveHost,
                                                                      it->second.Port, it->second.Location);
             }

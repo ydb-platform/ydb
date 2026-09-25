@@ -868,8 +868,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreateS3LogicalOptProposalTransformer(TS3State::TPtr state) {
-    return MakeHolder<TS3LogicalOptProposalTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateS3LogicalOptProposalTransformer(TS3State::TPtr state) {
+    return std::make_unique<TS3LogicalOptProposalTransformer>(state);
 }
 
 } // namespace NYql

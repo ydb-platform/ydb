@@ -29,7 +29,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "TTxGetLogTail found matching log records",
             {"records", records.size()});
 
-        Response = MakeHolder<TEvConsole::TEvGetLogTailResponse>();
+        Response = std::make_unique<TEvConsole::TEvGetLogTailResponse>();
         auto &rec = Response->Record;
         rec.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
         for (auto it = records.rbegin(); it != records.rend(); ++it) {
@@ -51,7 +51,7 @@ public:
 
 private:
     TEvConsole::TEvGetLogTailRequest::TPtr Request;
-    THolder<TEvConsole::TEvGetLogTailResponse> Response;
+    std::unique_ptr<TEvConsole::TEvGetLogTailResponse> Response;
 };
 
 ITransaction *TConfigsManager::CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev)

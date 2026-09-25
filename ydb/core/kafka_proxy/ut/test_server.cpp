@@ -89,7 +89,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     limit->SetMinStorageMegabytes(50_KB);
     limit->SetMaxStorageMegabytes(1_MB);
 
-    MeteringFile = MakeHolder<TTempFileHandle>();
+    MeteringFile = std::make_unique<TTempFileHandle>();
     appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
 
     auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();

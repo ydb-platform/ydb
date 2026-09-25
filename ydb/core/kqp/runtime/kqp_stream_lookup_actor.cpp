@@ -479,7 +479,7 @@ private:
             StreamLockWorker.reset();
             for (auto& [id, state] : Reads) {
                 Counters->SentIteratorCancels->Inc();
-                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+                auto cancel = std::make_unique<TEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
                 Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
             }
@@ -795,7 +795,7 @@ private:
             Reads.eraseRead(read);
         } else {
             Counters->SentIteratorAcks->Inc();
-            THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
+            std::unique_ptr<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
             request->Record.SetSeqNo(record.GetSeqNo());
 
@@ -834,7 +834,7 @@ private:
 
         auto guard = BindAllocator();
         StreamLookupWorker->AddResult(TStreamLookupShardReadResult(
-            shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()),
+            shardId, std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()),
             &guard.GetMutex()->Ref()
         ));
         if (!SentResultsAvailable) {
@@ -1030,7 +1030,7 @@ private:
         return Reads.InFlightLocks() >= MaxInFlightLocks;
     }
 
-    void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
+    void SendLockRequest(ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvLockRows> request) {
         YDB_LOG_DEBUG("Send lock request",
             {"logPrefix", this->LogPrefix},
             {"shard", shardId});
@@ -1201,7 +1201,7 @@ private:
         }
     }
 
-    void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
+    void StartTableRead(ui64 shardId, std::unique_ptr<TEvDataShard::TEvRead> request) {
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -1398,7 +1398,7 @@ private:
 
         Partitioning.reset();
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Database;
 
         auto keyColumnTypes = StreamLookupWorker->GetKeyColumnTypes();
@@ -1407,7 +1407,7 @@ private:
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
 
-        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(StreamLookupWorker->GetTableId(), range, TKeyDesc::ERowOperation::Read,
+        request->ResultSet.emplace_back(std::make_unique<TKeyDesc>(StreamLookupWorker->GetTableId(), range, TKeyDesc::ERowOperation::Read,
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Counters->IteratorsShardResolve->Inc();

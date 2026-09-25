@@ -16,7 +16,7 @@ void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx, ui64 cooki
 }
 
 void TKqpTxHelper::BeginTransaction(ui64 cookie, const TActorContext& ctx) {
-    auto begin = MakeHolder<TEvKqp::TEvQueryRequest>();
+    auto begin = std::make_unique<TEvKqp::TEvQueryRequest>();
 
     begin->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
     begin->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -47,24 +47,24 @@ void TKqpTxHelper::CloseKqpSession(const TActorContext& ctx) {
     }
 }
 
-THolder<TEvKqp::TEvCreateSessionRequest> TKqpTxHelper::MakeCreateSessionRequest() {
-    auto ev = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
+std::unique_ptr<TEvKqp::TEvCreateSessionRequest> TKqpTxHelper::MakeCreateSessionRequest() {
+    auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
     ev->Record.MutableRequest()->SetDatabase(DataBase);
     return ev;
 }
 
-THolder<TEvKqp::TEvCloseSessionRequest> TKqpTxHelper::MakeCloseSessionRequest() {
-    auto ev = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+std::unique_ptr<TEvKqp::TEvCloseSessionRequest> TKqpTxHelper::MakeCloseSessionRequest() {
+    auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     return ev;
 }
 
-void TKqpTxHelper::SendRequest(THolder<TEvKqp::TEvQueryRequest> request, ui64 cookie, const TActorContext& ctx) {
+void TKqpTxHelper::SendRequest(std::unique_ptr<TEvKqp::TEvQueryRequest> request, ui64 cookie, const TActorContext& ctx) {
     ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), request.Release(), 0, cookie);
 }
 
 void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit) {
-    auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+    auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -86,7 +86,7 @@ void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlPa
 }
 
 void TKqpTxHelper::CommitTx(ui64 cookie, const TActorContext& ctx) {
-    auto commit = MakeHolder<TEvKqp::TEvQueryRequest>();
+    auto commit = std::make_unique<TEvKqp::TEvQueryRequest>();
 
     commit->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
     commit->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);

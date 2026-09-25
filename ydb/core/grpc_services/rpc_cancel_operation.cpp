@@ -94,7 +94,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
     // SA-specific cancel navigation
     void ResolveStatisticsAggregatorForCancel() {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto req = MakeHolder<TNavigate>();
+        auto req = std::make_unique<TNavigate>();
         req->DatabaseName = GetDatabaseName();
         auto& entry = req->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpPath;
@@ -136,7 +136,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
     void NavigateDomainKeyForSA(const TPathId& domainKey) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto nav = MakeHolder<TNavigate>();
+        auto nav = std::make_unique<TNavigate>();
         nav->DatabaseName = GetDatabaseName();
         auto& entry = nav->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);

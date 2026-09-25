@@ -53,10 +53,10 @@ void TLoadTxDetailsUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return MakeHolder<TLoadTxDetailsUnit>(dataShard, pipeline);
+    return std::make_unique<TLoadTxDetailsUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

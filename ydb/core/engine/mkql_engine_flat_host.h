@@ -43,7 +43,7 @@ public:
     virtual ui64 CalculateResultSize(const TKeyDesc& key) const = 0;
 
     // At Tx execution make sure that all pages are loaded
-    virtual void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount = 0) = 0;
+    virtual void PinPages(const TVector<std::unique_ptr<TKeyDesc>>& keys, ui64 pageFaultCount = 0) = 0;
 
     // Returns empty optional with type 'returnType' or the filled one.
     virtual NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,

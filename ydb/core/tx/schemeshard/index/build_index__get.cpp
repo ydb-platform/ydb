@@ -22,7 +22,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvIndexBuilder::TEvGetResponse>();
+        Response = std::make_unique<TEvIndexBuilder::TEvGetResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(

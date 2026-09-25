@@ -40,8 +40,8 @@ public:
     UNIT_TEST_SUITE_END();
 
     void SetUp() override {
-        Resources = MakeHolder<TQuoterResources>();
-        Queue = MakeHolder<TTickProcessorQueue>();
+        Resources = std::make_unique<TQuoterResources>();
+        Queue = std::make_unique<TTickProcessorQueue>();
         NextResourceId = 1;
         NextActorId = 1;
         Time = TInstant::Now();
@@ -741,8 +741,8 @@ public:
     }
 
 private:
-    THolder<TQuoterResources> Resources;
-    THolder<TTickProcessorQueue> Queue;
+    std::unique_ptr<TQuoterResources> Resources;
+    std::unique_ptr<TTickProcessorQueue> Queue;
     ui64 NextResourceId = 1;
     ui64 NextActorId = 1;
     TInstant Time = TInstant::Now();

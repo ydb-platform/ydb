@@ -102,7 +102,7 @@ public:
             if (!DryRun) {
                 // We use FlagTrackDelivery to catch cases where tablet dies before us
                 // We use tablet id as cookie to distinguish different ack replies
-                auto request = MakeHolder<TEvDataShard::TEvReturnBorrowedPart>(kv.first, kv.second);
+                auto request = std::make_unique<TEvDataShard::TEvReturnBorrowedPart>(kv.first, kv.second);
                 ctx.Send(Owner, request.Release(), IEventHandle::FlagTrackDelivery, kv.first);
                 WaitingAcks.insert(kv.first);
             }

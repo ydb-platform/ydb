@@ -1505,7 +1505,7 @@ void TTenantSlotBroker::DisconnectNodeSlots(ui32 nodeId,
 void TTenantSlotBroker::SendConfigureSlot(TSlot::TPtr slot,
                                           const TActorContext &ctx)
 {
-    auto event = MakeHolder<TEvTenantPool::TEvConfigureSlot>();
+    auto event = std::make_unique<TEvTenantPool::TEvConfigureSlot>();
     event->Record.SetSlotId(slot->Id.SlotId);
     if (slot->AssignedTenant) {
         if (!slot->IsPending())
@@ -1627,7 +1627,7 @@ void TTenantSlotBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &e
         ProcessTx(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        auto response = std::make_unique<TEvConsole::TEvConfigNotificationResponse>();
         response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
@@ -1734,7 +1734,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvAlterTenant::TPtr &ev,
 void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetSlotStats::TPtr &ev,
                                const TActorContext &ctx)
 {
-    auto resp = MakeHolder<TEvTenantSlotBroker::TEvSlotStats>();
+    auto resp = std::make_unique<TEvTenantSlotBroker::TEvSlotStats>();
     Counters->FillSlotStats(resp->Record);
 
     YDB_LOG_TRACE_CTX(ctx, "TTenantSlotBroker::Handle TEvTenantSlotBroker::TEvGetSlotStats: send TEvSlotStats",
@@ -1746,7 +1746,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetSlotStats::TPtr &ev,
 void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetTenantState::TPtr &ev,
                                const TActorContext &ctx)
 {
-    auto resp = MakeHolder<TEvTenantSlotBroker::TEvTenantState>();
+    auto resp = std::make_unique<TEvTenantSlotBroker::TEvTenantState>();
     FillTenantState(ev->Get()->Record.GetTenantName(), resp->Record);
 
     YDB_LOG_TRACE_CTX(ctx, "TTenantSlotBroker::Handle TEvTenantSlotBroker::TEvGetTenantState: send TEvTenantState",
@@ -1758,7 +1758,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetTenantState::TPtr &ev,
 void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvListTenants::TPtr &ev,
                                const TActorContext &ctx)
 {
-    auto resp = MakeHolder<TEvTenantSlotBroker::TEvTenantsList>();
+    auto resp = std::make_unique<TEvTenantSlotBroker::TEvTenantsList>();
     for (auto &pr : Tenants)
         FillTenantState(pr.first, *resp->Record.AddTenants());
     ctx.Send(ev->Sender, resp.Release());

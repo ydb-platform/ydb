@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         i64 offset)
     {
         TAutoPtr<IEventHandle> handle;
-        THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+        std::unique_ptr<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
         auto* req = request->Record.MutablePartitionRequest();
         req->SetPartition(partitionId);
         req->SetOwnerCookie(ownerCookie);

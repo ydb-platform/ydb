@@ -128,7 +128,7 @@ int NewYdbClient(int argc, char** argv) {
         return {"ydb-cli", version};
     };
 
-    auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
+    auto commandsRoot = std::make_unique<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");
     if (schemeCtx) {
         commandsRoot->SetSchemeCompletionContext(std::move(*schemeCtx));

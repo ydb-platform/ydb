@@ -12,7 +12,7 @@ void TTxChainActor::OnBootstrap(const TActorContext& ctx) {
         SendCurrentTxToSS();
     } else {
         TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(&AppDataVerified()));
-        ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(1));
+        ctx.Send(TxAllocatorClient, std::make_unique<TEvTxAllocatorClient::TEvAllocate>(1));
     }
 }
 
@@ -43,7 +43,7 @@ void TTxChainActor::OnSessionProgressSaved() {
     if (SessionLogic->IsFinished()) {
         SaveSessionState();
     } else {
-        NActors::TActivationContext::AsActorContext().Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(1));
+        NActors::TActivationContext::AsActorContext().Send(TxAllocatorClient, std::make_unique<TEvTxAllocatorClient::TEvAllocate>(1));
     }
 }
 

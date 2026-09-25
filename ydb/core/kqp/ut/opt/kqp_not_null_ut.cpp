@@ -1915,7 +1915,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto sender = runtime.AllocateEdgeActor();
             TAutoPtr<IEventHandle> handle;
 
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->SetPath(path);
             request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));

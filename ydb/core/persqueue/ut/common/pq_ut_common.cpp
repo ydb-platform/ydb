@@ -37,7 +37,7 @@ void SendPQTabletConfig(
     ui64 txId,
     ui64 planStep)
 {
-    auto request = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto request = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
     request->Record.SetTxId(txId);
     ActorIdToProto(edge, request->Record.MutableSourceActor());
     *request->Record.MutableConfig()->MutableTabletConfig() = tabletConfig;
@@ -64,7 +64,7 @@ void SendPQTabletConfig(
     UNIT_ASSERT(prepared->Record.HasMinStep());
     planStep = Max(planStep, prepared->Record.GetMinStep());
 
-    auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>();
     plan->Record.SetStep(planStep);
     auto* tx = plan->Record.AddTransactions();
     tx->SetTxId(txId);
@@ -268,7 +268,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
     }
     UNIT_ASSERT(configApplied);
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
     bool configRead = false;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
@@ -310,7 +310,7 @@ i64 CmdGetOffset(const ui32 partition, const TString& user, const TMaybe<i64>& e
                   ui64 writeTime) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     i64 ret = -1;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
@@ -384,7 +384,7 @@ void PQBalancerPrepare(const TBalancerParams& params) {
         try {
             params.Runtime.ResetScheduledCount();
 
-            THolder<TEvPersQueue::TEvUpdateBalancerConfig> request(new TEvPersQueue::TEvUpdateBalancerConfig());
+            std::unique_ptr<TEvPersQueue::TEvUpdateBalancerConfig> request(new TEvPersQueue::TEvUpdateBalancerConfig());
             for (const auto& p : params.Map) {
                 auto part = request->Record.AddPartitions();
                 part->SetPartition(p.first);
@@ -438,7 +438,7 @@ void PQBalancerPrepare(const TBalancerParams& params) {
 void PQGetPartInfo(std::function<bool(ui64)> firstOffsetMatcher, ui64 endOffset, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvOffsetsResponse *result;
-    THolder<TEvPersQueue::TEvOffsets> request;
+    std::unique_ptr<TEvPersQueue::TEvOffsets> request;
 
     for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
         try {
@@ -492,7 +492,7 @@ THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
                                 ui64 tabletId,
                                 const TActorId& edge)
 {
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     auto* cmd = request->Record.AddCmdReadRange();
     auto* range = cmd->MutableRange();
     range->SetFrom(TString(1, '\x00'));
@@ -530,7 +530,7 @@ TActorId SetOwner(const ui32 partition, TTestContext& tc, const TString& owner, 
 TActorId SetOwner(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender, const ui32 partition, const TString& owner, bool force) {
     TActorId pipeClient = runtime->ConnectToPipe(tabletId, sender, 0, GetPipeConfigWithRetries());
 
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
 
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
@@ -546,7 +546,7 @@ TActorId SetOwner(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sen
 TActorId RegisterReadSession(const TString& session, TTestContext& tc, const TVector<ui32>& groups) {
     TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
 
-    THolder<TEvPersQueue::TEvRegisterReadSession> request;
+    std::unique_ptr<TEvPersQueue::TEvRegisterReadSession> request;
 
     request.Reset(new TEvPersQueue::TEvRegisterReadSession);
     auto& req = request->Record;
@@ -601,7 +601,7 @@ void WaitPartition(const TString &session, TTestContext& tc, ui32 partition, con
                 UNIT_ASSERT_EQUAL(result->Record.GetSession(), sessionToRelease);
                 UNIT_ASSERT(ok);
 
-                auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+                auto request = std::make_unique<TEvPersQueue::TEvPartitionReleased>();
 
                 auto& req = request->Record;
                 req.SetSession(sessionToRelease);
@@ -675,7 +675,7 @@ std::pair<TString, TActorId> CmdSetOwner(TTestActorRuntime* runtime, ui64 tablet
 
 void WritePartData(const ui32 partition, const TString& sourceId, const i64 offset, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
                     const ui32 totalSize, const TString& data, TTestContext& tc, const TString& cookie, i32 msgSeqNo) {
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
@@ -698,7 +698,7 @@ void WritePartData(const ui32 partition, const TString& sourceId, const i64 offs
 
 void WritePartDataWithBigMsg(const ui32 partition, const TString& sourceId, const ui64 seqNo, const ui16 partNo, const ui16 totalParts,
                     const ui32 totalSize, const TString& data, TTestContext& tc, const TString& cookie, i32 msgSeqNo, ui32 bigMsgSize) {
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
@@ -733,7 +733,7 @@ void WriteData(const ui32 partition, const TString& sourceId, const TVector<std:
 
 void WriteData(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender, const ui32 partition, const TString& sourceId,
                const TVector<std::pair<ui64, TString>> data, const TString& cookie, i32 msgSeqNo, i64 offset, bool disableDeduplication) {
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
@@ -940,7 +940,7 @@ void CmdWriteBatched(
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            THolder<TEvPersQueue::TEvRequest> request;
+            std::unique_ptr<TEvPersQueue::TEvRequest> request;
             tc.Runtime->ResetScheduledCount();
             request.Reset(new TEvPersQueue::TEvRequest);
             auto req = request->Record.MutablePartitionRequest();
@@ -1028,7 +1028,7 @@ void CmdWrite(const TCmdWriteOptions& o) {
 
 void ReserveBytes(const ui32 partition, TTestContext& tc,
                const TString& cookie, i32 msgSeqNo, i64 size, const TActorId& pipeClient, bool lastRequest) {
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
@@ -1094,7 +1094,7 @@ void CmdReserveBytes(const ui32 partition, TTestContext& tc, const TString& owne
 void CmdSetOffset(const ui32 partition, const TString& user, ui64 offset, bool error, TTestContext& tc, const TString& session) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -1139,7 +1139,7 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
         UNIT_ASSERT(ev);
     }
     TEvPersQueue::TEvResponse *result;
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -1193,7 +1193,7 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
 void CmdKillSession(const ui32 partition, const TString& user, const TString& session, TTestContext& tc, const TActorId& pipe) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -1228,7 +1228,7 @@ void CmdKillSession(const ui32 partition, const TString& user, const TString& se
 void CmdUpdateWriteTimestamp(const ui32 partition, ui64 timestamp, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -1261,7 +1261,7 @@ void CmdUpdateWriteTimestamp(const ui32 partition, ui64 timestamp, TTestContext&
 TVector<TString> CmdSourceIdRead(TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TVector<TString> sourceIds;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
     TEvKeyValue::TEvResponse *result;
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
@@ -1405,7 +1405,7 @@ ui64 GetSizeLag(const ui32 partition,
 
 void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
 {
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
 
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
@@ -1488,7 +1488,7 @@ void CheckDirectReadEvent(TEvent* event, const TCmdDirectReadSettings& settings)
 void CmdPublishOrForgetRead(const TCmdDirectReadSettings& settings, bool isPublish, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
-    THolder<TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<TEvPersQueue::TEvRequest> request;
     tc.Runtime->ResetScheduledCount();
     request.Reset(new TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
@@ -1597,7 +1597,7 @@ void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, co
     write->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
 }
 
-THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId) {
+std::unique_ptr<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId) {
     runtime.ResetScheduledCount();
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -1611,7 +1611,7 @@ void CmdRunCompaction(TTestActorRuntime& runtime,
                       const TActorId& sender,
                       const ui32 partition)
 {
-    auto event = MakeHolder<TEvPQ::TEvForceCompaction>(partition);
+    auto event = std::make_unique<TEvPQ::TEvForceCompaction>(partition);
     runtime.SendToPipe(tabletId, sender, event.Release(), 0, GetPipeConfigWithRetries());
 }
 
@@ -1627,7 +1627,7 @@ void CmdRenameKey(TTestActorRuntime& runtime,
                   const TString& oldKey,
                   const TString& newKey)
 {
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     auto* rename = request->Record.AddCmdRename();
     rename->SetOldKey(oldKey);
     rename->SetNewKey(newKey);

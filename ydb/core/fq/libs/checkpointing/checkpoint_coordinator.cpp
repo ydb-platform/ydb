@@ -935,7 +935,7 @@ void TCheckpointCoordinator::OnInternalError(const TString& message, const NYql:
     OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, subIssues);
 }
 
-THolder<NActors::IActor> MakeCheckpointCoordinator(
+std::unique_ptr<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
@@ -946,7 +946,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     const FederatedQuery::StreamingDisposition& streamingDisposition,
     bool restoreOffsetsFromForeignCheckpoint)
 {
-    return MakeHolder<TCheckpointCoordinator>(
+    return std::make_unique<TCheckpointCoordinator>(
         coordinatorId,
         storageProxy,
         runActorId,

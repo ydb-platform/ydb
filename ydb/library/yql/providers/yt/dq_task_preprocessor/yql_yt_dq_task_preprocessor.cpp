@@ -54,7 +54,7 @@ public:
         Specs.SetUseSkiff("");
         Specs.Init(CodecContext, spec);
         OutStream = tx->CreateRawWriter(NYT::TRichYPath{path}, Specs.MakeOutputFormat(), NYT::TTableWriterOptions());
-        TableWriter = MakeHolder<TMkqlWriterImpl>(OutStream, 4_MB);
+        TableWriter = std::make_unique<TMkqlWriterImpl>(OutStream, 4_MB);
         TableWriter->SetSpecs(Specs);
         Alloc.Release();
     }
@@ -116,7 +116,7 @@ private:
     NCommon::TCodecContext CodecContext;
     TMkqlIOSpecs Specs;
     NYT::TRawTableWriterPtr OutStream;
-    THolder<TMkqlWriterImpl> TableWriter;
+    std::unique_ptr<TMkqlWriterImpl> TableWriter;
     ui64 RowCount{0};
     bool Finished = false;
 };
@@ -135,7 +135,7 @@ public:
         , Specs()
     {
         Specs.Init(CodecContext, spec);
-        TableWriter = MakeHolder<TMkqlWriterImpl>(OutStream, 1, 4_MB);
+        TableWriter = std::make_unique<TMkqlWriterImpl>(OutStream, 1, 4_MB);
         TableWriter->SetSpecs(Specs);
         Alloc.Release();
     }
@@ -195,7 +195,7 @@ private:
     NCommon::TCodecContext CodecContext;
     TMkqlIOSpecs Specs;
     TStringStream OutStream;
-    THolder<TMkqlWriterImpl> TableWriter;
+    std::unique_ptr<TMkqlWriterImpl> TableWriter;
     ui64 RowCount{0};
     bool Finished = false;
 };
@@ -289,12 +289,12 @@ public:
         }
     }
 
-    THolder<IDqFullResultWriter> CreateFullResultWriter() override {
+    std::unique_ptr<IDqFullResultWriter> CreateFullResultWriter() override {
         if (auto p = GraphParams_.FindPtr("yt.full_result_table")) {
             try {
                 auto params = NYT::NodeFromYsonString(*p);
                 if (YtEmulationMode_) {
-                    return MakeHolder<TFileFullResultWriter>(FuncRegistry_, params["path"].AsString(), params["codecSpec"].AsString(), params["tableAttrs"].AsString());
+                    return std::make_unique<TFileFullResultWriter>(FuncRegistry_, params["path"].AsString(), params["codecSpec"].AsString(), params["tableAttrs"].AsString());
                 } else {
                     auto server = params["server"].AsString();
                     auto token = params["token"].AsString();
@@ -333,7 +333,7 @@ public:
 
                     FullResultSubTx_ = subTx;
 
-                    return MakeHolder<TYtFullResultWriter>(FuncRegistry_, subTx, path, params["codecSpec"].AsString());
+                    return std::make_unique<TYtFullResultWriter>(FuncRegistry_, subTx, path, params["codecSpec"].AsString());
                 }
             }
             catch (const NYT::TErrorResponse& e) {

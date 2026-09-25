@@ -293,7 +293,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
     nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
-    THolder<TActorSystemSetup> setup1(new TActorSystemSetup());
+    std::unique_ptr<TActorSystemSetup> setup1(new TActorSystemSetup());
     setup1->NodeId = 1;
     setup1->ExecutorsCount = 4;
     setup1->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);

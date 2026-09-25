@@ -55,9 +55,9 @@ private:
 class TFsStorageTestBase : public NUnitTest::TTestBase {
 protected:
     void SetUp() override {
-        TempDir = MakeHolder<TTempDir>();
+        TempDir = std::make_unique<TTempDir>();
 
-        Runtime = MakeHolder<TTestBasicRuntime>();
+        Runtime = std::make_unique<TTestBasicRuntime>();
         Runtime->Initialize(TAppPrepare().Unwrap());
         Runtime->SetLogPriority(NKikimrServices::FS_WRAPPER, NLog::PRI_DEBUG);
 
@@ -196,8 +196,8 @@ protected:
     }
 
 protected:
-    THolder<TTempDir> TempDir;
-    THolder<TTestBasicRuntime> Runtime;
+    std::unique_ptr<TTempDir> TempDir;
+    std::unique_ptr<TTestBasicRuntime> Runtime;
     TActorId Wrapper;
     TActorId Edge;
 };

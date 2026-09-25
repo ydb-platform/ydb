@@ -262,7 +262,7 @@ struct TMessageTraits<TEvBenchFlatMessage> {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(TEvent::Make(base));
+        std::unique_ptr<TEvent> ev(TEvent::Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -288,7 +288,7 @@ struct TPayloadPbTraits {
     }
 
     static TEvent* Make(ui64) {
-        THolder<TEvent> holder(new TEvent());
+        std::unique_ptr<TEvent> holder(new TEvent());
         const ui64 payloadId = holder->AddPayload(TRope(GetSharedPayload(PayloadBytes)));
         holder->Record.SetPayloadId(payloadId);
         return holder.Release();
@@ -301,7 +301,7 @@ struct TPayloadPbTraits {
     }
 
     static ui32 SerializedSize(ui64) {
-        THolder<TEvent> ev(Make(0));
+        std::unique_ptr<TEvent> ev(Make(0));
         return ev->CalculateSerializedSize();
     }
 
@@ -327,7 +327,7 @@ struct TPayloadFlatTraits {
     }
 
     static TEvent* Make(ui64) {
-        THolder<TEvent> holder(TEvent::MakeEvent());
+        std::unique_ptr<TEvent> holder(TEvent::MakeEvent());
         holder->template Bytes<typename TEvent::TBlobTag>().Set(TRope(GetSharedPayload(PayloadBytes)));
         return holder.Release();
     }
@@ -337,7 +337,7 @@ struct TPayloadFlatTraits {
     }
 
     static ui32 SerializedSize(ui64) {
-        THolder<TEvent> ev(Make(0));
+        std::unique_ptr<TEvent> ev(Make(0));
         return ev->CalculateSerializedSize();
     }
 
@@ -359,7 +359,7 @@ struct TMessageTraits<TEvBenchPbThirtyMessage> {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(new TEvent());
+        std::unique_ptr<TEvent> holder(new TEvent());
         FillThirtyU64Record(holder->Record, base);
         return holder.Release();
     }
@@ -369,7 +369,7 @@ struct TMessageTraits<TEvBenchPbThirtyMessage> {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -404,7 +404,7 @@ struct TMessageTraits<TEvBenchFlatThirtyMessage> {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -434,7 +434,7 @@ struct TArrayPbTraits {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(new TEvent());
+        std::unique_ptr<TEvent> holder(new TEvent());
         auto* values = holder->Record.MutableValues();
         values->Reserve(ItemCount);
         for (ui64 i = 0; i < ItemCount; ++i) {
@@ -453,7 +453,7 @@ struct TArrayPbTraits {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -483,7 +483,7 @@ struct TArrayFlatTraits {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(TEvent::MakeEvent());
+        std::unique_ptr<TEvent> holder(TEvent::MakeEvent());
         auto array = holder->template Array<typename TEvent::TValuesTag>();
         if constexpr (ItemCount == 30) {
             std::array<ui64, ItemCount> values;
@@ -517,7 +517,7 @@ struct TArrayFlatTraits {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -539,7 +539,7 @@ struct TMessageTraits<TEvBenchPbStructArrayMessage> {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(new TEvent());
+        std::unique_ptr<TEvent> holder(new TEvent());
         for (ui64 i = 0; i < 10; ++i) {
             auto* item = holder->Record.AddValues();
             item->SetA(static_cast<ui32>(base + i * 3 + 1));
@@ -559,7 +559,7 @@ struct TMessageTraits<TEvBenchPbStructArrayMessage> {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -581,7 +581,7 @@ struct TMessageTraits<TEvBenchFlatStructArrayMessage> {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(TEvent::MakeEvent());
+        std::unique_ptr<TEvent> holder(TEvent::MakeEvent());
         std::array<TTripleInts, 10> values;
         for (size_t i = 0; i < values.size(); ++i) {
             values[i] = TTripleInts{
@@ -606,7 +606,7 @@ struct TMessageTraits<TEvBenchFlatStructArrayMessage> {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -634,7 +634,7 @@ struct TPbVPutLikeTraits {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(new TEvent());
+        std::unique_ptr<TEvent> holder(new TEvent());
         const ui32 payloadId = holder->AddPayload(TRope(GetSharedPayload(PayloadBytes)));
         FillVPutLikeRecord(holder->Record, base, payloadId);
         return holder.Release();
@@ -647,7 +647,7 @@ struct TPbVPutLikeTraits {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 
@@ -675,7 +675,7 @@ struct TFlatVPutLikeTraits {
     }
 
     static TEvent* Make(ui64 base) {
-        THolder<TEvent> holder(TEvent::MakeEvent());
+        std::unique_ptr<TEvent> holder(TEvent::MakeEvent());
         auto frontend = holder->template GetFrontend<typename TEvent::TSchemeV1>();
         frontend.template Field<typename TEvent::TBlobIdTag>() = MakeBlobIdRaw(base);
         frontend.template Field<typename TEvent::TChecksumTag>() = base * 19 + 5;
@@ -725,7 +725,7 @@ struct TFlatVPutLikeTraits {
     }
 
     static ui32 SerializedSize(ui64 base) {
-        THolder<TEvent> ev(Make(base));
+        std::unique_ptr<TEvent> ev(Make(base));
         return ev->CalculateSerializedSize();
     }
 

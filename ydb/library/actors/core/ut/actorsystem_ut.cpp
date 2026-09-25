@@ -27,15 +27,15 @@ Y_UNIT_TEST_SUITE(TActorSystemTest) {
         }
     };
 
-    THolder<TTestActorRuntimeBase> CreateRuntime() {
-        auto runtime = MakeHolder<TTestActorRuntimeBase>();
+    std::unique_ptr<TTestActorRuntimeBase> CreateRuntime() {
+        auto runtime = std::make_unique<TTestActorRuntimeBase>();
         runtime->SetScheduledEventFilter([](auto&&, auto&&, auto&&, auto&&) { return false; });
         runtime->Initialize();
         return runtime;
     }
 
     Y_UNIT_TEST(LocalService) {
-        THolder<TTestActorRuntimeBase> runtime = CreateRuntime();
+        std::unique_ptr<TTestActorRuntimeBase> runtime = CreateRuntime();
         auto actorA = runtime->Register(new TTestActor);
         auto actorB = runtime->Register(new TTestActor);
 
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TActorSystemTest) {
     };
 
     TActorId GetUndeliveredSender(ui32 flags) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = SelfNodeId;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);

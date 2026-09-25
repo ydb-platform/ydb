@@ -26,7 +26,7 @@ protected:
 private:
     void ParseProfile();
 
-    THolder<TProfileConfig> ProfileConfig;
+    std::unique_ptr<TProfileConfig> ProfileConfig;
     TString LocalProfileName;
     TString UserName;
     TString PasswordFile;

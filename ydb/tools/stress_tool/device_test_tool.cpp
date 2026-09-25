@@ -324,7 +324,7 @@ static int Run(int argc, char **argv) {
             if (serverMode) {
                 InstallInterconnectServerSignalHandler();
                 auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
-                THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort));
+                std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort));
                 test->SetPrinter(printer);
                 test->RunTest();
                 return 0;
@@ -356,7 +356,7 @@ static int Run(int argc, char **argv) {
 
                 auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
-                    THolder<NKikimr::TPerfTest> test(
+                    std::unique_ptr<NKikimr::TPerfTest> test(
                         new NKikimr::TInterconnectClient(config, testProto, clientNodeId, serverPeers));
                     test->SetPrinter(printer);
                     test->RunTest();
@@ -376,7 +376,7 @@ static int Run(int argc, char **argv) {
         if (serverMode) {
             InstallServerSignalHandler();
             auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort));
+            std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort));
             test->SetPrinter(printer);
             test->RunTest();
             return 0;
@@ -421,7 +421,7 @@ static int Run(int argc, char **argv) {
                 for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                     overrideDDiskInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
-                        THolder<NKikimr::TPerfTest> test(
+                        std::unique_ptr<NKikimr::TPerfTest> test(
                             new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
                         test->SetPrinter(printer);
                         test->RunTest();
@@ -429,7 +429,7 @@ static int Run(int argc, char **argv) {
                 }
             } else {
                 for (ui32 run = 0; run < config.RunCount; ++run) {
-                    THolder<NKikimr::TPerfTest> test(
+                    std::unique_ptr<NKikimr::TPerfTest> test(
                         new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
                     test->SetPrinter(printer);
                     test->RunTest();
@@ -531,7 +531,7 @@ static int Run(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.AioTestListSize(); ++i) {
         NDevicePerfTest::TAioTest testProto = protoTests.GetAioTestList(i);
         for (ui32 run = 0; run < config.RunCount; ++run) {
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TAioTest(config, testProto));
+            std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TAioTest(config, testProto));
             test->SetPrinter(printer);
             test->RunTest();
         }
@@ -545,14 +545,14 @@ static int Run(int argc, char **argv) {
             for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                 testProto.SetQueueDepth(inFlight);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
-                    THolder<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
+                    std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
             }
         } else {
             for (ui32 run = 0; run < config.RunCount; ++run) {
-                THolder<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
+                std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
                 test->SetPrinter(printer);
                 test->RunTest();
             }
@@ -564,7 +564,7 @@ static int Run(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.TrimTestListSize(); ++i) {
         NDevicePerfTest::TTrimTest testProto = protoTests.GetTrimTestList(i);
         for (ui32 run = 0; run < config.RunCount; ++run) {
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TTrimTest(config, testProto));
+            std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TTrimTest(config, testProto));
             test->SetPrinter(printer);
             test->RunTest();
         }
@@ -594,14 +594,14 @@ static int Run(int argc, char **argv) {
             for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                 overridePDiskInFlight(testProto, inFlight);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
-                    THolder<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
+                    std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
             }
         } else {
             for (ui32 run = 0; run < config.RunCount; ++run) {
-                THolder<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
+                std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
                 test->SetPrinter(printer);
                 test->RunTest();
             }
@@ -625,14 +625,14 @@ static int Run(int argc, char **argv) {
             for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                 overrideDDiskInFlight(testProto, inFlight);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
-                    THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
+                    std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
             }
         } else {
             for (ui32 run = 0; run < config.RunCount; ++run) {
-                THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
+                std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
                 test->SetPrinter(printer);
                 test->RunTest();
             }
@@ -674,7 +674,7 @@ static int Run(int argc, char **argv) {
                     overridePBufferInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
                         overridePBufferMeasureType(testProto, measureType);
-                        THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+                        std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
                         test->SetPrinter(printer);
                         test->RunTest();
                     }
@@ -684,7 +684,7 @@ static int Run(int argc, char **argv) {
             for (ui32 measureType : xrange(3)) {
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     overridePBufferMeasureType(testProto, measureType);
-                    THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+                    std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
@@ -696,7 +696,7 @@ static int Run(int argc, char **argv) {
     if (protoTests.HasDriveEstimatorTest()) {
         NDevicePerfTest::TDriveEstimatorTest testProto = protoTests.GetDriveEstimatorTest();
         for (ui32 run = 0; run < config.RunCount; ++run) {
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TDriveEstimatorTest(config, testProto));
+            std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TDriveEstimatorTest(config, testProto));
             test->SetPrinter(printer);
             test->RunTest();
         }
@@ -706,7 +706,7 @@ static int Run(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.InterconnectTestListSize(); ++i) {
         NDevicePerfTest::TInterconnectTest testProto = protoTests.GetInterconnectTestList(i);
         for (ui32 run = 0; run < config.RunCount; ++run) {
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectTest(config, testProto));
+            std::unique_ptr<NKikimr::TPerfTest> test(new NKikimr::TInterconnectTest(config, testProto));
             test->SetPrinter(printer);
             test->RunTest();
         }

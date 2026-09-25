@@ -1686,8 +1686,8 @@ TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext&
     return TStatus::Ok;
 }
 
-THolder<TVisitorTransformerBase> CreateDqTypeAnnotationTransformer() {
-    return MakeHolder<TDqTypeAnnotationTransformer>();
+std::unique_ptr<TVisitorTransformerBase> CreateDqTypeAnnotationTransformer() {
+    return std::make_unique<TDqTypeAnnotationTransformer>();
 }
 
 bool IsTypeSupportedInMergeCn(EDataSlot type) {

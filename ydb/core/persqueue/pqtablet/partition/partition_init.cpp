@@ -32,17 +32,17 @@ TInitializer::TInitializer(TPartition* partition)
     : Partition(partition)
     , InProgress(false)
 {
-    Steps.push_back(MakeHolder<TInitConfigStep>(this));
-    Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
-    Steps.push_back(MakeHolder<TInitDiskStatusStep>(this));
-    Steps.push_back(MakeHolder<TInitMetaStep>(this));
-    Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
-    Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
-    Steps.push_back(MakeHolder<TInitDataStep>(this));
-    Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
-    Steps.push_back(MakeHolder<TInitMessageDeduplicatorStep>(this));
-    Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
-    Steps.push_back(MakeHolder<TInitFieldsStep>(this));
+    Steps.push_back(std::make_unique<TInitConfigStep>(this));
+    Steps.push_back(std::make_unique<TInitInternalFieldsStep>(this));
+    Steps.push_back(std::make_unique<TInitDiskStatusStep>(this));
+    Steps.push_back(std::make_unique<TInitMetaStep>(this));
+    Steps.push_back(std::make_unique<TInitInfoRangeStep>(this));
+    Steps.push_back(std::make_unique<TInitDataRangeStep>(this));
+    Steps.push_back(std::make_unique<TInitDataStep>(this));
+    Steps.push_back(std::make_unique<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(std::make_unique<TInitMessageDeduplicatorStep>(this));
+    Steps.push_back(std::make_unique<TDeleteKeysStep>(this));
+    Steps.push_back(std::make_unique<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -179,7 +179,7 @@ TInitConfigStep::TInitConfigStep(TInitializer* initializer)
 }
 
 void TInitConfigStep::Execute(const TActorContext& ctx) {
-    auto event = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto event = std::make_unique<TEvKeyValue::TEvRequest>();
     auto read = event->Record.AddCmdRead();
     read->SetKey(Partition()->GetKeyConfig());
 
@@ -203,7 +203,7 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Migrate(Partition()->Config);
 
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
-            auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
+            auto event = std::make_unique<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
                                                                      Partition()->TabletConfig);
             Partition()->PushFrontDistrTx(event.Release());
         }
@@ -252,7 +252,7 @@ TInitDiskStatusStep::TInitDiskStatusStep(TInitializer* initializer)
 }
 
 void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
 
@@ -291,7 +291,7 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
         read->SetKey(key.Data(), key.Size());
     };
 
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     addKey(request->Record, TKeyPrefix::TypeMeta, PartitionId());
     addKey(request->Record, TKeyPrefix::TypeTxMeta, PartitionId());
@@ -1054,7 +1054,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
         return;
     }
 
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     for (auto& key: keys) {
         auto read = request->Record.AddCmdRead();
         read->SetKey(key);
@@ -1331,7 +1331,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
             {"sensor", "BufferFullTime" + suffix, true});
 
     auto subGroup = GetServiceCounters(counters, "pqproxy|writeTimeLag");
-    InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
+    InputTimeLag = std::unique_ptr<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         subGroup, labels, {{"sensor", "TimeLags" + suffix}}, "Interval",
         SLOW_LATENCY_MS_INTERVALS, true));
 
@@ -1371,7 +1371,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WriteBigLatency"}, true, "sensor", false);
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "sensor", false);
     if (IsQuotingEnabled()) {
-        TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
+        TopicWriteQuotaWaitCounter = std::unique_ptr<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), labels,
                     {{"sensor", "TopicWriteQuotaWait" + suffix}}, "Interval",
@@ -1379,7 +1379,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
         );
     }
 
-    PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
+    PartitionWriteQuotaWaitCounter = std::unique_ptr<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(GetServiceCounters(counters, "pqproxy|partitionWriteQuotaWait"),
             labels, {{"sensor", "PartitionWriteQuotaWait" + suffix}}, "Interval",
                 FAST_LATENCY_MS_INTERVALS, true)
@@ -1407,11 +1407,11 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     subgroups.push_back({"name", "topic.write.lag_milliseconds"});
 
     if (IsSupportive()) {
-        SupportivePartitionTimeLag = MakeHolder<TMultiBucketCounter>(
+        SupportivePartitionTimeLag = std::make_unique<TMultiBucketCounter>(
                 TVector<ui64>{100, 200, 500, 1000, 2000, 5000, 10'000, 30'000, 60'000, 180'000, 9'999'999},
                 DEFAULT_BUCKET_COUNTER_MULTIPLIER, ctx.Now().MilliSeconds());
     } else {
-        InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
+        InputTimeLag = std::unique_ptr<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                         subgroups, "bin",
                         SLOW_LATENCY_INTERVALS, true));
@@ -1520,7 +1520,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "name", false);
     if (IsQuotingEnabled()) {
         subgroups.push_back({"name", "topic.write.topic_throttled_milliseconds"});
-        TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
+        TopicWriteQuotaWaitCounter = std::unique_ptr<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 NPersQueue::GetCountersForTopic(counters, IsServerless), {},
                             subgroups, "bin",
@@ -1530,7 +1530,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     }
 
     subgroups.push_back({"name", "topic.write.partition_throttled_milliseconds"});
-    PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
+    PartitionWriteQuotaWaitCounter = std::unique_ptr<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
             NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups, "bin",
             FAST_LATENCY_INTERVALS, true)
@@ -1552,7 +1552,7 @@ void TPartition::CreateCompacter() {
     }
     auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext());
     ui64 compStartOffset = userInfo.Offset;
-    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+    Compacter = std::make_unique<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
 
     //Init compacter counters
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -1621,7 +1621,7 @@ void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request, TKeyPrefix::EType c, co
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
                          TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
     auto keyPrefixes = MakeKeyPrefixRange(c, partition);
     TKeyPrefix& from = keyPrefixes.first;

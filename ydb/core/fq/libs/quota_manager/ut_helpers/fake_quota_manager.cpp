@@ -3,7 +3,7 @@
 namespace NFq {
 
 void TQuotaServiceFakeActor::Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev) {
-    auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
+    auto response = std::make_unique<TEvQuotaService::TQuotaGetResponse>();
     response->SubjectId = ev->Get()->SubjectId;
     response->SubjectType = ev->Get()->SubjectType;
     response->Quotas = Quotas;

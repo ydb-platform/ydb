@@ -103,7 +103,7 @@ public:
         Runtime.Send(new IEventHandle(
             Proxy,
             Edge,
-            new TBscProxy::TEvSend(THolder<IEventBase>(
+            new TBscProxy::TEvSend(std::unique_ptr<IEventBase>(
                 new TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup())),
             0,
             cookie));
@@ -125,7 +125,7 @@ public:
         Runtime.Send(new IEventHandle(
             Proxy,
             Edge,
-            new TBscProxy::TEvSend(THolder<IEventBase>(
+            new TBscProxy::TEvSend(std::unique_ptr<IEventBase>(
                 new TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup())),
             0,
             cookie));

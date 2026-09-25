@@ -41,7 +41,7 @@ namespace {
         const ui64 TabletId;
         const ui32 FollowerId;
         TExecutorCounters Executor;
-        THolder<TTabletCountersBase> App = CreateAppCountersByTabletType(TABLET_TYPE);
+        std::unique_ptr<TTabletCountersBase> App = CreateAppCountersByTabletType(TABLET_TYPE);
         TTabletCountersBase ExecutorBaseline;
         TTabletCountersBase AppBaseline;
 

@@ -96,8 +96,8 @@ private:
 
 private:
     TString Database;
-    THolder<TDriver> Driver;
-    THolder<NTpch::TTpchRunner> Tpch;
+    std::unique_ptr<TDriver> Driver;
+    std::unique_ptr<NTpch::TTpchRunner> Tpch;
     bool InitDone = false;
 };
 UNIT_TEST_SUITE_REGISTRATION(KqpTpch);

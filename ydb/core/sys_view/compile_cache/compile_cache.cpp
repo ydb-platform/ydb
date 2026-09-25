@@ -495,7 +495,7 @@ private:
     }
 
     void ProcessRows() {
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
 
         for (auto& entry : *LastResponse.MutableCacheCacheQueries()) {
@@ -590,12 +590,12 @@ private:
     NYql::TIssues PartialIssues;
     NActors::TSchedulerCookieHolder NodeRequestTimeoutCookieHolder;
     };
-THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
+    return std::make_unique<TCompileCacheQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 } // NKikimr::NSysView

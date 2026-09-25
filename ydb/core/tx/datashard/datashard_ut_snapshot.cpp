@@ -96,7 +96,7 @@ namespace {
             TString fromKey;
             bool fromKeyInclusive = true;
             for (;;) {
-                auto req = MakeHolder<TEvDataShard::TEvReadColumnsRequest>();
+                auto req = std::make_unique<TEvDataShard::TEvReadColumnsRequest>();
                 req->Record.SetTableId(tableId.PathId.LocalPathId);
                 if (!snapshot.IsMax()) {
                     req->Record.SetSnapshotStep(snapshot.Step);
@@ -131,7 +131,7 @@ namespace {
 
     ui64 GetSnapshotCount(TTestActorRuntime& runtime, ui64 shard) {
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
         TString miniKQL = R"___((
             (let range '('IncFrom
                 '('Oid (Uint64 '0) (Void))
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
             auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-            auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+            auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
             request->Record.MutableProgram()->MutableProgram()->SetText(programText);
             runtime.SendToPipe(shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             auto tablets = GetTableShards(server, senderDiscard, "/Root/table-1");
             const auto tableId = ResolveTableId(server, senderDiscard, "/Root/table-1");
             for (ui64 shardId : tablets) {
-                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
+                auto req = std::make_unique<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
                 req->Record.SetOwnerId(tableId.PathId.OwnerId);
                 req->Record.SetPathId(tableId.PathId.LocalPathId);
                 req->Record.SetStep(snapshot.Step);
@@ -865,8 +865,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         bool captureSplit = true;
         bool captureTimecast = false;
-        TVector<THolder<IEventHandle>> capturedSplit;
-        TVector<THolder<IEventHandle>> capturedTimecast;
+        TVector<std::unique_ptr<IEventHandle>> capturedSplit;
+        TVector<std::unique_ptr<IEventHandle>> capturedTimecast;
         auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvSplit::EventType: {
@@ -1039,7 +1039,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         size_t observedPlanSteps = 0;
         size_t observedPlanStepTxs = 0;
         // Capture and block all readset messages
-        TVector<THolder<IEventHandle>> readSets;
+        TVector<std::unique_ptr<IEventHandle>> readSets;
         auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
@@ -1051,7 +1051,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 }
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     Cerr << "... captured TEvReadSet" << Endl;
-                    readSets.push_back(THolder(ev.Release()));
+                    readSets.push_back(std::unique_ptr<IEventHandle>(ev.Release()));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             }
@@ -1319,7 +1319,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     if (BlockReadSets) {
                         Cerr << "... blocked TEvReadSet" << Endl;
-                        BlockedReadSets.push_back(THolder(ev.Release()));
+                        BlockedReadSets.push_back(std::unique_ptr<IEventHandle>(ev.Release()));
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
@@ -1327,7 +1327,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 case TEvChangeExchange::TEvApplyRecords::EventType: {
                     if (BlockApplyRecords) {
                         Cerr << "... blocked ApplyRecords" << Endl;
-                        BlockedApplyRecords.push_back(THolder(ev.Release()));
+                        BlockedApplyRecords.push_back(std::unique_ptr<IEventHandle>(ev.Release()));
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
@@ -1354,9 +1354,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         std::optional<TInjectLocks> InjectLocks;
         bool InjectClearTasks = false;
         bool BlockReadSets = false;
-        TVector<THolder<IEventHandle>> BlockedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> BlockedReadSets;
         bool BlockApplyRecords = false;
-        TVector<THolder<IEventHandle>> BlockedApplyRecords;
+        TVector<std::unique_ptr<IEventHandle>> BlockedApplyRecords;
     };
 
     Y_UNIT_TEST(MvccSnapshotLockedWrites) {

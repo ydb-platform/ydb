@@ -162,9 +162,9 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     Y_UNIT_TEST(Touch_MainQueue) {
         TS3FIFOCache<NTest::TPage, TPageTraits> cache(10);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(20)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 1));
         }
 
         for (ui32 pageId : xrange(10)) {
@@ -205,9 +205,9 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     Y_UNIT_TEST(EvictNext) {
         TS3FIFOCache<NTest::TPage, TPageTraits> cache(10);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(30)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 1));
         }
 
         for (ui32 pageId : xrange(30)) {
@@ -235,9 +235,9 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     Y_UNIT_TEST(UpdateLimit) {
         TS3FIFOCache<NTest::TPage, TPageTraits> cache(10);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(30)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 1));
         }
 
         for (ui32 pageId : xrange(30)) {
@@ -264,9 +264,9 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     Y_UNIT_TEST(Erase) {
         TS3FIFOCache<NTest::TPage, TPageTraits> cache(10);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(30)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 1));
         }
 
         for (ui32 pageId : xrange(30)) {
@@ -295,9 +295,9 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     Y_UNIT_TEST(Random) {
         TS3FIFOCache<NTest::TPage, TPageTraits> cache(100);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(500)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 1));
         }
 
         ui32 hits = 0, misses = 0;
@@ -345,9 +345,9 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
     Y_UNIT_TEST(EnsureLimits) {
         TS3FIFOCache<NTest::TPage, TPageTraits> cache(8);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(4)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 2));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 2));
             Touch(cache, *pages.back());
         }
 

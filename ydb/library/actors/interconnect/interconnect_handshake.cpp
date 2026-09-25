@@ -365,13 +365,13 @@ namespace NActors {
         TConnection ExternalDataChannel;
         TString State;
         TString HandshakeKind;
-        TMaybe<THolder<TProgramInfo>> ProgramInfo; // filled in in case of successful handshake; even if null
+        TMaybe<std::unique_ptr<TProgramInfo>> ProgramInfo; // filled in in case of successful handshake; even if null
         TSessionParams Params;
         TMonotonic Deadline;
         TActorId HandshakeBroker;
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
         std::optional<TString> HandshakeId; // for XDC
-        THolder<TEvReportConnection::THandle> PendingXdcConnection;
+        std::unique_ptr<TEvReportConnection::THandle> PendingXdcConnection;
         bool SubscribedForConnection = false;
 
         struct {
@@ -449,7 +449,7 @@ namespace NActors {
             }
             StopRdmaSyncActor();
             if (SubscribedForConnection) {
-                SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, false));
+                SendToProxy(std::make_unique<TEvSubscribeForConnection>(*HandshakeId, false));
             }
         }
 
@@ -562,7 +562,7 @@ namespace NActors {
                 TEvHandshakeDone::TRdmaResult rdmaResult = (Rdma.Qp && Rdma.Cq)
                     ? TEvHandshakeDone::TRdmaResult(std::move(Rdma.Qp), std::move(Rdma.Cq), std::move(rdmaPreinitSession))
                     : TEvHandshakeDone::TRdmaResult(TEvHandshakeDone::TRdmaResult::TDisabled(RunDelayedRdmaHandshake));
-                SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
+                SendToProxy(std::make_unique<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
                     *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()),
                     std::move(rdmaResult)));
             }
@@ -576,7 +576,7 @@ namespace NActors {
             // wrap current socket with secure one
             connection.ResetPollerToken();
             TIntrusivePtr<NInterconnect::TStreamSocket>& socketRef = connection.GetSocketRef();
-            auto ev = AskProxy<TEvSecureSocket>(MakeHolder<TEvGetSecureSocket>(socketRef), "AskProxy(TEvSecureContext)");
+            auto ev = AskProxy<TEvSecureSocket>(std::make_unique<TEvGetSecureSocket>(socketRef), "AskProxy(TEvSecureContext)");
             TIntrusivePtr<NInterconnect::TSecureSocket> secure = std::move(ev->Get()->Socket); // remember for further use
             socketRef = secure; // replace the socket within the connection
             connection.RegisterInPoller(); // re-register in poller
@@ -1305,7 +1305,7 @@ namespace NActors {
                         Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
                     }
                     HandshakeId = params.GetHandshakeId();
-                    SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, true));
+                    SendToProxy(std::make_unique<TEvSubscribeForConnection>(*HandshakeId, true));
                     SubscribedForConnection = true;
                     break;
                 }
@@ -1315,14 +1315,14 @@ namespace NActors {
                         Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
                     }
                     MainChannel.ResetPollerToken();
-                    SendToProxy(MakeHolder<TEvReportConnection>(params.GetHandshakeId(), std::move(MainChannel.GetSocketRef())));
+                    SendToProxy(std::make_unique<TEvReportConnection>(params.GetHandshakeId(), std::move(MainChannel.GetSocketRef())));
                     throw TExHandshakeFailed();
                 }
             }
 
             if (request.Header.PeerVirtualId) {
                 // issue request to the proxy and wait for the response
-                auto reply = AskProxy<TEvHandshakeAck, TEvHandshakeNak>(MakeHolder<TEvHandshakeAsk>(
+                auto reply = AskProxy<TEvHandshakeAck, TEvHandshakeNak>(std::make_unique<TEvHandshakeAsk>(
                     request.Header.SelfVirtualId, request.Header.PeerVirtualId, request.Header.NextPacket),
                     "TEvHandshakeAsk");
                 if (auto *ack = reply->CastAsLocal<TEvHandshakeAck>()) {
@@ -1356,7 +1356,7 @@ namespace NActors {
                 SendInitialPacket(MainChannel);
 
                 // wait for extended request
-                auto ev = MakeHolder<TEvHandshakeRequest>();
+                auto ev = std::make_unique<TEvHandshakeRequest>();
                 auto& request = ev->Record;
                 if (!request.ParseFromString(ReceiveExBlock(MainChannel, "ExRequest"))) {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect THandshakeRequest");
@@ -1458,7 +1458,7 @@ namespace NActors {
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
                         HandshakeId = request.GetHandshakeId();
-                        SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, true));
+                        SendToProxy(std::make_unique<TEvSubscribeForConnection>(*HandshakeId, true));
                         SubscribedForConnection = true;
                     } else {
                         generateError("Peer has requested ExternalDataChannel feature, but did not provide HandshakeId");
@@ -1807,31 +1807,31 @@ namespace NActors {
             return rdmaReadAck;
         }
 
-        void SendToProxy(THolder<IEventBase> ev) {
+        void SendToProxy(std::unique_ptr<IEventBase> ev) {
             Y_ABORT_UNLESS(PeerNodeId);
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), ev.Release());
         }
 
         template <typename TEvent>
-        THolder<typename TEvent::THandle> WaitForSpecificEvent(TString state, TMonotonic deadline = TMonotonic::Max()) {
+        std::unique_ptr<typename TEvent::THandle> WaitForSpecificEvent(TString state, TMonotonic deadline = TMonotonic::Max()) {
             State = std::move(state);
             return TActorCoroImpl::WaitForSpecificEvent<TEvent>(&THandshakeActor::ProcessUnexpectedEvent, deadline);
         }
 
         template <typename T1, typename T2, typename... TEvents>
-        THolder<IEventHandle> WaitForSpecificEvent(TString state, TMonotonic deadline = TMonotonic::Max()) {
+        std::unique_ptr<IEventHandle> WaitForSpecificEvent(TString state, TMonotonic deadline = TMonotonic::Max()) {
             State = std::move(state);
             return TActorCoroImpl::WaitForSpecificEvent<T1, T2, TEvents...>(&THandshakeActor::ProcessUnexpectedEvent, deadline);
         }
 
         template <typename TEvent>
-        THolder<typename TEvent::THandle> AskProxy(THolder<IEventBase> ev, TString state) {
+        std::unique_ptr<typename TEvent::THandle> AskProxy(std::unique_ptr<IEventBase> ev, TString state) {
             SendToProxy(std::move(ev));
             return WaitForSpecificEvent<TEvent>(std::move(state));
         }
 
         template <typename T1, typename T2, typename... TOther>
-        THolder<IEventHandle> AskProxy(THolder<IEventBase> ev, TString state) {
+        std::unique_ptr<IEventHandle> AskProxy(std::unique_ptr<IEventBase> ev, TString state) {
             SendToProxy(std::move(ev));
             return WaitForSpecificEvent<T1, T2, TOther...>(std::move(state));
         }
@@ -1876,7 +1876,7 @@ namespace NActors {
             }
 
             if (PeerNodeId) {
-                SendToProxy(MakeHolder<TEvHandshakeFail>(failType, std::move(msg), PeerHostName, std::move(peerError), detailedReason));
+                SendToProxy(std::make_unique<TEvHandshakeFail>(failType, std::move(msg), PeerHostName, std::move(peerError), detailedReason));
             }
 
             throw TExHandshakeFailed() << explanation;
@@ -1892,7 +1892,7 @@ namespace NActors {
             connection.SendData(&packet, sizeof(packet), "SendInitialPacket");
         }
 
-        THolder<TEvInterconnect::TNodeInfo> GetPeerNodeInfo() {
+        std::unique_ptr<TEvInterconnect::TNodeInfo> GetPeerNodeInfo() {
             Y_ABORT_UNLESS(PeerNodeId);
             Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId, Deadline));
             auto response = WaitForSpecificEvent<TEvInterconnect::TEvNodeInfo>("GetPeerNodeInfo");
@@ -1900,8 +1900,8 @@ namespace NActors {
         }
 
         template <typename T>
-        static THolder<TProgramInfo> GetProgramInfo(const T& proto) {
-            auto programInfo = MakeHolder<TProgramInfo>();
+        static std::unique_ptr<TProgramInfo> GetProgramInfo(const T& proto) {
+            auto programInfo = std::make_unique<TProgramInfo>();
             programInfo->PID = proto.GetProgramPID();
             programInfo->StartTime = proto.GetProgramStartTime();
             programInfo->Serial = proto.GetSerial();
@@ -1913,13 +1913,13 @@ namespace NActors {
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
         THandshakeActorCreateTimer timer(common);
-        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
+        return new TActorCoro(std::make_unique<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
         THandshakeActorCreateTimer timer(common);
-        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
+        return new TActorCoro(std::make_unique<THandshakeActor>(std::move(common), std::move(socket)),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 

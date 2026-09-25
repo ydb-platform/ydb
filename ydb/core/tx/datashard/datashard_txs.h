@@ -36,7 +36,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; }
 private:
     TEvDataShard::TEvGetShardState::TPtr Ev;
-    THolder<TEvDataShard::TEvGetShardStateResult> Result;
+    std::unique_ptr<TEvDataShard::TEvGetShardStateResult> Result;
 };
 
 class TDataShard::TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -137,13 +137,13 @@ public:
 
 private:
     TEvTxProcessing::TEvReadSet::TPtr Ev;
-    THolder<IEventHandle> Ack;
-    THolder<IEventHandle> NoDataReply;
+    std::unique_ptr<IEventHandle> Ack;
+    std::unique_ptr<IEventHandle> NoDataReply;
     TMonotonic AckTs;
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx);
-    THolder<IEventHandle> MakeAck(const TActorContext &ctx);
-    THolder<IEventHandle> MakeNoDataReply(const TActorContext &ctx);
+    std::unique_ptr<IEventHandle> MakeAck(const TActorContext &ctx);
+    std::unique_ptr<IEventHandle> MakeNoDataReply(const TActorContext &ctx);
 };
 
 class TDataShard::TTxProgressResendRS : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -199,7 +199,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REFRESH_VOLATILE_SNAPSHOT; }
 private:
     TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr Ev;
-    THolder<TEvDataShard::TEvRefreshVolatileSnapshotResponse> Reply;
+    std::unique_ptr<TEvDataShard::TEvRefreshVolatileSnapshotResponse> Reply;
 };
 
 class TDataShard::TTxDiscardVolatileSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -210,7 +210,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_DISCARD_VOLATILE_SNAPSHOT; }
 private:
     TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr Ev;
-    THolder<TEvDataShard::TEvDiscardVolatileSnapshotResponse> Reply;
+    std::unique_ptr<TEvDataShard::TEvDiscardVolatileSnapshotResponse> Reply;
 };
 
 class TDataShard::TTxCleanupRemovedSnapshots : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -229,7 +229,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_MIGRATE_SCHEMESHARD; }
 private:
     TEvDataShard::TEvMigrateSchemeShardRequest::TPtr Ev;
-    THolder<TEvDataShard::TEvMigrateSchemeShardResponse> Reply;
+    std::unique_ptr<TEvDataShard::TEvMigrateSchemeShardResponse> Reply;
 };
 
 class TDataShard::TTxGetS3Upload: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -240,7 +240,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_GET_S3_UPLOAD_ID; }
 private:
     TEvDataShard::TEvGetS3Upload::TPtr Ev;
-    THolder<TEvDataShard::TEvS3Upload> Reply;
+    std::unique_ptr<TEvDataShard::TEvS3Upload> Reply;
 };
 
 class TDataShard::TTxStoreS3UploadId: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -251,7 +251,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_S3_UPLOAD_ID; }
 private:
     TEvDataShard::TEvStoreS3UploadId::TPtr Ev;
-    THolder<TEvDataShard::TEvS3Upload> Reply;
+    std::unique_ptr<TEvDataShard::TEvS3Upload> Reply;
 };
 
 class TDataShard::TTxChangeS3UploadStatus: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -262,7 +262,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CHANGE_S3_UPLOAD_STATUS; }
 private:
     TEvDataShard::TEvChangeS3UploadStatus::TPtr Ev;
-    THolder<TEvDataShard::TEvS3Upload> Reply;
+    std::unique_ptr<TEvDataShard::TEvS3Upload> Reply;
 };
 
 class TDataShard::TTxGetS3DownloadInfo: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -273,7 +273,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_GET_S3_DOWNLOAD_INFO; }
 private:
     TEvDataShard::TEvGetS3DownloadInfo::TPtr Ev;
-    THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
+    std::unique_ptr<TEvDataShard::TEvS3DownloadInfo> Reply;
 };
 
 class TDataShard::TTxStoreS3DownloadInfo: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -284,7 +284,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_S3_DOWNLOAD_INFO; }
 private:
     TEvDataShard::TEvStoreS3DownloadInfo::TPtr Ev;
-    THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
+    std::unique_ptr<TEvDataShard::TEvS3DownloadInfo> Reply;
 };
 
 class TDataShard::TTxS3UploadRows

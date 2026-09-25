@@ -13,7 +13,7 @@ class ITempStorageProxy;  // Proxy class to provide unified interface for all ty
 struct TOperationResults; // Contains information about particular operation results
 
 // Factory method to create TempStorageProxy for usage.  Error reasons are returned in TOperatonResults 
-std::pair<THolder<ITempStorageProxy>, TOperationResults> CreateFileStorageProxy(const TFileStorageConfig& config, const TTempStorageExecutionPolicy& policy );
+std::pair<std::unique_ptr<ITempStorageProxy>, TOperationResults> CreateFileStorageProxy(const TFileStorageConfig& config, const TTempStorageExecutionPolicy& policy );
 
 struct TLoadOperationResults; // Contains information about load operation together with loaded data
 
@@ -66,7 +66,7 @@ public:
     virtual TOperationResults SetExecutionPolicy(const TSessionExecutionPolicy& policy) = 0;  // Changes execution policy of ISession
 
     // Opens stream to save or load data.  Possible errors are returned in TOperationResults
-    virtual std::pair<THolder<IStream>, TOperationResults> OpenStream(const TString& objNamespace, const TString& streamName ) = 0;
+    virtual std::pair<std::unique_ptr<IStream>, TOperationResults> OpenStream(const TString& objNamespace, const TString& streamName ) = 0;
 
     virtual ~ISession() = default;
 };
@@ -98,11 +98,11 @@ public:
 
     // Creates new session to store and load temporary objects;  Session manages lifecycle of all resources associated with the session.
     // When session is deleted, all pending load operations are canceled, all resources associated with the session are freed
-    virtual THolder<ISession> CreateSession() = 0;  
+    virtual std::unique_ptr<ISession> CreateSession() = 0;  
 
     // Creates iterator to enumerate stored objects of interest. It works both for namespaces and  objects enumeration.
     // Objects are identified by namespace and name.  If onlyValid = true, only valid objects are returned
-    virtual THolder<IObjectsIterator> CreateIterator(   const TMaybe<TString>& objNamespace = TMaybe<TString>(),
+    virtual std::unique_ptr<IObjectsIterator> CreateIterator(   const TMaybe<TString>& objNamespace = TMaybe<TString>(),
                                                         const TMaybe<TString>& objName = TMaybe<TString>(), 
                                                         bool onlyValid = true) = 0;    
                                                                             

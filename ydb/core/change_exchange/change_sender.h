@@ -193,7 +193,7 @@ private:
     IChangeSenderIdentity* const Identity;
     IChangeSenderPathResolver* const PathResolver;
     IChangeSenderFactory* const SenderFactory;
-    THolder<IPartitionResolverVisitor> PartitionResolver;
+    std::unique_ptr<IPartitionResolverVisitor> PartitionResolver;
 
 protected:
     TActorId ChangeServer;

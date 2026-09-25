@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(UnorderedCache) {
             return Time;
         }
 
-        static THolder<TWorkerThread> Spawn(std::function<void()> func) {
-            THolder<TWorkerThread> thread = MakeHolder<TWorkerThread>(std::move(func));
+        static std::unique_ptr<TWorkerThread> Spawn(std::function<void()> func) {
+            std::unique_ptr<TWorkerThread> thread = std::make_unique<TWorkerThread>(std::move(func));
             thread->Start();
             return thread;
         }
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(UnorderedCache) {
             }
         };
 
-        TVector<THolder<TWorkerThread>> workers(threads);
+        TVector<std::unique_ptr<TWorkerThread>> workers(threads);
         for (size_t i = 0; i < threads; ++i) {
             workers[i] = TWorkerThread::Spawn([workerFunc, i]() {
                 workerFunc(i);

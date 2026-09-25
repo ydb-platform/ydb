@@ -6,6 +6,6 @@
 
 namespace NKikimr {
 
-THolder<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType type);
+std::unique_ptr<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType type);
 
 }

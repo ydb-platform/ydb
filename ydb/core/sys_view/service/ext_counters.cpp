@@ -140,7 +140,7 @@ private:
 
     void Transform() {
         Initialize();
-        auto metrics(MakeHolder<NGraph::TEvGraph::TEvSendMetrics>());
+        auto metrics(std::make_unique<NGraph::TEvGraph::TEvSendMetrics>());
         if (AnonRssSize) {
             MemoryUsedBytes->Set(AnonRssSize->Val());
             metrics->AddMetric("resources.memory.used_bytes", AnonRssSize->Val());

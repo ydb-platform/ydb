@@ -15,7 +15,7 @@ class TDedicatedPipePool {
     TMap<TActorId, std::pair<TEntityId, TTabletId>> Owners;
 
 public:
-    void Send(const TEntityId& entityId, TTabletId dst, THolder<IEventBase> message, const TActorContext& ctx) {
+    void Send(const TEntityId& entityId, TTabletId dst, std::unique_ptr<IEventBase> message, const TActorContext& ctx) {
         using namespace NTabletPipe;
 
         if (!Pipes[entityId].contains(dst)) {

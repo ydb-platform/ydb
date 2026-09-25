@@ -569,7 +569,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 };
 
 struct TEvMultiLog : TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
-    void AddLog(THolder<TEvLog> &&ev, NWilson::TTraceId traceId = {}) {
+    void AddLog(std::unique_ptr<TEvLog> &&ev, NWilson::TTraceId traceId = {}) {
         Logs.emplace_back(std::move(ev), std::move(traceId));
         auto &log = *Logs.back().Event;
         if (Logs.size() == 1) {
@@ -596,12 +596,12 @@ struct TEvMultiLog : TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
     }
 
     struct TItem {
-        TItem(THolder<TEvLog>&& event, NWilson::TTraceId&& traceId)
+        TItem(std::unique_ptr<TEvLog>&& event, NWilson::TTraceId&& traceId)
             : Event(std::move(event))
             , TraceId(std::move(traceId))
         {}
 
-        THolder<TEvLog> Event;
+        std::unique_ptr<TEvLog> Event;
         NWilson::TTraceId TraceId;
     };
 

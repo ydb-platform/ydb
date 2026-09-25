@@ -34,7 +34,7 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
         TIntermediate::TRead::TReadItem *ReadItem;
     };
 
-    THolder<TIntermediate> IntermediateResult;
+    std::unique_ptr<TIntermediate> IntermediateResult;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 TabletGeneration;
     TStackVec<TGetBatch, 1> Batches;
@@ -555,7 +555,7 @@ public:
         }
    }
 
-    TKeyValueStorageReadRequest(THolder<TIntermediate> &&intermediate,
+    TKeyValueStorageReadRequest(std::unique_ptr<TIntermediate> &&intermediate,
             const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
             TKeyValueState *state,
             std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
@@ -571,7 +571,7 @@ public:
 };
 
 
-IActor* CreateKeyValueStorageReadRequest(THolder<TIntermediate>&& intermediate,
+IActor* CreateKeyValueStorageReadRequest(std::unique_ptr<TIntermediate>&& intermediate,
         const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
         TKeyValueState *state,
         std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)

@@ -171,7 +171,7 @@ public:
     }
 
     void ReplyAndDie(const TActorContext& ctx) {
-        auto response = MakeHolder<TBusResponse>();
+        auto response = std::make_unique<TBusResponse>();
         response->Record.SetStatus(MSTATUS_OK);
         if (WaitForCompletion) {
             LoadResult.Fill(response->Record.MutableInterconnectLoadResult());

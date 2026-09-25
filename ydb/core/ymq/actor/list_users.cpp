@@ -19,7 +19,7 @@ public:
         return false;
     }
 
-    TListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListUsers, std::move(cb))
     {
     }
@@ -38,7 +38,7 @@ private:
 
         auto proxy = MakeTxProxyID();
 
-        auto ev = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto ev = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         ev->Record.MutableDescribePath()->SetPath(Cfg().GetRoot());
 
         RLOG_SQS_TRACE("TListUsersActor generate request."
@@ -89,7 +89,7 @@ private:
     }
 };
 
-IActor* CreateListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TListUsersActor(sourceSqsRequest, std::move(cb));
 }
 

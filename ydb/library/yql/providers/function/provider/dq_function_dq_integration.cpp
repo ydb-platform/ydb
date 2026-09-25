@@ -43,8 +43,8 @@ private:
 };
 } // namespace
 
-THolder<IDqIntegration> CreateDqFunctionDqIntegration(TDqFunctionState::TPtr state) {
-    return MakeHolder<TDqFunctionDqIntegration>(state);
+std::unique_ptr<IDqIntegration> CreateDqFunctionDqIntegration(TDqFunctionState::TPtr state) {
+    return std::make_unique<TDqFunctionDqIntegration>(state);
 }
 
 }

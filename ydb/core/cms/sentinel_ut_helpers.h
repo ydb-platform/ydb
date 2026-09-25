@@ -109,7 +109,7 @@ public:
         auto prevObserver = SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         SetObserverFunc([this, prevObserver](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvCms::TEvClusterStateRequest::EventType) {
-                auto response = MakeHolder<TEvCms::TEvClusterStateResponse>();
+                auto response = std::make_unique<TEvCms::TEvClusterStateResponse>();
                 auto& record = response->Record;
                 if (State) {
                     record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);

@@ -39,8 +39,8 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup(const char* name = "TopicSchemaO
 // Simulated threads are required for AddObserver on TEvPipeCache::TEvForward.
 // Avoid TTopicSdkTestSetup here: its StartServer(true)/FullInit deadlocks without a dispatcher.
 struct TSimulatedServer {
-    THolder<TThreadPool> Pool;
-    THolder<::NPersQueue::TTestServer> Server;
+    std::unique_ptr<TThreadPool> Pool;
+    std::unique_ptr<::NPersQueue::TTestServer> Server;
 
     ~TSimulatedServer() {
         Server.Reset();
@@ -59,7 +59,7 @@ std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
     settings.SetUseRealThreads(false);
 
     auto out = std::make_unique<TSimulatedServer>();
-    out->Server = MakeHolder<::NPersQueue::TTestServer>(settings, /*start=*/false);
+    out->Server = std::make_unique<::NPersQueue::TTestServer>(settings, /*start=*/false);
     out->Server->StartServer(/*doClientInit=*/false, TString("/Root"));
 
     auto& runtime = out->GetRuntime();
@@ -67,7 +67,7 @@ std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
     out->Server->EnableLogs({NKikimrServices::PQ_SCHEMA}, NActors::NLog::PRI_DEBUG);
 
     out->Server->AnnoyingClient->SetNoConfigMode();
-    out->Pool = MakeHolder<TThreadPool>();
+    out->Pool = std::make_unique<TThreadPool>();
     out->Pool->Start(2);
     auto* server = out->Server.Get();
     auto future = NThreading::Async([server] {

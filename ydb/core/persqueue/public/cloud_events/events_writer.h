@@ -11,7 +11,7 @@ namespace NKikimr::NPQ::NCloudEvents {
 
 class IEventsWriter {
 public:
-    using TPtr = THolder<IEventsWriter>;
+    using TPtr = std::unique_ptr<IEventsWriter>;
     virtual ~IEventsWriter() = default;
     virtual void Write(const TString& data) = 0;
 };
@@ -29,7 +29,7 @@ private:
 
 class IUaEventsSession {
 public:
-    using TPtr = THolder<IUaEventsSession>;
+    using TPtr = std::unique_ptr<IUaEventsSession>;
     virtual ~IUaEventsSession() = default;
     virtual void Send(const TString& data) = 0;
     virtual void Close() = 0;
@@ -46,7 +46,7 @@ public:
 private:
     NUnifiedAgent::TClientPtr Client;
     IUaEventsSession::TPtr Session;
-    THolder<TLog> Logger;
+    std::unique_ptr<TLog> Logger;
     bool Closed = false;
 };
 

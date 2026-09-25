@@ -298,9 +298,9 @@ namespace NTable {
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;
         TPartView PartView;
-        THolder<TLoaderEnv> LoaderEnv;
+        std::unique_ptr<TLoaderEnv> LoaderEnv;
         struct TPreloadBTreeWalker {
-            THolder<TBTreePartWalker> Walker;
+            std::unique_ptr<TBTreePartWalker> Walker;
             NPage::TGroupId GroupId;
             bool SkipDataPages = false;
         };

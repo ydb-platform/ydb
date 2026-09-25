@@ -70,7 +70,7 @@ public:
     {}
 
     TCachedMessageData(TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries,
-                        const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                        const std::unique_ptr<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
                         const TBridgeInfo::TPtr& bridgeInfo,
                         const TString& endpointId = {},
                         const TSet<TString>& services = {},
@@ -84,7 +84,7 @@ public:
 
     void UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
 
-    void UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+    void UpdateCache(const std::unique_ptr<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
                         const TBridgeInfo::TPtr& bridgeInfo,
                         const TString& endpointId = {},
                         const TSet<TString>& services = {});

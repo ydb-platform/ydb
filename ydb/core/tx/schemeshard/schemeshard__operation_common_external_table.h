@@ -20,7 +20,7 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath) {
         .IsLikeDirectory();
 }
 
-inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
+inline bool IsParentPathValid(const std::unique_ptr<TProposeResponse>& result,
                               const TPath& parentPath) {
     const auto checks = IsParentPathValid(parentPath);
 

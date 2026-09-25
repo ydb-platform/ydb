@@ -30,7 +30,7 @@ public:
             {"record", request.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
+        Response = std::make_unique<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
         if (Self->IndexBuilds.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()

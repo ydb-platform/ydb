@@ -5,14 +5,14 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
     TSessionParams p;
     p.UseExternalDataChannel = true;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, nullptr);
 
     auto ev = MakeTestEvent(123);
-    auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+    auto evHandle = std::make_unique<IEventHandle>(TActorId(), TActorId(), ev);
 
     TInstant t = TInstant::Zero();
 
@@ -168,7 +168,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
 
     const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -197,7 +197,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
     info.Sections.push_back(TEventSectionInfo{0, rdmaSize, 0, 0, false, true});
     auto serialized = MakeIntrusive<TEventSerializedData>(TRope(std::move(rcBuf)), std::move(info));
 
-    auto evHandle = MakeHolder<IEventHandle>(
+    auto evHandle = std::make_unique<IEventHandle>(
         TEvTestSerialization::EventType,
         0,
         TActorId(),
@@ -306,7 +306,7 @@ TEST_P(XdcRdmaPayloadChecksumTest, RdmaPayloadChecksums) {
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
 
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
 
     const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -331,7 +331,7 @@ TEST_P(XdcRdmaPayloadChecksumTest, RdmaPayloadChecksums) {
     info.Sections.push_back(TEventSectionInfo{0, payloadSize, 0, 0, false, true /*IsRdmaCapable*/});
     auto serialized = MakeIntrusive<TEventSerializedData>(TRope(std::move(rcBuf)), std::move(info));
 
-    auto evHandle = MakeHolder<IEventHandle>(
+    auto evHandle = std::make_unique<IEventHandle>(
         TEvTestSerialization::EventType,
         params.DisablePayloadChecksumsFlag ? IEventHandle::FlagDisablePayloadChecksums : 0,
         TActorId(),
@@ -376,7 +376,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
 
     const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -394,7 +394,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     info.Sections.push_back(TEventSectionInfo{0, payloadSize, 0, 0, false, true});
     auto serialized = MakeIntrusive<TEventSerializedData>(TRope(std::move(rcBuf)), std::move(info));
 
-    auto evHandle = MakeHolder<IEventHandle>(
+    auto evHandle = std::make_unique<IEventHandle>(
         TEvTestSerialization::EventType,
         0,
         TActorId(),
@@ -424,7 +424,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
 
     const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -435,7 +435,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
     auto* ev = new TEvSerializeToRopeFailure();
-    auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+    auto evHandle = std::make_unique<IEventHandle>(TActorId(), TActorId(), ev);
     channel.Push(*evHandle, pool, TInstant::Zero());
 
     TXdcCommandCounters counters;
@@ -463,7 +463,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) 
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
 
     const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -481,7 +481,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) 
     info.Sections.push_back(TEventSectionInfo{0, payloadSize, 0, 0, false, true});
     auto serialized = MakeIntrusive<TEventSerializedData>(TRope(std::move(nonRdmaBuf)), std::move(info));
 
-    auto evHandle = MakeHolder<IEventHandle>(
+    auto evHandle = std::make_unique<IEventHandle>(
         TEvTestSerialization::EventType,
         0,
         TActorId(),
@@ -514,7 +514,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
     ctr->SetPeerInfo("peer", "1", "peer");
-    auto callback = [](THolder<IEventBase>) {};
+    auto callback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, callback);
 
     const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -540,7 +540,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     info.Sections.push_back(TEventSectionInfo{0, payloadSize, 0, 0, false, true});
     auto serialized = MakeIntrusive<TEventSerializedData>(std::move(payload), std::move(info));
 
-    auto evHandle = MakeHolder<IEventHandle>(
+    auto evHandle = std::make_unique<IEventHandle>(
         TEvTestSerialization::EventType,
         0,
         TActorId(),

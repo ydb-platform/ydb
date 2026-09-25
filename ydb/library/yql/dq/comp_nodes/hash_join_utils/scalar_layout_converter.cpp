@@ -884,7 +884,7 @@ private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
-    THolder<NPackedTuple::TTupleLayout> TupleLayout_;
+    std::unique_ptr<NPackedTuple::TTupleLayout> TupleLayout_;
     const THolderFactory& HolderFactory_;
     
     // Reusable buffers to avoid allocations in hot path

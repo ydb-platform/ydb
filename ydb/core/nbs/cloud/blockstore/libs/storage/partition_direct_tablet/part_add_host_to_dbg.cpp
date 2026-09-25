@@ -429,7 +429,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
+    SendToBsc(ctx, std::unique_ptr<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

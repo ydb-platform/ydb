@@ -59,7 +59,7 @@ public:
                 Y_ABORT_UNLESS(pipeActor);
                 ShemePipeActorId = ctx.Register(pipeActor);
 
-                auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+                auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
                 request->Record.SetTxId(response.GetTxId());
                 if (response.HasSchemeShardOperationId()) {
                     OperationId = response.GetSchemeShardOperationId();

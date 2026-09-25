@@ -24,8 +24,8 @@ struct TPersQueueYdbSdkTestSetupSettings {
 };
 
 class TPersQueueYdbSdkTestSetup : public ::NPersQueue::SDKTestSetup {
-    THolder<NYdb::TDriver> Driver;
-    THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
+    std::unique_ptr<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
 
     TAdaptiveLock Lock;
 public:
@@ -67,7 +67,7 @@ public:
             cfg.SetEndpoint(TStringBuilder() << "localhost:" << Server.GrpcPort);
             cfg.SetDatabase("/Root");
             cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-            Driver = MakeHolder<NYdb::TDriver>(cfg);
+            Driver = std::make_unique<NYdb::TDriver>(cfg);
         }
         return *Driver;
     }
@@ -75,7 +75,7 @@ public:
     NYdb::NPersQueue::TPersQueueClient& GetPersQueueClient() {
         with_lock(Lock) {
             if (!PersQueueClient) {
-                PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(GetDriver());
+                PersQueueClient = std::make_unique<NYdb::NPersQueue::TPersQueueClient>(GetDriver());
             }
             return *PersQueueClient;
         }

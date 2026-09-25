@@ -726,7 +726,7 @@ protected:
                     safeKey->GetBuffer() != LastAckedKey.GetBuffer()) {
                     LastAckedKey = std::move(*safeKey);
 
-                    auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
+                    auto progress = std::make_unique<TEvDataShard::TEvBuildFulltextIndexResponse>();
                     auto& record = progress->Record;
                     record.SetId(BuildId);
                     record.SetTabletId(TabletId);
@@ -801,7 +801,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvBuildFulltextIndexResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting fulltext index build scan",

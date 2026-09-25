@@ -13,7 +13,7 @@ void TCachedPartitionWriter::OnEvInitResult(const TEvPartitionWriter::TEvInitRes
     MaxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
 }
 
-void TCachedPartitionWriter::OnWriteRequest(THolder<TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
+void TCachedPartitionWriter::OnWriteRequest(std::unique_ptr<TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
                                             const TActorContext& ctx)
 {
     AFL_ENSURE(ev->Record.HasPartitionRequest());

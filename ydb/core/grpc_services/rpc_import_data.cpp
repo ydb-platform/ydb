@@ -66,9 +66,9 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
         return TSerializedTableRange(fromValues, true, toValues, false);
     }
 
-    static THolder<TKeyDesc> MakeKeyDesc(const TNavigate::TEntry& entry) {
+    static std::unique_ptr<TKeyDesc> MakeKeyDesc(const TNavigate::TEntry& entry) {
         const TVector<NScheme::TTypeInfo> keyColumnTypes = MakeKeyColumnTypes(entry);
-        return MakeHolder<TKeyDesc>(
+        return std::make_unique<TKeyDesc>(
             entry.TableId,
             GetFullRange(keyColumnTypes.size()).ToTableRange(),
             TKeyDesc::ERowOperation::Update,
@@ -119,7 +119,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     /// Resolve path
 
     void ResolvePath() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = GetDatabaseName();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -178,7 +178,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     /// Resolve keys
 
     void ResolveKeys() {
-        auto request = MakeHolder<TResolve>();
+        auto request = std::make_unique<TResolve>();
         request->DatabaseName = GetDatabaseName();
 
         request->ResultSet.emplace_back(std::move(KeyDesc));
@@ -232,7 +232,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty data");
         }
 
-        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
         if (Request != nullptr && Request->GetInternalToken() != nullptr) {
             ev->Record.SetUserSID(Request->GetInternalToken()->GetUserSID());
@@ -443,7 +443,7 @@ public:
 private:
     TActorId LeaderPipeCache;
     THashMap<TString, TSysTables::TTableColumnInfo> Columns;
-    THolder<TKeyDesc> KeyDesc;
+    std::unique_ptr<TKeyDesc> KeyDesc;
 
 }; // TImportDataRPC
 

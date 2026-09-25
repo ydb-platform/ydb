@@ -31,7 +31,7 @@ struct TAccountLockoutInitializer {
 };
 
 void SetAccountLockoutParameters(TTestActorRuntime &runtime, ui64 schemeShard, const TAccountLockoutInitializer& initializer) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     ::NKikimrProto::TAccountLockout accountLockout;
     accountLockout.SetAttemptThreshold(initializer.AttemptThreshold);

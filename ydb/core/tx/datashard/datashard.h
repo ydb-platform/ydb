@@ -35,7 +35,7 @@ class TTabletStorageInfo;
 
 // Direct part import (EnableDataShardDirectPartImport). Forward-declared so
 // the heavy ydb/core/tablet_flat/flat_direct_part_writer.h is not pulled into
-// this widely-included header; the events below only hold THolder<> pointers and
+// this widely-included header; the events below only hold std::unique_ptr<> pointers and
 // have out-of-line destructors (see datashard_direct_import.cpp).
 namespace NTabletFlatExecutor {
     class TDirectPartWriter;
@@ -1556,11 +1556,11 @@ namespace TEvDataShard {
         bool Success;
         TString Error;
         ui32 Step; // reserved step of the write (for TEvS3DirectWriteAbort)
-        THolder<NTabletFlatExecutor::TDirectPartWriter> Writer;
+        std::unique_ptr<NTabletFlatExecutor::TDirectPartWriter> Writer;
 
         // Defined out-of-line (datashard_direct_import.cpp) because TDirectPartWriter
         // is only forward-declared here.
-        TEvS3DirectWriteBeginResult(ui64 txId, THolder<NTabletFlatExecutor::TDirectPartWriter> writer, ui32 step);
+        TEvS3DirectWriteBeginResult(ui64 txId, std::unique_ptr<NTabletFlatExecutor::TDirectPartWriter> writer, ui32 step);
         TEvS3DirectWriteBeginResult(ui64 txId, TString error);
         ~TEvS3DirectWriteBeginResult();
 
@@ -1579,13 +1579,13 @@ namespace TEvDataShard {
     struct TEvS3DirectWriteFinish : public TEventLocal<TEvS3DirectWriteFinish, TEvDataShard::EvS3DirectWriteFinish> {
         ui64 TxId;
         ui64 TableId;
-        THolder<NTabletFlatExecutor::TDirectPartResult> Result;
+        std::unique_ptr<NTabletFlatExecutor::TDirectPartResult> Result;
         NDataShard::TS3Download Info; // final progress to persist for idempotent restart
 
         // Defined out-of-line (datashard_direct_import.cpp) because TDirectPartResult
         // is only forward-declared here.
         TEvS3DirectWriteFinish(ui64 txId, ui64 tableId,
-                THolder<NTabletFlatExecutor::TDirectPartResult> result,
+                std::unique_ptr<NTabletFlatExecutor::TDirectPartResult> result,
                 const NDataShard::TS3Download& info);
         ~TEvS3DirectWriteFinish();
 

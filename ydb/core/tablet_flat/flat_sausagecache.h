@@ -86,7 +86,7 @@ public:
         // Otherwise stat counters would be out of sync
 
         bool AddPage(TPageOffset offset, size_t size, TSharedPageRef sharedBody) {
-            return PageMap.emplace(MakeHolder<TPage>(
+            return PageMap.emplace(std::make_unique<TPage>(
                 offset, size, std::move(sharedBody), this)).second;
         }
 
@@ -125,18 +125,18 @@ public:
 
     private:
         struct TPageByOffsetHash {
-            size_t operator()(const THolder<TPage>& page) const { return THash<TPageOffset>()(page->Offset); }
+            size_t operator()(const std::unique_ptr<TPage>& page) const { return THash<TPageOffset>()(page->Offset); }
             size_t operator()(TPageOffset offset) const { return THash<TPageOffset>()(offset); }
         };
 
         struct TPageByOffsetEq {
-            bool operator()(const THolder<TPage>& a, const THolder<TPage>& b) const { return a->Offset == b->Offset; }
-            bool operator()(const THolder<TPage>& a, TPageOffset b) const { return a->Offset == b; }
-            bool operator()(TPageOffset a, const THolder<TPage>& b) const { return a == b->Offset; }
+            bool operator()(const std::unique_ptr<TPage>& a, const std::unique_ptr<TPage>& b) const { return a->Offset == b->Offset; }
+            bool operator()(const std::unique_ptr<TPage>& a, TPageOffset b) const { return a->Offset == b; }
+            bool operator()(TPageOffset a, const std::unique_ptr<TPage>& b) const { return a == b->Offset; }
         };
 
         // all pages in PageMap have valid unused shared body
-        THashSet<THolder<TPage>, TPageByOffsetHash, TPageByOffsetEq> PageMap;
+        THashSet<std::unique_ptr<TPage>, TPageByOffsetHash, TPageByOffsetEq> PageMap;
 
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageOffset, TSharedPageRef> StickyPages;

@@ -344,7 +344,7 @@ private:
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
-    THolder<NYdb::TKikimrWithGrpcAndRootSchema> KikimrServer;
+    std::unique_ptr<NYdb::TKikimrWithGrpcAndRootSchema> KikimrServer;
     TPortManager PortManager;
     TTestActorRuntime* ActorRuntime = nullptr;
     TAccessServiceMock AccessServiceMock;
@@ -356,7 +356,7 @@ public:
     std::unique_ptr<NKikimr::NSQS::TMultiAuthFactory> MultiAuthFactory;
     TAutoPtr<TMon> Monitoring;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = {};
-    THolder<NYdbGrpc::TGRpcServer> GRpcServer;
+    std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
     ui16 GRpcServerPort = 0;
     ui16 HttpServicePort = 0;
     ui16 AccessServicePort = 0;

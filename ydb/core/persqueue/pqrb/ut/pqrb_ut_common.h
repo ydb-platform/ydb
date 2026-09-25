@@ -21,7 +21,7 @@ inline void DispatchFor(TTestContext& tc, TDuration timeout = TDuration::MilliSe
     tc.Runtime->DispatchEvents({}, timeout);
 }
 
-inline THolder<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
+inline std::unique_ptr<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
     TTestContext& tc,
     TEvPersQueue::TEvGetPartitionsLocation* request,
     TDuration timeout = TDuration::Seconds(10),
@@ -94,7 +94,7 @@ inline void SendBalancerUpdate(TTestContext& tc, TBalancerUpdate params) {
         params.Version = NextBalancerVersion();
     }
 
-    auto request = MakeHolder<TEvPersQueue::TEvUpdateBalancerConfig>();
+    auto request = std::make_unique<TEvPersQueue::TEvUpdateBalancerConfig>();
     auto& record = request->Record;
     record.SetTxId(params.TxId);
     record.SetPathId(1);
@@ -168,7 +168,7 @@ inline void NotifyDatabasePath(TTestContext& tc, const TString& path = "/Root") 
     NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
     result->SetPath(path);
     NSchemeCache::TDescribeResult::TCPtr cres = result;
-    auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, path, TPathId{}, cres);
+    auto event = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, path, TPathId{}, cres);
     ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, event.Release());
     DispatchFor(tc, TDuration::MilliSeconds(200));
 }
@@ -310,7 +310,7 @@ struct TScaleEnv {
     }
 
     void AckRelease(const TActorId& pipe, ui32 partition, const TString& session) {
-        auto released = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+        auto released = std::make_unique<TEvPersQueue::TEvPartitionReleased>();
         released->Record.SetSession(session);
         released->Record.SetPartition(partition);
         released->Record.SetTopic("topic");
@@ -359,8 +359,8 @@ struct TScaleEnv {
         DispatchFor(tc, wait);
     }
 
-    THolder<TEvPersQueue::TEvReadSessionsInfoResponse> SessionsInfo() {
-        auto sessions = MakeHolder<TEvPersQueue::TEvGetReadSessionsInfo>();
+    std::unique_ptr<TEvPersQueue::TEvReadSessionsInfoResponse> SessionsInfo() {
+        auto sessions = std::make_unique<TEvPersQueue::TEvGetReadSessionsInfo>();
         sessions->Record.SetClientId("user");
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, sessions.Release(), 0, GetPipeConfigWithRetries());
         auto info = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvReadSessionsInfoResponse>(TDuration::Seconds(10));

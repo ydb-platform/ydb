@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TGuardedSgListWithThreadsTest)
     class TScopedTasks
     {
     private:
-        using TThread = THolder<IThreadFactory::IThread>;
+        using TThread = std::unique_ptr<IThreadFactory::IThread>;
 
         TVector<TThread> Workers;
         TAtomic ShouldStart = 0;

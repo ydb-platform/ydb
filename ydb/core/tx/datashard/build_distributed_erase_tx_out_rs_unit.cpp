@@ -98,7 +98,7 @@ public:
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
-        THolder<IEraseRowsCondition> condition{CreateEraseRowsCondition(request)};
+        std::unique_ptr<IEraseRowsCondition> condition{CreateEraseRowsCondition(request)};
         Y_ENSURE(condition.Get());
         condition->Prepare(txc.DB.GetRowScheme(tableInfo.LocalTid), 0);
 
@@ -196,8 +196,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TBuildDistributedEraseTxOutRSUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TBuildDistributedEraseTxOutRSUnit>(new TBuildDistributedEraseTxOutRSUnit(self, pipeline));
 }
 
 } // namespace NDataShard

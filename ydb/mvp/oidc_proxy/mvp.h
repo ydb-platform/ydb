@@ -28,7 +28,7 @@ protected:
     NSignals::TSignalHandler<SIGTERM, &TMVP::OnTerminate> SignalSIGTERM;
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
 
-    THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
+    std::unique_ptr<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     void TryGetOidcOptionsFromConfig();
@@ -37,7 +37,7 @@ protected:
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
-    THolder<NActors::TActorSystemSetup> ActorSystemSetup;
+    std::unique_ptr<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;
     NActors::TActorId BaseHttpProxyId;
     NActors::TActorId HttpProxyId;

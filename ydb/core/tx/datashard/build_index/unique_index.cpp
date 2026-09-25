@@ -251,7 +251,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvValidateUniqueIndexResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvValidateUniqueIndexResponse>();
         FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting unique index validation scan",

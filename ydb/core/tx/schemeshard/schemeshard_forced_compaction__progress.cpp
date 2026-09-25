@@ -41,7 +41,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         for (auto cancelling : Self->CancellingForcedCompactions) {
             compactionsToPersist.emplace(cancelling.Info);
             if (cancelling.Waiter) {
-                auto cancelResponse = MakeHolder<TEvForcedCompaction::TEvCancelResponse>(cancelling.Waiter->TxId);
+                auto cancelResponse = std::make_unique<TEvForcedCompaction::TEvCancelResponse>(cancelling.Waiter->TxId);
                 cancelResponse->Record.SetStatus(Ydb::StatusIds::SUCCESS);
                 SideEffects.Send(
                     cancelling.Waiter->ActorId,
@@ -95,7 +95,7 @@ private:
         TSet<TActorId> toAnswer;
         toAnswer.swap(info.Subscribers);
         for (auto& actorId: toAnswer) {
-            SideEffects.Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(info.Id));
+            SideEffects.Send(actorId, std::make_unique<TEvSchemeShard::TEvNotifyTxCompletionResult>(info.Id));
         }
     }
 

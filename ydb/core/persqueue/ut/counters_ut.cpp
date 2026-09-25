@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                 ua->SetValue(attr);
             }
             NSchemeCache::TDescribeResult::TCPtr cres = result;
-            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            auto event = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
             TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
             tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
 
@@ -1234,7 +1234,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                     ua->SetValue(attr);
                 }
                 NSchemeCache::TDescribeResult::TCPtr cres = result;
-                auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+                auto event = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
                 TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
                 tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
 
@@ -1355,7 +1355,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                 ua->SetValue(attr);
             }
             NSchemeCache::TDescribeResult::TCPtr cres = result;
-            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            auto event = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
             TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
             tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
 
@@ -1444,7 +1444,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                 ua->SetValue(attr);
             }
             NSchemeCache::TDescribeResult::TCPtr cres = result;
-            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            auto event = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
             TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
             tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
 
@@ -1590,7 +1590,7 @@ Y_UNIT_TEST_SUITE(PQCountersLabeled) {
                 ua->SetValue(attr);
             }
             NSchemeCache::TDescribeResult::TCPtr cres = result;
-            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            auto event = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
             TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
             tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
 

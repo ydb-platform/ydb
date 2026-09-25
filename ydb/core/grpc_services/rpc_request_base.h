@@ -153,9 +153,9 @@ public:
     }
 
 private:
-    static THolder<const NACLib::TUserToken> CreateUserToken(TRequestCtx* request) {
+    static std::unique_ptr<const NACLib::TUserToken> CreateUserToken(TRequestCtx* request) {
         if (const auto& userToken = request->GetSerializedToken()) {
-            return MakeHolder<NACLib::TUserToken>(userToken);
+            return std::make_unique<NACLib::TUserToken>(userToken);
         } else {
             return {};
         }
@@ -206,8 +206,8 @@ protected:
     }
 
 protected:
-    const THolder<TRequestCtx> Request;
-    const THolder<const NACLib::TUserToken> UserToken;
+    const std::unique_ptr<TRequestCtx> Request;
+    const std::unique_ptr<const NACLib::TUserToken> UserToken;
 
 private:
     mutable std::optional<TString> DatabaseName_;

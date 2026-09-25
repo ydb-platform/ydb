@@ -58,7 +58,7 @@ namespace {
     }
 
     void CheckShredStatus(TTestBasicRuntime& runtime, TActorId sender, bool completed) {
-        auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
             TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
         runtime.DispatchEvents(options);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvShredInfoResponse>(handle);
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         auto sender = runtime.AllocateEdgeActor();
         // Change BSC counter value between shred iterations
         if (currentBscGeneration > 1) {
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(currentBscGeneration);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(currentBscGeneration);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, (currentBscGeneration >  1 ? 4 : 3)));
         runtime.DispatchEvents(options);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 9));
         runtime.DispatchEvents(options);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         CreateTestExtSubdomain(runtime, env, &txId, "Database2");
 
         {
-            auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+            auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
 
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
         runtime.DispatchEvents(options);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
@@ -650,14 +650,14 @@ Y_UNIT_TEST_SUITE(TestShred) {
         CreateTestExtSubdomain(runtime, env, &txId, "Database2");
 
         {
-            auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+            auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
         runtime.DispatchEvents(options);
-        auto infoRequest = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        auto infoRequest = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, infoRequest.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
@@ -668,11 +668,11 @@ Y_UNIT_TEST_SUITE(TestShred) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         {
-            auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+            auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
         runtime.DispatchEvents(options);
-        infoRequest = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+        infoRequest = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, infoRequest.Release(), 0, GetPipeConfigWithRetries());
 
         response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvShredInfoResponse>(handle);
@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         auto runShred = [&runtime](ui32 expectedGeneration) {
             auto sender = runtime.AllocateEdgeActor();
             {
-                auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+                auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
                 runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
             }
 
@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
             runtime.DispatchEvents(options);
 
-            auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+            auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         auto runShred = [&runtime](ui32 expectedGeneration, ui32 requiredCountShredResponses) {
             auto sender = runtime.AllocateEdgeActor();
             {
-                auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+                auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
                 runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
             }
 
@@ -767,7 +767,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, requiredCountShredResponses));
             runtime.DispatchEvents(options);
 
-            auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+            auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
@@ -780,13 +780,13 @@ Y_UNIT_TEST_SUITE(TestShred) {
         runShred(1, 3);
         // Change BSC counter value between shred iterations
         {
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(50);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(50);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
         runShred(2, 4);
         // Change BSC counter value between shred iterations
         {
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(100);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(100);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
         runShred(3, 4);
@@ -820,7 +820,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         auto runShred = [&runtime](ui32 expectedGeneration, ui32 requiredCountShredResponses) {
             auto sender = runtime.AllocateEdgeActor();
             {
-                auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+                auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
                 runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
             }
 
@@ -828,7 +828,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, requiredCountShredResponses));
             runtime.DispatchEvents(options);
 
-            auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+            auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         runShred(1, 3);
         // Change BSC counter value between shred iterations
         {
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(50);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(50);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
         runShred(2, 4);
@@ -850,7 +850,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         runShred(4, 4);
         // Change BSC counter value between shred iterations
         {
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(100);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerShredRequest>(100);
             runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
         }
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);

@@ -223,11 +223,11 @@ private:
 int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGenerator& /*workloadGen*/, TConfig& /*config*/) {
     auto dataGeneratorList = Initializer->GetBulkInitialData();
     AtomicSet(ErrorsCount, 0);
-    InFlightSemaphore = MakeHolder<TFastSemaphore>(UploadParams.MaxInFlight);
+    InFlightSemaphore = std::make_unique<TFastSemaphore>(UploadParams.MaxInFlight);
     if (UploadParams.FileOutputPath.IsDefined()) {
-        Writer = MakeHolder<TFileWriter>(*this);
+        Writer = std::make_unique<TFileWriter>(*this);
     } else {
-        Writer = MakeHolder<TDbWriter>(*this);
+        Writer = std::make_unique<TDbWriter>(*this);
     }
     for (auto dataGen : dataGeneratorList) {
         TThreadPoolParams params;
@@ -236,7 +236,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         pool.Start(UploadParams.Threads);
         const auto start = Now();
         Cout << "Fill table " << dataGen->GetName() << "..."  << Endl;
-        Bar = MakeHolder<TProgressBar>(dataGen->GetSize(), 100);
+        Bar = std::make_unique<TProgressBar>(dataGen->GetSize(), 100);
         for (ui32 t = 0; t < UploadParams.Threads; ++t) {
             pool.SafeAddFunc([this, dataGen] () {
                 ProcessDataGenerator(dataGen);

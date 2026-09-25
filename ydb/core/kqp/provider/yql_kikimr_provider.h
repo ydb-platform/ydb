@@ -576,7 +576,7 @@ public:
         return UserRequestContext;
     }
 
-    void SetInternalTypeAnnTransformer(THolder<TVisitorTransformerBase>&& transformer);
+    void SetInternalTypeAnnTransformer(std::unique_ptr<TVisitorTransformerBase>&& transformer);
 
     TVisitorTransformerBase* GetInternalTypeAnnTransformer() const {
         return InternalTypeAnnTransformer.Get();
@@ -594,7 +594,7 @@ private:
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
-    THolder<TVisitorTransformerBase> InternalTypeAnnTransformer;
+    std::unique_ptr<TVisitorTransformerBase> InternalTypeAnnTransformer;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(

@@ -813,7 +813,7 @@ private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
-    THolder<NPackedTuple::TTupleLayout> TupleLayout_;
+    std::unique_ptr<NPackedTuple::TTupleLayout> TupleLayout_;
     bool RememberNullBitmaps_;
     TVector<bool> IsBitmapNull_;
 };

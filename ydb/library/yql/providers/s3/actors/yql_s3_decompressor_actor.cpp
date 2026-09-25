@@ -199,7 +199,7 @@ private:
     TString Compression;
     TActorId Parent;
     bool InputFinished = false;
-    std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
+    std::queue<std::unique_ptr<TEvS3Provider::TEvDecompressDataRequest>> Requests;
     const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
     bool Working = false;            // holds HDRF slot — allowed to consume CPU
@@ -210,7 +210,7 @@ class TS3DecompressorCoroActor : public TActorCoro {
     static constexpr char ActorName[] = "S3_DECOMPRESSOR";
 
 public:
-    explicit TS3DecompressorCoroActor(THolder<TS3DecompressorCoroImpl> impl)
+    explicit TS3DecompressorCoroActor(std::unique_ptr<TS3DecompressorCoroImpl> impl)
         : TActorCoro(std::move(impl), TStringBuf(ActorName))
     {}
 
@@ -223,7 +223,7 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory) {
-    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(workFactory)));
+    return new TS3DecompressorCoroActor(std::make_unique<TS3DecompressorCoroImpl>(parent, compression, std::move(workFactory)));
 }
 
 } // namespace NYql::NDq

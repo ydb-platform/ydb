@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         auto manager = std::make_shared<TStubQuotaManager>();
         ::NMonitoring::TDynamicCounters::TCounterPtr counter;
         auto makeQuota = [&](ui64 taskId) {
-            auto quota = MakeHolder<TDqMemoryQuota>(counter, 40_MB, MakeLimits(manager), TTxId{ui64(1)}, taskId, /* profileStats = */ false, /* actorSystem = */ nullptr);
+            auto quota = std::make_unique<TDqMemoryQuota>(counter, 40_MB, MakeLimits(manager), TTxId{ui64(1)}, taskId, /* profileStats = */ false, /* actorSystem = */ nullptr);
             quota->BindScopedAlloc(&alloc);
             return quota;
         };

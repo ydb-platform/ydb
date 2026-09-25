@@ -235,7 +235,7 @@ private:
             return;
         }
 
-        IActor* actor = NWorker::CreateClusterDiscoveryWorker(THolder(ev->Release<NGRpcService::TEvDiscoverPQClustersRequest>().Release()), DatacenterClassifier, CloudNetworksClassifier, ClustersList, Counters);
+        IActor* actor = NWorker::CreateClusterDiscoveryWorker(std::unique_ptr<NGRpcService::TEvDiscoverPQClustersRequest>(ev->Release<NGRpcService::TEvDiscoverPQClustersRequest>().Release()), DatacenterClassifier, CloudNetworksClassifier, ClustersList, Counters);
         Register(actor, TMailboxType::HTSwap, AppData(Ctx())->UserPoolId);
     }
 

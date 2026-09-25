@@ -303,7 +303,7 @@ private:
     TVector<ui32> KeyColumnIds;
 };
 
-THolder<NTable::IScan> CreateIncrementalRestoreScan(
+std::unique_ptr<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
         std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
         const TPathId& sourcePathId,
@@ -312,7 +312,7 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
         ui64 txId,
         NStreamScan::TLimits limits)
 {
-    return MakeHolder<TIncrementalRestoreScan>(
+    return std::make_unique<TIncrementalRestoreScan>(
         parent,
         changeSenderFactory,
         sourcePathId,

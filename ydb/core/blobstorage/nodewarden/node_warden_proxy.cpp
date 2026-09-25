@@ -223,7 +223,7 @@ void TNodeWarden::HandleGroupPendingQueueTick() {
                 TimeoutToQueue.emplace(timestamp, ptr);
                 break;
             } else {
-                THolder<IEventHandle> tmp(ev.release());
+                std::unique_ptr<IEventHandle> tmp(ev.release());
                 TActivationContext::Forward(tmp, errorProxy);
                 queue.pop_front();
                 if (queue.empty()) {

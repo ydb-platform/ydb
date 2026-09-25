@@ -115,8 +115,8 @@ private:
 
 }
 
-THolder<TExecTransformerBase> CreateS3DataSinkExecTransformer(TS3State::TPtr state) {
-    return THolder(new TS3DataSinkExecTransformer(state));
+std::unique_ptr<TExecTransformerBase> CreateS3DataSinkExecTransformer(TS3State::TPtr state) {
+    return std::unique_ptr<TS3DataSinkExecTransformer>(new TS3DataSinkExecTransformer(state));
 }
 
 } // namespace NYql

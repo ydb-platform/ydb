@@ -1787,7 +1787,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             UNIT_ASSERT_C(HijackedLocks.size() > sentReplies, "lock request was not captured by the observer");
 
             const auto& [actorId, requestId] = HijackedLocks[sentReplies];
-            auto result = MakeHolder<NEvents::TDataEvents::TEvLockRowsResult>(
+            auto result = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
                 1, requestId, NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED);
             runtime.Send(new NActors::IEventHandle(actorId, NActors::TActorId(), result.Release()));
             ++sentReplies;
@@ -1899,7 +1899,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
 
             const auto& [actorId, tabletId] = HijackedLocks[sentReplies];
             runtime.Send(new NActors::IEventHandle(actorId, NActors::TActorId(),
-                MakeHolder<TEvPipeCache::TEvDeliveryProblem>(tabletId, true).Release()));
+                std::make_unique<TEvPipeCache::TEvDeliveryProblem>(tabletId, true).Release()));
             ++sentReplies;
         }
 
@@ -2010,7 +2010,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 idleRounds = 0;
                 const auto& [actorId, tabletId] = HijackedLocks[sentDps];
                 runtime.Send(new NActors::IEventHandle(actorId, NActors::TActorId(),
-                    MakeHolder<TEvPipeCache::TEvDeliveryProblem>(tabletId, true).Release()));
+                    std::make_unique<TEvPipeCache::TEvDeliveryProblem>(tabletId, true).Release()));
                 ++sentDps;
             } else {
                 ++idleRounds;

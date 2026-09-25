@@ -26,7 +26,7 @@ public:
                 {"cookie", Ev->Cookie},
                 {"state", Self->State},
                 {"sender", Ev->Sender});
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
                 record.GetPathId().GetLocalId(),
@@ -43,7 +43,7 @@ public:
                 {"cookie", Ev->Cookie},
                 {"pathId", pathId},
                 {"pathOwnerId", Self->GetPathOwnerId()});
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
@@ -59,7 +59,7 @@ public:
                 {"cookie", Ev->Cookie},
                 {"pathId", pathId},
                 {"sender", Ev->Sender});
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
@@ -83,7 +83,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_BORROWED);
 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
@@ -102,7 +102,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_LOANED);
 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::LOANED);
@@ -124,7 +124,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_COMPACTION_NOT_NEEDED);
 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
@@ -152,7 +152,7 @@ public:
         } else {
             // compaction failed, for now we don't care
             Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_START);
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
@@ -254,7 +254,7 @@ void TDataShard::ReplyCompactionWaiters(
             break;
         }
 
-        auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+        auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(
             TabletID(),
             GetPathOwnerId(),
             localPathId,
@@ -279,7 +279,7 @@ void TDataShard::ReplyCompactionWaiters(
                 waiter->CompactingTables.erase(tableId);
 
                 if (waiter->CompactingTables.empty()) { // all requested tables have been compacted
-                    auto response = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(
+                    auto response = std::make_unique<TEvDataShard::TEvCompactBorrowedResult>(
                         TabletID(),
                         GetPathOwnerId(),
                         waiter->RequestedTable);
@@ -300,7 +300,7 @@ void TDataShard::ReplyCompactionWaiters(
 
 void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx) {
     auto &record = ev->Get()->Record;
-    auto response = MakeHolder<TEvDataShard::TEvGetCompactTableStatsResult>();
+    auto response = std::make_unique<TEvDataShard::TEvGetCompactTableStatsResult>();
 
     const auto pathId = TPathId::FromProto(record.GetPathId());
 

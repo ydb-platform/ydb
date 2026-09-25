@@ -580,7 +580,7 @@ void TSysViewProcessor::SendRequests() {
     while (!NodesToRequest.empty() && RequestsInFlight.size() < MaxInFlightRequests) {
         auto& req = NodesToRequest.back();
 
-        auto request = MakeHolder<TEvSysView::TEvGetIntervalMetricsRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetIntervalMetricsRequest>();
         auto& record = request->Record;
         record.SetIntervalEndUs(IntervalEnd.MicroSeconds());
         record.SetDatabase(Database);
@@ -730,7 +730,7 @@ void TSysViewProcessor::EntryToProto(NKikimrSysView::TTopPartitionsEntry& dst, c
 
 template <typename TResponse>
 void TSysViewProcessor::ReplyOverloaded(const NActors::TActorId& sender) {
-    auto response = MakeHolder<TResponse>();
+    auto response = std::make_unique<TResponse>();
     response->Record.SetOverloaded(true);
     Send(sender, std::move(response));
 }
@@ -738,7 +738,7 @@ void TSysViewProcessor::ReplyOverloaded(const NActors::TActorId& sender) {
 template <typename TMap, typename TRequest, typename TResponse>
 void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    auto response = MakeHolder<TResponse>();
+    auto response = std::make_unique<TResponse>();
     response->Record.SetLastBatch(true);
 
     using TEntry = typename TMap::mapped_type;

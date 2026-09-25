@@ -123,8 +123,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TCheckDistributedEraseTxUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TCheckDistributedEraseTxUnit>(new TCheckDistributedEraseTxUnit(self, pipeline));
 }
 
 } // namespace NDataShard

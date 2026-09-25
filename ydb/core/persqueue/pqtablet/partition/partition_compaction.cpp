@@ -294,7 +294,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 
     CompactionBlobsCount = blobs.size();
 
-    auto request = MakeHolder<TEvPQ::TEvBlobRequest>(ERequestCookie::ReadBlobsForCompaction,
+    auto request = std::make_unique<TEvPQ::TEvBlobRequest>(ERequestCookie::ReadBlobsForCompaction,
                                                      Partition,
                                                      std::move(blobs));
     Send(BlobCache, request.Release());
@@ -562,7 +562,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     parameters.CurOffset = CompactionBlobEncoder.EndOffset;
     parameters.HeadCleared = (CompactionBlobEncoder.Head.PackedSize == 0);
 
-    auto compactionRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto compactionRequest = std::make_unique<TEvKeyValue::TEvRequest>();
     compactionRequest->Record.SetCookie(ERequestCookie::WriteBlobsForCompaction);
 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());

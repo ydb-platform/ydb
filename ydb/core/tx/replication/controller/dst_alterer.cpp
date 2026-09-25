@@ -41,7 +41,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void AlterDst() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto ev = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
 

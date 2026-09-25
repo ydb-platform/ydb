@@ -7964,7 +7964,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
 
         {
-            auto driver = MakeHolder<NYdb::TDriver>(NYdb::TDriverConfig()
+            auto driver = std::make_unique<NYdb::TDriver>(NYdb::TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
                 .SetDatabase("/Root/Database")
                 .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));

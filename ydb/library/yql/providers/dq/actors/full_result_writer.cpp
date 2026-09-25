@@ -44,11 +44,11 @@ public:
 
     explicit TFullResultWriterActor(const TString& traceId,
         const TString& resultType,
-        THolder<IDqFullResultWriter>&& writer,
+        std::unique_ptr<IDqFullResultWriter>&& writer,
         const NActors::TActorId& aggregatorId)
         : NActors::TActor<TFullResultWriterActor>(&TFullResultWriterActor::Handler)
         , TraceID(traceId)
-        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, TVector<TString>()))
+        , ResultBuilder(std::make_unique<TProtoBuilder>(resultType, TVector<TString>()))
         , FullResultWriter(std::move(writer))
         , AggregatorID(aggregatorId)
     {
@@ -72,7 +72,7 @@ private:
         ResultBuilder.Reset();
         FullResultWriter.Reset();
 
-        Send(AggregatorID, MakeHolder<NActors::TEvents::TEvGone>());
+        Send(AggregatorID, std::make_unique<NActors::TEvents::TEvGone>());
 
         NActors::TActor<TThis>::PassAway();
     }
@@ -98,7 +98,7 @@ private:
         if (record.Data.GetFinish()) {
             ui64 reqSize = record.Data.GetData().ByteSizeLong() + record.Payload.size();
             if (reqSize != 0) {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue("Non empty final write " + std::to_string(record.Data.ByteSizeLong()) + " " + std::to_string(record.Payload.size())) .SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
+                Send(AggregatorID, std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue("Non empty final write " + std::to_string(record.Data.ByteSizeLong()) + " " + std::to_string(record.Payload.size())) .SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
             }
             Finish();
         } else {
@@ -112,9 +112,9 @@ private:
             TFailureInjector::Reach("full_result_fail_on_finish", [] { throw yexception() << "full_result_fail_on_finish"; });
             FullResultWriter->Finish();
             if (ErrorMessage) {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue(*ErrorMessage).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
+                Send(AggregatorID, std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue(*ErrorMessage).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
             } else {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::SUCCESS).Release());
+                Send(AggregatorID, std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::SUCCESS).Release());
             }
         } catch (...) {
             TIssue issue(CurrentExceptionMessage());
@@ -122,9 +122,9 @@ private:
             if (ErrorMessage) {
                 issue.AddSubIssue(MakeIntrusive<TIssue>(*ErrorMessage));
             }
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, issue).Release());
+            Send(AggregatorID, std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, issue).Release());
         }
-        Send(SelfId(), MakeHolder<NActors::TEvents::TEvPoison>());
+        Send(SelfId(), std::make_unique<NActors::TEvents::TEvPoison>());
     }
 
     void Continue(TFullResultWriterWriteRequestOOB&& request) {
@@ -148,10 +148,10 @@ private:
             });
             NDqProto::TFullResultWriterAck ackRecord; 
             ackRecord.SetMessageId(request.Data.GetMessageId());
-            Send(AggregatorID, MakeHolder<TEvFullResultWriterAck>(ackRecord));
+            Send(AggregatorID, std::make_unique<TEvFullResultWriterAck>(ackRecord));
         } catch (...) {
             ErrorMessage = CurrentExceptionMessage();
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue(*ErrorMessage).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
+            Send(AggregatorID, std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue(*ErrorMessage).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
         }
 
         if (ErrorMessage) {
@@ -161,8 +161,8 @@ private:
 
 private:
     const TString TraceID;
-    THolder<TProtoBuilder> ResultBuilder;
-    THolder<IDqFullResultWriter> FullResultWriter;
+    std::unique_ptr<TProtoBuilder> ResultBuilder;
+    std::unique_ptr<IDqFullResultWriter> FullResultWriter;
     NActors::TActorId AggregatorID;
 
     ui64 BytesReceived{0};
@@ -170,13 +170,13 @@ private:
 };
 
 
-THolder<NActors::IActor> MakeFullResultWriterActor(
+std::unique_ptr<NActors::IActor> MakeFullResultWriterActor(
     const TString& traceId,
     const TString& resultType,
-    THolder<IDqFullResultWriter>&& writer,
+    std::unique_ptr<IDqFullResultWriter>&& writer,
     const NActors::TActorId& aggregatorId)
 {
-    return MakeHolder<TFullResultWriterActor>(traceId, resultType, std::move(writer), aggregatorId);
+    return std::make_unique<TFullResultWriterActor>(traceId, resultType, std::move(writer), aggregatorId);
 }
 
 } // namespace NYql::NDqs

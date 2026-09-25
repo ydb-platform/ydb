@@ -12,17 +12,17 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateYdbIODiscoveryTransformer(TYdbState::TPtr state);
-THolder<IGraphTransformer> CreateYdbLoadTableMetadataTransformer(TYdbState::TPtr state, NYdb::TDriver driver);
+std::unique_ptr<IGraphTransformer> CreateYdbIODiscoveryTransformer(TYdbState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateYdbLoadTableMetadataTransformer(TYdbState::TPtr state, NYdb::TDriver driver);
 
-THolder<TVisitorTransformerBase> CreateYdbDataSourceTypeAnnotationTransformer(TYdbState::TPtr state);
-THolder<TVisitorTransformerBase> CreateYdbDataSinkTypeAnnotationTransformer(TYdbState::TPtr state);
+std::unique_ptr<TVisitorTransformerBase> CreateYdbDataSourceTypeAnnotationTransformer(TYdbState::TPtr state);
+std::unique_ptr<TVisitorTransformerBase> CreateYdbDataSinkTypeAnnotationTransformer(TYdbState::TPtr state);
 
-THolder<TExecTransformerBase> CreateYdbDataSinkExecTransformer(TYdbState::TPtr state);
+std::unique_ptr<TExecTransformerBase> CreateYdbDataSinkExecTransformer(TYdbState::TPtr state);
 
-THolder<IGraphTransformer> CreateYdbLogicalOptProposalTransformer(TYdbState::TPtr state);
-THolder<IGraphTransformer> CreateYdbPhysicalOptProposalTransformer(TYdbState::TPtr state);
-THolder<IGraphTransformer> CreateYdbSourceCallableExecutionTransformer(TYdbState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateYdbLogicalOptProposalTransformer(TYdbState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateYdbPhysicalOptProposalTransformer(TYdbState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateYdbSourceCallableExecutionTransformer(TYdbState::TPtr state);
 
 void MetaToYson(const TString& cluster, const TString& table,  TYdbState::TPtr state, NYson::TYsonWriter& writer);
 

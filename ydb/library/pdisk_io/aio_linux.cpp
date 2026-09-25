@@ -122,7 +122,7 @@ class TAsyncIoContextLibaio : public IAsyncIoContext {
     io_context_t IoContext;
     TActorSystem *ActorSystem;
     TPool<TAsyncIoOperation, 1024> Pool;
-    THolder<TFileHandle> File;
+    std::unique_ptr<TFileHandle> File;
     int LastErrno = 0;
 
     TPDiskDebugInfo PDiskInfo;
@@ -324,7 +324,7 @@ public:
     }
 
     EIoResult Setup(ui64 maxEvents, bool doLock) override {
-        File = MakeHolder<TFileHandle>(PDiskInfo.Path.c_str(),
+        File = std::make_unique<TFileHandle>(PDiskInfo.Path.c_str(),
             OpenExisting | RdWr | DirectAligned | Sync);
         bool isFileOpened = File->IsOpen();
         if (isFileOpened) {
@@ -479,7 +479,7 @@ struct TAsyncIoOperationLiburing : IAsyncIoOperation {
 class TAsyncIoContextLiburing : public IAsyncIoContext {
     TActorSystem *ActorSystem = nullptr;
     TPool<TAsyncIoOperationLiburing, 1024> Pool;
-    THolder<TFileHandle> File;
+    std::unique_ptr<TFileHandle> File;
     int LastErrno = 0;
 
     TPDiskDebugInfo PDiskInfo;
@@ -656,7 +656,7 @@ public:
     }
 
     EIoResult Setup(ui64, bool doLock) override {
-        File = MakeHolder<TFileHandle>(PDiskInfo.Path.c_str(),
+        File = std::make_unique<TFileHandle>(PDiskInfo.Path.c_str(),
             OpenExisting | RdWr | DirectAligned | Sync);
         bool isFileOpened = File->IsOpen();
         if (isFileOpened) {

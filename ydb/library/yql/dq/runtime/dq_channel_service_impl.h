@@ -750,10 +750,10 @@ public:
     void FailDescriptors(const TString& reason);
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     // The part of a data message which does not depend on the session, built off Mutex where possible
-    static THolder<TEvDqCompute::TEvChannelDataV2> BuildDataEvent(const TDataChunk& data, const TOutputDescriptor& descriptor);
+    static std::unique_ptr<TEvDqCompute::TEvChannelDataV2> BuildDataEvent(const TDataChunk& data, const TOutputDescriptor& descriptor);
     // Stamps the session and the numbers of the item onto the message and sends it. Under Mutex, together with the
     // numbering: the messages must go in SeqNo order, a gap makes the receiver ask to resend
-    void SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const TOutputItem& item);
+    void SendDataEvent(std::unique_ptr<TEvDqCompute::TEvChannelDataV2> ev, const TOutputItem& item);
     void SendMessage(const TOutputItem& item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
@@ -772,7 +772,7 @@ public:
     // the reason is needed only where there is no peer to compare against, i.e. for the session teardown
     void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
     void FailOutputs(const TString& reason);
-    void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
+    void SendAck(std::unique_ptr<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckOk(const TChannelInfo& info, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
@@ -1392,7 +1392,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvServiceLookup::TPtr& ev) {
-        auto evReply = MakeHolder<TEvPrivate::TEvServiceReply>();
+        auto evReply = std::make_unique<TEvPrivate::TEvServiceReply>();
         evReply->Service = ChannelService;
         Send(ev->Sender, evReply.Release());
     }

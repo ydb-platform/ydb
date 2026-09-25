@@ -848,7 +848,7 @@ protected:
     }
 
     TString SecurityToken;
-    THolder<TImpl> Impl;
+    std::unique_ptr<TImpl> Impl;
 };
 
 } // NClient

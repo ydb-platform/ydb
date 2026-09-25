@@ -85,7 +85,7 @@ struct TEvFlatOptionalEmpty : TEventFlat<TEvFlatOptionalEmpty, TEvFlatOptionalEm
     }
 
     static TEvFlatOptionalEmpty* MakeNoData() {
-        THolder<TEvFlatOptionalEmpty> holder(new TEvFlatOptionalEmpty());
+        std::unique_ptr<TEvFlatOptionalEmpty> holder(new TEvFlatOptionalEmpty());
         holder->InitializeAsNoData();
         return holder.Release();
     }
@@ -436,19 +436,19 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TEventFlatTest) {
     Y_UNIT_TEST(EmptyEventRoundTrip) {
-        THolder<TEvFlatEmpty> ev(TEvFlatEmpty::Make());
+        std::unique_ptr<TEvFlatEmpty> ev(TEvFlatEmpty::Make());
 
         UNIT_ASSERT_VALUES_EQUAL(ev->GetVersion(), static_cast<ui8>(0));
         UNIT_ASSERT(!ev->HasData());
         UNIT_ASSERT_VALUES_EQUAL(ev->GetSerializedSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(ev->CalculateSerializedSize(), 0);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), 0);
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatEmpty, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatEmpty* loaded = handle->Get<TEvFlatEmpty>();
@@ -458,18 +458,18 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(EmptyVersionCanBeKeptAfterAddingDataVersion) {
-        THolder<TEvFlatOptionalEmpty> oldEv(TEvFlatOptionalEmpty::MakeNoData());
+        std::unique_ptr<TEvFlatOptionalEmpty> oldEv(TEvFlatOptionalEmpty::MakeNoData());
 
         UNIT_ASSERT_VALUES_EQUAL(oldEv->GetVersion(), static_cast<ui8>(0));
         UNIT_ASSERT(!oldEv->HasData());
         UNIT_ASSERT(!oldEv->HasField<TEvFlatOptionalEmpty::TMarkerTag>());
 
-        auto oldSerializer = MakeHolder<TAllocChunkSerializer>();
+        auto oldSerializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(oldEv->SerializeToArcadiaStream(oldSerializer.Get()));
         auto oldBuffers = oldSerializer->Release(oldEv->CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(oldBuffers->GetSize(), 0);
 
-        THolder<IEventHandle> oldHandle(new IEventHandle(
+        std::unique_ptr<IEventHandle> oldHandle(new IEventHandle(
             EvFlatOptionalEmpty, 0, TActorId(), TActorId(), oldBuffers, 0));
 
         TEvFlatOptionalEmpty* loadedOld = oldHandle->Get<TEvFlatOptionalEmpty>();
@@ -477,17 +477,17 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT(!loadedOld->HasData());
         UNIT_ASSERT(!loadedOld->HasField<TEvFlatOptionalEmpty::TMarkerTag>());
 
-        THolder<TEvFlatOptionalEmpty> newEv(TEvFlatOptionalEmpty::Make());
+        std::unique_ptr<TEvFlatOptionalEmpty> newEv(TEvFlatOptionalEmpty::Make());
         UNIT_ASSERT_VALUES_EQUAL(newEv->GetVersion(), static_cast<ui8>(1));
         UNIT_ASSERT(newEv->HasData());
         newEv->Marker() = 42;
 
-        auto newSerializer = MakeHolder<TAllocChunkSerializer>();
+        auto newSerializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(newEv->SerializeToArcadiaStream(newSerializer.Get()));
         auto newBuffers = newSerializer->Release(newEv->CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(newBuffers->GetSize(), TEvFlatOptionalEmpty::TSchemeV1::HeaderSize);
 
-        THolder<IEventHandle> newHandle(new IEventHandle(
+        std::unique_ptr<IEventHandle> newHandle(new IEventHandle(
             EvFlatOptionalEmpty, 0, TActorId(), TActorId(), newBuffers, 0));
 
         TEvFlatOptionalEmpty* loadedNew = newHandle->Get<TEvFlatOptionalEmpty>();
@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(FixedFieldsWithTrivialStructRoundTrip) {
-        THolder<TEvFlatFixedFields> ev(TEvFlatFixedFields::Make());
+        std::unique_ptr<TEvFlatFixedFields> ev(TEvFlatFixedFields::Make());
         ev->Small() = 17;
         ev->TabletId() = 123456789;
         ev->Point() = TPoint{11, 22};
@@ -512,11 +512,11 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(point.Y, 22);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Cookie()), 77);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatFixedFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatFixedFields* loaded = handle->Get<TEvFlatFixedFields>();
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(RepeatedFieldsWithTrivialStructAndEmptyArray) {
-        THolder<TEvFlatRepeatedFields> ev(TEvFlatRepeatedFields::Make());
+        std::unique_ptr<TEvFlatRepeatedFields> ev(TEvFlatRepeatedFields::Make());
         ev->Marker() = 99;
         ev->Point() = TPoint{5, 6};
 
@@ -565,11 +565,11 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(second.Right, 4);
         UNIT_ASSERT_VALUES_EQUAL(second.Score, 200);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatRepeatedFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatRepeatedFields* loaded = handle->Get<TEvFlatRepeatedFields>();
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(BytesAndArrayPayloadFields) {
-        THolder<TEvFlatPayloadFields> ev(TEvFlatPayloadFields::Make());
+        std::unique_ptr<TEvFlatPayloadFields> ev(TEvFlatPayloadFields::Make());
         ev->Marker() = 7;
         ev->Blob().Append(TRope(TString("ab")));
         ev->Blob().Append(TRope(TString("cd")));
@@ -615,11 +615,11 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Numbers()[3]), 4);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Numbers()[4]), 55);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatPayloadFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatPayloadFields* loaded = handle->Get<TEvFlatPayloadFields>();
@@ -635,7 +635,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(InlineBytesAndInlineArrayFields) {
-        THolder<TEvFlatInlineFields> ev(TEvFlatInlineFields::Make());
+        std::unique_ptr<TEvFlatInlineFields> ev(TEvFlatInlineFields::Make());
         ev->Marker() = 101;
         ev->Blob().Append(TRope(TString("mini")));
 
@@ -649,11 +649,11 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Numbers()[0]), 4u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Numbers()[3]), 16u);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatInlineFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatInlineFields* loaded = handle->Get<TEvFlatInlineFields>();
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(FrontendForSingleVersionPayloadScheme) {
-        THolder<TEvFlatPayloadFields> ev(TEvFlatPayloadFields::Make());
+        std::unique_ptr<TEvFlatPayloadFields> ev(TEvFlatPayloadFields::Make());
         UNIT_ASSERT(ev->IsVersion<TEvFlatPayloadFields::TSchemeV1>());
 
         auto frontend = ev->GetFrontend<TEvFlatPayloadFields::TSchemeV1>();
@@ -687,7 +687,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(PayloadFieldAbsenceAndClear) {
-        THolder<TEvFlatPayloadFields> ev(TEvFlatPayloadFields::Make());
+        std::unique_ptr<TEvFlatPayloadFields> ev(TEvFlatPayloadFields::Make());
         ev->Marker() = 13;
 
         UNIT_ASSERT(!ev->Blob().HasPayload());
@@ -713,11 +713,11 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT(ev->Numbers().empty());
         UNIT_ASSERT_VALUES_EQUAL(ev->NumbersSize(), 0);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatPayloadFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatPayloadFields* loaded = handle->Get<TEvFlatPayloadFields>();
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(CreateSerializeAndLoadLatestVersion) {
-        THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
+        std::unique_ptr<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 42;
         ui32 values[] = {10, 20, 30};
         std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
@@ -740,11 +740,11 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT(!ev->HasOldField());
         UNIT_ASSERT_VALUES_EQUAL(ev->NumbersSize(), 3);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
 
     Y_UNIT_TEST(LoadOldVersion) {
         auto buffers = MakeV1Buffer(101, 202, {7, 8, 9, 10});
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
 
     Y_UNIT_TEST(LoadOldVersionWithEmptyPayload) {
         auto buffers = MakeV1Buffer(101, 202, {});
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(VersionedFrontendsForLatestAndOldSchemes) {
-        THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
+        std::unique_ptr<TEvFlatMessage> ev(TEvFlatMessage::Make());
         UNIT_ASSERT(ev->IsVersion<TEvFlatMessage::TSchemeV2>());
         UNIT_ASSERT(ev->Is<TEvFlatMessage::TSchemeV2>());
         UNIT_ASSERT(!ev->IsVersion<TEvFlatMessage::TSchemeV1>());
@@ -806,7 +806,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(constV2.template Array<TEvFlatMessage::TArrayFieldTag>()[1]), 8);
 
         auto buffers = MakeV1Buffer(501, 777, {5, 6});
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
@@ -829,7 +829,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         WriteUnaligned<i64>(ptr + sizeof(ui8), 909);
 
         auto buffers = MakeSerializedData(TVector<TRope>{}, std::move(header));
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
@@ -859,7 +859,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
 
         const TVector<ui32> values = {100, 200, 300};
         auto buffers = MakeSerializedData({TRope(MakeArrayPayload(values))}, std::move(header));
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatRepeatedFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatRepeatedFields* loaded = handle->Get<TEvFlatRepeatedFields>();
@@ -874,7 +874,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     Y_UNIT_TEST(ArrayPayloadPreservesAlignmentLocally) {
         using TScheme = TEvFlatMessage::TSchemeV2;
 
-        THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
+        std::unique_ptr<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 11;
 
         ui32 values[] = {10, 20, 30, 40};
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(rope->GetSize(), expectedWireSize);
 
         auto buffers = MakeIntrusive<TEventSerializedData>(std::move(*rope), TEventSerializationInfo{});
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
@@ -908,12 +908,12 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(loadedData[0], 10u);
         UNIT_ASSERT_VALUES_EQUAL(loadedData[3], 40u);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto arcadiaBuffers = serializer->Release(ev->CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(arcadiaBuffers->GetSize(), expectedWireSize);
 
-        THolder<IEventHandle> arcadiaHandle(new IEventHandle(
+        std::unique_ptr<IEventHandle> arcadiaHandle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), arcadiaBuffers, 0));
 
         TEvFlatMessage* arcadiaLoaded = arcadiaHandle->Get<TEvFlatMessage>();
@@ -957,7 +957,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         std::memcpy(ptr, values, sizeof(values));
 
         auto buffers = MakeIntrusive<TEventSerializedData>(TRope(std::move(buffer)), TEventSerializationInfo{});
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatRepeatedFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatRepeatedFields* loaded = handle->Get<TEvFlatRepeatedFields>();
@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     Y_UNIT_TEST(StrictInlineArrayWireOmitsHeaderSizePrefix) {
         using TScheme = TEvFlatStrictArrayFields::TSchemeV1;
 
-        THolder<TEvFlatStrictArrayFields> ev(TEvFlatStrictArrayFields::Make());
+        std::unique_ptr<TEvFlatStrictArrayFields> ev(TEvFlatStrictArrayFields::Make());
         ev->Marker() = 313;
 
         ui32 values[] = {21, 34, 55};
@@ -988,12 +988,12 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             + payloadBytes;
         UNIT_ASSERT_VALUES_EQUAL(ev->CalculateSerializedSize(), expectedWireSize);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), expectedWireSize);
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatStrictArrayFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatStrictArrayFields* loaded = handle->Get<TEvFlatStrictArrayFields>();
@@ -1004,14 +1004,14 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(BytesOnlyPayloadUsesDirectWirePayloads) {
-        THolder<TEvFlatStrictBytesFields> ev(TEvFlatStrictBytesFields::Make());
+        std::unique_ptr<TEvFlatStrictBytesFields> ev(TEvFlatStrictBytesFields::Make());
         ev->Marker() = 515;
         ev->Blob().Append(TRope(TString("strict-bytes")));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatStrictBytesFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatStrictBytesFields* loaded = handle->Get<TEvFlatStrictBytesFields>();
@@ -1025,18 +1025,18 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         payload[0] = 'a';
         payload.back() = 'z';
 
-        THolder<TEvFlatStrictBytesFields> ev(TEvFlatStrictBytesFields::Make());
+        std::unique_ptr<TEvFlatStrictBytesFields> ev(TEvFlatStrictBytesFields::Make());
         ev->Marker() = 616;
         ev->Blob().Append(TRope(payload));
 
         TEventSerializationInfo info = ev->CreateSerializationInfo(true);
         UNIT_ASSERT(info.IsExtendedFormat);
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
         auto buffers = serializer->Release(std::move(info));
 
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatStrictBytesFields, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatStrictBytesFields* loaded = handle->Get<TEvFlatStrictBytesFields>();
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(ArrayPayloadAlignmentIsExposedInSerializationInfo) {
-        THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
+        std::unique_ptr<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 42;
 
         TVector<ui32> values(4097, 7);
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
             typename TScheme::TPayloadRef{.PayloadId = 1});
 
         auto buffers = MakeSerializedData({TRope(std::move(payloadBuf))}, std::move(header));
-        THolder<IEventHandle> handle(new IEventHandle(
+        std::unique_ptr<IEventHandle> handle(new IEventHandle(
             EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
 
         TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();

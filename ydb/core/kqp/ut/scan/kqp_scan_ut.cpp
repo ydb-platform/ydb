@@ -2844,14 +2844,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
                 Y_ASSERT(record.GetResultSet().rows().size() == 0);
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
                 if (captureEvRead) {
                     auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::NOT_FOUND);
 
@@ -2959,7 +2959,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
                 if (throttleResponded < kThrottleCount) {
                     auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     resp->Record.SetThrottleDelayMs(1);
@@ -3062,7 +3062,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
                 auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
                 if (throttleResponded < kThrottleCount) {
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     resp->Record.SetThrottleDelayMs(1);
@@ -3071,7 +3071,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     return true;
                 }
                 if (nonThrottleResponded == 0) {
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     // No Throttled flag.
@@ -3170,7 +3170,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
                 if (throttleResponded < kThrottleCount) {
                     auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     resp->Record.SetThrottleDelayMs(1);
@@ -3268,7 +3268,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
                 auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
                 if (throttleResponded < kThrottleCount) {
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     resp->Record.SetThrottleDelayMs(1);
@@ -3277,7 +3277,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     return true;
                 }
                 if (nonThrottleResponded == 0) {
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     // No Throttled flag.
@@ -3382,7 +3382,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 }
                 auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
                 if (throttleResponded < kThrottleCount) {
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     resp->Record.SetThrottleDelayMs(1);
@@ -3391,7 +3391,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     return true;
                 }
                 if (nonThrottleResponded == 0) {
-                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    auto resp = std::make_unique<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
                     // No Throttled flag.

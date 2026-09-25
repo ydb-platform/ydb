@@ -62,13 +62,13 @@ namespace NYql {
         ui32 ObtainNextActorNodeId();
 
         // Actor system
-        THolder<TActorSystemSetup> Setup_;
+        std::unique_ptr<TActorSystemSetup> Setup_;
         std::optional<TActorSystem> ActorSystem_;
         ui32 ActorNodeIDCounter_;
 
         // Logging infrastructure
         TIntrusivePtr<NActors::NLog::TSettings> LoggingSettings_;
-        THolder<TLogBackend> LoggerBackend_ = nullptr;
+        std::unique_ptr<TLogBackend> LoggerBackend_ = nullptr;
         IMetricsRegistryPtr MetricsRegistry_;
     };
 } // namespace NYql

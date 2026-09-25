@@ -29,8 +29,8 @@ private:
 
 }
 
-THolder<TExecTransformerBase> CreateYdbDataSinkExecTransformer(TYdbState::TPtr state) {
-    return THolder(new TYdbDataSinkExecTransformer(state));
+std::unique_ptr<TExecTransformerBase> CreateYdbDataSinkExecTransformer(TYdbState::TPtr state) {
+    return std::unique_ptr<TYdbDataSinkExecTransformer>(new TYdbDataSinkExecTransformer(state));
 }
 
 } // namespace NYql

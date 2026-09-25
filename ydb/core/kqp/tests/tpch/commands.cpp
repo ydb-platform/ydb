@@ -78,7 +78,7 @@ int TClientCommandTpchRoot::Run(TConfig& config) {
 }
 
 int NewTpchClient(int argc, char** argv) {
-    THolder<TClientCommandTpchRoot> cmds = MakeHolder<TClientCommandTpchRoot>();
+    std::unique_ptr<TClientCommandTpchRoot> cmds = std::make_unique<TClientCommandTpchRoot>();
     cmds->Opts.SetTitle("TPC-H tool");
     TClientCommand::TConfig config(argc, argv);
     return cmds->Process(config);

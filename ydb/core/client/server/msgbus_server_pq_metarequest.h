@@ -13,7 +13,7 @@ public:
     TPersQueueGetTopicMetadataProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    std::unique_ptr<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 };
 
 class TPersQueueGetTopicMetadataTopicWorker : public TReplierToParent<TTopicInfoBasedActor> {
@@ -34,7 +34,7 @@ public:
     TPersQueueGetPartitionOffsetsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& metaCacheId);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    std::unique_ptr<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 
 private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
@@ -66,7 +66,7 @@ public:
     TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    std::unique_ptr<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 
 private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
@@ -99,7 +99,7 @@ public:
     TPersQueueGetPartitionLocationsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    std::unique_ptr<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 
 private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
@@ -143,7 +143,7 @@ public:
             }
             HasSessionsRequest = true;
             auto actorId = ctx.Register(CreateSessionsSubactor(std::move(ReadSessions), ctx).Release());
-            Children.emplace(actorId, MakeHolder<TPerTopicInfo>());
+            Children.emplace(actorId, std::make_unique<TPerTopicInfo>());
         }
         return false;
     }
@@ -168,8 +168,8 @@ public:
 
 private:
 
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
-    THolder<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions, const TActorContext& ctx);
+    std::unique_ptr<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    std::unique_ptr<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions, const TActorContext& ctx);
 
     mutable bool HasSessionsRequest = false;
     THashMap<TString, TActorId> ReadSessions;

@@ -22,9 +22,9 @@ struct TFolderServiceTestSetup {
     TPortManager PortManager;
     ui16 KikimrPort;
 
-    THolder<TServer> Server;
-    THolder<TClient> Client;
-    THolder<NClient::TKikimr> Kikimr;
+    std::unique_ptr<TServer> Server;
+    std::unique_ptr<TClient> Client;
+    std::unique_ptr<NClient::TKikimr> Kikimr;
     TActorId EdgeActor;
     IActor* AccessServiceActor = nullptr;
 
@@ -42,10 +42,10 @@ struct TFolderServiceTestSetup {
         NKikimrProto::TAuthConfig authConfig;
         auto settings = TServerSettings(KikimrPort, authConfig);
         settings.SetDomainName("Root");
-        Server = MakeHolder<TServer>(settings);
+        Server = std::make_unique<TServer>(settings);
         Server->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_DEBUG);
-        Client = MakeHolder<TClient>(settings);
-        Kikimr = MakeHolder<NClient::TKikimr>(Client->GetClientConfig());
+        Client = std::make_unique<TClient>(settings);
+        Kikimr = std::make_unique<NClient::TKikimr>(Client->GetClientConfig());
         Client->InitRootScheme();
         EdgeActor = GetRuntime()->AllocateEdgeActor();
     }
@@ -76,19 +76,19 @@ struct TFolderServiceTestSetup {
     }
 
     void SendListFolderRequest(IActor* to, TString folderId) {
-        auto request = MakeHolder<NCloud::TEvFolderServiceTransitional::TEvListFolderRequest>();
+        auto request = std::make_unique<NCloud::TEvFolderServiceTransitional::TEvListFolderRequest>();
         request->Request.set_id(folderId);
         GetRuntime()->Send(new IEventHandle(to->SelfId(), EdgeActor, request.Release()));
     }
 
     void SendResolveFoldersRequest(IActor* to, TString folderId) {
-        auto request = MakeHolder<NCloud::TEvFolderService::TEvResolveFoldersRequest>();
+        auto request = std::make_unique<NCloud::TEvFolderService::TEvResolveFoldersRequest>();
         request->Request.add_folder_ids(folderId);
         GetRuntime()->Send(new IEventHandle(to->SelfId(), EdgeActor, request.Release()));
     }
 
     void SendGetCloudByFolderRequest(IActor* to, TString folderId) {
-        auto request = MakeHolder<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest>();
+        auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest>();
         request->FolderId = folderId;
         GetRuntime()->Send(new IEventHandle(to->SelfId(), EdgeActor, request.Release()));
     }

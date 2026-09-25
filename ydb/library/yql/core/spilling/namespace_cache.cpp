@@ -374,11 +374,11 @@ void TNamespaceCache::NextNamespaceFile(bool openExisting) {
         TTempStorageExecutionPolicy pol;
         ui32 retryCount = 0;
         for (; retryCount < pol.MaxNumberOfRetries; retryCount++ ) {
-            THolder<ISpillFile> metFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(maxInd) + TString(".0.met"), MetaFileIncreaseStep);
+            std::unique_ptr<ISpillFile> metFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(maxInd) + TString(".0.met"), MetaFileIncreaseStep);
             if (metFile->IsLocked()) {
                 CurrSpillFileId_ = maxInd;
                 CurrSpillMetaFile_ = std::move(metFile);
-                THolder<ISpillFile> datFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(maxInd) + TString(".0.dat"), DataFileIncreaseStep);
+                std::unique_ptr<ISpillFile> datFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(maxInd) + TString(".0.dat"), DataFileIncreaseStep);
                 CurrSpillDataFile_ = std::move(datFile);
                 NextObjId_ = CurrSpillFileId_ * (1<<16) + 1;
                 TAtomicSharedPtr<TMetaFileAttributes> res = MakeAtomicShared<TMetaFileAttributes>();
@@ -795,8 +795,8 @@ TAtomicSharedPtr< std::vector<TSpillMetaRecord> > ReadAllRecordsFromMetaFile( TA
         if (found != SpillMetaFiles_.end()) {
             res = found->second;
         } else {
-            THolder<ISpillFile> metFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(fileId) + TString(".0.met"), MetaFileIncreaseStep);
-            THolder<ISpillFile> datFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(fileId) + TString(".0.dat"), DataFileIncreaseStep);
+            std::unique_ptr<ISpillFile> metFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(fileId) + TString(".0.met"), MetaFileIncreaseStep);
+            std::unique_ptr<ISpillFile> datFile = StorageI_->CreateSpillFile(Name_, TString("ydbspl.") + std::to_string(fileId) + TString(".0.dat"), DataFileIncreaseStep);
             res = MakeAtomicShared<TMetaFileAttributes>();
             res->MetaFile = std::move( metFile );
             res->DataFile = std::move(datFile);

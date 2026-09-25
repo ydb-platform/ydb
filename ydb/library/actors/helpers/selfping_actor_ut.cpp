@@ -6,8 +6,8 @@
 namespace NActors {
 namespace Tests {
 
-THolder<TTestActorRuntimeBase> CreateRuntime() {
-    auto runtime = MakeHolder<TTestActorRuntimeBase>();
+std::unique_ptr<TTestActorRuntimeBase> CreateRuntime() {
+    auto runtime = std::make_unique<TTestActorRuntimeBase>();
     runtime->SetScheduledEventFilter([](auto&&, auto&&, auto&&, auto&&) { return false; });
     runtime->Initialize();
     return runtime;

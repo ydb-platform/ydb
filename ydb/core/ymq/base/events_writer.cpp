@@ -37,7 +37,7 @@ public:
 private:
     NUnifiedAgent::TClientPtr Client;
     NUnifiedAgent::TClientSessionPtr Session;
-    THolder<TLog> Logger;
+    std::unique_ptr<TLog> Logger;
 };
 
 

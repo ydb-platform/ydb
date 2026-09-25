@@ -52,7 +52,7 @@ namespace NKikimr::NHttpProxy {
         {
         }
 
-        void Execute(THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
+        void Execute(THttpRequestContext&& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
             ctx.Register(new TSqsTopicHttpRequestActor(
                     std::move(context),
                     std::move(signature),
@@ -67,7 +67,7 @@ namespace NKikimr::NHttpProxy {
             using TBase = NPQ::TBaseActor<TSqsTopicHttpRequestActor>;
 
             TSqsTopicHttpRequestActor(THttpRequestContext&& httpContext,
-                              THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
+                              std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
                               TProtoCall protoCall, const TString& method)
                 : TBase(NKikimrServices::HTTP_PROXY)
                 , HttpContext(std::move(httpContext))
@@ -125,16 +125,16 @@ namespace NKikimr::NHttpProxy {
                 RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                                     (const NThreading::TFuture<TProtoResponse>& future) {
                     auto& response = future.GetValueSync();
-                    auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                    auto result = std::make_unique<TEvServerlessProxy::TEvGrpcRequestResult>();
                     Y_ABORT_UNLESS(response.operation().ready());
                     if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
                         TProtoResult rs;
                         response.operation().result().UnpackTo(&rs);
-                        result->Message = MakeHolder<TProtoResult>(rs);
+                        result->Message = std::make_unique<TProtoResult>(rs);
                     }
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(response.operation().issues(), issues);
-                    result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
+                    result->Status = std::make_unique<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
                                                                NYdb::NAdapters::ToSdkIssues(std::move(issues)));
                     actorSystem->Send(actorId, result.Release());
                 });
@@ -473,7 +473,7 @@ namespace NKikimr::NHttpProxy {
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
             THttpRequestContext HttpContext;
-            THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
+            std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
             TProtoCall ProtoCall;
             TString Method;

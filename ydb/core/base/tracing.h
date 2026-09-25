@@ -123,7 +123,7 @@ public:
     virtual ~ITrace() = default;
 
     virtual ITrace* CreateTrace(ITrace::EType type) = 0;
-    virtual bool Attach(THolder<ITraceSignal> signal) = 0;
+    virtual bool Attach(std::unique_ptr<ITraceSignal> signal) = 0;
     virtual TTraceID GetSelfID() const = 0;
     virtual TTraceID GetParentID() const = 0;
     virtual TTraceID GetRootID() const = 0;
@@ -173,7 +173,7 @@ public:
         TLightWriteGuard g{ Lock };
         auto it = Factorymap.find(signalType);
         if (it == Factorymap.end()) {
-            Factorymap[signalType] = MakeHolder<TSignalCreator<TSignalType>>();
+            Factorymap[signalType] = std::make_unique<TSignalCreator<TSignalType>>();
         }
     }
 
@@ -187,7 +187,7 @@ public:
     }
 
 private:
-    using TFactoryMap = THashMap<ui32, THolder<ISignalCreator>>;
+    using TFactoryMap = THashMap<ui32, std::unique_ptr<ISignalCreator>>;
     TFactoryMap Factorymap;
     TLightRWLock Lock;
 };

@@ -18,9 +18,9 @@ namespace NPDisk {
 
 struct TEvWhiteboardReportResult :
                 public TEventLocal<TEvWhiteboardReportResult, TEvBlobStorage::EvWhiteboardReportResult> {
-    THolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate> PDiskState;
+    std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate> PDiskState;
     TVector<std::tuple<TActorId, NKikimrWhiteboard::TVDiskStateInfo>> VDiskStateVect;
-    THolder<TEvBlobStorage::TEvControllerUpdateDiskStatus> DiskMetrics;
+    std::unique_ptr<TEvBlobStorage::TEvControllerUpdateDiskStatus> DiskMetrics;
 
     ~TEvWhiteboardReportResult();
 

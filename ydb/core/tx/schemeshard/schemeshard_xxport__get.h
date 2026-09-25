@@ -23,7 +23,7 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
     bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
         const auto& request = Request->Get()->Record;
 
-        auto response = MakeHolder<TEvResponse>();
+        auto response = std::make_unique<TEvResponse>();
         auto& entry = *response->Record.MutableResponse()->MutableEntry();
 
         auto it = container.find(request.GetRequest().GetId());

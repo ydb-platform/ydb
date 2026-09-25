@@ -180,7 +180,7 @@ public:
     virtual ~TWorkloadParams() = default;
     virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {
     };
-    virtual THolder<IWorkloadQueryGenerator> CreateGenerator() const = 0;
+    virtual std::unique_ptr<IWorkloadQueryGenerator> CreateGenerator() const = 0;
     virtual TWorkloadDataInitializer::TList CreateDataInitializers() const {
         return {};
     }

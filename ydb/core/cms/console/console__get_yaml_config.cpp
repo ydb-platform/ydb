@@ -20,7 +20,7 @@ public:
 
     bool Execute(TTransactionContext &, const TActorContext &) override
     {
-        Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
+        Response = std::make_unique<TEvConsole::TEvGetAllConfigsResponse>();
 
         if (IngressDatabase
             // treat root (domain) database as cluster for backward compatibility
@@ -71,7 +71,7 @@ public:
 
 private:
     TEvConsole::TEvGetAllConfigsRequest::TPtr Request;
-    THolder<TEvConsole::TEvGetAllConfigsResponse> Response;
+    std::unique_ptr<TEvConsole::TEvGetAllConfigsResponse> Response;
     TMaybe<TString> IngressDatabase;
 };
 

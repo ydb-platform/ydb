@@ -28,7 +28,7 @@ void TVectorWorkloadGenerator::Init() {
         return;
     }
 
-    VectorSampler = MakeHolder<TVectorSampler>(Params);
+    VectorSampler = std::make_unique<TVectorSampler>(Params);
     if (Params.QueryTableName.empty()) {
         VectorSampler->SampleExistingVectors();
     } else {

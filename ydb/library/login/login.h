@@ -293,7 +293,7 @@ private:
 
 private:
     struct TImpl;
-    THolder<TImpl> Impl;
+    std::unique_ptr<TImpl> Impl;
 
     TPasswordChecker PasswordChecker;
     TAccountLockout AccountLockout;

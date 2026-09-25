@@ -71,7 +71,7 @@ public:
         SetupStorage(runtime);
 
         const TActorId edge = runtime.AllocateEdgeActor(1);
-        auto coro = MakeHolder<TCoro>(*this, std::move(fn), edge);
+        auto coro = std::make_unique<TCoro>(*this, std::move(fn), edge);
         UNIT_ASSERT(!CurrentCoro);
         CurrentCoro = coro.Get();
         runtime.Register(new TActorCoro(std::move(coro)), TActorId(), 0, std::nullopt, 1);

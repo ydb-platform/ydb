@@ -532,7 +532,7 @@ namespace {
 
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
-    auto SetDelayObserver(TTestActorRuntime& runtime, THolder<IEventHandle>& delayed, TDelayFunc delayFunc) {
+    auto SetDelayObserver(TTestActorRuntime& runtime, std::unique_ptr<IEventHandle>& delayed, TDelayFunc delayFunc) {
         return runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
@@ -542,7 +542,7 @@ namespace {
         });
     }
 
-    void WaitForDelayed(TTestActorRuntime& runtime, THolder<IEventHandle>& delayed, TTestActorRuntime::TEventObserver prevObserver) {
+    void WaitForDelayed(TTestActorRuntime& runtime, std::unique_ptr<IEventHandle>& delayed, TTestActorRuntime::TEventObserver prevObserver) {
         if (!delayed) {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
@@ -558,7 +558,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TRestoreTests) {
     void RestoreNoWait(TTestBasicRuntime& runtime, ui64& txId,
-            ui16 port, THolder<TS3Mock>& s3Mock, TVector<TTestData>&& data, ui32 readBatchSize = 128,
+            ui16 port, std::unique_ptr<TS3Mock>& s3Mock, TVector<TTestData>&& data, ui32 readBatchSize = 128,
             bool validateChecksums = false, ui32 numberOfRetries = 0) {
 
         const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         env.TestWaitNotification(runtime, txId);
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
 
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, std::move(data), readBatchSize);
         env.TestWaitNotification(runtime, txId);
@@ -848,7 +848,7 @@ value {
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock,
             {GenerateTestData(ECompressionCodec::None, "", 100)});
         env.TestWaitNotification(runtime, txId);
@@ -980,7 +980,7 @@ value {
         });
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data}, /*readBatchSize=*/4_KB,
             /*validateChecksums=*/true, /*numberOfRetries=*/3);
         env.TestWaitNotification(runtime, txId);
@@ -1038,7 +1038,7 @@ value {
         });
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
         const auto data = GenerateZstdTestData("a", 2);
         const ui32 batchSize = 1;
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data}, batchSize);
@@ -2899,7 +2899,7 @@ value {
         }
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
 
         const auto data = GenerateTestData("", 1000);
         const ui32 batchSize = 32;
@@ -3137,13 +3137,13 @@ value {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = SetDelayObserver(runtime, delayed, [](TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvToDelay::EventType;
         });
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
 
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data});
@@ -3204,13 +3204,13 @@ value {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> schemaChanged;
+        std::unique_ptr<IEventHandle> schemaChanged;
         auto prevObserver = SetDelayObserver(runtime, schemaChanged, [](TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvDataShard::TEvSchemaChanged::EventType;
         });
 
         TPortManager portManager;
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
         const auto data = GenerateTestData(Codec, "a", 1);
 
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data});
@@ -3218,7 +3218,7 @@ value {
 
         WaitForDelayed(runtime, schemaChanged, prevObserver);
 
-        THolder<IEventHandle> progress;
+        std::unique_ptr<IEventHandle> progress;
         prevObserver = SetDelayObserver(runtime, progress, [](TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvPrivate::TEvProgressOperation::EventType;
         });
@@ -3522,7 +3522,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
     void Restore(TTestWithReboots& t, TTestActorRuntime& runtime, bool& activeZone,
             ui16 port, const TString& creationScheme, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
 
-        THolder<TS3Mock> s3Mock;
+        std::unique_ptr<TS3Mock> s3Mock;
         TString schemeStr;
 
         {
@@ -3890,7 +3890,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
 
-            THolder<TS3Mock> s3Mock;
+            std::unique_ptr<TS3Mock> s3Mock;
             TString schemeStr;
 
             {
@@ -5636,7 +5636,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = SetDelayObserver(runtime, delayed, delayFunc);
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -6134,7 +6134,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 .GetTransaction(0).GetOperationType() == ESchemeOpRestore;
         };
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = SetDelayObserver(runtime, delayed, delayFunc);
 
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -6306,7 +6306,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 .GetTransaction(0).GetOperationType() == ESchemeOpRestore;
         };
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = SetDelayObserver(runtime, delayed, delayFunc);
 
         const auto request = Sprintf(R"(

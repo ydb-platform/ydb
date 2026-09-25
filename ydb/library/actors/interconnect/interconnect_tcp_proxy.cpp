@@ -164,7 +164,7 @@ namespace NActors {
         }
 
         // process incoming handshake requests; all failures were ejected from the queue along with the matching initiation requests
-        for (THolder<IEventHandle>& ev : PendingIncomingHandshakeEvents) {
+        for (std::unique_ptr<IEventHandle>& ev : PendingIncomingHandshakeEvents) {
             TAutoPtr<IEventHandle> x(ev.Release());
             IncomingHandshake(x);
         }
@@ -213,7 +213,7 @@ namespace NActors {
     }
 
     void TInterconnectProxyTCP::IssueIncomingHandshakeReply(const TActorId& handshakeId, ui64 peerLocalId,
-            THolder<IEventBase> event) {
+            std::unique_ptr<IEventBase> event) {
         ICPROXY_PROFILED;
 
         Y_ABORT_UNLESS(!IncomingHandshakeActor);
@@ -301,7 +301,7 @@ namespace NActors {
             DropIncomingHandshake();
 
             // issue reply to the sender, possibly holding it while outgoing handshake is at race
-            THolder<IEventBase> reply = InvokeSession(&IInterconnectSession::ProcessHandshakeRequest, ev);
+            std::unique_ptr<IEventBase> reply = InvokeSession(&IInterconnectSession::ProcessHandshakeRequest, ev);
             return IssueIncomingHandshakeReply(ev->Sender, RemoteSessionVirtualId.LocalId(), std::move(reply));
         }
 
@@ -373,7 +373,7 @@ namespace NActors {
         // prepare for new session
         PrepareNewSessionHandshake();
 
-        auto event = MakeHolder<TEvHandshakeReplyOK>();
+        auto event = std::make_unique<TEvHandshakeReplyOK>();
         auto* pb = event->Record.MutableSuccess();
         const TActorId virtualId = GenerateSessionVirtualId();
         pb->SetProtocol(INTERCONNECT_PROTOCOL_VERSION);
@@ -747,7 +747,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         for (auto it = PendingIncomingHandshakeEvents.begin(); it != PendingIncomingHandshakeEvents.end(); ++it) {
-            THolder<IEventHandle>& pendingEvent = *it;
+            std::unique_ptr<IEventHandle>& pendingEvent = *it;
             if (pendingEvent->Sender == ev->Sender) {
                 // we have found cancellation request for the pending handshake request; so simply remove it from the
                 // deque, as we are not interested in failure reason; must likely it happens because of handshake timeout
@@ -1340,7 +1340,7 @@ namespace NActors {
             }
         }
 
-        auto response = MakeHolder<TEvStats>();
+        auto response = std::make_unique<TEvStats>();
         response->PeerNodeId = PeerNodeId;
         response->ProxyStats = std::move(stats);
         Send(ev->Sender, response.Release());

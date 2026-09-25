@@ -218,8 +218,8 @@ TMutex g_Lock;
 TCondVar g_CondVar;
 TDeque<TMyTask*> g_Incoming;
 TVector<TQueuePtr> g_SchedulerQs;
-THolder<NShop::TFlowCtl> g_Fc;
-THolder<TDRRScheduler<TMyQueue>> g_Drr;
+std::unique_ptr<NShop::TFlowCtl> g_Fc;
+std::unique_ptr<TDRRScheduler<TMyQueue>> g_Drr;
 
 TAtomic g_IdleTime = 0; // in microsec
 TAtomic g_ActiveTime = 0; // in microsec
@@ -519,7 +519,7 @@ int main(int argc, char** argv)
 
         // Configure
         using TMonSrvc = NMonitoring::TMonService2;
-        THolder<TMonSrvc> MonSrvc;
+        std::unique_ptr<TMonSrvc> MonSrvc;
         NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
         opts.AddLongOption(0, "mon-port", "port of monitoring service")
                 .RequiredArgument("port")

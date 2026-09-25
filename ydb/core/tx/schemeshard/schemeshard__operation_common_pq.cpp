@@ -170,7 +170,7 @@ public:
     }
 };
 
-THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
+std::unique_ptr<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         TTxId txId,
         const TTopicInfo& pqGroup,
         const TTopicTabletInfo& pqShard,
@@ -186,7 +186,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         const TOperationContext& context
     )
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
     event->Record.SetTxId(ui64(txId));
     ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
 
@@ -445,7 +445,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 {"partitionsCount", pqShard->Partitions.size()},
             );
 
-            THolder<NActors::IEventBase> event = MakeEvProposeTransaction(OperationId.GetTxId(),
+            std::unique_ptr<NActors::IEventBase> event = MakeEvProposeTransaction(OperationId.GetTxId(),
                                                     *pqGroup,
                                                     *pqShard,
                                                     topicName,
@@ -662,7 +662,7 @@ void TPropose::SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
                                               TOperationContext& context)
 {
     auto event =
-        MakeHolder<TEvPersQueue::TEvProposeTransactionAttach>(ui64(tablet),
+        std::make_unique<TEvPersQueue::TEvProposeTransactionAttach>(ui64(tablet),
                                                               ui64(OperationId.GetTxId()));
     context.OnComplete.BindMsgToPipe(OperationId, tablet, shard, event.Release());
 }

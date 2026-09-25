@@ -161,7 +161,7 @@ struct TQuoterEnv {
         return id;
     }
 
-    THolder<TEvChargeRequestUnitsResponse> WaitResponse(TDuration timeout = TDuration::Seconds(5)) {
+    std::unique_ptr<TEvChargeRequestUnitsResponse> WaitResponse(TDuration timeout = TDuration::Seconds(5)) {
         return Runtime.GrabEdgeEvent<TEvChargeRequestUnitsResponse>(timeout);
     }
 };
@@ -196,7 +196,7 @@ struct THoldingQuoterEnv {
         return id;
     }
 
-    THolder<TEvChargeRequestUnitsResponse> WaitResponse(TDuration timeout = TDuration::Seconds(5)) {
+    std::unique_ptr<TEvChargeRequestUnitsResponse> WaitResponse(TDuration timeout = TDuration::Seconds(5)) {
         return Runtime.GrabEdgeEvent<TEvChargeRequestUnitsResponse>(timeout);
     }
 };
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         };
         env.Runtime.DispatchEvents(waitQuota);
 
-        auto request = MakeHolder<TSchemeCacheNavigate>();
+        auto request = std::make_unique<TSchemeCacheNavigate>();
         request->ResultSet.emplace_back();
         FillOkPath(request->ResultSet.front(), RlAndMeteringAttrs());
         env.Runtime.Send(new IEventHandle(

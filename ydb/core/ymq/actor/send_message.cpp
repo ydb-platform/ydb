@@ -34,7 +34,7 @@ public:
         return true;
     }
 
-    TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
+    TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
         , IsBatch_(isBatch)
     {
@@ -178,7 +178,7 @@ private:
     void DoActionDeduplicateTopicImplementation() {
         Become(&TThis::StateFunc);
 
-        auto req = MakeHolder<TSqsEvents::TEvDeduplicateMessageBatch>();
+        auto req = std::make_unique<TSqsEvents::TEvDeduplicateMessageBatch>();
         req->RequestId = RequestId_;
         req->SenderId = UserSID_;
 
@@ -298,7 +298,7 @@ private:
         Become(&TThis::StateFunc);
 
         const bool isFifo = IsFifoQueue();
-        THolder<TSqsEvents::TEvSendMessageBatch> req;
+        std::unique_ptr<TSqsEvents::TEvSendMessageBatch> req;
         for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
             auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->AddEntries() : Response_.MutableSendMessage();
@@ -320,7 +320,7 @@ private:
             }
 
             if (!req) {
-                req = MakeHolder<TSqsEvents::TEvSendMessageBatch>();
+                req = std::make_unique<TSqsEvents::TEvSendMessageBatch>();
                 req->RequestId = RequestId_;
                 req->SenderId = UserSID_;
                 req->Messages.reserve(size);
@@ -532,11 +532,11 @@ private:
     ui64 TopicSendDedupCount_ = 0;
 };
 
-IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TSendMessageActor(sourceSqsRequest, false, std::move(cb));
 }
 
-IActor* CreateSendMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateSendMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TSendMessageActor(sourceSqsRequest, true, std::move(cb));
 }
 

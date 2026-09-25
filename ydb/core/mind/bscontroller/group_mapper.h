@@ -114,7 +114,7 @@ namespace NKikimr {
         private:
             class TImpl;
             const TOptions Options;
-            THolder<TImpl> Impl;
+            std::unique_ptr<TImpl> Impl;
             THashMap<TVDiskID, i64> VDiskAllocatedSizes;
 
         public:
@@ -218,7 +218,7 @@ namespace NKikimr {
 
             class TPlacementBuilder {
                 class TState;
-                THolder<TState> State;
+                std::unique_ptr<TState> State;
 
                 void UpdateMaxGroupSlotSize(ui32 groupId, ui32 groupGeneration, i64 spaceUsed);
 

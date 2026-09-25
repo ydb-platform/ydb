@@ -21,7 +21,7 @@ public:
                   const TActorContext &ctx) override;
 
 private:
-    TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
+    TVector<std::unique_ptr<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
 };
 
 TDropTableUnit::TDropTableUnit(TDataShard &dataShard,
@@ -122,10 +122,10 @@ void TDropTableUnit::Complete(TOperation::TPtr,
     }
 }
 
-THolder<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard,
                                             TPipeline &pipeline)
 {
-    return THolder(new TDropTableUnit(dataShard, pipeline));
+    return std::unique_ptr<TDropTableUnit>(new TDropTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

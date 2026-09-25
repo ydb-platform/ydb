@@ -612,7 +612,7 @@ private:
             {"tableId", TableId},
             {"keyColumnsCount", KeyIds.size()});
 
-        auto keyRange = MakeHolder<TKeyDesc>(TableId, range, OperationType, KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
+        auto keyRange = std::make_unique<TKeyDesc>(TableId, range, OperationType, KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->DatabaseName = Database;

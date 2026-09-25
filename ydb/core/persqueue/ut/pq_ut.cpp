@@ -132,7 +132,7 @@ void CmdWriteKafkaBatch(
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+            std::unique_ptr<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
             tc.Runtime->ResetScheduledCount();
             auto* req = request->Record.MutablePartitionRequest();
             req->SetPartition(partition);
@@ -212,7 +212,7 @@ void CmdWriteBatchedPart(
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-            THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+            std::unique_ptr<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
             tc.Runtime->ResetScheduledCount();
             auto* req = request->Record.MutablePartitionRequest();
             req->SetPartition(partition);
@@ -275,7 +275,7 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
 {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvOffsetsResponse *result;
-    THolder<TEvPersQueue::TEvOffsets> request;
+    std::unique_ptr<TEvPersQueue::TEvOffsets> request;
 
     for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
         try {
@@ -328,7 +328,7 @@ void DispatchUntilWakeup(TTestContext& tc, i32 retriesLeft = 2) {
 bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvOffsetsResponse* result = nullptr;
-    THolder<TEvPersQueue::TEvOffsets> request;
+    std::unique_ptr<TEvPersQueue::TEvOffsets> request;
 
     for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
         try {
@@ -1208,7 +1208,7 @@ TTransactionalOwnership CreateTransactionalOwnership(
         0,
         GetPipeConfigWithRetries());
 
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(0);
@@ -1255,7 +1255,7 @@ void WriteTransactionalBatchedMessage(
     const TExpectedReadMessage& msg,
     ui32 messageNo)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(0);
@@ -1300,7 +1300,7 @@ void ProposeTopicWriteTransaction(
     ui32 supportivePartition,
     ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
     ActorIdToProto(tc.Edge, event->Record.MutableSourceActor());
     event->Record.SetTxId(txId);
 
@@ -1338,7 +1338,7 @@ void WaitProposeTransactionResult(
 
 void SendPlanStep(TTestContext& tc, ui64 step, ui64 txId)
 {
-    auto event = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+    auto event = std::make_unique<TEvTxProcessing::TEvPlanStep>();
     event->Record.SetStep(step);
     auto* tx = event->Record.AddTransactions();
     tx->SetTxId(txId);
@@ -1391,7 +1391,7 @@ void CancelTopicWriteTransaction(
     ProposeTopicWriteTransaction(tc, writeId, supportivePartition, txId);
     WaitProposeTransactionResult(tc, txId, NKikimrPQ::TEvProposeTransactionResult::PREPARED);
 
-    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(txId);
+    auto event = std::make_unique<TEvPersQueue::TEvCancelTransactionProposal>(txId);
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries());
 }
 
@@ -2039,7 +2039,7 @@ Y_UNIT_TEST(DirectReadOldPipe) {
 
         auto pipe = CmdCreateSession(sessionSettings, tc);
 
-        auto event = MakeHolder<TEvTabletPipe::TEvServerDisconnected>(0, pipe, TActorId{});
+        auto event = std::make_unique<TEvTabletPipe::TEvServerDisconnected>(0, pipe, TActorId{});
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries());
         readSettings.Pipe = pipe;
 
@@ -2231,7 +2231,7 @@ Y_UNIT_TEST(TestUserInfoCompatibility) {
         CmdWrite(3, "sourceid", data, tc);
 
 
-        THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+        std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
         FillUserInfo(request->Record.AddCmdWrite(), client, 0, 0);
         FillDeprecatedUserInfo(request->Record.AddCmdWrite(), client, 0, 0);
         FillUserInfo(request->Record.AddCmdWrite(), client, 1, 1);
@@ -2280,7 +2280,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
         CmdSetOffset(1, client, 2, false, tc);
 
         {
-            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+            std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
             FillUserInfo(request->Record.AddCmdWrite(), "old_consumer", 0, 0);
             FillDeprecatedUserInfo(request->Record.AddCmdWrite(), "old_consumer", 0, 0);
@@ -2299,7 +2299,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
         CmdGetOffset(0, "user", 0, tc);
 
         {
-            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+            std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
             auto read = request->Record.AddCmdReadRange();
             auto range = read->MutableRange();
             NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, TPartitionId(0), NPQ::TKeyPrefix::MarkUser);
@@ -2324,7 +2324,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
         CmdGetOffset(1, client, 0, tc);
 
         {
-            THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+            std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
             auto read = request->Record.AddCmdReadRange();
             auto range = read->MutableRange();
             NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, TPartitionId(0), NPQ::TKeyPrefix::MarkUser);
@@ -3808,7 +3808,7 @@ Y_UNIT_TEST(TestReadSubscription) {
 
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse *result;
-        THolder<TEvPersQueue::TEvRequest> request;
+        std::unique_ptr<TEvPersQueue::TEvRequest> request;
 
         request.Reset(new TEvPersQueue::TEvRequest);
         auto req = request->Record.MutablePartitionRequest();
@@ -4175,7 +4175,7 @@ Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
     }
 
     {
-        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        std::unique_ptr<TEvPersQueue::TEvStatus> statusEvent = std::make_unique<TEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("consumer-0");
         statusEvent->Record.AddConsumers("consumer-1");
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
@@ -4188,7 +4188,7 @@ Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
     }
 
     {
-        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        std::unique_ptr<TEvPersQueue::TEvStatus> statusEvent = std::make_unique<TEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("nonex-consumer-2");
         statusEvent->Record.AddConsumers("nonex-consumer-3");
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
@@ -4201,7 +4201,7 @@ Y_UNIT_TEST(TestStatusWithMultipleConsumers) {
     }
 
     {
-        THolder<TEvPersQueue::TEvStatus> statusEvent = MakeHolder<TEvPersQueue::TEvStatus>();
+        std::unique_ptr<TEvPersQueue::TEvStatus> statusEvent = std::make_unique<TEvPersQueue::TEvStatus>();
         statusEvent->Record.AddConsumers("consumer-0");
         statusEvent->Record.AddConsumers("nonex-consumer");
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, statusEvent.Release(), 0, GetPipeConfigWithRetries());
@@ -4309,7 +4309,7 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
 
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse* readResult = nullptr;
-        THolder<TEvPersQueue::TEvRequest> readRequest;
+        std::unique_ptr<TEvPersQueue::TEvRequest> readRequest;
 
         // Read request
         {
@@ -4504,7 +4504,7 @@ Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
             continue;
         }
 
-        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         auto read = request->Record.AddCmdReadRange();
         auto range = read->MutableRange();
         range->SetFrom(key);

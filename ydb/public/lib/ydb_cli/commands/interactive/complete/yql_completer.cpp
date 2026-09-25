@@ -29,7 +29,7 @@ namespace {
 
     class TYQLCompleter final : public IYQLCompleter {
     public:
-        using TPtr = THolder<IYQLCompleter>;
+        using TPtr = std::unique_ptr<IYQLCompleter>;
 
         TYQLCompleter(
             NSQLComplete::ISqlCompletionEngine::TPtr heavyEngine,
@@ -466,14 +466,14 @@ namespace {
 
         auto config = NSQLComplete::MakeYDBConfiguration();
 
-        return MakeHolder<TYQLCompleter>(
+        return std::make_unique<TYQLCompleter>(
             /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
             /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
             std::move(settings.Color));
     }
 
     IYQLCompleter::TPtr MakeYQLCompositeCompleter(const TCompositeCompleterConfig& config) {
-        return MakeHolder<TCompositeCommandCompleter>(config);
+        return std::make_unique<TCompositeCommandCompleter>(config);
     }
 
 } // namespace NYdb::NConsoleClient

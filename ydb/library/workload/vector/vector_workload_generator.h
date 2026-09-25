@@ -36,7 +36,7 @@ private:
 
     size_t CurrentIndex = 0;
 
-    THolder<TVectorSampler> VectorSampler;
+    std::unique_ptr<TVectorSampler> VectorSampler;
 };
 
 } // namespace NYdbWorkload

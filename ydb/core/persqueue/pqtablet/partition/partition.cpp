@@ -1455,7 +1455,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorC
 
 
 void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
-    THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
+    std::unique_ptr<TEvPersQueue::TEvPartitionClientInfoResponse> response = std::make_unique<TEvPersQueue::TEvPartitionClientInfoResponse>();
     NKikimrPQ::TClientInfoResponse& result(response->Record);
     result.SetPartition(Partition.InternalPartitionId);
     result.SetStartOffset(GetStartOffset());
@@ -1735,7 +1735,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCalcPredicate> 
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(*ev) < GetStepAndTxId(*PlanStep, *TxId)) {
             Send(TabletActorId,
-                 MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(ev->Step,
+                 std::make_unique<TEvPQ::TEvTxCalcPredicateResult>(ev->Step,
                                                              ev->TxId,
                                                              Partition,
                                                              Nothing(),
@@ -2174,7 +2174,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
         );
 
         Send(TabletActorId,
-             MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
+             std::make_unique<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                          tx->Tx->TxId,
                                                          Partition,
                                                          *tx->Predicate,
@@ -2183,7 +2183,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         PQ_ENSURE(insRes.second);
 
-        auto result = MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
+        auto result = std::make_unique<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
                                                                 Partition);
 
@@ -2200,7 +2200,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
+    auto response = std::make_unique<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -2940,7 +2940,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
 
     if (DeletePartitionState == DELETION_INITED) {
         if (!PersistRequest) {
-            PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+            PersistRequest = std::make_unique<TEvKeyValue::TEvRequest>();
         }
 
         ScheduleNegativeReplies();
@@ -3075,7 +3075,7 @@ void TPartition::ProcessUserActionAndTxPendingCommits() {
 
     PQ_ENSURE(!KVWriteInProgress);
     if (!PersistRequest) {
-        PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+        PersistRequest = std::make_unique<TEvKeyValue::TEvRequest>();
     }
 
     while (!UserActionAndTxPendingCommit.empty() && WritingCycleDoesNotExceedTheLimits()) {
@@ -3215,7 +3215,7 @@ void TPartition::RunPersist() {
     const auto& ctx = ActorContext();
     const auto now = ctx.Now();
     if (!PersistRequest) {
-        PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+        PersistRequest = std::make_unique<TEvKeyValue::TEvRequest>();
     }
 
     TryAppendStaleTxMetaWrites();
@@ -4074,7 +4074,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 
         ui64 rrGen = consumer.GetGeneration();
         if (userInfo.ReadRuleGeneration != rrGen) {
-            auto act = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{},
+            auto act = std::make_unique<TEvPQ::TEvSetClientInfo>(0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{},
                                         TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
 
             auto res = PreProcessUserAct(*act, nullptr);
@@ -4087,7 +4087,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 
     for (const auto& consumer : hasReadRule) {
         GetOrCreatePendingUser(consumer);
-        auto act = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer, 0, "", 0, 0, 0, TActorId{},
+        auto act = std::make_unique<TEvPQ::TEvSetClientInfo>(0, consumer, 0, "", 0, 0, 0, TActorId{},
                                     TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
 
         auto res = PreProcessUserAct(*act, nullptr);
@@ -4866,19 +4866,19 @@ void TPartition::ScheduleReplyTxDone(ui64 step, ui64 txId, NWilson::TSpan&& comm
 void TPartition::ScheduleDropPartitionLabeledCounters(const TString& group)
 {
     Replies.emplace_back(TabletActorId,
-                         MakeHolder<TEvPQ::TEvPartitionLabeledCountersDrop>(Partition, group).Release());
+                         std::make_unique<TEvPQ::TEvPartitionLabeledCountersDrop>(Partition, group).Release());
 }
 
 void TPartition::SchedulePartitionConfigChanged()
 {
     Replies.emplace_back(TabletActorId,
-                         MakeHolder<TEvPQ::TEvPartitionConfigChanged>(Partition).Release());
+                         std::make_unique<TEvPQ::TEvPartitionConfigChanged>(Partition).Release());
 }
 
 void TPartition::ScheduleDeletePartitionDone()
 {
     Replies.emplace_back(TabletActorId,
-                         MakeHolder<TEvPQ::TEvDeletePartitionDone>(Partition).Release());
+                         std::make_unique<TEvPQ::TEvDeletePartitionDone>(Partition).Release());
 }
 
 void TPartition::AddCmdDeleteRange(NKikimrClient::TKeyValueRequest& request,
@@ -5049,9 +5049,9 @@ TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
     return nullptr;
 }
 
-THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst, bool internal)
+std::unique_ptr<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst, bool internal)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, internal);
+    auto response = std::make_unique<TEvPQ::TEvProxyResponse>(dst, internal);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -5060,14 +5060,14 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst, bool in
     return response;
 }
 
-THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui64 dst,
+std::unique_ptr<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui64 dst,
                                                                         const i64 offset,
                                                                         const TInstant writeTimestamp,
                                                                         const TInstant createTimestamp,
                                                                         bool consumerHasAnyCommits,
                                                                         const std::optional<TString>& committedMetadata)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
+    auto response = std::make_unique<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -5096,7 +5096,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
     user->SetClientHasAnyCommits(consumerHasAnyCommits);
     return response;
 }
-THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
+std::unique_ptr<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
                                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                                     const TString& error,
                                                     bool internal)
@@ -5104,15 +5104,15 @@ THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
     //
     // FIXME(abcdef): в ReplyPersQueueError есть дополнительные действия
     //
-    return MakeHolder<TEvPQ::TEvError>(errorCode, error, dst, internal);
+    return std::make_unique<TEvPQ::TEvError>(errorCode, error, dst, internal);
 }
 
-THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+std::unique_ptr<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                                                                 NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                                 NKikimrPQ::TError::EKind kind,
                                                                                 const TString& reason)
 {
-    auto response = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
+    auto response = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
 
     response->Record.SetOrigin(TabletId);
     response->Record.SetStatus(statusCode);
@@ -5127,9 +5127,9 @@ THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(
     return response;
 }
 
-THolder<TEvPQ::TEvTxDone> TPartition::MakeTxDone(ui64 step, ui64 txId) const
+std::unique_ptr<TEvPQ::TEvTxDone> TPartition::MakeTxDone(ui64 step, ui64 txId) const
 {
-    return MakeHolder<TEvPQ::TEvTxDone>(step, txId, Partition);
+    return std::make_unique<TEvPQ::TEvTxDone>(step, txId, Partition);
 }
 
 void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
@@ -5202,7 +5202,7 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
 }
 
 void TPartition::CreateMirrorerActor() {
-    Mirrorer = MakeHolder<TMirrorerInfo>(
+    Mirrorer = std::make_unique<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
 }
@@ -5246,7 +5246,7 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
         return;
     }
 
-    auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+    auto response = std::make_unique<TEvPQ::TEvCheckPartitionStatusResponse>();
     response->Record.SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
 
     if (record.HasSourceId()) {
@@ -5362,7 +5362,7 @@ void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransac
     }
 
     Replies.emplace_back(TabletActorId,
-                         MakeHolder<TEvPQ::TEvTransactionCompleted>(writeId).Release());
+                         std::make_unique<TEvPQ::TEvTransactionCompleted>(writeId).Release());
 }
 
 void TPartition::ProcessPendingEvents(const TActorContext& ctx)
@@ -5409,7 +5409,7 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
     }
 }
 
-void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
+void TPartition::SendCompacterWriteRequest(std::unique_ptr<TEvKeyValue::TEvRequest>&& request) {
     AFL_ENSURE(!CompacterKvRequestInflight)
         ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
     AFL_ENSURE(!CompacterKvRequest)
@@ -5538,7 +5538,7 @@ void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationReque
             {"topicName", TopicName()});
         return;
     }
-    auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+    auto response = std::make_unique<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
     response->Record.SetPartitionId(Partition.InternalPartitionId);
     response->Record.SetGeneration(record.GetGeneration());
     if (IsActive()) {

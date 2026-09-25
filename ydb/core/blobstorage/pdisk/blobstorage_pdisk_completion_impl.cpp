@@ -104,7 +104,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 
 void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
     for (TLogWrite *logWrite : LogWriteQueue) {
-        auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED,
+        auto res = std::make_unique<TEvLogResult>(NKikimrProto::CORRUPTED,
             NKikimrBlobStorage::StatusIsValid, ErrorReason, PDisk->Keeper.GetLogChunkCount());
         logWrite->Replied = true;
         res->Results.emplace_back(logWrite->Lsn, logWrite->Cookie);
@@ -360,7 +360,7 @@ TCompletionChunkRead::~TCompletionChunkRead() {
 
 void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     Read->Span.Event("PDisk.CompletionChunkRead.Exec");
-    THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
+    std::unique_ptr<TEvChunkReadResult> result = std::make_unique<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
 
     if (!Read->ChunkEncrypted) {
@@ -400,7 +400,7 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
 
     TStringStream error;
     error << "Reply Error from TCompletionChunkRead PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << Read->ReqId << " reason# " << reason;
-    auto result = MakeHolder<TEvChunkReadResult>(NKikimrProto::CORRUPTED,
+    auto result = std::make_unique<TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             Read->ChunkIdx, Read->Offset, Read->Cookie,
             PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), error.Str());
 

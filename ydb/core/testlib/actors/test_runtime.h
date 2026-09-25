@@ -39,7 +39,7 @@ namespace NActors {
             void Stop();
             ~TNodeData();
             ui64 GetLoggerPoolId() const override;
-            THolder<NActors::TMon> Mon;
+            std::unique_ptr<NActors::TMon> Mon;
         };
 
         struct TNodeFactory: public INodeFactory {
@@ -146,9 +146,9 @@ namespace NActors {
         using TTestActorRuntimeBase::Initialize;
 
     private:
-        THolder<NKikimr::TAppData> App0;
+        std::unique_ptr<NKikimr::TAppData> App0;
         TKeyConfigGenerator KeyConfigGenerator;
-        THolder<IDestructable> Opaque;
+        std::unique_ptr<IDestructable> Opaque;
         TVector<ui16> MonPorts;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;

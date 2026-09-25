@@ -19,7 +19,7 @@ class TPurgeQueueActor
     : public TActionActor<TPurgeQueueActor>
 {
 public:
-    TPurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TPurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::PurgeQueue, std::move(cb))
     {
     }
@@ -93,7 +93,7 @@ private:
             const TValue list(val["result"]);
 
             for (size_t i = 0; i < list.Size(); ++i) {
-                auto req = MakeHolder<TSqsEvents::TEvPurgeQueue>();
+                auto req = std::make_unique<TSqsEvents::TEvPurgeQueue>();
                 req->QueuePath = GetQueuePath();
                 req->Boundary = TInstant::MilliSeconds(ui64(list[i]["RetentionBoundary"]));
                 if (TablesFormat() == 0) {
@@ -157,7 +157,7 @@ class TPurgeQueueBatchActor
     : public TCommonBatchActor<TPurgeQueueBatchActor>
 {
 public:
-    TPurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TPurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TCommonBatchActor(sourceSqsRequest, EAction::PurgeQueueBatch, std::move(cb))
     {
     }
@@ -216,11 +216,11 @@ private:
     }
 };
 
-IActor* CreatePurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreatePurgeQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TPurgeQueueActor(sourceSqsRequest, std::move(cb));
 }
 
-IActor* CreatePurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreatePurgeQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TPurgeQueueBatchActor(sourceSqsRequest, std::move(cb));
 }
 

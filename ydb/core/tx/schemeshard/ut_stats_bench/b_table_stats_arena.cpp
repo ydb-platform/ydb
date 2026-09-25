@@ -222,7 +222,7 @@ namespace {
         size_t bytes = 0;
         for (auto _ : state) {
             TEventSerializedData data(TString(payload), TEventSerializationInfo{});
-            THolder<TEv> ev(TEv::Load(&data));
+            std::unique_ptr<TEv> ev(TEv::Load(&data));
             benchmark::DoNotOptimize(ev.Get());
             bytes += payload.size();
         }

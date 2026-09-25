@@ -28,8 +28,8 @@ private:
 };
 } // namespace
 
-THolder<TVisitorTransformerBase> CreateDqFunctionTypeAnnotation(TDqFunctionState::TPtr state) {
-    return MakeHolder<TDqFunctionTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreateDqFunctionTypeAnnotation(TDqFunctionState::TPtr state) {
+    return std::make_unique<TDqFunctionTypeAnnotationTransformer>(state);
 }
 
 }

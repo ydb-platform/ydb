@@ -620,7 +620,7 @@ TLongTxServiceActor::SubscribeToProxyLock(TProxyNodeState& node, ui64 lockId) {
         lock.Cookie = ++LastCookie;
         node.CookieToLock[lock.Cookie] = lockId;
 
-        auto subscribeEv = MakeHolder<TEvLongTxService::TEvSubscribeLock>(lockId, node.NodeId);
+        auto subscribeEv = std::make_unique<TEvLongTxService::TEvSubscribeLock>(lockId, node.NodeId);
         for (const auto& edge : lock.WaitNode.Blockers) {
             if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
                 subscribeEv->AddLocalWaitEdge(edge.Id, edge.Blocker.LockInfo(SelfId()));
@@ -700,7 +700,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
 
     auto& lock = it->second;
 
-    auto statusEv = MakeHolder<TEvLongTxService::TEvLockStatus>(
+    auto statusEv = std::make_unique<TEvLongTxService::TEvLockStatus>(
         lockId, lockNode,
         NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED,
         lock.Timestamp);
@@ -907,7 +907,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
 void TLongTxServiceActor::SendViaSession(const TActorId& sessionId, const TActorId& recipient,
         IEventBase* event, ui32 flags, ui64 cookie)
 {
-    auto ev = MakeHolder<IEventHandle>(recipient, SelfId(), event, flags, cookie);
+    auto ev = std::make_unique<IEventHandle>(recipient, SelfId(), event, flags, cookie);
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);
     }
@@ -957,7 +957,7 @@ TLongTxServiceActor::TProxyNodeState& TLongTxServiceActor::ConnectProxyNode(ui32
     return node;
 }
 
-void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THolder<IEventHandle> ev) {
+void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, std::unique_ptr<IEventHandle> ev) {
     auto& node = ConnectProxyNode(nodeId);
     if (node.State == EProxyState::Disconnected) {
         return SendReplyUnavailable(type, ev->Sender, ev->Cookie, "Cannot forward request: node unknown");
@@ -971,7 +971,7 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
     req.Cookie = ev->Cookie;
 
     // Construct a new event
-    THolder<IEventHandle> pendingEv;
+    std::unique_ptr<IEventHandle> pendingEv;
     auto target = MakeLongTxServiceID(nodeId);
     auto flags = IEventHandle::FlagTrackDelivery;
     if (ev->HasBuffer()) {
@@ -1032,7 +1032,7 @@ void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         lock.Cookie = ++LastCookie;
         node.CookieToLock[lock.Cookie] = lock.Cookie;
 
-        auto subscribeEv = MakeHolder<TEvLongTxService::TEvSubscribeLock>(lockId, nodeId);
+        auto subscribeEv = std::make_unique<TEvLongTxService::TEvSubscribeLock>(lockId, nodeId);
         for (const auto& edge : lock.WaitNode.Blockers) {
             if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
                 subscribeEv->AddLocalWaitEdge(edge.Id, edge.Blocker.LockInfo(SelfId()));
@@ -1406,7 +1406,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         if (!actuallyAdded.empty() || !actuallyRemoved.empty()) {
             for (const auto& [sessionId, subscribers] : localAwaiter->RemoteSubscribers) {
                 for (const auto& [subscriber, _] : subscribers) {
-                    auto updateEv = MakeHolder<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
+                    auto updateEv = std::make_unique<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
                     for (const auto& edge : actuallyAdded) {
                         if (edge.Id.OwnerId.NodeId() != subscriber.NodeId()) {
                             updateEv->AddAddedEdge(edge.Id, edge.Blocker);
@@ -1435,7 +1435,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         TProxyLockState* proxyAwaiter = awaiter.ProxyState();
         auto& node = proxyAwaiter->ProxyNode;
         if (node.State == EProxyState::Connected) {
-            auto updateEv = MakeHolder<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
+            auto updateEv = std::make_unique<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
             for (const auto& edge : actuallyAdded) {
                 if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
                     updateEv->AddAddedEdge(edge.Id, edge.Blocker);
@@ -1621,7 +1621,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev) {
-    auto response = MakeHolder<TEvLongTxService::TEvGetLockWaitGraphResult>();
+    auto response = std::make_unique<TEvLongTxService::TEvGetLockWaitGraphResult>();
     response->WaitEdges.reserve(WaitEdges.size());
     for (const auto& [id, edge] : WaitEdges) {
         response->WaitEdges.push_back(TEvLongTxService::TEvGetLockWaitGraphResult::TWaitEdge{

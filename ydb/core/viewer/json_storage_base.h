@@ -41,13 +41,13 @@ protected:
     IViewer* Viewer;
     TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
-    THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
-    THashMap<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
-    THolder<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
+    THashMap<TString, std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
+    THashMap<TTabletId, std::unique_ptr<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
 
     // indexes
     THashMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo*> VDiskId2vDiskStateInfo;
@@ -291,7 +291,7 @@ public:
                         continue;
                     }
                     storagePoolInfo.Kind = storagePool.GetKind();
-                    THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+                    std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> request = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
                     request->Record.SetReturnAllMatchingGroups(true);
                     request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);
                     RequestBSControllerSelectGroups(std::move(request));

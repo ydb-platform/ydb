@@ -50,7 +50,7 @@ NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType *type, bool &isOption
     }
 }
 
-THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
+std::unique_ptr<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
     const TVector<TKeyDesc::TColumnOp>& columns,
     TKeyDesc::ERowOperation rowOperation, bool requireStaticKey, const TTypeEnvironment& env) {
     TVector<NScheme::TTypeInfo> keyColumnTypes(tuple->GetValuesCount());
@@ -84,7 +84,7 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
 
     TTableRange range(TConstArrayRef<TCell>(fromValues.data(), tuple->GetValuesCount()),
         inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), staticComponents), inclusiveTo, point);
-    return MakeHolder<TKeyDesc>(tableId, range, rowOperation, keyColumnTypes, columns);
+    return std::make_unique<TKeyDesc>(tableId, range, rowOperation, keyColumnTypes, columns);
 }
 
 void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<TKeyDesc::TColumnOp>& columns) {
@@ -103,7 +103,7 @@ void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<
     }
 }
 
-THolder<TKeyDesc> ExtractSelectRow(TCallable& callable, const TTypeEnvironment& env) {
+std::unique_ptr<TKeyDesc> ExtractSelectRow(TCallable& callable, const TTypeEnvironment& env) {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto columnsNode = callable.GetInput(1);
@@ -113,12 +113,12 @@ THolder<TKeyDesc> ExtractSelectRow(TCallable& callable, const TTypeEnvironment& 
     TVector<TKeyDesc::TColumnOp> columns(columnsType->GetMembersCount());
     ExtractReadColumns(columnsType, tags, columns);
     auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(3));
-    THolder<TKeyDesc> desc = ExtractKeyTuple(tableId, tuple, columns, TKeyDesc::ERowOperation::Read, true, env);
+    std::unique_ptr<TKeyDesc> desc = ExtractKeyTuple(tableId, tuple, columns, TKeyDesc::ERowOperation::Read, true, env);
     desc->ReadTarget = ExtractFlatReadTarget(callable.GetInput(4));
     return desc;
 }
 
-THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment& env) {
+std::unique_ptr<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment& env) {
     MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args");
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto columnsNode = callable.GetInput(1);
@@ -173,13 +173,13 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
 
     TTableRange range(TConstArrayRef<TCell>(fromValues.data(), fromValues.size()),
         inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), toValues.size()), inclusiveTo, point);
-    THolder<TKeyDesc> desc(
+    std::unique_ptr<TKeyDesc> desc(
         new TKeyDesc(tableId, range, TKeyDesc::ERowOperation::Read, keyColumnTypes, columns, itemsLimit, bytesLimit, reverse));
     desc->ReadTarget = ExtractFlatReadTarget(callable.GetInput(8));
     return desc;
 }
 
-THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& env) {
+std::unique_ptr<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& env) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto updateNode = callable.GetInput(2);
@@ -238,11 +238,11 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
     return ExtractKeyTuple(tableId, tuple, columns, TKeyDesc::ERowOperation::Update, false, env);
 }
 
-THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& env) {
+std::unique_ptr<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& env) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(1));
-    THolder<TKeyDesc> desc;
+    std::unique_ptr<TKeyDesc> desc;
     return ExtractKeyTuple(tableId, tuple, TVector<TKeyDesc::TColumnOp>(), TKeyDesc::ERowOperation::Erase, false, env);
 }
 
@@ -333,7 +333,7 @@ TReadTarget ExtractFlatReadTarget(TRuntimeNode modeInput) {
     }
 }
 
-THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& strings, const TTypeEnvironment& env) {
+std::unique_ptr<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& strings, const TTypeEnvironment& env) {
     auto name = callable.GetType()->GetNameStr();
     if (name == strings.SelectRow) {
         return ExtractSelectRow(callable, env);
@@ -351,15 +351,15 @@ THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& stri
     return nullptr;
 }
 
-TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env) {
-    TVector<THolder<TKeyDesc>> descList;
+TVector<std::unique_ptr<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env) {
+    TVector<std::unique_ptr<TKeyDesc>> descList;
     TTableStrings strings(env);
     for (auto node : explorer.GetNodes()) {
         if (node->GetType()->GetKind() != TType::EKind::Callable)
             continue;
 
         TCallable& callable = static_cast<TCallable&>(*node);
-        THolder<TKeyDesc> desc = ExtractTableKey(callable, strings, env);
+        std::unique_ptr<TKeyDesc> desc = ExtractTableKey(callable, strings, env);
         if (desc) {
             descList.emplace_back(std::move(desc));
         }

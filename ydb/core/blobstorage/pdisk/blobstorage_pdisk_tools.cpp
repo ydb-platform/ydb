@@ -123,7 +123,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
     auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(creator.GetActorSystem());
-    THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
+    std::unique_ptr<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
 
     pDisk->Initialize();
 
@@ -151,7 +151,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
     }
 
     TActorSystemCreator creator;
-    THolder<NPDisk::IBlockDevice> blockDevice(
+    std::unique_ptr<NPDisk::IBlockDevice> blockDevice(
         NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon, deviceFlags, sectorMap, creator.GetActorSystem()));
     if (!blockDevice->IsGood()) {
         TStringStream str;
@@ -163,7 +163,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
 
     ui32 formatSectorsSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
 
-    THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(512 << 10, 2, useSdpkNvmeDriver, {}));
+    std::unique_ptr<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(512 << 10, 2, useSdpkNvmeDriver, {}));
     NPDisk::TBuffer::TPtr formatRaw(bufferPool->Pop());
     Y_VERIFY(formatRaw->Size() >= formatSectorsSize);
 

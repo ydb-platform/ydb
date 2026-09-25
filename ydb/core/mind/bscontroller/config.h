@@ -34,11 +34,11 @@ namespace NKikimr {
             template<typename T>
             class TCowHolder {
                 T *Origin;
-                THolder<T> Ptr;
-                std::function<THolder<T> (T*)> Clone;
+                std::unique_ptr<T> Ptr;
+                std::function<std::unique_ptr<T> (T*)> Clone;
 
             public:
-                TCowHolder(T *ptr, std::function<THolder<T> (T*)> clone = {})
+                TCowHolder(T *ptr, std::function<std::unique_ptr<T> (T*)> clone = {})
                     : Origin(ptr)
                     , Clone(std::move(clone))
                 {}
@@ -49,7 +49,7 @@ namespace NKikimr {
 
                 T &Unshare() {
                     if (!Ptr) {
-                        Ptr = Clone ? Clone(Origin) : MakeHolder<T>(*Origin);
+                        Ptr = Clone ? Clone(Origin) : std::make_unique<T>(*Origin);
                     }
                     return *Ptr;
                 }
@@ -121,7 +121,7 @@ namespace NKikimr {
             std::deque<TOutgoingMessage> Outbox;
             std::deque<std::unique_ptr<IEventBase>> StatProcessorOutbox;
             std::deque<std::unique_ptr<IEventBase>> NodeWhiteboardOutbox;
-            THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
+            std::unique_ptr<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
 
             // deferred callbacks
             std::deque<std::function<void()>> Callbacks;

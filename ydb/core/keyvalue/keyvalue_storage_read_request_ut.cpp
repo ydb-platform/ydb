@@ -154,7 +154,7 @@ struct TTestEnv {
 
 
 struct TBuilderResult {
-    THolder<TIntermediate> Intermediate;
+    std::unique_ptr<TIntermediate> Intermediate;
     std::unordered_map<std::string, std::string> Values;
 };
 

@@ -15,7 +15,7 @@ Y_UNIT_TEST(ParseErrorIncludesLocationAndColumn) {
         .AddNullableColumn("ColFloat", EPrimitiveType::Float)
         .Build();
 
-    THolder<NPrivate::IDataAccumulator> accumulator(
+    std::unique_ptr<NPrivate::IDataAccumulator> accumulator(
         CreateCompatAccumulator("table_path", tableDesc, TRestoreSettings{}));
 
     try {

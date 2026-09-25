@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IYtflowIntegration> CreatePqYtflowIntegration(const TPqState::TPtr& state);
+std::unique_ptr<IYtflowIntegration> CreatePqYtflowIntegration(const TPqState::TPtr& state);
 
 } // namespace NYql

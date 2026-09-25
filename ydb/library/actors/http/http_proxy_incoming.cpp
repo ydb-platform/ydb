@@ -577,7 +577,7 @@ protected:
             {"status", response->Status},
             {"message", response->Message});
 
-        THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
+        std::unique_ptr<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         Send(Endpoint->Owner, sensors.Release());
 
         bool endStream = response->IsDone();
@@ -877,7 +877,7 @@ protected:
                 {"address", Address},
                 {"obfuscatedData", response->GetObfuscatedData()});
         }
-        THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
+        std::unique_ptr<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         Send(Endpoint->Owner, sensors.Release());
         if (Requests.empty()) {
             YDB_LOG_ERROR("Connection closed - no request found for response",

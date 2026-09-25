@@ -117,18 +117,18 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
             selfId = SelfId(),
             generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult>& result) {
-            THolder<TEvPQ::TEvMirrorTopicDescription> ev;
+            std::unique_ptr<TEvPQ::TEvMirrorTopicDescription> ev;
             const bool hasValue = result.HasValue();
             if (hasValue) {
                 const auto& value = result.GetValue();
-                ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(value);
+                ev = std::make_unique<TEvPQ::TEvMirrorTopicDescription>(value);
                 actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
                 return;
             }
             try {
-                ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(result.GetValue());
+                ev = std::make_unique<TEvPQ::TEvMirrorTopicDescription>(result.GetValue());
             } catch (...) {
-                ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(CurrentExceptionMessage());
+                ev = std::make_unique<TEvPQ::TEvMirrorTopicDescription>(CurrentExceptionMessage());
             }
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }
@@ -161,7 +161,7 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev
             selfId = SelfId(),
             generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
-            THolder<TEvPQ::TEvCredentialsCreated> ev;
+            std::unique_ptr<TEvPQ::TEvCredentialsCreated> ev;
             if (result.HasException()) {
                 TString error;
                 try {
@@ -169,9 +169,9 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev
                 } catch(...) {
                     error = CurrentExceptionMessage();
                 }
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(error);
+                ev = std::make_unique<TEvPQ::TEvCredentialsCreated>(error);
             } else {
-                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
+                ev = std::make_unique<TEvPQ::TEvCredentialsCreated>(result.GetValue());
             }
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }

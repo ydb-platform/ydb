@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             "Drop has taken " << (dropEnd - dropStart) << " of simulated time");
 
         { // make sure that the ejeceted propose has become outdated
-            auto request = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
+            auto request = std::make_unique<TEvTxProxy::TEvProposeTransaction>();
             request->Record.CopyFrom(proposeEvent->Get<TEvTxProxy::TEvProposeTransaction>()->Record);
             runtime.SendToPipe(request->Record.GetCoordinatorID(), sender, request.Release());
 
@@ -182,9 +182,9 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         bool capturePlan = false;
         bool captureProposes = false;
         bool captureProposeResults = false;
-        TDeque<THolder<IEventHandle>> plans;
-        TDeque<THolder<IEventHandle>> proposes;
-        TDeque<THolder<IEventHandle>> proposeResults;
+        TDeque<std::unique_ptr<IEventHandle>> plans;
+        TDeque<std::unique_ptr<IEventHandle>> proposes;
+        TDeque<std::unique_ptr<IEventHandle>> proposeResults;
         size_t schemaChangedCount = 0;
         TTestActorRuntimeBase::TEventObserver prevObserver;
         auto captureObserver = [&](TAutoPtr<IEventHandle>& ev) {

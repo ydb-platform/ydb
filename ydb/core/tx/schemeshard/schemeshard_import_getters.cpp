@@ -1686,7 +1686,7 @@ public:
             {"error", error},
         );
 
-        auto result = MakeHolder<TEvImport::TEvListObjectsInS3ExportResponse>();
+        auto result = std::make_unique<TEvImport::TEvListObjectsInS3ExportResponse>();
         result->Record.set_status(statusCode);
         if (error) {
             result->Record.add_issues()->set_message(error);

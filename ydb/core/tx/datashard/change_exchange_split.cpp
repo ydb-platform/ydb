@@ -117,7 +117,7 @@ public:
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
 
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto ev = std::make_unique<TEvPersQueue::TEvRequest>();
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetPartition(PartitionId);
         ActorIdToProto(PipeClient, request.MutablePipeClient());
@@ -250,7 +250,7 @@ class TCdcWorker
     /// ResolveCdcStream
 
     void ResolveCdcStream() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(PathId, TNavigate::OpList));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
@@ -310,7 +310,7 @@ class TCdcWorker
     /// ResolveTopic
 
     void ResolveTopic(const TPathId& pathId) {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(pathId, TNavigate::OpTopic));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));

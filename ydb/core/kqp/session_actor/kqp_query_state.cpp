@@ -114,7 +114,7 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     FiilTablesAndViews(PreparedQuery->GetPhysicalQuery().GetTableInfos());
     FiilTablesAndViews(PreparedQuery->GetPhysicalQuery().GetViewInfos());
 
-    auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;
     if (HasUserToken()) {
         navigate->UserToken = UserToken;

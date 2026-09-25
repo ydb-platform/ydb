@@ -61,7 +61,7 @@ TVector<NSc::TValue> LoadBillingRecords(const TString& filepath) {
 }
 
 void AddRequestToQueue(
-    TList<THolder<TSqsEvents::TEvReportProcessedRequestAttributes>>& requests,
+    TList<std::unique_ptr<TSqsEvents::TEvReportProcessedRequestAttributes>>& requests,
     const TString sourceAddress,
     ui32 requestSizeInBytes,
     ui32 responseSizeInBytes,
@@ -70,7 +70,7 @@ void AddRequestToQueue(
     const TString& resourceId = "",
     bool isFifo = false
 ) {
-    auto request = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>();
+    auto request = std::make_unique<TSqsEvents::TEvReportProcessedRequestAttributes>();
     TProcessedRequestAttributes& requestAttributes = request->Data;
     requestAttributes.HttpStatusCode = statusCode;
     requestAttributes.IsFifo = isFifo;
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             runtime->Register(NSQS::CreateSqsMeteringService())
         );
 
-        TList<THolder<TSqsEvents::TEvReportProcessedRequestAttributes>> requests;
+        TList<std::unique_ptr<TSqsEvents::TEvReportProcessedRequestAttributes>> requests;
         TVector<NSc::TValue> expectedRecords;
 
 
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             runtime->Register(NSQS::CreateSqsMeteringService())
         );
 
-        TList<THolder<TSqsEvents::TEvReportProcessedRequestAttributes>> requests;
+        TList<std::unique_ptr<TSqsEvents::TEvReportProcessedRequestAttributes>> requests;
         TVector<NSc::TValue> expectedRecords;
 
         {
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             auto classifier = NAddressClassifier::TLabeledAddressClassifier::MakeLabeledAddressClassifier(std::move(rawClassifier), std::move(labels));
 
 
-            auto classifierUpdateRequest = MakeHolder<NNetClassifier::TEvNetClassifier::TEvClassifierUpdate>();
+            auto classifierUpdateRequest = std::make_unique<NNetClassifier::TEvNetClassifier::TEvClassifierUpdate>();
             classifierUpdateRequest->Classifier = classifier;
             classifierUpdateRequest->NetDataUpdateTimestamp = TInstant::Now();
             runtime->Send(new IEventHandle(
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             }
             auto classifier = NAddressClassifier::TLabeledAddressClassifier::MakeLabeledAddressClassifier(std::move(rawClassifier), std::move(labels));
 
-            auto classifierUpdateRequest = MakeHolder<NNetClassifier::TEvNetClassifier::TEvClassifierUpdate>();
+            auto classifierUpdateRequest = std::make_unique<NNetClassifier::TEvNetClassifier::TEvClassifierUpdate>();
             classifierUpdateRequest->Classifier = classifier;
             classifierUpdateRequest->NetDataUpdateTimestamp = TInstant::Now();
             runtime->Send(new IEventHandle(
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             ));
         }
         Sleep(TDuration::MilliSeconds(100));
-        TList<THolder<TSqsEvents::TEvReportProcessedRequestAttributes>> requests;
+        TList<std::unique_ptr<TSqsEvents::TEvReportProcessedRequestAttributes>> requests;
         TVector<NSc::TValue> expectedRecords;
         {
             AddRequestToQueue(requests, "127.255.255.255", 1, 2, 200, "folder1");

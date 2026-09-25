@@ -612,7 +612,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             CmsState->BSControllerPipe = this->Register(CreateBSControllerPipe(CmsState));
         }
 
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release());
     }
@@ -1123,7 +1123,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     void LogStatusChange(const TPDiskID& id, EPDiskStatus status, EPDiskStatus requiredStatus,
                          EMaintenanceStatus::E maintenanceStatus, EMaintenanceStatus::E requiredMaintenanceStatus,
                          const TString& reason) {
-        auto ev = MakeHolder<TCms::TEvPrivate::TEvLogAndSend>();
+        auto ev = std::make_unique<TCms::TEvPrivate::TEvLogAndSend>();
 
         ev->LogData.SetRecordType(NKikimrCms::TLogRecordData::PDISK_MONITOR_ACTION);
         auto& action = *ev->LogData.MutablePDiskMonitorAction();
@@ -1387,7 +1387,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             {"name", Name()},
             {"requestsSize", SentinelState->ChangeRequests.size()});
 
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         for (const auto& [id, info] : SentinelState->ChangeRequests) {
             auto& command = *request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
             command.MutableHostKey()->SetNodeId(id.NodeId);
@@ -1456,7 +1456,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
         };
 
-        auto response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
+        auto response = std::make_unique<TEvCms::TEvGetSentinelStateResponse>();
 
         auto& record = response->Record;
         record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
@@ -1683,7 +1683,7 @@ public:
 private:
     TCmsStatePtr CmsState;
     const TCmsSentinelConfig& Config;
-    THolder<TCounters> Counters;
+    std::unique_ptr<TCounters> Counters;
 
     TUpdaterInfo ConfigUpdater;
     TUpdaterInfo StateUpdater;

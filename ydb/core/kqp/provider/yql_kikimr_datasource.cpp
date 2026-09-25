@@ -580,7 +580,7 @@ public:
     }
 
     bool Initialize(TExprContext& ctx) override {
-        KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>(SessionCtx);
+        KikimrDqIntegration = std::make_unique<TKikimrDqIntegration>(SessionCtx);
 
         TString defaultToken;
         if (auto credential = Types.Credentials->FindCredential(TString("default_") + KikimrProviderName)) {
@@ -1013,7 +1013,7 @@ private:
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
-    THolder<IDqIntegration> KikimrDqIntegration;
+    std::unique_ptr<IDqIntegration> KikimrDqIntegration;
 };
 
 } // anonymous namespace

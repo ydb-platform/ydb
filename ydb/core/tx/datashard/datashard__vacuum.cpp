@@ -102,7 +102,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         auto waiterIt = Self->VacuumWaiters.begin();
         while (waiterIt != Self->VacuumWaiters.end() && waiterIt->first <= VacuumGeneration) {
-            auto response = MakeHolder<TEvDataShard::TEvVacuumResult>(
+            auto response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 VacuumGeneration,
                 Self->TabletID(),
                 NKikimrTxDataShard::TEvVacuumResult::OK);

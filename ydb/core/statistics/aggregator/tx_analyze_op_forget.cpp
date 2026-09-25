@@ -50,7 +50,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
             {"tabletId", Self->TabletID()},
             {"opId", record.GetOperationId().Quote()});
 
-        auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpForgetResponse>();
+        auto response = std::make_unique<TEvStatistics::TEvAnalyzeOpForgetResponse>();
         auto& rec = response->Record;
 
         auto addError = [&rec](const TString& msg) {

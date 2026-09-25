@@ -122,7 +122,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             totalSize += msg.GetData().size();
         }
 
-        auto event = MakeHolder<TEvWorker::TEvData>(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
+        auto event = std::make_unique<TEvWorker::TEvData>(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
 
         if (Settings.ReportStats_) {
             event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<ReplicationTopicReadStats>(),

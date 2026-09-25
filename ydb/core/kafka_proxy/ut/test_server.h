@@ -65,7 +65,7 @@ public:
 public:
     std::unique_ptr<TKikimr> KikimrServer;
     std::unique_ptr<TDriver> Driver;
-    THolder<TTempFileHandle> MeteringFile;
+    std::unique_ptr<TTempFileHandle> MeteringFile;
 
     TTicketParserAccessServiceMock accessServiceMock;
     TTicketParserAccessServiceMockV2 accessServiceMockV2;

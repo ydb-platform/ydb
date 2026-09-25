@@ -59,10 +59,10 @@ public:
 
 
 class TTxReleaseTabletsReply : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvReleaseTabletsReply::THandle> Request;
+    std::unique_ptr<TEvHive::TEvReleaseTabletsReply::THandle> Request;
 
 public:
-    TTxReleaseTabletsReply(THolder<TEvHive::TEvReleaseTabletsReply::THandle> event, THive *hive)
+    TTxReleaseTabletsReply(std::unique_ptr<TEvHive::TEvReleaseTabletsReply::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -128,7 +128,7 @@ public:
 };
 
 ITransaction* THive::CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event) {
-    return new TTxReleaseTabletsReply(THolder(event.Release()), this);
+    return new TTxReleaseTabletsReply(std::unique_ptr<TEvHive::TEvReleaseTabletsReply::THandle>(event.Release()), this);
 }
 
 } // NHive

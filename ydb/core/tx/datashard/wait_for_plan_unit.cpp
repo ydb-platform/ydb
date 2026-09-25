@@ -48,10 +48,10 @@ void TWaitForPlanUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return MakeHolder<TWaitForPlanUnit>(dataShard, pipeline);
+    return std::make_unique<TWaitForPlanUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

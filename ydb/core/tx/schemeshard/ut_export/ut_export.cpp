@@ -371,7 +371,7 @@ namespace {
                 Runtime().GetAppData().FeatureFlags.SetEnableExportInParquet(true);
             }
 
-            THolder<IEventHandle> injectResult;
+            std::unique_ptr<IEventHandle> injectResult;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
                     case TEvDataShard::EvProposeTransaction: {
@@ -397,13 +397,13 @@ namespace {
                             return TTestActorRuntime::EEventAction::PROCESS;
                         }
 
-                        auto response = MakeHolder<NWrappers::NExternalStorage::TEvUploadPartResponse>(
+                        auto response = std::make_unique<NWrappers::NExternalStorage::TEvUploadPartResponse>(
                             std::nullopt,
                             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error>(
                                 Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::SLOW_DOWN, true)
                             )
                         );
-                        injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, response.Release(), ev->Flags, ev->Cookie);
+                        injectResult = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, response.Release(), ev->Flags, ev->Cookie);
                         return TTestActorRuntime::EEventAction::DROP;
                     }
 
@@ -478,7 +478,7 @@ namespace {
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
             Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
-            THolder<IEventHandle> delayed;
+            std::unique_ptr<IEventHandle> delayed;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (delayFunc(ev)) {
                     delayed.Reset(ev.Release());
@@ -594,7 +594,7 @@ namespace {
             Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             bool dropNotification = false;
-            THolder<IEventHandle> delayed;
+            std::unique_ptr<IEventHandle> delayed;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
                 case TEvSchemeShard::EvModifySchemeTransaction:
@@ -1217,7 +1217,7 @@ namespace {
             ui64 ExportId = 0;
             ui64 ShardId = 0;
             ui64 PathId = 0;
-            THolder<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>> BlockExportBatch;
+            std::unique_ptr<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>> BlockExportBatch;
             std::function<ui64()> GetAliveCounter;
         };
 
@@ -1355,7 +1355,7 @@ namespace {
             ctx.PathId = tableInfo.PathId;
             ctx.ShardId = tableInfo.ShardId;
 
-            ctx.BlockExportBatch = MakeHolder<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>>(Runtime());
+            ctx.BlockExportBatch = std::make_unique<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>>(Runtime());
             ctx.ExportId = StartColumnTableS3Export(ctx.TxId, tableName, destinationPrefix);
 
             ctx.GetAliveCounter = MakeColumnTableExportAliveCounter();
@@ -1931,7 +1931,7 @@ partitioning_settings {
         Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         bool dropNotification = false;
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvSchemeShard::EvModifySchemeTransaction:
@@ -2169,16 +2169,16 @@ partitioning_settings {
 
         UpdateRow(Runtime(), "Table", 1, "valueA");
 
-        THolder<IEventHandle> injectResult;
+        std::unique_ptr<IEventHandle> injectResult;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NSharedCache::EvResult) {
                 const auto* msg = ev->Get<NSharedCache::TEvResult>();
                 UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
 
-                auto result = MakeHolder<NSharedCache::TEvResult>(msg->PageCollection, NKikimrProto::ERROR, msg->Cookie);
+                auto result = std::make_unique<NSharedCache::TEvResult>(msg->PageCollection, NKikimrProto::ERROR, msg->Cookie);
                 std::move(msg->Pages.begin(), msg->Pages.end(), std::back_inserter(result->Pages));
 
-                injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, result.Release(), ev->Flags, ev->Cookie);
+                injectResult = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, result.Release(), ev->Flags, ev->Cookie);
                 return TTestActorRuntime::EEventAction::DROP;
             }
 
@@ -2223,7 +2223,7 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        THolder<IEventHandle> copyTables;
+        std::unique_ptr<IEventHandle> copyTables;
         auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
@@ -2255,7 +2255,7 @@ partitioning_settings {
             Runtime().DispatchEvents(opts);
         }
 
-        THolder<IEventHandle> proposeTxResult;
+        std::unique_ptr<IEventHandle> proposeTxResult;
         Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
                 proposeTxResult.Reset(ev.Release());
@@ -2298,7 +2298,7 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        TVector<THolder<IEventHandle>> copyTables;
+        TVector<std::unique_ptr<IEventHandle>> copyTables;
         auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
@@ -2360,8 +2360,8 @@ partitioning_settings {
 
         ui64 copyTablesTxIdA = 0;
         ui64 copyTablesTxIdB = 0;
-        TVector<THolder<IEventHandle>> heldSchemaChanged;
-        THolder<IEventHandle> heldBMultipleMods;
+        TVector<std::unique_ptr<IEventHandle>> heldSchemaChanged;
+        std::unique_ptr<IEventHandle> heldBMultipleMods;
 
         auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -2475,7 +2475,7 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), txId);
         TestGetExport(Runtime(), txId, "/MyRoot");
 
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
         auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
@@ -2655,7 +2655,7 @@ partitioning_settings {
         UpdateRow(runtime, "Table", 2, "valueB");
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
-        THolder<IEventHandle> injectResult;
+        std::unique_ptr<IEventHandle> injectResult;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
@@ -2677,13 +2677,13 @@ partitioning_settings {
                 }
 
                 case NWrappers::NExternalStorage::EvCompleteMultipartUploadResponse: {
-                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                    auto response = std::make_unique<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
                         std::nullopt,
                         Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(
                             Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::SLOW_DOWN, true)
                         )
                     );
-                    injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, response.Release(), ev->Flags, ev->Cookie);
+                    injectResult = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, response.Release(), ev->Flags, ev->Cookie);
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -2817,7 +2817,7 @@ partitioning_settings {
         // match the parts it holds. The request is dropped, so the upload is still there and its
         // parts have to be uploaded anew. 'InvalidPart' is unknown to the aws sdk, so it arrives
         // as UNKNOWN with the exception name set and without the retryable flag.
-        THolder<IEventHandle> injectResult;
+        std::unique_ptr<IEventHandle> injectResult;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
@@ -2849,11 +2849,11 @@ partitioning_settings {
                     // Without the response code the error defaults to REQUEST_NOT_MADE, which is retryable
                     error.SetResponseCode(Aws::Http::HttpResponseCode::BAD_REQUEST);
 
-                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                    auto response = std::make_unique<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
                         std::nullopt,
                         Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(std::move(error))
                     );
-                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), ev->Flags, ev->Cookie);
+                    injectResult = std::make_unique<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), ev->Flags, ev->Cookie);
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -2910,7 +2910,7 @@ partitioning_settings {
         UpdateRow(runtime, "Table", 1, "valueA");
         UpdateRow(runtime, "Table", 2, "valueB");
 
-        THolder<IEventHandle> injectResult;
+        std::unique_ptr<IEventHandle> injectResult;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
@@ -2947,12 +2947,12 @@ partitioning_settings {
                     // NWrappers::ShouldRetry treats as retryable - set the real code explicitly.
                     error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
 
-                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                    auto response = std::make_unique<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
                         std::nullopt,
                         Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(error)
                     );
                     // Reply to the uploader (the request's sender) on behalf of the storage wrapper.
-                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie);
+                    injectResult = std::make_unique<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie);
                     return TTestActorRuntime::EEventAction::DROP;
                 }
 
@@ -3207,7 +3207,7 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), txId);
 
         TWaitExportItemStateDelayFunc delayFunc;
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
@@ -3238,7 +3238,7 @@ partitioning_settings {
             Runtime().DispatchEvents(opts);
         }
         // Block TEvSchemeShard::TEvCancelTxResult
-        THolder<IEventHandle> cancelAck;
+        std::unique_ptr<IEventHandle> cancelAck;
         Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvCancelTxResult) {
                 cancelAck.Reset(ev.Release());
@@ -3374,7 +3374,7 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), txId);
 
         TWaitExportItemStateDelayFunc delayFunc;
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
@@ -3434,7 +3434,7 @@ partitioning_settings {
         }
 
         // Block TEvSchemeShard::TEvCancelTxResult
-        THolder<IEventHandle> cancelAck;
+        std::unique_ptr<IEventHandle> cancelAck;
         Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvCancelTxResult) {
                 cancelAck.Reset(ev.Release());
@@ -5621,7 +5621,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         }
 
         TColumnTableSlowS3ExportContext ctx;
-        ctx.BlockExportBatch = MakeHolder<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>>(Runtime());
+        ctx.BlockExportBatch = std::make_unique<NActors::TBlockEvents<NKikimr::NColumnShard::TEvPrivate::TEvBackupExportRecordBatch>>(Runtime());
         ctx.GetAliveCounter = MakeColumnTableExportAliveCounter();
 
         const ui64 exportTxId1 = StartColumnTableS3Export(txId, "ColumnTable1", "table1");

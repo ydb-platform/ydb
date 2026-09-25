@@ -204,7 +204,7 @@ private:
     };
     TCloudEventsConfig CloudEventsConfig;
 
-    THolder<TLocalLeaderManager> LocalLeaderManager;
+    std::unique_ptr<TLocalLeaderManager> LocalLeaderManager;
 
     /// Queues for which a deferred topic creation actor is already running (user\\0queue).
     THashSet<TString> PendingDeferredTopicCreations_;

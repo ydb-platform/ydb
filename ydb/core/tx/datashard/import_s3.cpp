@@ -102,7 +102,7 @@ public:
     bool NeedsAbort() const { return Step_ != Max<ui32>() && State_ != EState::HandedOff; }
 
     // Hand over the reserved writer (received in TEvS3DirectWriteBeginResult).
-    void SetWriter(THolder<TDirectPartWriter> writer, ui32 step) {
+    void SetWriter(std::unique_ptr<TDirectPartWriter> writer, ui32 step) {
         Y_ENSURE(State_ == EState::Pending);
         Writer = std::move(writer);
         Step_ = step;
@@ -146,7 +146,7 @@ public:
     }
 
     // Build the final part(s). Valid only once Complete; moves to HandedOff.
-    THolder<TDirectPartResult> ExtractResult(const TActorContext& ctx) {
+    std::unique_ptr<TDirectPartResult> ExtractResult(const TActorContext& ctx) {
         Y_ENSURE(State_ == EState::Complete, "ExtractResult before the part is complete");
         auto result = Writer->ExtractResult(ctx);
         Writer.Reset();
@@ -155,7 +155,7 @@ public:
     }
 
 private:
-    THolder<TDirectPartWriter> Writer;
+    std::unique_ptr<TDirectPartWriter> Writer;
     ui32 Step_ = Max<ui32>();
     EState State_ = EState::Pending;
     TVector<ui32> ValueColumnIds;
@@ -1322,7 +1322,7 @@ private:
         // Every engine feeds rows in the exporter's key order, which is what the direct-part
         // writer needs.
         if (DirectPartImportEnabled && !DirectImport) {
-            DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
+            DirectImport = std::make_unique<TDirectImportWriter>(TableInfo, Scheme);
         }
 
         return true;
@@ -1374,7 +1374,7 @@ private:
     TCounters Counters;
 
     bool DirectPartImportEnabled;
-    THolder<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
+    std::unique_ptr<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
 
 }; // TS3Downloader
 

@@ -19,7 +19,7 @@ class TListQueueTagsActor
     : public TActionActor<TListQueueTagsActor>
 {
 public:
-    TListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListQueueTags, std::move(cb))
     {
     }
@@ -60,7 +60,7 @@ private:
 
 };
 
-IActor* CreateListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TListQueueTagsActor(sourceSqsRequest, std::move(cb));
 }
 

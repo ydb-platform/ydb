@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 }
 
                 { //wait stats
-                    TVector<THolder<IEventHandle>> suppressed;
+                    TVector<std::unique_ptr<IEventHandle>> suppressed;
                     auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
                     WaitForSuppressed(runtime, suppressed, 1, prevObserver);
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                    {NLs::PathNotExist});
 
                 { //wait stats
-                    TVector<THolder<IEventHandle>> suppressed;
+                    TVector<std::unique_ptr<IEventHandle>> suppressed;
                     auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
                     WaitForSuppressed(runtime, suppressed, 1, prevObserver);

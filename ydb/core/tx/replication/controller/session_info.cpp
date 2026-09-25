@@ -43,7 +43,7 @@ void TWorkerInfo::SetCommand(NKikimrReplication::TRunWorkerCommand* cmd) {
     }
 
     if (!Command) {
-        Command = MakeHolder<NKikimrReplication::TRunWorkerCommand>();
+        Command = std::make_unique<NKikimrReplication::TRunWorkerCommand>();
     }
 
     Command->Swap(cmd);

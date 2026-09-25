@@ -23,7 +23,7 @@ public:
             {"pathId", pathId},
             {"tabletId", Self->TabletID()});
 
-        auto nothingToCompactResult = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(Self->TabletID(), pathId);
+        auto nothingToCompactResult = std::make_unique<TEvDataShard::TEvCompactBorrowedResult>(Self->TabletID(), pathId);
 
         if (pathId.OwnerId != Self->GetPathOwnerId()) { // ignore unexpected owner
             ctx.Send(Ev->Sender, std::move(nothingToCompactResult));

@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             file.Close();
         }
 
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto& record = ev->Record;
         auto *request = record.MutableRequest();
         auto *cmd1 = request->AddCommand()->MutableDefineHostConfig();
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     ui32 CreateGroupInBox(TTestActorRuntime& runtime, const TActorId& sender, ui64 boxId, ui64 poolId,
             ui32 encryptionMode) {
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto& record = ev->Record;
         auto *request = record.MutableRequest();
         auto *cmd = request->AddCommand()->MutableDefineStoragePool();

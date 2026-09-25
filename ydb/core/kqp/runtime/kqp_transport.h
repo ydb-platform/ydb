@@ -38,7 +38,7 @@ private:
 
         explicit TSelfHosted(const NMiniKQL::IFunctionRegistry& funcRegistry);
     };
-    THolder<TSelfHosted> SelfHosted;
+    std::unique_ptr<TSelfHosted> SelfHosted;
 };
 
 } // namespace NKqp

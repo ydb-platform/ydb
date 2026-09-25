@@ -82,50 +82,50 @@ public:
             {"request", Request});
 
         if (Request.HasCreateTenantRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
+            auto request = std::make_unique<TEvConsole::TEvCreateTenantRequest>();
             request->Record.CopyFrom(Request.GetCreateTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             request->Record.SetPeerName(TBase::GetPeerName());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetConfigRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetConfigRequest>();
             request->Record.CopyFrom(Request.GetGetConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetTenantStatusRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetTenantStatusRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetTenantStatusRequest>();
             request->Record.CopyFrom(Request.GetGetTenantStatusRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasAlterTenantRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvAlterTenantRequest>();
+            auto request = std::make_unique<TEvConsole::TEvAlterTenantRequest>();
             request->Record.CopyFrom(Request.GetAlterTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasListTenantsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvListTenantsRequest>();
+            auto request = std::make_unique<TEvConsole::TEvListTenantsRequest>();
             request->Record.CopyFrom(Request.GetListTenantsRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasRemoveTenantRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvRemoveTenantRequest>();
+            auto request = std::make_unique<TEvConsole::TEvRemoveTenantRequest>();
             request->Record.CopyFrom(Request.GetRemoveTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasSetConfigRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvSetConfigRequest>();
+            auto request = std::make_unique<TEvConsole::TEvSetConfigRequest>();
             request->Record.CopyFrom(Request.GetSetConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasConfigureRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvConfigureRequest>();
+            auto request = std::make_unique<TEvConsole::TEvConfigureRequest>();
             request->Record.CopyFrom(Request.GetConfigureRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigItemsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetConfigItemsRequest>();
             request->Record.CopyFrom(Request.GetGetConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigItemsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigItemsRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetNodeConfigItemsRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigRequest()) {
@@ -133,27 +133,27 @@ public:
                 ReplyWithErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot get node config. Access denied. Node is not authorized", ctx);
                 return;
             }
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetOperationRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvGetOperationRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetOperationRequest>();
             request->Record.MutableRequest()->CopyFrom(Request.GetGetOperationRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasCheckConfigUpdatesRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvCheckConfigUpdatesRequest>();
+            auto request = std::make_unique<TEvConsole::TEvCheckConfigUpdatesRequest>();
             request->Record.CopyFrom(Request.GetCheckConfigUpdatesRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasListConfigValidatorsRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvListConfigValidatorsRequest>();
+            auto request = std::make_unique<TEvConsole::TEvListConfigValidatorsRequest>();
             request->Record.CopyFrom(Request.GetListConfigValidatorsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasToggleConfigValidatorRequest()) {
-            auto request = MakeHolder<TEvConsole::TEvToggleConfigValidatorRequest>();
+            auto request = std::make_unique<TEvConsole::TEvToggleConfigValidatorRequest>();
             request->Record.CopyFrom(Request.GetToggleConfigValidatorRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasUpdateTenantPoolConfig()) {
-            auto request = MakeHolder<TEvConsole::TEvUpdateTenantPoolConfig>();
+            auto request = std::make_unique<TEvConsole::TEvUpdateTenantPoolConfig>();
             request->Record.CopyFrom(Request.GetUpdateTenantPoolConfig());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else {
@@ -316,7 +316,7 @@ public:
     {
         Y_ABORT_UNLESS(Response.HasStatus());
 
-        auto response = MakeHolder<TBusConsoleResponse>();
+        auto response = std::make_unique<TBusConsoleResponse>();
         response->Record = std::move(Response);
         SendReplyMove(response.Release());
         Die(ctx);

@@ -146,8 +146,8 @@ TReadResult MakePlainReadResult(
     return readResult;
 }
 
-THolder<TEvPQ::TEvProxyResponse> MakeProxyResponse(TVector<TReadResult> results) {
-    auto event = MakeHolder<TEvPQ::TEvProxyResponse>(1, false);
+std::unique_ptr<TEvPQ::TEvProxyResponse> MakeProxyResponse(TVector<TReadResult> results) {
+    auto event = std::make_unique<TEvPQ::TEvProxyResponse>(1, false);
     auto* cmdRead = event->Response->MutablePartitionResponse()->MutableCmdReadResult();
     for (auto& result : results) {
         cmdRead->AddResult()->Swap(&result);

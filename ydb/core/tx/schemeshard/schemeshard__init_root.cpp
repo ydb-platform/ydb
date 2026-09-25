@@ -192,7 +192,7 @@ struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
             {"schemeshard", Self->TabletID()},
         );
 
-        auto reply = MakeHolder<TEvSchemeShard::TEvInitRootShardResult>(Self->TabletID(), TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
+        auto reply = std::make_unique<TEvSchemeShard::TEvInitRootShardResult>(Self->TabletID(), TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
 
         if (!Self->IsDomainSchemeShard) {
             reply->Record.SetStatus(TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument);

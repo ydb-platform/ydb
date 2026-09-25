@@ -307,7 +307,7 @@ public:
     }
 
     void SetupNode(ui32 nodeId, TPerNodeInfo& info) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = nodeId;
         setup->ExecutorsCount = 1;
         info.SchedulerThread = new TTestSchedulerThread(this, nodeId);

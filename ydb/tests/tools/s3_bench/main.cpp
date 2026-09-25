@@ -54,8 +54,8 @@ struct TConfig {
     TString SecretKey;
 };
 
-static THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads) {
-    auto setup = MakeHolder<TActorSystemSetup>();
+static std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(ui32 threads) {
+    auto setup = std::make_unique<TActorSystemSetup>();
     setup->NodeId = 1;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
@@ -274,7 +274,7 @@ i32 main(i32 argc, const char** argv) {
         auto storageOperator = storageCfg->ConstructStorageOperator(/*verbose*/true);
 
         auto setup = BuildActorSystemSetup(/*threads*/ Max<ui32>(1u, cfg.Threads / 2u));
-        THolder<TActorSystem> system(new TActorSystem(setup));
+        std::unique_ptr<TActorSystem> system(new TActorSystem(setup));
         system->Start();
 
         const TActorId wrapperId = system->Register(CreateStorageWrapper(storageOperator));

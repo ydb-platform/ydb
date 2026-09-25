@@ -374,10 +374,10 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         // CTEST << " " << Endl;
     }
 
-    std::array<THolder<TAccumulator>, 2> accums;
-    accums[0] = MakeHolder<TAccumulatorImpl>(
+    std::array<std::unique_ptr<TAccumulator>, 2> accums;
+    accums[0] = std::make_unique<TAccumulatorImpl>(
         tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
-    accums[1] = MakeHolder<TSMBAccumulatorImpl>(
+    accums[1] = std::make_unique<TSMBAccumulatorImpl>(
         tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
 
     for (auto &accum : accums)
@@ -546,10 +546,10 @@ static bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Bucke
         CTEST << " " << Endl;
     }
 
-    std::array<THolder<TAccumulator>, 2> accums;
-    accums[0] = MakeHolder<TAccumulatorImpl>(
+    std::array<std::unique_ptr<TAccumulator>, 2> accums;
+    accums[0] = std::make_unique<TAccumulatorImpl>(
         tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
-    accums[1] = MakeHolder<TSMBAccumulatorImpl>(
+    accums[1] = std::make_unique<TSMBAccumulatorImpl>(
         tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
 
     for (auto &accum : accums)

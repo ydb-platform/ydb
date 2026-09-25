@@ -162,7 +162,7 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
 
     if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_ && !response.SkipMetering) {
         // Send request attributes to the metering actor
-        auto reportRequestAttributes = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>();
+        auto reportRequestAttributes = std::make_unique<TSqsEvents::TEvReportProcessedRequestAttributes>();
 
         auto& requestAttributes = reportRequestAttributes->Data;
 
@@ -499,7 +499,7 @@ bool HasPrivateActionParams(EAction action, const TParameters& params) {
 }
 
 bool THttpRequest::SetupRequest() {
-    auto requestHolder = MakeHolder<TSqsRequest>();
+    auto requestHolder = std::make_unique<TSqsRequest>();
     requestHolder->SetRequestId(RequestId_);
 
     if (HasPrivateActionParams(Action_, QueryParams_) && !IsPrivateRequest_) {
@@ -571,7 +571,7 @@ bool THttpRequest::SetupRequest() {
         ? Parent_->Config.GetEnableQueueMaster()
         : Parent_->Config.GetEnableQueueLeader();
 
-    auto httpCallback = MakeHolder<THttpCallback>(this, *requestHolder);
+    auto httpCallback = std::make_unique<THttpCallback>(this, *requestHolder);
 
     TAuthActorData data {
         .SQSRequest = std::move(requestHolder),
@@ -1019,7 +1019,7 @@ bool THttpRequest::SetupPing(const TReplyParams& params) {
     TParsedHttpFull parsed(params.Input.FirstLine());
     if (parsed.Method == "GET" && (parsed.Path == "/private/ping" || parsed.Path == "/private/ping/") && parsed.Cgi.empty()) {
         HttpMethod = TString(parsed.Method); // for logging
-        Parent_->ActorSystem_->Register(CreatePingActor(MakeHolder<TPingHttpCallback>(this), RequestId_),
+        Parent_->ActorSystem_->Register(CreatePingActor(std::make_unique<TPingHttpCallback>(this), RequestId_),
                                         NActors::TMailboxType::HTSwap, Parent_->PoolId_);
         return true;
     }
@@ -1044,7 +1044,7 @@ void TAsyncHttpServer::Initialize(
     ActorSystem_ = as;
     HttpCounters_ = new THttpCounters(Config, sqsCounters->GetSubgroup("subsystem", "http"));
     if (Config.GetYandexCloudMode()) {
-        CloudAuthCounters_ = MakeHolder<TCloudAuthCounters>(Config, sqsCounters->GetSubgroup("subsystem", "cloud_auth"));
+        CloudAuthCounters_ = std::make_unique<TCloudAuthCounters>(Config, sqsCounters->GetSubgroup("subsystem", "cloud_auth"));
     }
     AggregatedUserCounters_ = MakeIntrusive<TUserCounters>(
             Config, sqsCounters->GetSubgroup("subsystem", "core"), ymqCounters,

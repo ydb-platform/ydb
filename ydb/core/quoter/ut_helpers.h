@@ -68,7 +68,7 @@ public:
     void SendGetQuotaRequest(const TString& kesusPath, const TString& resourcePath, ui64 amount = 1);
     void SendGetQuotaRequest(const TString& kesusPath, const TString& resourcePath, ui64 amount, TDuration deadline);
 
-    THolder<TEvQuota::TEvClearance> WaitGetQuotaAnswer();
+    std::unique_ptr<TEvQuota::TEvClearance> WaitGetQuotaAnswer();
 
     TActorId GetEdgeActor();
 
@@ -83,7 +83,7 @@ private:
     const ui16 MsgBusPort;
     Tests::TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TClient> Client;
+    std::unique_ptr<Tests::TClient> Client;
     TActorId EdgeActor;
 };
 
@@ -134,7 +134,7 @@ public:
             void SendSubscribeOnResourceResult(const NKikimrKesus::TEvSubscribeOnResourcesResult& record, ui64 cookie);
             void SendUpdateConsumptionStateAck();
 
-            THolder<IEventHandle> GetDestroyedEventHandle();
+            std::unique_ptr<IEventHandle> GetDestroyedEventHandle();
 
             const TActorId& GetSelfID() const {
                 return SelfID;
@@ -187,10 +187,10 @@ public:
     TActorId GetPipeEdgeActor();
 
     void SendProxyRequest(const TString& resourceName);
-    THolder<TEventHandle<TEvQuota::TEvProxySession>> ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult = TEvQuota::TEvProxySession::Success);
+    std::unique_ptr<TEventHandle<TEvQuota::TEvProxySession>> ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult = TEvQuota::TEvProxySession::Success);
 
     void SendProxyStats(TDeque<TEvQuota::TProxyStat> stats);
-    THolder<TEventHandle<TEvQuota::TEvProxyUpdate>> GetProxyUpdate();
+    std::unique_ptr<TEventHandle<TEvQuota::TEvProxyUpdate>> GetProxyUpdate();
 
     void SendCloseSession(const TString& resource, ui64 resourceId);
 
@@ -235,7 +235,7 @@ private:
     void SetupLogging();
 
 private:
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     TActorId KesusProxyId;
     TTestTabletPipeFactory* PipeFactory = nullptr;
     TActorId EdgeActor;

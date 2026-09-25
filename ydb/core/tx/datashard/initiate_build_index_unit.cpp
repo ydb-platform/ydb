@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TInitiateBuildIndexUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvAddSender> AddSender;
+    std::unique_ptr<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
     TInitiateBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -84,11 +84,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(
+std::unique_ptr<TExecutionUnit> CreateInitiateBuildIndexUnit(
     TDataShard& dataShard,
     TPipeline& pipeline)
 {
-    return THolder(new TInitiateBuildIndexUnit(dataShard, pipeline));
+    return std::unique_ptr<TInitiateBuildIndexUnit>(new TInitiateBuildIndexUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

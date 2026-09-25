@@ -35,7 +35,7 @@ int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup());
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup());
     setup->NodeId = 1;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);

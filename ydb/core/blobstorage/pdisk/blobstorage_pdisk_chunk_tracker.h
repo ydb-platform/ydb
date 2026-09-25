@@ -295,9 +295,9 @@ class TChunkTracker {
 
 using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
-    THolder<TPerOwnerQuotaTracker> GlobalQuota;
-    THolder<TQuotaRecord> SharedQuota;
-    THolder<TPerOwnerQuotaTracker> OwnerQuota;
+    std::unique_ptr<TPerOwnerQuotaTracker> GlobalQuota;
+    std::unique_ptr<TQuotaRecord> SharedQuota;
+    std::unique_ptr<TPerOwnerQuotaTracker> OwnerQuota;
     TKeeperParams Params;
     TColorLimits ColorLimits;
     TColorLimits ChunkLimits;

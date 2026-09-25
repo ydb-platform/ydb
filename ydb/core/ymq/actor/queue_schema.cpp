@@ -82,8 +82,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
 
 TCreateQueueSchemaActorV2::~TCreateQueueSchemaActorV2() = default;
 
-static THolder<TSqsEvents::TEvQueueCreated> MakeErrorResponse(const TErrorClass& errorClass) {
-    auto resp = MakeHolder<TSqsEvents::TEvQueueCreated>();
+static std::unique_ptr<TSqsEvents::TEvQueueCreated> MakeErrorResponse(const TErrorClass& errorClass) {
+    auto resp = std::make_unique<TSqsEvents::TEvQueueCreated>();
     resp->Success = false;
     resp->State = EQueueState::Active;
     resp->ErrorClass = &errorClass;
@@ -321,7 +321,7 @@ STATEFN(TCreateQueueSchemaActorV2::Preamble) {
 }
 
 void TCreateQueueSchemaActorV2::HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
-    THolder<TSqsEvents::TEvQueueCreated> resp;
+    std::unique_ptr<TSqsEvents::TEvQueueCreated> resp;
     if (ev->Get()->Failed) {
         RLOG_SQS_WARN("Get queue id failed");
         resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
@@ -342,7 +342,7 @@ void TCreateQueueSchemaActorV2::OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr&
     const auto& record = ev->Get()->Record;
     const auto status = record.GetStatus();
 
-    THolder<TSqsEvents::TEvQueueCreated> resp;
+    std::unique_ptr<TSqsEvents::TEvQueueCreated> resp;
 
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
@@ -472,7 +472,7 @@ void TCreateQueueSchemaActorV2::RequestTablesFormatSettings(const TString& accou
 }
 
 void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, const TString& dirName) {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
     trans->SetWorkingDir(workingDir);
@@ -519,7 +519,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
 
 void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
     RLOG_SQS_TRACE("Requesting leader tablet id for path id " << TableWithLeaderPathId_.second);
-    THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+    std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetSchemeshardId(TableWithLeaderPathId_.first);
     request->Record.MutableDescribePath()->SetPathId(TableWithLeaderPathId_.second);
     Send(MakeTxProxyID(), std::move(request));
@@ -1713,7 +1713,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             break;
         }
         case EDeleting::Finish: {
-            Send(Sender_, MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, true));
+            Send(Sender_, std::make_unique<TSqsEvents::TEvQueueDeleted>(QueuePath_, true));
             PassAway();
             break;
         }
@@ -1785,7 +1785,7 @@ void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             if (!bool(val["exists"])) {
                 Send(Sender_,
-                    MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Queue does not exist."));
+                    std::make_unique<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Queue does not exist."));
                 PassAway();
                 return;
             } else {
@@ -1801,7 +1801,7 @@ void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev
 
         if (DeletionStep_ == EDeleting::EraseQueueRecord) {
             Send(Sender_,
-                     MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to erase queue record."));
+                     std::make_unique<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to erase queue record."));
             PassAway();
             return;
         }
@@ -1828,7 +1828,7 @@ void TDeleteQueueSchemaActorV2::HandleDeleteQuoterResource(NKesus::TEvKesus::TEv
         RLOG_SQS_WARN("Failed to delete quoter resource: " << ev->Get()->Record);
 
         Send(Sender_,
-                 MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to delete RPS quoter resource."));
+                 std::make_unique<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to delete RPS quoter resource."));
         PassAway();
     }
 }

@@ -7,39 +7,39 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo
 );
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
+std::unique_ptr<TEvSchemeShard::TEvCancelTx> CancelPropose(
     const TExportInfo& exportInfo,
     TTxId backupTxId
 );

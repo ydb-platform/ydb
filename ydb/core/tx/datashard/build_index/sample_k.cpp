@@ -318,7 +318,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvSampleKResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting K-means sample scan",

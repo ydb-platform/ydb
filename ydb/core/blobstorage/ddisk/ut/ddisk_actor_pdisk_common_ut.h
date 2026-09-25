@@ -77,7 +77,7 @@ struct TEvReservationsSettled : TEventLocal<TEvReservationsSettled, EventSpaceBe
 class TReservationProbeDecorator : public TDecorator {
 public:
     explicit TReservationProbeDecorator(IActor* actor)
-        : TDecorator(THolder<IActor>(actor))
+        : TDecorator(std::unique_ptr<IActor>(actor))
     {}
 
     bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
@@ -95,7 +95,7 @@ public:
 class TDropShutdownReleasesDecorator : public TDecorator {
 public:
     explicit TDropShutdownReleasesDecorator(IActor* actor)
-        : TDecorator(THolder<IActor>(actor))
+        : TDecorator(std::unique_ptr<IActor>(actor))
     {}
 
     bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
@@ -104,7 +104,7 @@ public:
 };
 
 class TTestContext {
-    THolder<NActors::TTestActorRuntime> Runtime;
+    std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     TTempDir TempDir;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -138,7 +138,7 @@ public:
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Runtime.Reset(new NActors::TTestActorRuntime(1, 1, true));
 
-        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        auto appData = std::make_unique<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         appData->IoContextFactory = IoContext.get();
 

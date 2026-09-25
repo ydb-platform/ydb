@@ -26,22 +26,22 @@ TMaybe<NYql::NDqProto::StatusIds::StatusCode> GetDqStatus(const TIssue& issue);
 struct TEvDq {
 
     struct TEvAbortExecution : public NActors::TEventPB<TEvAbortExecution, NDqProto::TEvAbortExecution, TDqEvents::EvAbortExecution> {
-        static THolder<TEvAbortExecution> Unavailable(const TString& s, const TIssues& subIssues = {}) {
-            return MakeHolder<TEvAbortExecution>(NYql::NDqProto::StatusIds::UNAVAILABLE, s, subIssues);
+        static std::unique_ptr<TEvAbortExecution> Unavailable(const TString& s, const TIssues& subIssues = {}) {
+            return std::make_unique<TEvAbortExecution>(NYql::NDqProto::StatusIds::UNAVAILABLE, s, subIssues);
         }
 
-        static THolder<TEvAbortExecution> InternalError(const TString& s, const TIssues& subIssues = {}) {
-            return MakeHolder<TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, s, subIssues);
+        static std::unique_ptr<TEvAbortExecution> InternalError(const TString& s, const TIssues& subIssues = {}) {
+            return std::make_unique<TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, s, subIssues);
         }
 
-        static THolder<TEvAbortExecution> Aborted(const TString& s, const TIssues& subIssues = {}) {
-            return MakeHolder<TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, s, subIssues);
+        static std::unique_ptr<TEvAbortExecution> Aborted(const TString& s, const TIssues& subIssues = {}) {
+            return std::make_unique<TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, s, subIssues);
         }
 
-        static THolder<TEvAbortExecution> Build(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
+        static std::unique_ptr<TEvAbortExecution> Build(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
             TIssue issue(message);
             SetIssueCode(issueCode, issue);
-            return MakeHolder<TEvAbortExecution>(statusCode, TIssues{issue});
+            return std::make_unique<TEvAbortExecution>(statusCode, TIssues{issue});
         }
 
         TEvAbortExecution() = default;

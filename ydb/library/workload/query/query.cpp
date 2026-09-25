@@ -23,8 +23,8 @@ void TQueryWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
     }
 }
 
-THolder<IWorkloadQueryGenerator> TQueryWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TQueryGenerator>(this);
+std::unique_ptr<IWorkloadQueryGenerator> TQueryWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TQueryGenerator>(this);
 }
 
 TWorkloadDataInitializer::TList TQueryWorkloadParams::CreateDataInitializers() const {

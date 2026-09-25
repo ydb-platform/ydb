@@ -127,7 +127,7 @@ private:
         const auto& response = ev->Get()->Record.GetResponse();
         if (response.operation().ready() == false
             && this->GetProtoRequest()->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
-            auto request = MakeHolder<TEvConsole::TEvNotifyOperationCompletionRequest>();
+            auto request = std::make_unique<TEvConsole::TEvNotifyOperationCompletionRequest>();
             request->Record.MutableRequest()->set_id(response.operation().id());
             request->Record.SetUserToken(this->Request_->GetSerializedToken());
 
@@ -251,7 +251,7 @@ private:
 
     void SendRequest()
     {
-        auto request = MakeHolder<TConsoleRequest>();
+        auto request = std::make_unique<TConsoleRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
         request->Record.SetPeerName(this->Request_->GetPeerName());

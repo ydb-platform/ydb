@@ -279,7 +279,7 @@ private:
 
     TDataShardChangeGroupProvider ChangeGroupProvider;
 
-    absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
+    absl::flat_hash_map<TPathId, std::unique_ptr<IDataShardChangeCollector>> ChangeCollectors;
     ui64 InvisibleRowSkips = 0;
 
     YDB_READONLY_DEF(ui64, GlobalTxId);

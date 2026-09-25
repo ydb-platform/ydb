@@ -67,7 +67,7 @@ Ydb::Topic::CreateTopicRequest MakeCreateTopicRequest(
     return request;
 }
 
-THolder<TEvSchemaResponse> DoAlterTopicRequest(
+std::unique_ptr<TEvSchemaResponse> DoAlterTopicRequest(
     NActors::TTestActorRuntime& runtime,
     const Ydb::Topic::AlterTopicRequest& request,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
@@ -85,7 +85,7 @@ THolder<TEvSchemaResponse> DoAlterTopicRequest(
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
 }
 
-THolder<TEvSchemaResponse> DoCreateTopicRequest(
+std::unique_ptr<TEvSchemaResponse> DoCreateTopicRequest(
     NActors::TTestActorRuntime& runtime,
     const Ydb::Topic::CreateTopicRequest& request,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
@@ -128,7 +128,7 @@ void CreateDLQTopic(const std::shared_ptr<TTopicSdkTestSetup>& setup, const char
     setup->GetServer().WaitInit(dlqTopicPath);
 }
 
-THolder<TEvSchemaResponse> CreateTopicWithDLQ(
+std::unique_ptr<TEvSchemaResponse> CreateTopicWithDLQ(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
     const TString& mainTopic,
@@ -141,7 +141,7 @@ THolder<TEvSchemaResponse> CreateTopicWithDLQ(
     return DoCreateTopicRequest(runtime, request, userToken);
 }
 
-THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
+std::unique_ptr<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
     const TString& mainTopic,
@@ -165,7 +165,7 @@ THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
     return DoAlterTopicRequest(runtime, request, userToken);
 }
 
-THolder<TEvSchemaResponse> AlterTopicMlpConsumerDlq(
+std::unique_ptr<TEvSchemaResponse> AlterTopicMlpConsumerDlq(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
     const char* mainTopic,
@@ -187,7 +187,7 @@ THolder<TEvSchemaResponse> AlterTopicMlpConsumerDlq(
     return DoAlterTopicRequest(runtime, request, userToken);
 }
 
-THolder<TEvSchemaResponse> AlterTopicRetention(
+std::unique_ptr<TEvSchemaResponse> AlterTopicRetention(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
     const char* mainTopic

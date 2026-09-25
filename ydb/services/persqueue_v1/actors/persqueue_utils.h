@@ -31,13 +31,13 @@ bool AllEqual(const TItem0& item0, const TItems&... items) {
 
 class TAclWrapper {
 public:
-    TAclWrapper(THolder<NACLib::TSecurityObject>);
+    TAclWrapper(std::unique_ptr<NACLib::TSecurityObject>);
     TAclWrapper(TIntrusivePtr<TSecurityObject>);
 
     bool CheckAccess(NACLib::EAccessRights, const NACLib::TUserToken& userToken);
 
 private:
-    THolder<NACLib::TSecurityObject> AclOldSchemeCache;
+    std::unique_ptr<NACLib::TSecurityObject> AclOldSchemeCache;
     TIntrusivePtr<TSecurityObject> AclNewSchemeCache;
 };
 

@@ -159,7 +159,7 @@ private:
     EState State;
     bool Temporary;
     ITransaction *ActiveTx;
-    TDeque<THolder<ITransaction>> TxQueue;
+    TDeque<std::unique_ptr<ITransaction>> TxQueue;
     TTxProcessor *Parent;
     TMap<TString, TTxProcessor::TPtr> SubProcessors;
     TString LogPrefix;

@@ -191,7 +191,7 @@ public:
 class TMessageListValue final: public TCustomListValue {
 private:
     mutable bool HasIterator_ = false;
-    THolder<IStream<TMessage*>> Underlying_;
+    std::unique_ptr<IStream<TMessage*>> Underlying_;
     TInputConverter Converter;
     TScopedAlloc& ScopedAlloc_;
 
@@ -199,7 +199,7 @@ public:
     TMessageListValue(
         TMemoryUsageInfo* memInfo,
         const TMessageInputSpec& /*inputSpec*/,
-        THolder<IStream<TMessage*>> underlying,
+        std::unique_ptr<IStream<TMessage*>> underlying,
         IWorker* worker
     )
         : TCustomListValue(memInfo)
@@ -264,7 +264,7 @@ using namespace NKikimr::NReplication::NTransfer;
 void TInputSpecTraits<TMessageInputSpec>::PreparePullListWorker(
     const TMessageInputSpec& inputSpec,
     IPullListWorker* worker,
-    THolder<IStream<TMessage*>> stream
+    std::unique_ptr<IStream<TMessage*>> stream
 ) {
     with_lock(worker->GetScopedAlloc()) {
         worker->SetInput(

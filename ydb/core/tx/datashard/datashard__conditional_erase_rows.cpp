@@ -149,10 +149,10 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
         return keyCells;
     }
 
-    static THolder<TEvDataShard::TEvEraseRowsRequest> MakeEraseRowsRequest(const TTableId& tableId,
+    static std::unique_ptr<TEvDataShard::TEvEraseRowsRequest> MakeEraseRowsRequest(const TTableId& tableId,
             IEraseRowsCondition* condition, const TVector<TKey>& keyOrder, TVector<TString>& keys)
     {
-        auto request = MakeHolder<TEvDataShard::TEvEraseRowsRequest>();
+        auto request = std::make_unique<TEvDataShard::TEvEraseRowsRequest>();
 
         request->Record.SetTableId(tableId.PathId.LocalPathId);
         request->Record.SetSchemaVersion(tableId.SchemaVersion);
@@ -177,7 +177,7 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
     }
 
     void Reply(EStatus status = EStatus::Done) {
-        auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
         if (status != EStatus::Done) {
@@ -222,7 +222,7 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
 public:
     explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo,
         const TString& databaseName, const TTableId& tableId, ui64 txId,
-        THolder<IEraseRowsCondition> condition, const TLimits& limits
+        std::unique_ptr<IEraseRowsCondition> condition, const TLimits& limits
     )
         : IActorCallback(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
         , DatabaseName(databaseName)
@@ -375,7 +375,7 @@ private:
     const TDataShardId DataShard;
     TActorId ReplyTo;
     const ui64 TxId;
-    THolder<IEraseRowsCondition> Condition;
+    std::unique_ptr<IEraseRowsCondition> Condition;
 
     IDriver* Driver;
     TIntrusiveConstPtr<TScheme> Scheme;
@@ -395,7 +395,7 @@ public:
     explicit TIndexedCondEraseScan(
             TDataShard* ds, const TActorId& replyTo,
             const TString& databaseName, const TTableId& tableId, ui64 txId,
-            THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
+            std::unique_ptr<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
         : TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits)
         , Indexes(std::move(indexes))
     {
@@ -454,7 +454,7 @@ private:
 
 IScan* CreateCondEraseScan(
         TDataShard* ds, const TActorId& replyTo, const TString& databaseName, const TTableId& tableId, ui64 txId,
-        THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
+        std::unique_ptr<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
 {
     Y_ENSURE(ds);
     Y_ENSURE(condition.Get());
@@ -550,7 +550,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 
     const auto& record = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvResponse>();
+    auto response = std::make_unique<TEvResponse>();
     response->Record.SetTabletID(TabletID());
 
     auto badRequest = [&record = response->Record](const TString& error) {
@@ -589,7 +589,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
         }
 
         ui64 localTxId = 0;
-        THolder<IScan> scan;
+        std::unique_ptr<IScan> scan;
 
         switch (condition) {
             case TEvRequest::ProtoRecordType::kExpiration: {
@@ -602,7 +602,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                         localTxId = NextTieBreakerIndex++;
                         const auto tableId = TTableId(PathOwnerId, localPathId, record.GetSchemaVersion());
                         scan.Reset(CreateCondEraseScan(this, ev->Sender, record.GetDatabaseName(), tableId, localTxId,
-                            THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
+                            std::unique_ptr<IEraseRowsCondition>(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
                     } else {
                         badRequest(error);
                     }

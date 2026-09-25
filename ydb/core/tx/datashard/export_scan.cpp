@@ -93,7 +93,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
         }
 
         IBuffer::TStats stats;
-        THolder<IEventBase> ev{Buffer->PrepareEvent(noMoreData, stats)};
+        std::unique_ptr<IEventBase> ev{Buffer->PrepareEvent(noMoreData, stats)};
 
         if (!ev) {
             Success = false;
@@ -264,7 +264,7 @@ private:
     IBuffer::TPtr Buffer;
 
     TActorId Uploader;
-    THolder<TStats> Stats;
+    std::unique_ptr<TStats> Stats;
 
     IDriver* Driver;
     TIntrusiveConstPtr<TScheme> Scheme;

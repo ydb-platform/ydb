@@ -40,7 +40,7 @@ public:
     IEventBase* MakeRequest() override {
         // TODO copy / transfer event from public api to internal
 
-        auto ev = MakeHolder<typename NSchemeShard::TEvBackup::TEvApiMapping<TIn>::TEv>();
+        auto ev = std::make_unique<typename NSchemeShard::TEvBackup::TEvApiMapping<TIn>::TEv>();
         ev->Record.SetTxId(this->TxId);
         ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {

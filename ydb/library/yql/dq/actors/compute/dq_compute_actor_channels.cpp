@@ -249,7 +249,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
             LOG_E("Output channelId: " << msg->ChannelId << " has unexpected inflight message seqNo: " << seqNo);
         }
 
-        auto retryEv = MakeHolder<TEvDqCompute::TEvChannelData>();
+        auto retryEv = std::make_unique<TEvDqCompute::TEvChannelData>();
         retryEv->Record.SetSeqNo(seqNo);
         retryEv->Record.SetSendTime(now.MilliSeconds());
 
@@ -303,7 +303,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelDataAck::T
             inputChannel.Stats->ResentMessages++;
         }
 
-        auto retryEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
+        auto retryEv = std::make_unique<TEvDqCompute::TEvChannelDataAck>();
         retryEv->Record.SetSeqNo(seqNo);
         retryEv->Record.SetChannelId(msg->ChannelId);
         retryEv->Record.SetFreeSpace(Cbs->GetInputChannelFreeSpace(msg->ChannelId));
@@ -565,7 +565,7 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
         << ", seqNo: " << seqNo
         << ", finished: " << finished);
 
-    auto dataEv = MakeHolder<TEvDqCompute::TEvChannelData>();
+    auto dataEv = std::make_unique<TEvDqCompute::TEvChannelData>();
     dataEv->Record.SetSeqNo(seqNo);
     dataEv->Record.SetSendTime(TInstant::Now().MilliSeconds());
     // copying here since we need to save channelData in InFlight
@@ -696,7 +696,7 @@ bool TDqComputeActorChannels::FinishInputChannels() {
 
         inputChannel.Finished = true;
 
-        auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
+        auto ackEv = std::make_unique<TEvDqCompute::TEvChannelDataAck>();
         ackEv->Record.SetSeqNo(inputChannel.LastRecvSeqNo);
         ackEv->Record.SetChannelId(inputChannel.ChannelId);
         ackEv->Record.SetFreeSpace(0);
@@ -741,7 +741,7 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
             freeSpace
     );
 
-    auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
+    auto ackEv = std::make_unique<TEvDqCompute::TEvChannelDataAck>();
     ackEv->Record.SetSeqNo(inputChannel.LastRecvSeqNo);
     ackEv->Record.SetChannelId(inputChannel.ChannelId);
     ackEv->Record.SetFreeSpace(freeSpace);

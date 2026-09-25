@@ -131,7 +131,7 @@ namespace NDataShardReadTableTest {
             while (QuotaRequests && QuotaAvailable > 0) {
                 auto& req = QuotaRequests.front();
 
-                auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>();
+                auto response = std::make_unique<TEvTxProcessing::TEvStreamQuotaResponse>();
                 response->Record.SetTxId(req.TxId);
                 response->Record.SetMessageSizeLimit(1);
                 response->Record.SetReservedMessages(1);

@@ -30,7 +30,7 @@ namespace NActors {
         virtual void Init(const TSessionParams& params) = 0;
         virtual void SetNewConnection(TEvHandshakeDone::TPtr& ev) = 0;
         virtual void Terminate(TDisconnectReason reason) = 0;
-        virtual THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) = 0;
+        virtual std::unique_ptr<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) = 0;
         virtual void StartHandshake() = 0;
         virtual void ReestablishConnectionWithHandshake(TDisconnectReason reason) = 0;
         virtual void CloseInputSession() = 0;

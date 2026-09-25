@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
 
-        auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto req = std::make_unique<TEvPersQueue::TEvRequest>();
         req->Record = std::move(request);
         ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, path, partitionId), sender, req.Release());
 
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
     }
 
     TString FindIncrementalBackupDir(TTestActorRuntime& runtime, const TActorId& sender, const TString& collectionPath) {
-        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         request->Record.MutableDescribePath()->SetPath(collectionPath);
         request->Record.MutableDescribePath()->MutableOptions()->SetReturnChildren(true);
         runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
     }
 
     TString FindLatestBackupDir(TTestActorRuntime& runtime, const TActorId& sender, const TString& collectionPath) {
-        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         request->Record.MutableDescribePath()->SetPath(collectionPath);
         request->Record.MutableDescribePath()->MutableOptions()->SetReturnChildren(true);
         runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
     }
 
     TVector<TString> GetSortedBackupItems(TTestActorRuntime& runtime, const TActorId& sender, const TString& collectionPath) {
-        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         request->Record.MutableDescribePath()->SetPath(collectionPath);
         request->Record.MutableDescribePath()->MutableOptions()->SetReturnChildren(true);
         runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
@@ -2207,7 +2207,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         TString foundIncrementalBackupPath = "/Root/.backups/collections/TestCollection/" + backups.back() + "/Table";
 
         // Now check the found incremental backup table attributes
-        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         request->Record.MutableDescribePath()->SetPath(foundIncrementalBackupPath);
         request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
         runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.Release()));
@@ -3112,7 +3112,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         // Verify the incremental backup table was created using DescribePath
         TString mainTablePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << backupDir << "/Table";
         
-        auto tableRequest = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto tableRequest = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         tableRequest->Record.MutableDescribePath()->SetPath(mainTablePath);
         tableRequest->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
         runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, tableRequest.Release()));
@@ -3145,7 +3145,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         // Verify index backup does NOT exist when OmitIndexes is set
         TString indexMetaPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << backupDir << "/__ydb_backup_meta";
         
-        auto indexMetaRequest = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        auto indexMetaRequest = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         indexMetaRequest->Record.MutableDescribePath()->SetPath(indexMetaPath);
         runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, indexMetaRequest.Release()));
         auto indexMetaReply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(edgeActor);

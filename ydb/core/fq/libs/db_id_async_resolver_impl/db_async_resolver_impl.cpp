@@ -32,7 +32,7 @@ TFuture<NYql::TDatabaseResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
 
     auto promise = NewPromise<NYql::TDatabaseResolverResponse>();
     TDuration timeout = TDuration::Seconds(40);
-    auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
+    auto callback = std::make_unique<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
         [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {
             promise.SetValue(std::move(event->Get()->DbResolverResponse));
         },

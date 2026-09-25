@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
         CTEST << "Status: " << ui32( tproxy.second.Status ) << Endl;
         UNIT_ASSERT(tproxy.second.Status == EOperationStatus::Success);
     }
@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
-        THolder<ISession> session = tproxy.first->CreateSession();
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::unique_ptr<ISession> session = tproxy.first->CreateSession();
         UNIT_ASSERT(session != nullptr);
     }
 
@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
-        THolder<ISession> session = tproxy.first->CreateSession();
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::unique_ptr<ISession> session = tproxy.first->CreateSession();
         NThreading::TFuture<TOperationResults> ftr;
         const ui32 bufSize = 1024 * sizeof(int);
         const ui32 iters = 1000;
@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
-        THolder<ISession> session = tproxy.first->CreateSession();
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::unique_ptr<ISession> session = tproxy.first->CreateSession();
 
         NThreading::TFuture<TOperationResults> ftr;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -190,8 +190,8 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
-        THolder<ISession> session = tproxy.first->CreateSession();
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::unique_ptr<ISession> session = tproxy.first->CreateSession();
 
         NThreading::TFuture<TOperationResults> ftr;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -237,9 +237,9 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
         for (ui32 sessNum = 0; sessNum < 10; sessNum++) {
-            THolder<ISession> session = tproxy.first->CreateSession();
+            std::unique_ptr<ISession> session = tproxy.first->CreateSession();
 
             NThreading::TFuture<TOperationResults> ftr;
             std::chrono::steady_clock::time_point begin =
@@ -312,8 +312,8 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         TFileStorageConfig config;
         config.Path = NFs::CurrentWorkingDirectory();
         TTempStorageExecutionPolicy policy;
-        std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
-        THolder<ISession> session = tproxy.first->CreateSession();
+        std::pair < std::unique_ptr<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
+        std::unique_ptr<ISession> session = tproxy.first->CreateSession();
 
         NThreading::TFuture<TOperationResults> ftr;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();

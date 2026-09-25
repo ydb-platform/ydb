@@ -58,8 +58,8 @@ private:
     class TNode: public TIntrusiveListItem<TNode> {
     public:
         TNode* Parent = nullptr;
-        THolder<TNode> Left;
-        THolder<TNode> Right;
+        std::unique_ptr<TNode> Left;
+        std::unique_ptr<TNode> Right;
         ui64 Prio = -1;
         TKey LeftKey;
         TKey RightKey;
@@ -70,7 +70,7 @@ private:
         EBorderMode MaxRightMode;
         bool MaxRightTrivial;
 
-        TNode(TNode* parent, THolder<TNode> left, THolder<TNode> right, const ui64 prio, TKey leftKey, TKey rightKey, TValue value,
+        TNode(TNode* parent, std::unique_ptr<TNode> left, std::unique_ptr<TNode> right, const ui64 prio, TKey leftKey, TKey rightKey, TValue value,
             const EBorderMode leftMode, const EBorderMode rightMode, TKey maxRightKey, const EBorderMode maxRightMode,
             const bool maxRightTrivial)
             : Parent(parent)
@@ -88,28 +88,28 @@ private:
             SetRight(std::move(right));
         }
 
-        void SetLeft(THolder<TNode> child) noexcept {
+        void SetLeft(std::unique_ptr<TNode> child) noexcept {
             if (child) {
                 child->Parent = this;
             }
             Left = std::move(child);
         }
 
-        void SetRight(THolder<TNode> child) noexcept {
+        void SetRight(std::unique_ptr<TNode> child) noexcept {
             if (child) {
                 child->Parent = this;
             }
             Right = std::move(child);
         }
 
-        THolder<TNode> RemoveLeft() noexcept {
+        std::unique_ptr<TNode> RemoveLeft() noexcept {
             if (Left) {
                 Left->Parent = nullptr;
             }
             return std::move(Left);
         }
 
-        THolder<TNode> RemoveRight() noexcept {
+        std::unique_ptr<TNode> RemoveRight() noexcept {
             if (Right) {
                 Right->Parent = nullptr;
             }
@@ -221,9 +221,9 @@ private:
       * extend its RightKey instead of inserting a new node.
       */
     void DoInsert(
-        THolder<TNode>* tptr, const TBorder& leftKey, const TBorder& rightKey, TKey leftOwnedKey, TKey rightOwnedKey, TValue value, ui64 prio)
+        std::unique_ptr<TNode>* tptr, const TBorder& leftKey, const TBorder& rightKey, TKey leftOwnedKey, TKey rightOwnedKey, TValue value, ui64 prio)
     {
-        THolder<TNode> l, r;
+        std::unique_ptr<TNode> l, r;
 
         TNode* t;
         TNode* parent = nullptr;
@@ -284,7 +284,7 @@ private:
       *
       * Does nothing and returns existing node if (key, value) already exist in subtree t.
       */
-    TNode* FindOrSplit(THolder<TNode>&& t, THolder<TNode>& l, THolder<TNode>& r, const TBorder& key, const TValue& value)
+    TNode* FindOrSplit(std::unique_ptr<TNode>&& t, std::unique_ptr<TNode>& l, std::unique_ptr<TNode>& r, const TBorder& key, const TValue& value)
     {
         if (!t) {
             return nullptr;
@@ -299,7 +299,7 @@ private:
         if (cmp < 0 || cmp == 0 && TValueTraits::Less(value, t->Value)) {
             // We must split the left subtree
             if (t->Left) {
-                THolder<TNode> tmp;
+                std::unique_ptr<TNode> tmp;
                 if (TNode* found = FindOrSplit(std::move(t->Left), l, tmp, key, value)) {
                     return found;
                 }
@@ -311,7 +311,7 @@ private:
         } else {
             // We must split the right subtree
             if (t->Right) {
-                THolder<TNode> tmp;
+                std::unique_ptr<TNode> tmp;
                 if (TNode* found = FindOrSplit(std::move(t->Right), tmp, r, key, value)) {
                     return found;
                 }
@@ -348,8 +348,8 @@ private:
     /**
       * Removes the node linked by tptr from the tree
       */
-    void DoRemove(THolder<TNode>* tptr) {
-        THolder<TNode> d = std::move(*tptr);
+    void DoRemove(std::unique_ptr<TNode>* tptr) {
+        std::unique_ptr<TNode> d = std::move(*tptr);
         Y_DEBUG_ABORT_UNLESS(d, "Cannot remove a null node");
         ++Stats_.Deletes;
         --Size_;
@@ -368,7 +368,7 @@ private:
     /**
           * Merges two subtrees l and r (where l < r)
           */
-    THolder<TNode> Merge(THolder<TNode> l, THolder<TNode> r) {
+    std::unique_ptr<TNode> Merge(std::unique_ptr<TNode> l, std::unique_ptr<TNode> r) {
         Y_DEBUG_ABORT_UNLESS(!l || l->Parent == nullptr);
         Y_DEBUG_ABORT_UNLESS(!r || r->Parent == nullptr);
         if (!l || !r) {
@@ -630,7 +630,7 @@ private:
 
 private:
     TBorderComparator Comparator;
-    THolder<TNode> Root;
+    std::unique_ptr<TNode> Root;
     THashMap<TValue, TIntrusiveList<TNode>, typename TValueTraits::TValueHash> Values;
 };
 }   // namespace NRangeTreap

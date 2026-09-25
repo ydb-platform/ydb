@@ -73,7 +73,7 @@ struct TEnvironmentSetup {
 
     NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request) {
         const TActorId self = Runtime->AllocateEdgeActor(NodeId);
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->CopyFrom(request);
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, TTestActorSystem::GetPipeConfigWithRetries());
         auto response = WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerConfigResponse>(self);

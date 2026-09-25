@@ -213,7 +213,7 @@ TString TPlanGraphEntry::CutTextForAvailableWidth(const TString &text, double wi
     }
 }
 
-void TPlanGraphEntry::AddChild(THolder<TPlanGraphEntry> &&child) {
+void TPlanGraphEntry::AddChild(std::unique_ptr<TPlanGraphEntry> &&child) {
     Children.emplace_back(std::move(child));
 }
 }

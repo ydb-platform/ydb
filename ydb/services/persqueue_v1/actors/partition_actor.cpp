@@ -947,7 +947,7 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     const auto& dr = DirectReadResults[DirectReadId];
 
-    auto readResponse = MakeHolder<TEvPQProxy::TEvDirectReadResponse>(
+    auto readResponse = std::make_unique<TEvPQProxy::TEvDirectReadResponse>(
         Partition.AssignId,
         dr.GetReadOffset(),
         DirectReadId,
@@ -1058,7 +1058,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     ReadGuid = TString();
 
     if (Protocol == EProtocol::PQv1) {
-        auto readResponse = MakeHolder<TEvPQProxy::TEvMigrationReadResponse>(
+        auto readResponse = std::make_unique<TEvPQProxy::TEvMigrationReadResponse>(
             std::move(migrationResponse),
             ReadOffset,
             res.GetBlobsFromDisk() > 0,
@@ -1067,7 +1067,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
         ctx.Send(ParentId, readResponse.Release());
     } else {
         PARTITION_ENSURE(!DirectRead);
-        auto readResponse = MakeHolder<TEvPQProxy::TEvReadResponse>(
+        auto readResponse = std::make_unique<TEvPQProxy::TEvReadResponse>(
             std::move(response),
             ReadOffset,
             res.GetBlobsFromDisk() > 0,

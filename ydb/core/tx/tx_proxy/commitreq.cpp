@@ -113,14 +113,14 @@ public:
 
         // Schedule execution timeout
         {
-            THolder<IEventHandle> wakeupEv = MakeHolder<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
+            std::unique_ptr<IEventHandle> wakeupEv = std::make_unique<IEventHandle>(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup());
             ExecTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
 
             CreateLongTimer(ctx, ExecTimeoutPeriod, wakeupEv, AppData(ctx)->SystemPoolId, ExecTimeoutCookieHolder.Get());
         }
 
         if (!record.GetUserToken().empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(record.GetUserToken());
+            UserToken = std::make_unique<NACLib::TUserToken>(record.GetUserToken());
         }
 
         const auto& tx = record.GetTransaction();
@@ -634,7 +634,7 @@ private:
 
         Y_ABORT_UNLESS(SelectedCoordinator, "Unexpected null SelectedCoordinator");
 
-        auto req = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
+        auto req = std::make_unique<TEvTxProxy::TEvProposeTransaction>(
             SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
 
         auto* reqAffectedSet = req->Record.MutableTransaction()->MutableAffectedSet();
@@ -928,7 +928,7 @@ private:
 
 private:
     void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext& ctx) {
-        auto x = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
+        auto x = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
         x->Record.SetTxId(TxId);
 
         if (reportIssues && IssueManager.GetIssues()) {
@@ -990,7 +990,7 @@ private:
     const ui64 TxId;
     const TActorId Sender;
     const ui64 Cookie;
-    THolder<TEvTxUserProxy::TEvProposeTransaction> Request;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> Request;
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TControlWrapper DefaultTimeoutMs;
@@ -1013,7 +1013,7 @@ private:
 
     ui64 TxFlags = 0;
     ui64 SelectedCoordinator = 0;
-    THolder<const NACLib::TUserToken> UserToken;
+    std::unique_ptr<const NACLib::TUserToken> UserToken;
 
     TActorId ResolveActorID;
     TTablePathHashSet InvalidatedTables;

@@ -356,7 +356,7 @@ public:
     }
 
     static TEvQueryRequest* Load(const TEventSerializedData* data) {
-        auto pbEv = THolder<TEvQueryRequestRemote>(TEvQueryRequestRemote::Load(data));
+        auto pbEv = std::unique_ptr<TEvQueryRequestRemote>(TEvQueryRequestRemote::Load(data));
         auto req = new TEvQueryRequest();
         req->Record.Swap(&pbEv->Record);
         return req;

@@ -931,7 +931,7 @@ public:
             const TRestoreSettings& settings,
             TImportClient& importClient,
             TTableClient& tableClient,
-            const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
+            const TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& accumulators,
             const std::shared_ptr<TLog>& log)
         : Path(path)
         , Settings(MakeSettings(settings, desc))
@@ -950,7 +950,7 @@ public:
             Y_ENSURE(Accumulators[i]);
         }
 
-        TasksQueue = MakeHolder<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
+        TasksQueue = std::make_unique<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
 
         size_t threadCount = settings.MaxInFlight_;
         if (!threadCount) {
@@ -1001,7 +1001,7 @@ private:
 
     const ui32 MaxRetries;
 
-    THolder<IThreadPool> TasksQueue;
+    std::unique_ptr<IThreadPool> TasksQueue;
     TAtomic Stopped;
 
     TMaybe<TStatus> Error;
@@ -1026,7 +1026,7 @@ NPrivate::IDataWriter* CreateImportDataWriter(
         ui32 partitionCount,
         TImportClient& importClient,
         TTableClient& tableClient,
-        const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
+        const TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& accumulators,
         const TRestoreSettings& settings,
         const std::shared_ptr<TLog>& log)
 {

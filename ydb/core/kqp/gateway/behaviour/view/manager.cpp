@@ -97,7 +97,7 @@ NThreading::TFuture<TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvP
 
 NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSettings& settings,
                                                      const TInternalModificationContext& context) {
-    auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
@@ -115,7 +115,7 @@ NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSe
 
 NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettings& settings,
                                                    const TInternalModificationContext& context) {
-    auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
@@ -204,7 +204,7 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NK
                                                                         const TExternalModificationContext& context) const {
     Y_UNUSED(manager, nodeId);
 
-    auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetDatabase());
     if (context.GetUserToken()) {
         proposal->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());

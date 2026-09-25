@@ -23,7 +23,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvSetColumnConstraint::TEvCancelResponse>(record.GetTxId());
+        Response = std::make_unique<TEvSetColumnConstraint::TEvCancelResponse>(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {

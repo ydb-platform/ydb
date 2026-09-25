@@ -239,7 +239,7 @@ namespace NKikimr::NDataShard {
         }
 
     private:
-        TVector<THolder<TEvTxProcessing::TEvReadSet>> ReadSets;
+        TVector<std::unique_ptr<TEvTxProcessing::TEvReadSet>> ReadSets;
     };
 
     void TVolatileTxManager::TTxMap::Add(ui64 txId, TRowVersion version) {
@@ -824,7 +824,7 @@ namespace NKikimr::NDataShard {
 
     bool TVolatileTxManager::ProcessReadSet(
             const TEvTxProcessing::TEvReadSet& rs,
-            THolder<IEventHandle>&& ack,
+            std::unique_ptr<IEventHandle>&& ack,
             TTransactionContext& txc)
     {
         using Schema = TDataShard::Schema;
@@ -941,7 +941,7 @@ namespace NKikimr::NDataShard {
             // Send delayed acks when changes are persisted
             // TODO: maybe move it into a parameter?
             struct TDelayedAcksState : public TThrRefBase {
-                TVector<THolder<IEventHandle>> DelayedAcks;
+                TVector<std::unique_ptr<IEventHandle>> DelayedAcks;
 
                 TDelayedAcksState(TVolatileTxInfo* info)
                     : DelayedAcks(std::move(info->DelayedAcks))

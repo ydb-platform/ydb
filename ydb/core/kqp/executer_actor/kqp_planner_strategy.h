@@ -30,8 +30,8 @@ protected:
     TLogFunc LogFunc;
 };
 
-THolder<IKqpPlannerStrategy> CreateKqpGreedyPlanner();
+std::unique_ptr<IKqpPlannerStrategy> CreateKqpGreedyPlanner();
 
-THolder<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner();
+std::unique_ptr<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner();
 
 } // namespace NKikimr::NKqp

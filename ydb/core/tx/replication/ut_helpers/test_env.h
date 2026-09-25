@@ -41,7 +41,7 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        Driver = std::make_unique<NYdb::TDriver>(driverConfig);
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
@@ -206,7 +206,7 @@ public:
         Server.GetRuntime()->Send(new IEventHandle(recipient, Sender, ev));
     }
 
-    void SendAsync(const TActorId& recipient, THolder<IEventBase> ev) {
+    void SendAsync(const TActorId& recipient, std::unique_ptr<IEventBase> ev) {
         SendAsync(recipient, ev.Release());
     }
 
@@ -217,7 +217,7 @@ public:
     }
 
     template <typename TEvResponse>
-    auto Send(const TActorId& recipient, THolder<IEventBase> ev) {
+    auto Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev) {
         return Send<TEvResponse>(recipient, ev.Release());
     }
 
@@ -225,7 +225,7 @@ public:
         ForwardToTablet(*Server.GetRuntime(), tabletId, Sender, ev);
     }
 
-    void SendAsync(ui64 tabletId, THolder<IEventBase> ev) {
+    void SendAsync(ui64 tabletId, std::unique_ptr<IEventBase> ev) {
         SendAsync(tabletId, ev.Release());
     }
 
@@ -236,7 +236,7 @@ public:
     }
 
     template <typename TEvResponse>
-    auto Send(ui64 tabletId, THolder<IEventBase> ev) {
+    auto Send(ui64 tabletId, std::unique_ptr<IEventBase> ev) {
         return Send<TEvResponse>(tabletId, ev.Release());
     }
 
@@ -269,7 +269,7 @@ private:
     Tests::TServerSettings Settings;
     Tests::TServer Server;
     Tests::TClient Client;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
     TString Endpoint;
     TString Database;
     TActorId YdbProxy;

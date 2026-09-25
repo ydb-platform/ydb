@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             TMap<ui32, TString> nodesBlob;
             timer.Reset();
             for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
-                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+                std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> nodeData = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
                 auto* tabletData = nodeData->AllocatePackedResponse(10000);
                 for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
                     tabletData->TabletId = tabletId;
@@ -365,9 +365,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
             } else {
                 httpReq.HttpHeaders.AddHeader("X-Want-Trace", "true");
             }
-            auto page = MakeHolder<TMonPage>("viewer", "title");
+            auto page = std::make_unique<TMonPage>("viewer", "title");
             TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodelist", nullptr);
-            auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+            auto request = std::make_unique<NMon::TEvHttpInfo>(monReq);
 
             runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release(), 0));
             runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>();
@@ -513,9 +513,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         THttpRequest httpReq(HTTP_METHOD_GET);
         httpReq.CgiParameters.emplace("tablets", "true");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
+        auto page = std::make_unique<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/cluster", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        auto request = std::make_unique<NMon::TEvHttpInfo>(monReq);
 
         int tabletIdCount = 1;
         int nodeIdCount = 1;
@@ -583,9 +583,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         httpReq.CgiParameters.emplace("path", "/Root");
         httpReq.CgiParameters.emplace("tablets", "true");
         httpReq.CgiParameters.emplace("storage", "true");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
+        auto page = std::make_unique<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/tenantinfo", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        auto request = std::make_unique<NMon::TEvHttpInfo>(monReq);
 
         int tabletIdCount = 1;
         int nodeIdCount = 1;
@@ -812,9 +812,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         THttpRequest httpReq(HTTP_METHOD_GET);
         httpReq.CgiParameters.emplace("with", withValue);
         httpReq.CgiParameters.emplace("version", "v2");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
+        auto page = std::make_unique<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        auto request = std::make_unique<NMon::TEvHttpInfo>(monReq);
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
@@ -3354,9 +3354,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         if (pdiskFilter) {
             httpReq.CgiParameters.emplace("pdisk_id", "0");
         }
-        auto page = MakeHolder<TMonPage>("viewer", "title");
+        auto page = std::make_unique<TMonPage>("viewer", "title");
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        auto request = std::make_unique<NMon::TEvHttpInfo>(monReq);
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
@@ -3957,7 +3957,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
-        auto pqClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        auto pqClient = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         pqClient->SetSecurityToken(ROOT_TOKEN);
         pqClient->InitRoot();
         pqClient->InitSourceIds();
@@ -4199,7 +4199,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
-        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        auto client = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         client->InitRoot();
         client->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
@@ -4283,7 +4283,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
-        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        auto client = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         client->InitRoot();
         client->InitSourceIds();
         NYdb::TDriverConfig driverCfg;

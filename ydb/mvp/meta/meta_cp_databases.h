@@ -178,7 +178,7 @@ public:
                     if (balancerEndpoint.StartsWith("https") && !authHeaderValue.empty()) {
                         httpRequest->Set("Authorization", authHeaderValue);
                     }
-                    THolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> request = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
+                    std::unique_ptr<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
                     request->Timeout = TDuration::Seconds(60);
                     ctx.Send(HttpProxyId, request.Release());
                     ++Requests;

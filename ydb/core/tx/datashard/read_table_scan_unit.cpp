@@ -252,10 +252,10 @@ void TReadTableScanUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TReadTableScanUnit(dataShard, pipeline));
+    return std::unique_ptr<TReadTableScanUnit>(new TReadTableScanUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

@@ -290,14 +290,14 @@ TReadSessionEvent::TDataReceivedEvent MakeDataEvent(
     return TReadSessionEvent::TDataReceivedEvent({}, std::move(compressedMessages), partition);
 }
 
-THolder<TEvPersQueue::TEvResponse> MakeWriteResponse(
+std::unique_ptr<TEvPersQueue::TEvResponse> MakeWriteResponse(
     ui64 offset,
     ui64 cookie,
     bool alreadyWritten = false,
     NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_OK,
     NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::OK
 ) {
-    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    auto response = std::make_unique<TEvPersQueue::TEvResponse>();
     response->Record.SetStatus(status);
     response->Record.SetErrorCode(errorCode);
     response->Record.SetErrorReason("err");
@@ -350,8 +350,8 @@ struct TMirrorerEnv {
     TActorId Mirrorer;
     TMockMirrorFactory Factory;
     TPersQueueCounters Counters;
-    std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
-    std::vector<THolder<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
+    std::vector<std::unique_ptr<TEvPersQueue::TEvRequest>> CapturedRequests;
+    std::vector<std::unique_ptr<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
     ui32 ErrorCount = 0;
     ui32 CounterEventCount = 0;
     bool TabletPoisoned = false;
@@ -622,20 +622,20 @@ Y_UNIT_TEST(RetriesFailedWriteAndUnexpectedResponses) {
     env.Advance(TDuration::MilliSeconds(5));
     UNIT_ASSERT(env.CountRequests(1) >= 2);
 
-    auto unexpected = MakeHolder<TEvPersQueue::TEvResponse>();
+    auto unexpected = std::make_unique<TEvPersQueue::TEvResponse>();
     unexpected->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     unexpected->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
     unexpected->Record.MutablePartitionResponse()->SetCookie(99);
     env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Tablet, unexpected.Release()), 0, true);
     env.Dispatch();
 
-    auto noPart = MakeHolder<TEvPersQueue::TEvResponse>();
+    auto noPart = std::make_unique<TEvPersQueue::TEvResponse>();
     noPart->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     noPart->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
     env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Tablet, noPart.Release()), 0, true);
     env.Dispatch();
 
-    auto pqError = MakeHolder<TEvPersQueue::TEvResponse>();
+    auto pqError = std::make_unique<TEvPersQueue::TEvResponse>();
     pqError->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     pqError->Record.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
     pqError->Record.SetErrorReason("bad");
@@ -643,7 +643,7 @@ Y_UNIT_TEST(RetriesFailedWriteAndUnexpectedResponses) {
     env.Dispatch();
     UNIT_ASSERT(env.ErrorCount > 0);
 
-    auto ts = MakeHolder<TEvPersQueue::TEvResponse>();
+    auto ts = std::make_unique<TEvPersQueue::TEvResponse>();
     ts->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     ts->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
     ts->Record.MutablePartitionResponse()->SetCookie(2);

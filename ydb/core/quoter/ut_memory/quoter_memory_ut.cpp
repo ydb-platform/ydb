@@ -444,7 +444,7 @@ Y_UNIT_TEST(MeasureKesusTabletMemory) {
         TAutoPtr<NMsgBusProxy::TBusResponse> resp = setup.GetClient().Ls(kesusPath);
         const ui64 tabletId = resp->Record.GetPathDescription().GetKesus().GetKesusTabletId();
 
-        auto request = MakeHolder<NKesus::TEvKesus::TEvUpdateQuoterResource>();
+        auto request = std::make_unique<NKesus::TEvKesus::TEvUpdateQuoterResource>();
         request->Record.MutableResource()->SetResourcePath("memleak_root");
         request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()
             ->SetMaxUnitsPerSecond(2'000'000); // change speed to trigger effective props change
@@ -474,7 +474,7 @@ Y_UNIT_TEST(MeasureKesusTabletMemory) {
         const ui64 tabletId = resp->Record.GetPathDescription().GetKesus().GetKesusTabletId();
 
         for (int cycle = 1; cycle <= 5; ++cycle) {
-            auto request = MakeHolder<NKesus::TEvKesus::TEvUpdateQuoterResource>();
+            auto request = std::make_unique<NKesus::TEvKesus::TEvUpdateQuoterResource>();
             request->Record.MutableResource()->SetResourcePath("memleak_root");
             request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()
                 ->SetMaxUnitsPerSecond(1'000'000.0 + cycle * 100'000.0);
@@ -503,7 +503,7 @@ Y_UNIT_TEST(MeasureKesusTabletMemory) {
         const ui64 tabletId = resp->Record.GetPathDescription().GetKesus().GetKesusTabletId();
 
         for (size_t i = 0; i < ResourceCount; ++i) {
-            auto request = MakeHolder<NKesus::TEvKesus::TEvAddQuoterResource>();
+            auto request = std::make_unique<NKesus::TEvKesus::TEvAddQuoterResource>();
             auto* res = request->Record.MutableResource();
             res->SetResourcePath(TStringBuilder() << "acc_root/" << i);
             res->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(100);

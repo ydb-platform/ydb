@@ -67,7 +67,7 @@ struct TEvAuditLog {
     };
 };
 
-void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBackends) {
+void WriteLog(const TString& log, const TVector<std::unique_ptr<TLogBackend>>& logBackends) {
     for (auto& logBackend : logBackends) {
         try {
             logBackend->WriteData(TLogRecord(
@@ -256,7 +256,7 @@ std::atomic<bool> AUDIT_LOG_ENABLED = false;
 
 void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts)
 {
-    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
+    auto request = std::make_unique<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
     sys->Send(MakeAuditServiceID(), request.Release());
 }
 

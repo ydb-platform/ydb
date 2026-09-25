@@ -897,7 +897,7 @@ public:
         const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
         YQL_ENSURE(range.IsFullRange(KeyColumnTypes.size()));
-        auto keyRange = MakeHolder<TKeyDesc>(
+        auto keyRange = std::make_unique<TKeyDesc>(
             TableId,
             range,
             TKeyDesc::ERowOperation::Update, // Only for CTAS
@@ -5367,7 +5367,7 @@ public:
     void SendCommitToCoordinator() {
         const auto commitInfo = TxManager->GetCommitInfo();
 
-        auto ev = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
+        auto ev = std::make_unique<TEvTxProxy::TEvProposeTransaction>();
 
         YQL_ENSURE(commitInfo.Coordinator);
         Coordinator = commitInfo.Coordinator;
@@ -7314,7 +7314,7 @@ private:
     NWilson::TSpan ForwardWriteActorSpan;
     NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
 
-    THolder<TEvBufferWriteResult> PendingResult;
+    std::unique_ptr<TEvBufferWriteResult> PendingResult;
     size_t PendingBatchIndex = 0;
     size_t PendingRowIndex = 0;
 

@@ -57,7 +57,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     ui64 SourceCookie = 0;
 
     ui32 Replicas;
-    THolder<TStateStorageInfo::TSelection> ReplicaSelection;
+    std::unique_ptr<TStateStorageInfo::TSelection> ReplicaSelection;
     TEvStateStorage::TSignature Signature;
     THashSet<TActorId> UndeliveredReplicas;
 
@@ -84,7 +84,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void SelectRequestReplicas(TStateStorageInfo *info) {
-        THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
+        std::unique_ptr<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
         info->SelectReplicas(TabletID, selection.Get(), RingGroupIndex);
         Replicas = selection->Sz;
         ReplicaSelection = std::move(selection);
@@ -164,7 +164,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         {}
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
-            THolder<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
+            std::unique_ptr<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
             req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
             req->Record.SetClusterStateGeneration(ClusterStateGeneration);
@@ -193,7 +193,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         {}
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
-            THolder<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
+            std::unique_ptr<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
             req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
             req->Record.SetClusterStateGeneration(ClusterStateGeneration);
@@ -1134,7 +1134,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     void Handle(TEvStateStorage::TEvCleanup::TPtr &ev) {
         const auto *msg = ev->Get();
         for (size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
-            THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
+            std::unique_ptr<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
             Info->SelectReplicas(msg->TabletID, selection.Get(), ringGroupIdx);
             SpreadCleanupRequest(*selection, msg->TabletID, msg->ProposedLeader);
         }
@@ -1244,7 +1244,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
             if (info->RingGroups[ringGroupIndex].State == ERingGroupState::DISCONNECTED) {
                 continue;
             }
-            THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
+            std::unique_ptr<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
             info->SelectReplicas(tabletId, selection.Get(), ringGroupIndex);
             reply->ReplicaGroups.resize(reply->ReplicaGroups.size() + 1);
             auto &rg = reply->ReplicaGroups.back();

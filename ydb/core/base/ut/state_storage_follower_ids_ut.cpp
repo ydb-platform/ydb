@@ -291,7 +291,7 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
     TAutoPtr<IEventHandle> handleNodesInfo;
     auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-    auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto bsConfigureRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
     NKikimrBlobStorage::TDefineBox boxConfig;
     boxConfig.SetBoxId(1);
@@ -359,7 +359,7 @@ ui64 SendCreateTabletMessage(
     TTestActorRuntime &runtime,
     ui64 hiveTabletId,
     ui64 testerTabletId,
-    THolder<TEvHive::TEvCreateTablet> ev,
+    std::unique_ptr<TEvHive::TEvCreateTablet> ev,
     ui32 nodeIndex
 ) {
     const TActorId senderActorId = runtime.AllocateEdgeActor(nodeIndex);
@@ -438,7 +438,7 @@ void StartTabletWithFollowers(
     }
 
     // Create a tablet with a follower on each node
-    THolder<TEvHive::TEvCreateTablet> ev(
+    std::unique_ptr<TEvHive::TEvCreateTablet> ev(
         new TEvHive::TEvCreateTablet(
             testerTabletId,
             100500,

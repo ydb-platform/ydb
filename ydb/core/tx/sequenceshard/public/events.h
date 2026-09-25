@@ -67,7 +67,7 @@ namespace NSequenceShard {
             }
 
             struct TBuilder {
-                THolder<TEvCreateSequence> Msg;
+                std::unique_ptr<TEvCreateSequence> Msg;
 
                 TBuilder&& SetMinValue(i64 minValue) && {
                     Msg->Record.SetMinValue(minValue);
@@ -104,13 +104,13 @@ namespace NSequenceShard {
                     return std::move(*this);
                 }
 
-                THolder<TEvCreateSequence> Done() && {
+                std::unique_ptr<TEvCreateSequence> Done() && {
                     return std::move(Msg);
                 }
             };
 
             static TBuilder Build(const TPathId& pathId) {
-                return TBuilder{ MakeHolder<TEvCreateSequence>(pathId) };
+                return TBuilder{ std::make_unique<TEvCreateSequence>(pathId) };
             }
         };
 
@@ -217,7 +217,7 @@ namespace NSequenceShard {
             }
 
             struct TBuilder {
-                THolder<TEvUpdateSequence> Msg;
+                std::unique_ptr<TEvUpdateSequence> Msg;
 
                 TBuilder&& SetMinValue(i64 minValue) && {
                     Msg->Record.SetMinValue(minValue);
@@ -259,13 +259,13 @@ namespace NSequenceShard {
                     return std::move(*this);
                 }
 
-                THolder<TEvUpdateSequence> Done() && {
+                std::unique_ptr<TEvUpdateSequence> Done() && {
                     return std::move(Msg);
                 }
             };
 
             static TBuilder Build(const TPathId& pathId) {
-                return TBuilder{ MakeHolder<TEvUpdateSequence>(pathId) };
+                return TBuilder{ std::make_unique<TEvUpdateSequence>(pathId) };
             }
         };
 

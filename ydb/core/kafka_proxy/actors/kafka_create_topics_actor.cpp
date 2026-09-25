@@ -13,7 +13,7 @@
 
 namespace NKafka {
 
-std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(
+std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(
         const std::optional<TString>& configValue, std::optional<ECleanupPolicy>& cleanupPolicy
 ) {
     if (configValue.value_or("") == "delete") {
@@ -23,7 +23,7 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPol
         cleanupPolicy = ECleanupPolicy::COMPACT;
         return std::nullopt;
     }
-    auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+    auto result = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
     result->Status = EKafkaErrors::INVALID_REQUEST;
     result->Message = TStringBuilder()
         << "Topic-level config '"
@@ -34,14 +34,14 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPol
 }
 
 
-std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
+std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
         const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType
 ) {
     if (configValue == MESSAGE_TIMESTAMP_CREATE_TIME || configValue == MESSAGE_TIMESTAMP_LOG_APPEND) {
         correctTimestampType = configValue;
         return std::nullopt;
     }
-    auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+    auto result = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
     result->Status = EKafkaErrors::INVALID_REQUEST;
     result->Message = TStringBuilder()
         << "Topic-level config '"
@@ -81,7 +81,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
 
         if (topicName == "") {
-            auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+            auto result = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
             result->Status = EKafkaErrors::INVALID_REQUEST;
             result->Message = "Empty topic name";
             this->TopicNamesToResponses[topicName] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(result.Release());
@@ -93,7 +93,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         std::optional<ECleanupPolicy> cleanupPolicy;
         std::optional<TString> messageTimestampType;
 
-        std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
+        std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
         for (auto& config : topic.Configs) {
             unsupportedConfigResponse = ValidateTopicConfigName(config.Name.value());
@@ -190,7 +190,7 @@ void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaRespo
             status = ConvertErrorCode(eventPtr->Status);
     }
 
-    auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+    auto response = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
     response->TopicPath = eventPtr->Path;
     response->Status = status;
     response->Message = std::move(eventPtr->ErrorMessage);

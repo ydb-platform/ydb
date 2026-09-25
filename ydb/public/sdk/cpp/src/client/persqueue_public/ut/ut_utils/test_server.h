@@ -60,7 +60,7 @@ public:
 
         PrepareNetDataFile();
 
-        CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
+        CleverServer = std::make_unique<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
 
         // Unauthenticated: used by ModifyTopicACL/SDK sessions in UTs that rely on
@@ -68,11 +68,11 @@ public:
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase("/" + ServerSettings.DomainName);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        Driver = std::make_unique<NYdb::TDriver>(driverConfig);
 
         Log << TLOG_INFO << "TTestServer started on Port " << Port << " GrpcPort " << GrpcPort;
 
-        AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort, databaseName);
+        AnnoyingClient = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort, databaseName);
         if (doClientInit) {
             AnnoyingClient->FullInit();
             AnnoyingClient->CheckClustersList(CleverServer->GetRuntime());
@@ -117,7 +117,7 @@ public:
     bool PrepareNetDataFile(const TString& content = "::1/128\tdc1") {
         if (NetDataFile)
             return false;
-        NetDataFile = MakeHolder<TTempFileHandle>();
+        NetDataFile = std::make_unique<TTempFileHandle>();
         NetDataFile->Write(content.data(), content.size());
         NetDataFile->FlushData();
         ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());
@@ -174,19 +174,19 @@ public:
     ui16 GrpcPort;
     TString Endpoint;
 
-    THolder<NKikimr::Tests::TServer> CleverServer;
+    std::unique_ptr<NKikimr::Tests::TServer> CleverServer;
     NKikimr::Tests::TServerSettings ServerSettings;
     NYdbGrpc::TServerOptions GrpcServerOptions;
-    THolder<TTempFileHandle> NetDataFile;
+    std::unique_ptr<TTempFileHandle> NetDataFile;
 
     TLog Log = CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG);
 
-    THolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> AnnoyingClient;
+    std::unique_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> AnnoyingClient;
 
 
     static const TVector<NKikimrServices::EServiceKikimr> LOGGED_SERVICES;
 private:
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
 };
 
 } // namespace NPersQueue

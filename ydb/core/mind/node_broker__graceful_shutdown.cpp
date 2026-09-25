@@ -27,7 +27,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "TTxGracefulShutdown Execute: graceful shutdown request",
             {"nodeId", nodeId});
 
-        Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();
+        Response = std::make_unique<TEvNodeBroker::TEvGracefulShutdownResponse>();
         const auto it = Self->Dirty.Nodes.find(nodeId);
 
         if (it != Self->Dirty.Nodes.end()) {
@@ -60,7 +60,7 @@ public:
 
 private:
     TEvNodeBroker::TEvGracefulShutdownRequest::TPtr Event;
-    THolder<TEvNodeBroker::TEvGracefulShutdownResponse> Response;
+    std::unique_ptr<TEvNodeBroker::TEvGracefulShutdownResponse> Response;
     bool Update;
 };
 

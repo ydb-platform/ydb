@@ -89,8 +89,8 @@ public:
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
-    THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> FormWriteRequest() {
-        auto ev = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>();
+    std::unique_ptr<NPQ::TEvPartitionWriter::TEvWriteRequest> FormWriteRequest() {
+        auto ev = std::make_unique<NPQ::TEvPartitionWriter::TEvWriteRequest>();
         auto& request = ev->Record;
         auto* partitionRequest = request.MutablePartitionRequest();
         partitionRequest->SetTopic(TopicPath);

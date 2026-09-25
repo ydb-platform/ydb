@@ -71,7 +71,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             return;
         }
 
-        auto handshake = MakeHolder<TEvChangeExchange::TEvHandshake>();
+        auto handshake = std::make_unique<TEvChangeExchange::TEvHandshake>();
         handshake->Record.SetOrigin(DataShard.TabletId);
         handshake->Record.SetGeneration(DataShard.Generation);
 
@@ -130,7 +130,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
 
-        auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
+        auto records = std::make_unique<TEvChangeExchange::TEvApplyRecords>();
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 

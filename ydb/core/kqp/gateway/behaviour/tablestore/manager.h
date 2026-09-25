@@ -16,7 +16,7 @@ class TTableStoreManager: public NMetadata::NModifications::IOperationsManager {
 private:
     TConclusion<ITableStoreOperation::TPtr> BuildOperation(
         const NYql::TObjectSettingsImpl& settings, NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context) const;
-    NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> SendSchemeTx(THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+    NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> SendSchemeTx(std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& request,
         const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) const;
 
 protected:

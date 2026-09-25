@@ -13,7 +13,7 @@ namespace NKikimr::NReplication::NController {
 
 class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
     void Resolve(const TPathId& pathId) {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = ""; // it's intentional because TTenantResolver is deprecated
 
         auto& entry = request->ResultSet.emplace_back();

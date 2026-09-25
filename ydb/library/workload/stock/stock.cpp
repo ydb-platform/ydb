@@ -392,8 +392,8 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
     }
 }
 
-THolder<IWorkloadQueryGenerator> TStockWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TStockWorkloadGenerator>(this);
+std::unique_ptr<IWorkloadQueryGenerator> TStockWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TStockWorkloadGenerator>(this);
 }
 
 TString TStockWorkloadParams::GetWorkloadName() const {

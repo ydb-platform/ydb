@@ -255,8 +255,8 @@ namespace NYql {
         TGenericState::TPtr State_;
     };
 
-    THolder<TVisitorTransformerBase> CreateGenericDataSourceTypeAnnotationTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericDataSourceTypeAnnotationTransformer>(state);
+    std::unique_ptr<TVisitorTransformerBase> CreateGenericDataSourceTypeAnnotationTransformer(TGenericState::TPtr state) {
+        return std::make_unique<TGenericDataSourceTypeAnnotationTransformer>(state);
     }
 
 } // namespace NYql

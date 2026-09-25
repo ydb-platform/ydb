@@ -11,7 +11,7 @@ public:
     TTrace(const TString& serializedTrace);
 
     ITrace* CreateTrace(ITrace::EType type) override;
-    bool Attach(THolder<ITraceSignal> signal) override;
+    bool Attach(std::unique_ptr<ITraceSignal> signal) override;
     TTraceID GetSelfID() const override;
     TTraceID GetParentID() const override;
     TTraceID GetRootID() const override;

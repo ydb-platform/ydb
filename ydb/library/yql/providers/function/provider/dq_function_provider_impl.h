@@ -8,10 +8,10 @@
 
 namespace NYql::NDqFunction {
 
-THolder<TVisitorTransformerBase> CreateDqFunctionIntentTransformer(TDqFunctionState::TPtr state);
-THolder<IGraphTransformer> CreateDqFunctionMetaLoader(TDqFunctionState::TPtr state);
-THolder<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionState::TPtr state);
-THolder<IDqIntegration> CreateDqFunctionDqIntegration(TDqFunctionState::TPtr state);
-THolder<TVisitorTransformerBase> CreateDqFunctionTypeAnnotation(TDqFunctionState::TPtr state);
+std::unique_ptr<TVisitorTransformerBase> CreateDqFunctionIntentTransformer(TDqFunctionState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateDqFunctionMetaLoader(TDqFunctionState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionState::TPtr state);
+std::unique_ptr<IDqIntegration> CreateDqFunctionDqIntegration(TDqFunctionState::TPtr state);
+std::unique_ptr<TVisitorTransformerBase> CreateDqFunctionTypeAnnotation(TDqFunctionState::TPtr state);
 
 }

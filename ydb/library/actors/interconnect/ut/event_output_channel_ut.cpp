@@ -164,7 +164,7 @@ TSerializedEvent SerializeEvent(bool useXxhash, bool allowDisablingPayloadChecks
     std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
     metrics->SetPeerInfo("peer", "1", "peer");
 
-    auto releaseCallback = [](THolder<IEventBase>) {};
+    auto releaseCallback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, releaseCallback);
 
     TSessionParams params;
@@ -180,7 +180,7 @@ TSerializedEvent SerializeEvent(bool useXxhash, bool allowDisablingPayloadChecks
     ev->AddPayload(TRope(TString(5000, 'x')));
     UNIT_ASSERT(ev->AllowExternalDataChannel());
 
-    auto evHandle = MakeHolder<IEventHandle>(
+    auto evHandle = std::make_unique<IEventHandle>(
         TActorId(),
         TActorId(),
         ev,
@@ -294,7 +294,7 @@ public:
         std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
         metrics->SetPeerInfo("peer", "1", "peer");
 
-        auto releaseCallback = [](THolder<IEventBase>) {};
+        auto releaseCallback = [](std::unique_ptr<IEventBase>) {};
         TEventHolderPool pool(common, releaseCallback);
 
         TSessionParams params;
@@ -310,7 +310,7 @@ public:
         ev->Record.SetBuffer(CompleteSerializer
             ? TString("serialized event larger than configured limit")
             : TString(2 * TTcpPacketBuf::PacketDataLen, 'X'));
-        auto evHandle = MakeHolder<IEventHandle>(
+        auto evHandle = std::make_unique<IEventHandle>(
             SelfId(), ReplyTo, ev, IEventHandle::FlagTrackDelivery);
         channel.Push(*evHandle, pool, TInstant::Zero());
 
@@ -351,14 +351,14 @@ void AssertXdcDeclareNotSerialized(IEventBase* ev, ui32 maxSerializedEventSize) 
     std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
     metrics->SetPeerInfo("peer", "1", "peer");
 
-    auto releaseCallback = [](THolder<IEventBase>) {};
+    auto releaseCallback = [](std::unique_ptr<IEventBase>) {};
     TEventHolderPool pool(common, releaseCallback);
 
     TSessionParams params;
     params.UseExternalDataChannel = true;
 
     TEventOutputChannel channel(1, 1, maxSerializedEventSize, metrics, params, nullptr);
-    auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+    auto evHandle = std::make_unique<IEventHandle>(TActorId(), TActorId(), ev);
     channel.Push(*evHandle, pool, TInstant::Zero());
 
     NInterconnect::TOutgoingStream mainStream;
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(EventOutputChannel) {
         std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
         metrics->SetPeerInfo("peer", "1", "peer");
 
-        auto releaseCallback = [](THolder<IEventBase>) {};
+        auto releaseCallback = [](std::unique_ptr<IEventBase>) {};
         TEventHolderPool pool(common, releaseCallback);
 
         TSessionParams params;
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(EventOutputChannel) {
 
         auto* ev = new TEvTestSerialization;
         ev->Record.SetBuffer("serialized event larger than configured limit");
-        auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+        auto evHandle = std::make_unique<IEventHandle>(TActorId(), TActorId(), ev);
         channel.Push(*evHandle, pool, TInstant::Zero());
 
         NInterconnect::TOutgoingStream mainStream;

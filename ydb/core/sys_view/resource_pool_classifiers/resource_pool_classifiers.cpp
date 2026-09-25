@@ -162,7 +162,7 @@ private:
             return;
         }
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
         // It's a mandatory condition to keep sorted PK here
         for (const auto& [name, config] : std::map(resourcePoolsIt->second.ByName.begin(), resourcePoolsIt->second.ByName.end())) {
@@ -193,12 +193,12 @@ private:
     TString DatabaseId;
 };
 
-THolder<NActors::IActor> CreateResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
 {
-    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+    return std::make_unique<TResourcePoolClassifiersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
         std::move(userToken), reverse);
 }
 

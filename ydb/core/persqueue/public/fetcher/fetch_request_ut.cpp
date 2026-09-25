@@ -73,7 +73,7 @@ TActorId RegisterFetchActor(TTestActorRuntime& runtime, const TFetchRequestSetti
     return fetchId;
 }
 
-THolder<TEvPQ::TEvFetchResponse> Fetch(
+std::unique_ptr<TEvPQ::TEvFetchResponse> Fetch(
     TTestActorRuntime& runtime,
     const TFetchRequestSettings& settings,
     TDuration timeout = TDuration::Seconds(30))
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         // Reach StateWork (HasData handlers) before injecting — StateDescribe rejects this event.
         runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
 
-        auto response = MakeHolder<TEvPersQueue::TEvHasDataInfoResponse>();
+        auto response = std::make_unique<TEvPersQueue::TEvHasDataInfoResponse>();
         response->Record.SetCookie(0);
         response->Record.SetSessionInvalidated(true);
         runtime.Send(new IEventHandle(fetchId, fetchId, response.Release()), 0, true);
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
         // Periodically inject RlNoResource while the fetch is running. When the actor is waiting
         // for quota this re-triggers RequestDataQuota; otherwise the wakeup is ignored safely.
-        THolder<TEvPQ::TEvFetchResponse> ev;
+        std::unique_ptr<TEvPQ::TEvFetchResponse> ev;
         for (ui32 i = 0; i < 200 && !ev; ++i) {
             runtime.Send(new IEventHandle(fetchId, fetchId, new TEvents::TEvWakeup(RlNoResourceTag)), 0, true);
             runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(50));
@@ -646,7 +646,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         // Reach StateWork, then inject a response with a foreign cookie / no active read.
         runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
         {
-            auto stale = MakeHolder<TEvPersQueue::TEvResponse>();
+            auto stale = std::make_unique<TEvPersQueue::TEvResponse>();
             stale->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto* part = stale->Record.MutablePartitionResponse();
             part->SetCookie(999);

@@ -193,7 +193,7 @@ public:
 
             if (SayHelloOnBootstrap()) {
                 // say "Hello" to executer
-                auto ev = MakeHolder<TEvDqCompute::TEvState>();
+                auto ev = std::make_unique<TEvDqCompute::TEvState>();
                 ev->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
                 ev->Record.SetTaskId(Task.GetId());
 
@@ -370,8 +370,8 @@ protected:
     }
 
 protected:
-    THolder<TDqMemoryQuota> InitMemoryQuota() {
-        return MakeHolder<TDqMemoryQuota>(
+    std::unique_ptr<TDqMemoryQuota> InitMemoryQuota() {
+        return std::make_unique<TDqMemoryQuota>(
             MkqlMemoryQuota,
             CalcMkqlMemoryLimit(),
             MemoryLimits,
@@ -787,7 +787,7 @@ protected:
     }
 
     void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool forceTerminate = false) {
-        auto execEv = MakeHolder<TEvDqCompute::TEvState>();
+        auto execEv = std::make_unique<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
 
         FillExtraData(record);
@@ -1109,7 +1109,7 @@ protected:
             std::optional<TInstant> StartBlockedTime;
 
         };
-        THolder<TStats> Stats;
+        std::unique_ptr<TStats> Stats;
 
         struct TAsyncData { // Is used in case of async compute actor
             TVector<TDqSerializedBatch> Data;
@@ -1398,7 +1398,7 @@ protected:
 
     void HandleExecuteBase(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
-        auto evState = MakeHolder<TEvDqCompute::TEvState>();
+        auto evState = std::make_unique<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
         evState->Record.SetTaskId(Task.GetId());
@@ -2496,7 +2496,7 @@ protected:
                     outputChannel.WatermarksMode = channel.GetWatermarksMode();
 
                     if (Y_UNLIKELY(RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {
-                        outputChannel.Stats = MakeHolder<typename TOutputChannelInfo::TStats>();
+                        outputChannel.Stats = std::make_unique<typename TOutputChannelInfo::TStats>();
                     }
 
                     auto result = OutputChannelsMap.emplace(channel.GetId(), std::move(outputChannel));
@@ -2923,7 +2923,7 @@ protected:
     std::optional<TOutputChannelsSummary> OutputChannelsSummary;
     bool HasEffectsOutputs = false; // track execution of DISCARD results
 
-    THolder<TDqMemoryQuota> MemoryQuota;
+    std::unique_ptr<TDqMemoryQuota> MemoryQuota;
     TDqComputeActorWatermarks WatermarksTracker;
     TDqWatermarkGeneratorTracker WatermarkGeneratorTracker;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
@@ -2943,7 +2943,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
-    THolder<NYql::TCounters> Stat;
+    std::unique_ptr<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
 };
 

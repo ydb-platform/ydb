@@ -15,7 +15,7 @@ class TCms::TTxRemovePermissions : public TTransactionBase<TCms> {
     }
 
 public:
-    TTxRemovePermissions(TCms *self, TVector<TString> &&ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired)
+    TTxRemovePermissions(TCms *self, TVector<TString> &&ids, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired)
         : TBase(self)
         , Request(std::move(req))
         , Response(resp)
@@ -91,14 +91,14 @@ public:
     }
 
 private:
-    THolder<IEventBase> Request;
+    std::unique_ptr<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
     TVector<TString> Ids;
     bool Expired;
     TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
 };
 
-ITransaction *TCms::CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
+ITransaction *TCms::CreateTxRemovePermissions(TVector<TString> ids, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp,
         bool expired)
 {
     return new TTxRemovePermissions(this, std::move(ids), std::move(req), std::move(resp), expired);

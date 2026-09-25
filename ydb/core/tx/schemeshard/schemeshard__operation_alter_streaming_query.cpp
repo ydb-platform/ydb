@@ -88,15 +88,15 @@ class TAlterStreamingQuery : public TSubOperation {
         case TTxState::Waiting:
         case TTxState::Propose:
             // RunDelta is 0 on restart (init already loaded the updated state from DB)
-            return MakeHolder<TPropose>(OperationId, RunDelta);
+            return std::make_unique<TPropose>(OperationId, RunDelta);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    static bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
+    static bool IsParentPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& parentPath) {
         const auto checks = parentPath.Check();
         checks.NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
@@ -113,7 +113,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath) {
+    static bool IsDestinationPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
@@ -133,7 +133,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
+    bool IsApplyIfChecksPassed(const std::unique_ptr<TProposeResponse>& result, const TOperationContext& context) const {
         if (TString errorStr; !context.SS->CheckApplyIf(Transaction, errorStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
             return false;
@@ -217,7 +217,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return streamingQueryInfo;
     }
 
-    bool IsDescriptionValid(const THolder<TProposeResponse>& result, TStreamingQueryInfo::TPtr oldQueryInfo, TStreamingQueryInfo::TPtr newQueryInfo) const {
+    bool IsDescriptionValid(const std::unique_ptr<TProposeResponse>& result, TStreamingQueryInfo::TPtr oldQueryInfo, TStreamingQueryInfo::TPtr newQueryInfo) const {
         const auto& info = Transaction.GetCreateStreamingQuery();
         if (info.HasOperationOwnerActorId() && !newQueryInfo->OperationOwnerActorId) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
@@ -280,7 +280,7 @@ class TAlterStreamingQuery : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
         const TString& name = streamingQueryDescription.GetName();
@@ -288,7 +288,7 @@ public:
             {"path", parentPathStr + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 

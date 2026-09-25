@@ -101,7 +101,7 @@ private:
         Y_ABORT_UNLESS(messageIt != PendingMessages.end());
         const auto& message = messageIt->second;
 
-        auto req = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
+        auto req = std::make_unique<NDq::TEvDqCompute::TEvChannelDataAck>();
         req->Record.SetChannelId(message->Get()->Record.GetChannelData().GetChannelId());
         req->Record.SetSeqNo(message->Get()->Record.GetSeqNo());
         req->Record.SetFreeSpace((i64)256_MB - (i64)InflightBytes());
@@ -129,7 +129,7 @@ private:
 
 } /* namespace */
 
-THolder<NActors::IActor> MakeResultReceiver(
+std::unique_ptr<NActors::IActor> MakeResultReceiver(
     const TVector<TString>& columns,
     const NActors::TActorId& executerId,
     const TString& traceId,
@@ -138,7 +138,7 @@ THolder<NActors::IActor> MakeResultReceiver(
     const TString& resultType,
     const NActors::TActorId& graphExecutionEventsId,
     bool discard) {
-    return MakeHolder<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, graphExecutionEventsId, discard);
+    return std::make_unique<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, graphExecutionEventsId, discard);
 }
 
 } /* namespace NYql */

@@ -47,7 +47,7 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxSyncTenant(TPathId path
 
 struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr Ev;
-    THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> SyncEv;
+    std::unique_ptr<TEvSchemeShard::TEvSyncTenantSchemeShard> SyncEv;
     TSideEffects SideEffects;
 
     TTxUpdateTenant(TSelf *self, TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr &ev)

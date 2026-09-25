@@ -9,7 +9,7 @@ namespace NKikimr::NCms {
 
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
 public:
-    TTxStorePermissions(TCms *self, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
+    TTxStorePermissions(TCms *self, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp,
             const TString &owner, const TString &requestId, i32 priority, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
         : TBase(self)
         , Request(std::move(req))
@@ -152,7 +152,7 @@ public:
     }
 
 private:
-    THolder<IEventBase> Request;
+    std::unique_ptr<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
     TString Owner;
     TString RequestId;
@@ -164,7 +164,7 @@ private:
     TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
 };
 
-ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
+ITransaction *TCms::CreateTxStorePermissions(std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp,
         const TString &owner, const TString &requestId, i32 priority, TAutoPtr<TRequestInfo> scheduled,
         const TMaybe<TString> &maintenanceTaskId)
 {

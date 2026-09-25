@@ -75,7 +75,7 @@ public:
         using TPtr = TIntrusivePtr<IRetryableEvent>;
 
         virtual ~IRetryableEvent() = default;
-        virtual THolder<NActors::IEventHandle> Clone(ui64 confirmedSeqNo) const = 0;
+        virtual std::unique_ptr<NActors::IEventHandle> Clone(ui64 confirmedSeqNo) const = 0;
         virtual ui64 GetSeqNo() const = 0;
     };
 
@@ -85,11 +85,11 @@ public:
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
-        Send(THolder<T>(ev), cookie);
+        Send(std::unique_ptr<T>(ev), cookie);
     }
 
     template <TProtobufEventWithTransportMeta T>
-    void Send(THolder<T> ev, ui64 cookie = 0) {
+    void Send(std::unique_ptr<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
             LastSentDataTime = TInstant::Now();
             NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ NActors::IEventHandle::FlagTrackDelivery, cookie));
@@ -163,7 +163,7 @@ public:
 
 private:
     template <TProtobufEventWithTransportMeta T>
-    IRetryableEvent::TPtr Store(const NActors::TActorId& recipient, const NActors::TActorId& sender, THolder<T> ev, ui64 cookie) {
+    IRetryableEvent::TPtr Store(const NActors::TActorId& recipient, const NActors::TActorId& sender, std::unique_ptr<T> ev, ui64 cookie) {
         ev->Record.MutableTransportMeta()->SetSeqNo(NextSeqNo++);
         Events.push_back(MakeIntrusive<TRetryableEvent<T>>(recipient, sender, std::move(ev), cookie));
         return Events.back();
@@ -179,7 +179,7 @@ private:
     template <TProtobufEventWithTransportMeta T>
     class TRetryableEvent : public IRetryableEvent {
     public:
-        TRetryableEvent(const NActors::TActorId& recipient, const NActors::TActorId& sender, THolder<T> ev, ui64 cookie)
+        TRetryableEvent(const NActors::TActorId& recipient, const NActors::TActorId& sender, std::unique_ptr<T> ev, ui64 cookie)
             : Event(std::move(ev))
             , Recipient(recipient)
             , Sender(sender)
@@ -190,18 +190,18 @@ private:
             return Event->Record.GetTransportMeta().GetSeqNo();
         }
 
-        THolder<NActors::IEventHandle> Clone(ui64 confirmedSeqNo) const override {
-            THolder<T> ev = MakeHolder<T>();
+        std::unique_ptr<NActors::IEventHandle> Clone(ui64 confirmedSeqNo) const override {
+            std::unique_ptr<T> ev = std::make_unique<T>();
             ev->Record = Event->Record;
             ev->Record.MutableTransportMeta()->SetConfirmedSeqNo(confirmedSeqNo);
             for (ui32 i = 0; i < Event->GetPayloadCount(); ++i) {
                 ev->AddPayload(TRope(Event->GetPayload(i)));
             }
-            return MakeHolder<NActors::IEventHandle>(Recipient, Sender, ev.Release(), NActors::IEventHandle::FlagTrackDelivery, Cookie);
+            return std::make_unique<NActors::IEventHandle>(Recipient, Sender, ev.Release(), NActors::IEventHandle::FlagTrackDelivery, Cookie);
         }
 
     private:
-        const THolder<T> Event;
+        const std::unique_ptr<T> Event;
         const NActors::TActorId Recipient;
         const NActors::TActorId Sender;
         const ui64 Cookie;

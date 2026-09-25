@@ -136,13 +136,13 @@ protected:
     virtual void OnSuccessfulAuth() = 0;
     virtual void ChangeCounters(std::function<void()> func) = 0;
 
-    THolder<NKikimrClient::TSqsRequest> RequestHolder_;
-    THolder<IReplyCallback> Callback_;
+    std::unique_ptr<NKikimrClient::TSqsRequest> RequestHolder_;
+    std::unique_ptr<IReplyCallback> Callback_;
     const TString RequestId_;
     const bool EnableQueueLeader_;
     const ui32 PoolId_;
-    THolder<TAwsRequestSignV4> Signature_;
-    THolder<TAccessKeySignature> AccessKeySignature_;
+    std::unique_ptr<TAwsRequestSignV4> Signature_;
+    std::unique_ptr<TAccessKeySignature> AccessKeySignature_;
     const EAction Action_;
     TString PermissionName_;
     TString IamToken_;

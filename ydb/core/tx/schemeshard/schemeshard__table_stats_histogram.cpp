@@ -226,11 +226,11 @@ TSmallVec<NScheme::TTypeInfo> GetKeyColumnTypes(const TTableInfo& tableInfo) {
     return keyColumnTypes;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> SplitRequest(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> SplitRequest(
     TSchemeShard* ss, TTxId& txId, const TPathId& pathId, TTabletId datashardId, const TString& keyBuff,
     bool loadSplitLineage)
 {
-    auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->SelfTabletId()));
+    auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->SelfTabletId()));
     auto& record = request->Record;
 
     TPath tablePath = TPath::Init(pathId, ss);

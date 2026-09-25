@@ -19,7 +19,7 @@ public:
     void BeginTransaction(ui64 cookie, const TActorContext& ctx);
     bool HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void CloseKqpSession(const TActorContext& ctx);
-    void SendRequest(THolder<TEvKqp::TEvQueryRequest> request, ui64 cookie, const TActorContext& ctx);
+    void SendRequest(std::unique_ptr<TEvKqp::TEvQueryRequest> request, ui64 cookie, const TActorContext& ctx);
     void CommitTx(ui64 cookie, const TActorContext& ctx);
     void SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit = false);
     void SendInitTableRequest(const TActorContext& ctx, std::shared_ptr<NKikimr::NMetadata::IClassBehaviour> prepareManager);
@@ -31,8 +31,8 @@ public:
     TString TxId;
 
 private:
-    THolder<TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
-    THolder<TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
+    std::unique_ptr<TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
+    std::unique_ptr<TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
 
 
 private:

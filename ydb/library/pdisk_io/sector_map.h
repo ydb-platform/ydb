@@ -219,7 +219,7 @@ public:
 private:
     THashMap<ui64, std::variant<TString, std::pair<TString, TString>>> Map;
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
-    THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
+    std::unique_ptr<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
     std::function<void()> ReadCallback = nullptr;
 
     std::mt19937_64 RandomGenerator{RandomNumber<ui64>()};
@@ -266,7 +266,7 @@ public:
 
     void InitSectorOperationThrottler() {
         if (DeviceSize > 0 && DiskMode != NSectorMap::DM_NONE) {
-            SectorOperationThrottler = MakeHolder<NSectorMap::TSectorOperationThrottler>((DeviceSize + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE, DiskMode);
+            SectorOperationThrottler = std::make_unique<NSectorMap::TSectorOperationThrottler>((DeviceSize + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE, DiskMode);
         } else {
             SectorOperationThrottler.Reset();
         }

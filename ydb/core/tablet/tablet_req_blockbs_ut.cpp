@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
             groups.insert(info->Channels.at(channel).History.at(0).GroupID);
         }
 
-        TVector<THolder<IEventHandle>> blocked;
+        TVector<std::unique_ptr<IEventHandle>> blocked;
         size_t passed = 0;
         auto blockErrors = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {

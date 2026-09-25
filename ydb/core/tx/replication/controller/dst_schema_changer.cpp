@@ -561,7 +561,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
     }
 
     void ProposeAlter() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto ev = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         *ev->Record.AddTransaction() = Alter;
         MayHaveProposedTxId = true;
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));

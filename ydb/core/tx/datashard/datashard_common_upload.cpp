@@ -20,7 +20,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         absl::flat_hash_set<ui64>* volatileReadDependencies)
 {
     const auto& record = Ev->Get()->Record;
-    Result = MakeHolder<TEvResponse>(self->TabletID());
+    Result = std::make_unique<TEvResponse>(self->TabletID());
 
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
     if (deadline && deadline < AppData()->TimeProvider->Now()) {
@@ -269,7 +269,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 }
 
 template <typename TEvRequest, typename TEvResponse>
-void TCommonUploadOps<TEvRequest, TEvResponse>::GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie) {
+void TCommonUploadOps<TEvRequest, TEvResponse>::GetResult(TDataShard* self, TActorId& target, std::unique_ptr<IEventBase>& event, ui64& cookie) {
     Y_ENSURE(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {

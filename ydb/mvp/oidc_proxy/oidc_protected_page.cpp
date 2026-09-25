@@ -122,7 +122,7 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
     BLOG_D("Forward user request bypass OIDC");
 
     auto timeout = GetRequestTimeout();
-    ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
+    ExtensionManager = std::make_unique<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
     ExtensionManager->SetExtensionTimeout(timeout);
     ExtensionManager->SetLogContext(GetLogContext());
     ExtensionManager->ArrangeExtensions(Request);

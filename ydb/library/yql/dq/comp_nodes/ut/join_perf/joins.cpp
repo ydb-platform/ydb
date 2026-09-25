@@ -289,7 +289,7 @@ struct TSample {
 
 TSample RunOnce(ETestedJoinAlgo algo, EJoinKind joinKind, const TJoinDescription& descr, ui32 cols) {
     descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
-    THolder<IComputationGraph> graph = ConstructJoinGraphStream(joinKind, algo, descr);
+    std::unique_ptr<IComputationGraph> graph = ConstructJoinGraphStream(joinKind, algo, descr);
     graph->GetContext().LogProvider = nullptr;
 
     NYql::NUdf::TUnboxedValue stream = graph->GetValue();

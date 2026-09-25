@@ -34,7 +34,7 @@ void CollectQueryStatsImpl(const TActorContext& ctx, const T* queryStats,
     const TString& userSID, ui64 parametersSize, const TString& database,
     const NKikimrKqp::EQueryType type, ui64 requestUnits, const TString& traceId)
 {
-    auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
+    auto collectEv = std::make_unique<NSysView::TEvSysView::TEvCollectQueryStats>();
     collectEv->Database = database;
 
     auto& stats = collectEv->QueryStats;
@@ -181,7 +181,7 @@ void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
         return;
     }
 
-    auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
+    auto collectEv = std::make_unique<NSysView::TEvSysView::TEvCollectQueryStats>();
     collectEv->Database = database;
 
     auto& stats = collectEv->QueryStats;

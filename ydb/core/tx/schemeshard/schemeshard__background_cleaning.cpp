@@ -115,7 +115,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         BackgroundCleaningTxToDirPathId[txId] = pathId;
         state.TxIds.insert(txId);
 
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
+        auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
         auto& record = propose->Record;
 
         auto objectPath = TPath::Init(objectPathId, this);
@@ -210,7 +210,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
             return false;
         }
 
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
+        auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
         auto& record = propose->Record;
 
         auto& modifyScheme = *record.AddTransaction();

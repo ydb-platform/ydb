@@ -107,9 +107,9 @@ public:
 
 private:
     TStepOrder StepTxId;
-    THolder<NMiniKQL::TEngineHost> EngineHost;
-    THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
-    THolder<NMiniKQL::IEngineFlat> Engine;
+    std::unique_ptr<NMiniKQL::TEngineHost> EngineHost;
+    std::unique_ptr<NMiniKQL::TEngineFlatSettings> EngineSettings;
+    std::unique_ptr<NMiniKQL::IEngineFlat> Engine;
     TKeyValidator KeyValidator;
     TEngineHostCounters EngineHostCounters;
 };

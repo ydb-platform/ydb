@@ -394,7 +394,7 @@ private:
 
         PipeClient = CreatePipeClient(tabletId, ctx);
 
-        auto request = MakeHolder<NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest>();
+        auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest>();
         NTabletPipe::SendData(
             ctx,
             PipeClient,
@@ -800,7 +800,7 @@ private:
         // Create pipe to partition tablet
         PipeClient = CreatePipeClient(tabletId, ctx);
 
-        auto request = MakeHolder<NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest>();
+        auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest>();
         // Send request to partition tablet
         NTabletPipe::SendData(
             ctx,

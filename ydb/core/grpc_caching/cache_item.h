@@ -18,7 +18,7 @@ namespace NKikimr {
         TInstant UpdateTimestamp;
         TResponseRecord Response;
         NYdbGrpc::TGrpcStatus Status;
-        TVector<THolder<NActors::IEventHandle>> Waiters;
+        TVector<std::unique_ptr<NActors::IEventHandle>> Waiters;
         TRequestRecord* Request = nullptr;
         TString RequestId;
 
@@ -51,7 +51,7 @@ namespace NKikimr {
             }
         }
 
-        void Respond(THolder<NActors::IEventHandle>&& request, const NActors::TActorContext& ctx) const {
+        void Respond(std::unique_ptr<NActors::IEventHandle>&& request, const NActors::TActorContext& ctx) const {
             TResponseEvent* result = new TResponseEvent();
             result->Response = Response;
             result->Status = Status;
@@ -63,7 +63,7 @@ namespace NKikimr {
             Response = std::move(result.Response);
             Status = std::move(result.Status);
             UpdateTimestamp = ctx.Now();
-            for (THolder<NActors::IEventHandle>& request : Waiters) {
+            for (std::unique_ptr<NActors::IEventHandle>& request : Waiters) {
                 Respond(std::move(request), ctx);
             }
             Waiters.clear();

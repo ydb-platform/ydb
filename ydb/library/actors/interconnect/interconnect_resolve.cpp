@@ -163,11 +163,11 @@ namespace NActors {
                     sin6.sin6_family = AF_INET6;
                     sin6.sin6_addr = msg->GetAddrV6();
                     sin6.sin6_port = HostToInet(Port);
-                    return MakeHolder<NAddr::TIPv6Addr>(sin6);
+                    return std::make_unique<NAddr::TIPv6Addr>(sin6);
                 }
 
                 if (msg->IsV4()) {
-                    return MakeHolder<NAddr::TIPv4Addr>(TIpAddress(msg->GetAddrV4().s_addr, Port));
+                    return std::make_unique<NAddr::TIPv4Addr>(TIpAddress(msg->GetAddrV4().s_addr, Port));
                 }
 
                 Y_ABORT("Unexpected result address family");
@@ -182,9 +182,9 @@ namespace NActors {
 
                 switch (address.GetFamily()) {
                 case AF_INET:
-                    return MakeHolder<NAddr::TIPv4Addr>(*(sockaddr_in*)address.SockAddr());
+                    return std::make_unique<NAddr::TIPv4Addr>(*(sockaddr_in*)address.SockAddr());
                 case AF_INET6:
-                    return MakeHolder<NAddr::TIPv6Addr>(*(sockaddr_in6*)address.SockAddr());
+                    return std::make_unique<NAddr::TIPv6Addr>(*(sockaddr_in6*)address.SockAddr());
                 default:
                     errorText = "Unsupported default address: " + DefaultAddress;
                     break;

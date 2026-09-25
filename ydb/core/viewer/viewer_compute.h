@@ -19,9 +19,9 @@ class TJsonCompute : public TViewerPipeClient {
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     THashMap<TPathId, TTabletId> HiveBySubDomainKey;
     THashMap<TString, TPathId> SubDomainKeyByPath;
-    THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
+    THashMap<TString, std::unique_ptr<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
+    THashMap<TTabletId, std::unique_ptr<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
+    THashMap<TTabletId, std::unique_ptr<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     THashMap<TNodeId, TVector<const NKikimrWhiteboard::TTabletStateInfo*>> TabletInfoIndex;
     THashMap<TNodeId, const NKikimrHive::THiveNodeStats*> HiveNodeStatsIndex;
     THashMap<TNodeId, TString> TenantPathByNodeId;
@@ -31,7 +31,7 @@ class TJsonCompute : public TViewerPipeClient {
     THashSet<TNodeId> FoundNodeIds;
     THashMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> NodeSysInfo;
     TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse> NodeTabletInfo;
-    THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString User;
@@ -277,10 +277,10 @@ public:
                 }
                 NodeIds.emplace_back(nodeId); // order is important
                 TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-                THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+                std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
                 SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
                 if (Tablets && !ev->Get()->Record.GetExtendedTabletInfo()) {
-                    THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
+                    std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest> request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest>();
                     SendRequest(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
                 }
             }

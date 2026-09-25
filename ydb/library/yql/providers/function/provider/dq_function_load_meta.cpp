@@ -95,8 +95,8 @@ private:
 };
 }
 
-THolder<IGraphTransformer> CreateDqFunctionMetaLoader(TDqFunctionState::TPtr state) {
-    return THolder(new TDqFunctionResolverTransform(state));
+std::unique_ptr<IGraphTransformer> CreateDqFunctionMetaLoader(TDqFunctionState::TPtr state) {
+    return std::unique_ptr<TDqFunctionResolverTransform>(new TDqFunctionResolverTransform(state));
 }
 
 }

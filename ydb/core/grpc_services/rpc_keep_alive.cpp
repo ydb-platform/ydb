@@ -45,7 +45,7 @@ private:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvPingSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
 
         if (CheckSession(req->session_id(), Request_.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());

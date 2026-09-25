@@ -68,7 +68,7 @@ public:
                 {"logPrefix", GetLogPrefix()},
                 {"sequence", Sequence},
                 {"ownerId", Owner.first}, {"ownerIdx", Owner.second});
-            THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>();
+            std::unique_ptr<TEvHive::TEvResponseTabletIdSequence> response = std::make_unique<TEvHive::TEvResponseTabletIdSequence>();
             const auto& pbRecord(Event->Get()->Record);
             response->Record.MutableOwner()->CopyFrom(pbRecord.GetOwner());
             response->Record.SetBeginId(Sequence.Begin);

@@ -133,9 +133,9 @@ namespace {
             Writer = new TPartWriter(scheme, Tags, blocks, conf, subset.Epoch());
 
             // Set up TCompactCfg for fulltext
-            auto params = MakeHolder<TCompactionParams>();
+            auto params = std::make_unique<TCompactionParams>();
             params->IsFinal = IsFinal_;
-            CompactCfg = MakeHolder<NTabletFlatExecutor::TCompactCfg>(std::move(params));
+            CompactCfg = std::make_unique<NTabletFlatExecutor::TCompactCfg>(std::move(params));
             CompactCfg->IsFulltextCompact = true;
             CompactCfg->FulltextAddedTag = TagAdded;
             CompactCfg->FulltextSegmentTag = TagSegment;
@@ -233,7 +233,7 @@ namespace {
         TAutoPtr<IPages> Env;
         TVector<ui32> Tags;
         TIntrusivePtr<TPartWriter> Writer;
-        THolder<NTabletFlatExecutor::TCompactCfg> CompactCfg;
+        std::unique_ptr<NTabletFlatExecutor::TCompactCfg> CompactCfg;
         std::unique_ptr<NTabletFlatExecutor::TFulltextCompact> FtState;
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;

@@ -66,7 +66,7 @@ protected:
     void StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectSuccess, const bool waiting) const;
 
     Tests::TServer& Server;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
     bool UseQueryService = false;
 public:
     THelper(TServer& server)
@@ -83,7 +83,7 @@ public:
             driverConfig.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
         }
 
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        Driver = std::make_unique<NYdb::TDriver>(driverConfig);
     }
 
     void SetUseQueryService(bool use = true) {

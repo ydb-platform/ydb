@@ -34,7 +34,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& request = Request->Get()->Record;
 
-        auto response = MakeHolder<TEvExport::TEvCancelExportResponse>(request.GetTxId());
+        auto response = std::make_unique<TEvExport::TEvCancelExportResponse>(request.GetTxId());
         auto& cancel = *response->Record.MutableResponse();
 
         auto it = Self->Exports.find(request.GetRequest().GetId());

@@ -121,8 +121,8 @@ private:
 
 }
 
-THolder<TExecTransformerBase> CreatePqDataSinkExecTransformer(TPqState::TPtr state) {
-    return THolder(new TPqDataSinkExecTransformer(state));
+std::unique_ptr<TExecTransformerBase> CreatePqDataSinkExecTransformer(TPqState::TPtr state) {
+    return std::unique_ptr<TPqDataSinkExecTransformer>(new TPqDataSinkExecTransformer(state));
 }
 
 } // namespace NYql

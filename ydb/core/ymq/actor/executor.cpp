@@ -39,7 +39,7 @@ static TString MiniKQLParamsToString(const NKikimrMiniKQL::TParams& params) {
 TExecutorBuilder::TExecutorBuilder(TActorId parent, const TString& requestId)
     : Parent_(parent)
     , RequestId_(requestId)
-    , ProposeTransactionRequest_(MakeHolder<TEvTxUserProxy::TEvProposeTransaction>())
+    , ProposeTransactionRequest_(std::make_unique<TEvTxUserProxy::TEvProposeTransaction>())
 {
 }
 
@@ -85,8 +85,8 @@ void TExecutorBuilder::StartExecutorActor() {
         RLOG_SQS_DEBUG("Starting executor actor for text query. Mode: " << NKikimrTxUserProxy::TMiniKQLTransaction::EMode_Name(Request().Record.GetTransaction().GetMiniKQLTransaction().GetMode()));
     }
 
-    THolder<TMiniKqlExecutionActor> actor =
-        MakeHolder<TMiniKqlExecutionActor>(
+    std::unique_ptr<TMiniKqlExecutionActor> actor =
+        std::make_unique<TMiniKqlExecutionActor>(
             Parent_,
             RequestId_,
             std::move(ProposeTransactionRequest_),
@@ -105,7 +105,7 @@ void TExecutorBuilder::StartExecutorActor() {
 void TExecutorBuilder::SendToQueueLeader() {
     Y_ABORT_UNLESS(QueueLeaderActor_);
 
-    auto ev = MakeHolder<TSqsEvents::TEvExecute>(Parent_, RequestId_, TQueuePath(Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_), QueryId_, Shard_);
+    auto ev = std::make_unique<TSqsEvents::TEvExecute>(Parent_, RequestId_, TQueuePath(Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_), QueryId_, Shard_);
     ev->RetryOnTimeout = RetryOnTimeout_;
     ev->Cb = std::move(Callback_);
     Params(); // create params if not yet exist
@@ -119,7 +119,7 @@ void TExecutorBuilder::SendToQueueLeader() {
 TMiniKqlExecutionActor::TMiniKqlExecutionActor(
         const TActorId sender,
         TString requestId,
-        THolder<TRequest> req,
+        std::unique_ptr<TRequest> req,
         bool retryOnTimeout,
         const TQueuePath& path, // queue or user
         const TIntrusivePtr<TTransactionCounters>& counters,
@@ -163,7 +163,7 @@ void TMiniKqlExecutionActor::Bootstrap() {
         } catch (const yexception& e) {
             RLOG_SQS_ERROR(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Error while making mkql execution request params: " << CurrentExceptionMessage());
             // TODO Set error
-            Send(Sender_, MakeHolder<TSqsEvents::TEvExecuted>(Cb_, ui64(0)));
+            Send(Sender_, std::make_unique<TSqsEvents::TEvExecuted>(Cb_, ui64(0)));
             LogRequestDuration();
             PassAway();
             return;
@@ -184,7 +184,7 @@ void TMiniKqlExecutionActor::Bootstrap() {
 }
 
 void TMiniKqlExecutionActor::CompileProgram(bool forceRefresh) {
-    auto compileEv = MakeHolder<TMiniKQLCompileServiceEvents::TEvCompile>(MkqlProgramText_);
+    auto compileEv = std::make_unique<TMiniKQLCompileServiceEvents::TEvCompile>(MkqlProgramText_);
     compileEv->ForceRefresh = forceRefresh;
     if (!CompileResolveCookies_.empty()) {
         compileEv->CompileResolveCookies = std::move(CompileResolveCookies_);
@@ -197,7 +197,7 @@ void TMiniKqlExecutionActor::CompileProgram(bool forceRefresh) {
 
 void TMiniKqlExecutionActor::ProceedWithExecution() {
     if (!CompilationPending_) {
-        THolder<TRequest> ev = MakeHolder<TRequest>();
+        std::unique_ptr<TRequest> ev = std::make_unique<TRequest>();
         ev->Record.CopyFrom(Request_->Record);
 
         RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Execute program: " << ev->Record << ". Params: " << MiniKQLParamsToString(ProtoParamsForDebug));
@@ -239,7 +239,7 @@ void TMiniKqlExecutionActor::HandleCompile(TMiniKQLCompileServiceEvents::TEvComp
             resp.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
             IssuesToMessage(result.Errors, resp.MutableIssues());
             resp.SetMiniKQLErrors(errors);
-            THolder<TSqsEvents::TEvExecuted> e(new TSqsEvents::TEvExecuted(resp, Cb_, ui64(0)));
+            std::unique_ptr<TSqsEvents::TEvExecuted> e(new TSqsEvents::TEvExecuted(resp, Cb_, ui64(0)));
             Send(Sender_, std::move(e));
             LogRequestDuration();
             PassAway();
@@ -254,7 +254,7 @@ void TMiniKqlExecutionActor::HandleCompile(TMiniKQLCompileServiceEvents::TEvComp
         resp.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         resp.MutableMiniKQLCompileResults()->SetCompiledProgram(result.CompiledProgram);
         RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Compile program response: " << resp);
-        Send(Sender_, MakeHolder<TSqsEvents::TEvExecuted>(resp, Cb_, ui64(0)));
+        Send(Sender_, std::make_unique<TSqsEvents::TEvExecuted>(resp, Cb_, ui64(0)));
         LogRequestDuration();
         PassAway();
         return;
@@ -347,7 +347,7 @@ void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
             ResponseEvent_ = std::move(ev);
             WaitForCompletion();
         } else {
-            Send(Sender_, MakeHolder<TSqsEvents::TEvExecuted>(response.Record, Cb_, ui64(0)));
+            Send(Sender_, std::make_unique<TSqsEvents::TEvExecuted>(response.Record, Cb_, ui64(0)));
             LogRequestDuration();
             PassAway();
         }
@@ -454,7 +454,7 @@ void TMiniKqlExecutionActor::HandleResult(NSchemeShard::TEvSchemeShard::TEvNotif
     ResponseEvent_->Get()->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
     RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Sending mkql execution result: " << ResponseEvent_->Get()->Record);
 
-    Send(Sender_, MakeHolder<TSqsEvents::TEvExecuted>(ResponseEvent_->Get()->Record, Cb_, ui64(0)));
+    Send(Sender_, std::make_unique<TSqsEvents::TEvExecuted>(ResponseEvent_->Get()->Record, Cb_, ui64(0)));
     LogRequestDuration();
     PassAway();
 }

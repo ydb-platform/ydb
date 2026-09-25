@@ -533,12 +533,12 @@ namespace NKikimr {
         };
 
         template<typename TRow>
-        struct TRowTraits<THolder<TRow>> {
+        struct TRowTraits<std::unique_ptr<TRow>> {
             using TBase = TRow;
 
             template<typename TMap, typename TKey, typename TValue>
             static void Insert(TMap& map, TKey&& key, TValue&& value) {
-                map.emplace(std::forward<TKey>(key), MakeHolder<TValue>(std::forward<TValue>(value)));
+                map.emplace(std::forward<TKey>(key), std::make_unique<TValue>(std::forward<TValue>(value)));
             }
         };
 

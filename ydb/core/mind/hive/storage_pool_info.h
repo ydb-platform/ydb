@@ -97,7 +97,7 @@ struct TStoragePoolInfo {
     bool IsFresh() const;
     void SetAsFresh();
     void Invalidate();
-    THolder<TEvControllerSelectGroups::TGroupParameters> BuildRefreshRequest() const;
+    std::unique_ptr<TEvControllerSelectGroups::TGroupParameters> BuildRefreshRequest() const;
     bool AddTabletToWait(TTabletId tabletId);
     bool SetShrinkRequest(TEvHive::TEvShrinkStoragePool::TPtr ev);
     TVector<TTabletId> PullWaitingTablets();

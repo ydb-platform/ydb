@@ -261,7 +261,7 @@ private:
     }
 
     void Finish(bool success) {
-        auto done = MakeHolder<TSqsEvents::TEvDeferredTopicCreationResult>();
+        auto done = std::make_unique<TSqsEvents::TEvDeferredTopicCreationResult>();
         done->UserName = UserName_;
         done->QueueName = QueueName_;
         done->Success = success;

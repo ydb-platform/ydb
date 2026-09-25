@@ -18,12 +18,12 @@ namespace NSchemeShard {
 
 namespace NSetColumnConstraint {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWritesPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWritesPropose(
     TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
 {
     Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(operationInfo.LockNullWritesTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(operationInfo.LockNullWritesTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
@@ -39,12 +39,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
     TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
 {
     Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableUnlockPropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(operationInfo.UnlockNullWritesTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(operationInfo.UnlockNullWritesTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
@@ -171,7 +171,7 @@ public:
 
     void ReplyOnCreation(const TSetColumnConstraintOperationInfo& operationInfo,
                          const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
-        auto responseEv = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(ui64(operationInfo.Id));
+        auto responseEv = std::make_unique<TEvSetColumnConstraint::TEvCreateResponse>(ui64(operationInfo.Id));
 
         auto& response = responseEv->Record;
         response.SetStatus(status);
@@ -260,7 +260,7 @@ public:
             );
             operationInfo.DependencyTxIds.insert(copyTxId);
             Self->TxIdToDependentSetColumnConstraint[copyTxId].insert(BuildId);
-            Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
+            Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
             return true;
         };
 
@@ -671,7 +671,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgressSetColumnConstraint
     : public TSchemeShard::TIndexBuilder::TTxBase
 {
 private:
-    TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    TMap<TTabletId, std::unique_ptr<IEventBase>> ToTabletSend;
 
     bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
         YDB_LOG_DEBUG("InitiateValidationShards",
@@ -717,7 +717,7 @@ private:
     }
 
     void SendValidateRowConditionRequest(TShardIdx shardIdx, TSetColumnConstraintOperationInfo& operationInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvValidateRowConditionRequest>();
         auto& record = ev->Record;
 
         record.SetId(ui64(BuildId));
@@ -820,7 +820,7 @@ public:
                 } else if (operationInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
                     Send(Self->SelfId(), LockPropose(Self, operationInfo, operationInfo.LockTxId, TPath::Init(operationInfo.TablePathId, Self)), 0, ui64(BuildId));
                 } else if (!operationInfo.LockTxDone) {
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockTxId)));
+                    Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockTxId)));
                 } else {
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites);
                     Progress(BuildId);
@@ -834,7 +834,7 @@ public:
                 } else if (operationInfo.LockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
                     Send(Self->SelfId(), NSetColumnConstraint::AlterMainTableLockNullWritesPropose(Self, operationInfo), 0, ui64(BuildId));
                 } else if (!operationInfo.LockNullWritesTxDone) {
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockNullWritesTxId)));
+                    Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockNullWritesTxId)));
                 } else {
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validating);
                     Progress(BuildId);
@@ -874,7 +874,7 @@ public:
                 } else if (operationInfo.UnlockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
                     Send(Self->SelfId(), NSetColumnConstraint::AlterMainTableUnlockNullWritesPropose(Self, operationInfo), 0, ui64(BuildId));
                 } else if (!operationInfo.UnlockNullWritesTxDone) {
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockNullWritesTxId)));
+                    Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockNullWritesTxId)));
                 } else {
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
                     Progress(BuildId);
@@ -888,7 +888,7 @@ public:
                 } else if (operationInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                     Send(Self->SelfId(), UnlockPropose(Self, operationInfo), 0, ui64(BuildId));
                 } else if (!operationInfo.UnlockTxDone) {
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockTxId)));
+                    Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockTxId)));
                 } else {
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Done);
                     Progress(BuildId);

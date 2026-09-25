@@ -753,7 +753,7 @@ void TPipeline::DeactivateOp(TOperation::TPtr op,
 }
 
 bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
-                              THolder<IEventHandle> &ack,
+                              std::unique_ptr<IEventHandle> &ack,
                               TTransactionContext &txc,
                               const TActorContext &ctx)
 {
@@ -815,7 +815,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         }
 
         if (ack) {
-            op->AddDelayedAck(THolder(ack.Release()));
+            op->AddDelayedAck(std::unique_ptr<IEventHandle>(ack.Release()));
         }
 
         if (isActive && !isVolatile) {

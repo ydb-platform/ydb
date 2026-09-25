@@ -863,10 +863,10 @@ protected:
     void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
 
-        THolder<TTempDir> tempDirHolder;
+        std::unique_ptr<TTempDir> tempDirHolder;
         TString basePath;
         if (isFsBackup) {
-            tempDirHolder = MakeHolder<TTempDir>();
+            tempDirHolder = std::make_unique<TTempDir>();
             basePath = tempDirHolder->Path();
             Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
         }
@@ -1033,9 +1033,9 @@ protected:
         THashSet<TString> ivs;
         THashSet<TString> allKeyNames;
 
-        THolder<NKikimr::NWrappers::NTestHelpers::TFsMock> fsMockOwner;
+        std::unique_ptr<NKikimr::NWrappers::NTestHelpers::TFsMock> fsMockOwner;
         if (isFsBackup) {
-            fsMockOwner = MakeHolder<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
+            fsMockOwner = std::make_unique<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
             fsMockOwner->Refresh();
         }
         auto& mock = isFsBackup

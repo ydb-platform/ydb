@@ -127,7 +127,7 @@ namespace NLongTxService {
                 {"toColumnShard", tabletId},
                 {"writeId", data.GetWriteIdsStr()});
 
-            SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+            SendToTablet(tabletId, std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
                     SelfId(),
                     TxId,
@@ -257,7 +257,7 @@ namespace NLongTxService {
             Y_ABORT_UNLESS(WaitingShards.empty());
             ToRetry.clear();
 
-            auto req = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
+            auto req = std::make_unique<TEvTxProxy::TEvProposeTransaction>(
                 SelectedCoordinator, TxId, 0, MinStep, MaxStep);
             auto* reqAffectedSet = req->Record.MutableTransaction()->MutableAffectedSet();
             reqAffectedSet->Reserve(Params.ColumnShardWrites.size());
@@ -449,7 +449,7 @@ namespace NLongTxService {
                 {"planStep", PlanStep},
                 {"txId", TxId});
 
-            SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCheckPlannedTransaction>(
+            SendToTablet(tabletId, std::make_unique<TEvColumnShard::TEvCheckPlannedTransaction>(
                 SelfId(),
                 PlanStep,
                 TxId));
@@ -460,7 +460,7 @@ namespace NLongTxService {
         void CancelProposal() {
             for (const auto& pr : Params.ColumnShardWrites) {
                 const ui64 tabletId = pr.first;
-                SendToTablet(tabletId, MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId), false);
+                SendToTablet(tabletId, std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(TxId), false);
             }
         }
 
@@ -476,7 +476,7 @@ namespace NLongTxService {
         }
 
     private:
-        void SendToTablet(ui64 tabletId, THolder<IEventBase> event, bool subscribe = true) {
+        void SendToTablet(ui64 tabletId, std::unique_ptr<IEventBase> event, bool subscribe = true) {
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe));
         }
 

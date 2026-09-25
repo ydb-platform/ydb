@@ -362,7 +362,7 @@ public:
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         TxId = ev->Get()->TxId;
 
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
 
         auto& modifyScheme = *propose->Record.AddTransaction();
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
@@ -457,7 +457,7 @@ public:
         TxId = ev->Get()->TxId;
 
         auto propose = [&]() {
-            auto result = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+            auto result = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
 
             auto& modifyScheme = *result->Record.AddTransaction();
             modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropUnsafe);
@@ -534,7 +534,7 @@ private:
 
 public:
     TMonitoringMoveShardToStoragePool(NMon::TEvRemoteHttpInfo::TPtr&& ev, TActorId schemeShard, TTabletId hive,
-            TShardIdx shardIdx, TChannelsBindings newBindings, THolder<TEvHive::TEvCreateTablet> createEv)
+            TShardIdx shardIdx, TChannelsBindings newBindings, std::unique_ptr<TEvHive::TEvCreateTablet> createEv)
         : Ev(std::move(ev))
         , SchemeShard(schemeShard)
         , Hive(hive)
@@ -544,7 +544,7 @@ public:
     {}
 
     void SendCreateTablet() {
-        auto ev = MakeHolder<TEvHive::TEvCreateTablet>();
+        auto ev = std::make_unique<TEvHive::TEvCreateTablet>();
         ev->Record = CreateRecord;
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), ui64(Hive), /* subscribe */ true));
     }
@@ -2366,7 +2366,7 @@ private:
 
             TPathElement::TPtr path = Self->PathsById.at(info->PathId);
             // CreateEvCreateTablet copies the current (old-pool) bindings; override with the new ones.
-            THolder<TEvHive::TEvCreateTablet> createEv = CreateEvCreateTablet(path, shardIdx, Self);
+            std::unique_ptr<TEvHive::TEvCreateTablet> createEv = CreateEvCreateTablet(path, shardIdx, Self);
             createEv->Record.ClearBindedChannels();
             for (const auto& bind : newBindings) {
                 *createEv->Record.AddBindedChannels() = bind;

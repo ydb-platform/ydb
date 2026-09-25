@@ -227,10 +227,10 @@ class TCsvFileReader {
 public:
     class TFileChunk {
     public:
-        TFileChunk(TFile file, THolder<IInputStream>&& stream, ui64 size = std::numeric_limits<ui64>::max())
+        TFileChunk(TFile file, std::unique_ptr<IInputStream>&& stream, ui64 size = std::numeric_limits<ui64>::max())
             : File(file)
             , Stream(std::move(stream))
-            , CountStream(MakeHolder<TCountingInput>(Stream.Get()))
+            , CountStream(std::make_unique<TCountingInput>(Stream.Get()))
             , Size(size) {
         }
 
@@ -249,8 +249,8 @@ public:
 
     private:
         TFile File;
-        THolder<IInputStream> Stream;
-        THolder<TCountingInput> CountStream;
+        std::unique_ptr<IInputStream> Stream;
+        std::unique_ptr<TCountingInput> CountStream;
         ui64 Size;
     };
 
@@ -268,7 +268,7 @@ public:
             }
             file = TFile(GetStdinFileno());
         }
-        auto input = MakeHolder<TFileInput>(file);
+        auto input = std::make_unique<TFileInput>(file);
         TCountingInput countInput(input.Get());
 
         bool checkedForBom = false;
@@ -305,7 +305,7 @@ public:
         TString temp;
         file = TFile(filePath, RdOnly);
         file.Seek(seekPos, sSet);
-        THolder<TFileInput> stream = MakeHolder<TFileInput>(file);
+        std::unique_ptr<TFileInput> stream = std::make_unique<TFileInput>(file);
         if (!checkedForBom) {
             char bom[3];
             size_t read = input->Read(bom, 3);
@@ -314,14 +314,14 @@ public:
                     Cerr << "BOM detected and skipped" << Endl;
                 }
                 file.Seek(seekPos, sSet);
-                stream = MakeHolder<TFileInput>(file);
+                stream = std::make_unique<TFileInput>(file);
             }
         }
         for (size_t i = 0; i < SplitCount; ++i) {
             seekPos += chunkSize;
             i64 nextPos = seekPos;
             auto nextFile = TFile(filePath, RdOnly);
-            auto nextStream = MakeHolder<TFileInput>(nextFile);
+            auto nextStream = std::make_unique<TFileInput>(nextFile);
             nextFile.Seek(seekPos, sSet);
             if (seekPos > skipSize) {
                 nextFile.Seek(-1, sCur);
@@ -637,7 +637,7 @@ private:
     std::shared_ptr<TThreadPool> FileProgressPool;
     std::atomic<bool> Failed = false;
     std::atomic<bool> InformedAboutLimit = false;
-    THolder<TStatus> ErrorStatus;
+    std::unique_ptr<TStatus> ErrorStatus;
     size_t FilesPreviouslyCompleted = 0;
     size_t FilesPreviouslyStarted = 0;
     std::shared_ptr<TProgressFile> PreviouslyStartedProgressFile;
@@ -1017,7 +1017,7 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
             NYdb::TStatus status = asyncStatus.GetValueSync();
             if (!status.IsSuccess()) {
                 if (!Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(status);
+                    ErrorStatus = std::make_unique<TStatus>(status);
                 }
             }
             RequestsInflight->release();
@@ -1079,7 +1079,7 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
             NYdb::TStatus status = asyncStatus.GetValueSync();
             if (!status.IsSuccess()) {
                 if (!Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(status);
+                    ErrorStatus = std::make_unique<TStatus>(status);
                 }
             }
             RequestsInflight->release();
@@ -1129,7 +1129,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             }
             batchStatuses.push_back(batchStatus);
         }) && !Failed.exchange(true)) {
-            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+            ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
                 "Couldn't add worker func to add progress"));
         }
         return batchStatus;
@@ -1182,7 +1182,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                             return parser.BuildListOnArena(buffer, filePath, arena, row);
                         } catch (const std::exception& e) {
                             if (!Failed.exchange(true)) {
-                                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                                ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
                             }
                             jobInflightManager->ReleaseJob();
                             throw;
@@ -1194,7 +1194,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                             if (asyncStatus.GetValueSync().IsSuccess()) {
                                 batchStatus->Completed = true;
                                 if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
-                                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                                    ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
                                         "Couldn't add worker func to save progress"));
                                 }
                             }
@@ -1226,7 +1226,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                         if (asyncStatus.GetValueSync().IsSuccess()) {
                                             batchStatus->Completed = true;
                                             if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
-                                                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                                                ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
                                                     "Couldn't add worker func to save progress"));
                                             }
                                         }
@@ -1245,7 +1245,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
                     if (!error.empty()) {
                         if (!Failed.exchange(true)) {
-                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, error));
+                            ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, error));
                         }
                         jobInflightManager->ReleaseJob();
                     }
@@ -1253,7 +1253,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                 break;
             default:
                 if (!Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                    ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
                         (TStringBuilder() << "Unknown send format: " << Settings.SendFormat_).c_str()));
                 }
         }
@@ -1379,7 +1379,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
     ui64 maxThreads = Max((size_t)1, Settings.Threads_ / CurrentFileCount);
     TCsvFileReader splitter(filePath, Settings, headerRow, maxThreads);
     ui64 threadCount = splitter.GetSplitCount();
-    THolder<IThreadPool> readingPool = CreateThreadPool(maxThreads, 0,
+    std::unique_ptr<IThreadPool> readingPool = CreateThreadPool(maxThreads, 0,
     IThreadPool::TParams().SetThreadNamePrefix("CsvReading"));
     // MaxInFlightRequests_ requests in flight on server and threadCount threads building TValue
     size_t maxJobInflightTotal = threadCount + Settings.MaxInFlightRequests_;
@@ -1423,7 +1423,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                         });
                 } catch (const std::exception& e) {
                     if (!Failed.exchange(true)) {
-                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                        ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
                     }
                     jobsInflight.release();
                 }
@@ -1451,7 +1451,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                 if (removeLastDelimiter) {
                     if (!line.EndsWith(Settings.Delimiter_)) {
                         if (!Failed.exchange(true)) {
-                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::BAD_REQUEST,
+                            ErrorStatus = std::make_unique<TStatus>(MakeStatus(EStatus::BAD_REQUEST,
                                 "According to the header, lines should end with a delimiter"));
                         }
                         break;

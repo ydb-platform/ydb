@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
         // until every part finishes ConfigureParts, so suppressing the first
         // datashard propose keeps TxRotateCdcStream/TxRotateCdcStreamAtTable
         // in flight (persisted in TxInFlightV2).
-        TVector<THolder<IEventHandle>> suppressedProposes;
+        TVector<std::unique_ptr<IEventHandle>> suppressedProposes;
         auto prevObserver = SetSuppressObserver(runtime, suppressedProposes,
             TEvDataShard::TEvProposeTransaction::EventType);
 
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
         // the delay it fires mid-operation and reproduces the precursor crash
         //   DoDoneTransactions(): requirement ss->PathsById.contains(pathId)
         // from the same issue instead of the init crash.
-        TVector<THolder<IEventHandle>> suppressedCleanups;
+        TVector<std::unique_ptr<IEventHandle>> suppressedCleanups;
         runtime.SetObserverFunc([&suppressedCleanups](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvHive::TEvDeleteTablet::EventType:

@@ -186,7 +186,7 @@ struct TPDiskFailureInjectionTest {
         AppData->IoContextFactory = IoContext.get();
 
         // create actor system setup environment
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 4; // system, user, io, batch
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);

@@ -493,7 +493,7 @@ private:
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         YDB_LOG_INFO_CTX(*TlsActivationContext, "Updated config");
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
@@ -1014,7 +1014,7 @@ private:
             {"queryUid", compileResult->Uid},
             {"status", compileResult->Status});
 
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
+        auto responseEv = std::make_unique<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
 
         if (span) {
@@ -1077,7 +1077,7 @@ private:
 
         YDB_LOG_DEBUG_CTX(ctx, "Send ast statements response");
 
-        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(std::move(query), astStatements, std::move(orbit));
+        auto responseEv = std::make_unique<TEvKqp::TEvParseResponse>(std::move(query), astStatements, std::move(orbit));
 
         EndQueryTraceSpan(span, Ydb::StatusIds::SUCCESS);
 
@@ -1102,7 +1102,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
-    THolder<IQueryReplayBackend> QueryReplayBackend;
+    std::unique_ptr<IQueryReplayBackend> QueryReplayBackend;
 
     TKqpRequestsQueue RequestsQueue;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;

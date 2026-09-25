@@ -4,7 +4,7 @@ namespace NKikimr::NHttpProxy {
 
     bool TBaseHttpController::Execute(
         THttpRequestContext&& context,
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
+        std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const {
         const auto& ctx = TlsActivationContext->AsActorContext();
 

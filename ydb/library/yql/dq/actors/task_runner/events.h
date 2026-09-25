@@ -222,7 +222,7 @@ struct TEvTaskRunFinished
         const TTaskRunnerActorSensors& sensors = {},
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
-        THolder<TMiniKqlProgramState>&& programState = nullptr,
+        std::unique_ptr<TMiniKqlProgramState>&& programState = nullptr,
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
@@ -243,7 +243,7 @@ struct TEvTaskRunFinished
     THashMap<ui32, i64> SourcesFreeSpace;
     TDqMemoryQuota::TProfileStats ProfileStats;
     ui64 MkqlMemoryLimit = 0;
-    THolder<TMiniKqlProgramState> ProgramState;
+    std::unique_ptr<TMiniKqlProgramState> ProgramState;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;
 };

@@ -54,8 +54,8 @@ inline NActors::TActorId MakeMeteringServiceID() {
     return NActors::TActorId(0, TStringBuf("YDB_METER"));
 }
 
-THolder<NActors::IActor> CreateMeteringWriter(
-    THolder<TLogBackend> meteringFile);
+std::unique_ptr<NActors::IActor> CreateMeteringWriter(
+    std::unique_ptr<TLogBackend> meteringFile);
 
 }   // namespace NKikimr
 }   // namespace NMetering

@@ -138,7 +138,7 @@ void TPartitionWriterCacheActorFixture::SendTxWriteRequest(const TActorId& recip
 {
     auto write =
         std::make_unique<NPQ::TEvPartitionWriter::TEvTxWriteRequest>(params.SessionId, params.TxId,
-                                                                     MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>(params.Cookie));
+                                                                     std::make_unique<NPQ::TEvPartitionWriter::TEvWriteRequest>(params.Cookie));
     auto* w = write->Request->Record.MutablePartitionRequest()->AddCmdWrite();
     Y_UNUSED(w);
 

@@ -51,7 +51,7 @@ public:
             if (TYdbLocation::GetUserToken()) {
                 httpRequest->Set("Authorization", TYdbLocation::GetUserToken());
             }
-            THolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> request = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
+            std::unique_ptr<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> request = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
             request->Timeout = TDuration::Seconds(30);
             ctx.Send(HttpProxyId, request.Release());
         }

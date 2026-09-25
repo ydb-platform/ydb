@@ -57,10 +57,10 @@ void TPrepareSchemeTxInRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreatePrepareSchemeTxInRSUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreatePrepareSchemeTxInRSUnit(TDataShard &dataShard,
                                                       TPipeline &pipeline)
 {
-    return THolder(new TPrepareSchemeTxInRSUnit(dataShard, pipeline));
+    return std::unique_ptr<TPrepareSchemeTxInRSUnit>(new TPrepareSchemeTxInRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

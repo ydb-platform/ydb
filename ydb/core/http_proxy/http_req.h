@@ -92,7 +92,7 @@ struct THttpRequestContext : public NPQ::TLogPrefix {
             {"requestId", RequestId});
     }
 
-    THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
+    std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
     void ParseHeaders(TStringBuf headers);
 
     void DoReply(THttpResponseData&& data);
@@ -104,7 +104,7 @@ public:
 
     virtual const TString& Name() const = 0;
     virtual void Execute(THttpRequestContext&& context,
-                         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
+                         std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature,
                          const TActorContext& ctx) = 0;
 };
 
@@ -137,7 +137,7 @@ public:
 
     virtual bool Execute(
         THttpRequestContext&& context,
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
+        std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const = 0;
 
     virtual THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
@@ -157,7 +157,7 @@ public:
     THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config);
 
     bool Execute(const TString& name, THttpRequestContext&& params,
-                 THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
+                 std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
 };
 

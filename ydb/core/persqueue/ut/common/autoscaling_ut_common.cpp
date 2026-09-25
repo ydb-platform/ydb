@@ -696,7 +696,7 @@ TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString
     return readerId;
 }
 
-THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(timeout);
 }
 

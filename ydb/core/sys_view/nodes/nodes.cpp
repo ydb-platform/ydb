@@ -86,7 +86,7 @@ private:
 
         for (const auto& nodeId : TenantNodes) {
             TActorId whiteboardId = MakeNodeWhiteboardServiceId(nodeId);
-            auto request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
+            auto request = std::make_unique<TEvWhiteboard::TEvSystemStateRequest>();
 
             Send(whiteboardId, request.Release(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
@@ -94,7 +94,7 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = ev->Release();
+        std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfo = ev->Release();
 
         for (const auto& info : nodesInfo->Nodes) {
             auto nodeId = info.NodeId;
@@ -225,7 +225,7 @@ private:
         };
         static TExtractorsMap extractors;
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
 
         TVector<TCell> cells;
@@ -263,14 +263,14 @@ private:
     bool IsEmptyRange = false;
 
     TMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
-    THashMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> WBSystemInfo;
+    THashMap<TNodeId, std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse>> WBSystemInfo;
 };
 
-THolder<NActors::IActor> CreateNodesScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateNodesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TNodesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TNodesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NSysView

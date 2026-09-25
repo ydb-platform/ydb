@@ -7,7 +7,7 @@
 
 namespace NKikimr::NSysView {
 
-THolder<NActors::IActor> CreateUdfModulesScan(
+std::unique_ptr<NActors::IActor> CreateUdfModulesScan(
     const NActors::TActorId& ownerId,
     ui32 scanId,
     const TString& database,

@@ -83,7 +83,7 @@ public:
     IBlockDevice &BlockDevice;
     TDiskFormat &Format;
     ui64 &Nonce;
-    THolder<TBufferedWriter> BufferedWriter;
+    std::unique_ptr<TBufferedWriter> BufferedWriter;
     ui64 CurrentPosition = 0;
     ui32 SectorBytesFree;
     ui64 SectorIdx;

@@ -34,7 +34,7 @@ public:
     }
 
     void Subscribe() {
-        auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
+        auto req = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
         ActorIdToProto(SelfId(), req->Record.MutableActorID());
         req->Record.MutableResources()->Reserve(State->Options.ResourcesCount);
 

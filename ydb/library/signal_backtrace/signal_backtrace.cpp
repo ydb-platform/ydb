@@ -94,7 +94,7 @@ const THashSet<int> TTraceCollector::DEFAULT_SIGNALS = {SIGABRT, SIGBUS, SIGILL,
 TTraceCollector::TTraceCollector(const THashSet<int>& signalHandlers, IOutputStream& out)
     : Out(out)
     , HandledSignals(signalHandlers)
-    , Connection(MakeHolder<TPipeConnection>())
+    , Connection(std::make_unique<TPipeConnection>())
 {
     static_assert(sizeof(TStackTrace) <= PIPE_BUF, "Reading and writing TStackTrace to the pipe should be atomic");
 

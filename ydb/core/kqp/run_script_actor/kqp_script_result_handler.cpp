@@ -841,7 +841,7 @@ private:
                 {"queryIsCancelling", QueryIsCancelling});
 
             if (!QueryIsCancelling) {
-                auto ev = MakeHolder<TEvKqp::TEvCancelQueryRequest>();
+                auto ev = std::make_unique<TEvKqp::TEvCancelQueryRequest>();
                 ev->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
                 Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release());
                 QueryIsCancelling = true;

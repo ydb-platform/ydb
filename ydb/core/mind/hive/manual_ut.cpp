@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(THiveManualTests) {
         static constexpr size_t NUM_TABLETS = 20'000;
 
         TMailbox mailbox;
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         TString name = "no name";
         TActorSystem as(setup, nullptr, new NLog::TSettings(TActorId(), 0, NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, [&](auto&&) { return std::ref(name); }, NLog::EPriority::PRI_EMERG));
         TExecutorThread executor{0, &as, nullptr, "dummy"};

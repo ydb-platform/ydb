@@ -255,7 +255,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
             Writer.Registered();
             if (LastBuildProgress) {
-                auto progress = MakeHolder<TEvService::TEvIndexBuildProgressResult>();
+                auto progress = std::make_unique<TEvService::TEvIndexBuildProgressResult>();
                 progress->Record.MutableProgress()->CopyFrom(*LastBuildProgress);
                 Send(Writer, std::move(progress));
             }
@@ -277,7 +277,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        PendingBuildProgress = MakeHolder<NKikimrReplication::TIndexBuildProgress>(ev->Get()->Record.GetProgress());
+        PendingBuildProgress = std::make_unique<NKikimrReplication::TIndexBuildProgress>(ev->Get()->Record.GetProgress());
         Forward(ev);
     }
 
@@ -385,7 +385,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             // release only after that barrier exists in the writer.
             WriterHasSchemaBarrier = true;
             if (SchemaReleaseReceived) {
-                auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
+                auto result = std::make_unique<TEvService::TEvSchemaChangeResult>();
                 result->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
                 Send(Writer, result.Release());
             }
@@ -404,7 +404,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return PassAway();
         }
 
-        PendingSchemaChange = MakeHolder<TEvWorker::TEvSchemaChange>(ev->Get()->Schema, offset);
+        PendingSchemaChange = std::make_unique<TEvWorker::TEvSchemaChange>(ev->Get()->Schema, offset);
         WriterHasSchemaBarrier = true;
         Send(Reader, new TEvWorker::TEvCommit(offset));
     }
@@ -436,7 +436,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 return;
             }
 
-            auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
+            auto report = std::make_unique<TEvService::TEvSchemaChangeReport>();
             report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
             report->Record.SetOffset(PendingSchemaChange->Offset);
             report->Record.SetCompleted(true);
@@ -457,7 +457,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Y_ABORT_UNLESS(firstUncommitted != records.end());
         records.erase(records.begin(), firstUncommitted);
 
-        auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
+        auto report = std::make_unique<TEvService::TEvSchemaChangeReport>();
         report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
         report->Record.SetOffset(PendingSchemaChange->Offset);
         Send(Parent, report.Release());
@@ -507,7 +507,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 return;
             }
 
-            RecoveredCompletionSchema = MakeHolder<NKikimrReplication::TSchemaChange>(ev->Get()->Record.GetSchema());
+            RecoveredCompletionSchema = std::make_unique<NKikimrReplication::TSchemaChange>(ev->Get()->Record.GetSchema());
             RecoveredCompletionOffset = ev->Get()->Record.GetOffset();
             RecoveredCompletionReported = false;
             ReportRecoveredCompletion();
@@ -520,7 +520,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             // a whole worker restart and compare it with the consumer's
             // durable session-start offset.
             if (ev->Get()->Record.GetApplied()) {
-                RecoveredCompletionSchema = MakeHolder<NKikimrReplication::TSchemaChange>(ev->Get()->Record.GetSchema());
+                RecoveredCompletionSchema = std::make_unique<NKikimrReplication::TSchemaChange>(ev->Get()->Record.GetSchema());
                 RecoveredCompletionOffset = ev->Get()->Record.GetOffset();
                 RecoveredCompletionReported = false;
                 if (ReaderCommittedOffset && *ReaderCommittedOffset > RecoveredCompletionOffset) {
@@ -614,7 +614,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 return FinishSchemaChange();
             }
 
-            auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
+            auto report = std::make_unique<TEvService::TEvSchemaChangeReport>();
             report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
             report->Record.SetOffset(PendingSchemaChange->Offset);
             report->Record.SetCompleted(true);
@@ -630,7 +630,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
+        auto report = std::make_unique<TEvService::TEvSchemaChangeReport>();
         report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
         report->Record.SetOffset(PendingSchemaChange->Offset);
         report->Record.SetApplied(true);
@@ -688,7 +688,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             ReaderReplayBoundary.Clear();
         }
 
-        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
+        InFlightData = std::make_unique<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
             Send(ev->Forward(Writer));
@@ -731,7 +731,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         Y_ABORT_UNLESS(!TerminateWriter);
-        TerminateWriter = MakeHolder<TEvWorker::TEvTerminateWriter>(ev->Get()->PartitionId);
+        TerminateWriter = std::make_unique<TEvWorker::TEvTerminateWriter>(ev->Get()->PartitionId);
 
         if (Writer) {
             Send(ev->Forward(Writer));
@@ -833,7 +833,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void ReportLag() {
         if (PendingBuildProgress) {
-            auto progress = MakeHolder<TEvService::TEvIndexBuildProgress>();
+            auto progress = std::make_unique<TEvService::TEvIndexBuildProgress>();
             progress->Record.MutableProgress()->CopyFrom(*PendingBuildProgress);
             Send(Parent, std::move(progress));
         }
@@ -851,7 +851,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         // after the topic offset checkpoint, so a lost service/controller
         // message cannot leave this partition at the barrier forever.
         if (SchemaReportCommitted && PendingSchemaChange) {
-            auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
+            auto report = std::make_unique<TEvService::TEvSchemaChangeReport>();
             report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
             report->Record.SetOffset(PendingSchemaChange->Offset);
             report->Record.SetApplied(SchemaApplied && !SchemaAdvanceCommitted);
@@ -866,7 +866,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void ReportRecoveredCompletion() {
         Y_ABORT_UNLESS(RecoveredCompletionSchema);
-        auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
+        auto report = std::make_unique<TEvService::TEvSchemaChangeReport>();
         report->Record.MutableSchema()->CopyFrom(*RecoveredCompletionSchema);
         report->Record.SetOffset(RecoveredCompletionOffset);
         report->Record.SetCompleted(true);
@@ -940,11 +940,11 @@ private:
     const TActorId Parent;
     TActorInfo Reader;
     TActorInfo Writer;
-    THolder<TEvWorker::TEvData> InFlightData;
-    THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
-    THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
-    THolder<NKikimrReplication::TIndexBuildProgress> PendingBuildProgress;
-    THolder<NKikimrReplication::TIndexBuildProgress> LastBuildProgress;
+    std::unique_ptr<TEvWorker::TEvData> InFlightData;
+    std::unique_ptr<TEvWorker::TEvTerminateWriter> TerminateWriter;
+    std::unique_ptr<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    std::unique_ptr<NKikimrReplication::TIndexBuildProgress> PendingBuildProgress;
+    std::unique_ptr<NKikimrReplication::TIndexBuildProgress> LastBuildProgress;
     bool SchemaReportCommitted = false;
     bool SchemaReleaseReceived = false;
     bool WriterHasSchemaBarrier = false;
@@ -956,7 +956,7 @@ private:
     // Set only from a durable AppliedWorkers replay by the controller. This
     // survives neither worker lifetime nor controller routing, so it is used
     // solely to reconstruct completion from the topic's durable offset.
-    THolder<NKikimrReplication::TSchemaChange> RecoveredCompletionSchema;
+    std::unique_ptr<NKikimrReplication::TSchemaChange> RecoveredCompletionSchema;
     ui64 RecoveredCompletionOffset = 0;
     bool RecoveredCompletionReported = false;
     TMaybe<ui64> ReaderCommittedOffset;

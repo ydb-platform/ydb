@@ -139,7 +139,7 @@ struct ITestReadSession {
 std::shared_ptr<ITestReadSession> CreateTestReadSession(TestReadSessionSettings settings);
 
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath);
-THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
+std::unique_ptr<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 ui64 GetPQRBTabletId(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic);
 void ReloadPQRBTablet(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic);
 

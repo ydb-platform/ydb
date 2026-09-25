@@ -58,7 +58,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void DropDst() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto ev = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 

@@ -99,8 +99,8 @@ namespace NYdbWorkload {
         }
     }
 
-    THolder<IWorkloadQueryGenerator> TFulltextWorkloadParams::CreateGenerator() const {
-        return MakeHolder<TFulltextWorkloadGenerator>(this);
+    std::unique_ptr<IWorkloadQueryGenerator> TFulltextWorkloadParams::CreateGenerator() const {
+        return std::make_unique<TFulltextWorkloadGenerator>(this);
     }
 
     TWorkloadDataInitializer::TList TFulltextWorkloadParams::CreateDataInitializers() const {

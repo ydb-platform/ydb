@@ -126,7 +126,7 @@ namespace NYdb::NConsoleClient {
 
         void ReadCsvFile(const TString& path, char delimiter,
                          const std::function<void(TStringBuf)>& callback) {
-            auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path));
+            auto input = OpenOwnedMaybeCompressedInput(std::make_unique<TFileInput>(path));
             TString headerLine;
             if (!input->ReadLine(headerLine)) {
                 return;

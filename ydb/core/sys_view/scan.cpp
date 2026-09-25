@@ -119,13 +119,13 @@ public:
                 finished = false;
                 ScanActorId.Clear();
             } else {
-                TBase::Send(OwnerId, THolder(data->Release().Release()));
+                TBase::Send(OwnerId, std::unique_ptr<IEventBase>(data->Release().Release()));
                 PassAway();
                 return;
             }
         }
 
-        TBase::Send(OwnerId, THolder(data->Release().Release()));
+        TBase::Send(OwnerId, std::unique_ptr<IEventBase>(data->Release().Release()));
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanWarning::TPtr& ev) {
@@ -142,7 +142,7 @@ public:
             {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         if (ScanActorId) {
-            Send(*ScanActorId, THolder(ev->Release().Release()));
+            Send(*ScanActorId, std::unique_ptr<IEventBase>(ev->Release().Release()));
         }
 
         PassAway();
@@ -176,7 +176,7 @@ private:
     TMaybe<TActorId> ScanActorId;
 };
 
-THolder<NActors::IActor> CreateSystemViewScan(
+std::unique_ptr<NActors::IActor> CreateSystemViewScan(
     const NActors::TActorId& ownerId,
     ui32 scanId,
     const TString& database,
@@ -192,12 +192,12 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return CreateSystemViewScan(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges[0].ToTableRange(),
                                     columns, std::move(userToken), reverse);
     } else {
-        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges,
+        return std::make_unique<TSysViewRangesReader>(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges,
                                                 columns, std::move(userToken), reverse);
     }
 }
 
-THolder<NActors::IActor> CreateSystemViewScan(
+std::unique_ptr<NActors::IActor> CreateSystemViewScan(
     const NActors::TActorId& ownerId,
     ui32 scanId,
     const TString& database,

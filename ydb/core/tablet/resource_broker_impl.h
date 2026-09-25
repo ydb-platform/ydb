@@ -417,7 +417,7 @@ public:
     NKikimrResourceBroker::TResourceBrokerConfig GetConfig() const;
     void Configure(const NKikimrResourceBroker::TResourceBrokerConfig &config);
 
-    using TOpError = THolder<TEvResourceBroker::TEvTaskOperationError>;
+    using TOpError = std::unique_ptr<TEvResourceBroker::TEvTaskOperationError>;
 
     TOpError SubmitTask(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender);
     TOpError UpdateTask(const TEvResourceBroker::TEvUpdateTask &ev, const TActorId &sender);

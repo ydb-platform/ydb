@@ -156,7 +156,7 @@ void TController::SendSchemaChangeResult(
         return;
     }
 
-    auto event = MakeHolder<TEvService::TEvSchemaChangeResult>();
+    auto event = std::make_unique<TEvService::TEvSchemaChangeResult>();
     id.Serialize(*event->Record.MutableWorker());
     event->Record.MutableSchema()->CopyFrom(schema);
     const auto barrier = SchemaBarriers.find({id.ReplicationId(), id.TargetId()});

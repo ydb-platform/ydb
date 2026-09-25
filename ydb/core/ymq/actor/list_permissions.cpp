@@ -15,7 +15,7 @@ namespace NKikimr::NSQS {
 class TListPermissionsActor
    : public TActionActor<TListPermissionsActor> {
 public:
-    TListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListPermissions, std::move(cb))
     {
     }
@@ -158,7 +158,7 @@ private:
     TString Path_;
 };
 
-IActor* CreateListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TListPermissionsActor(sourceSqsRequest, std::move(cb));
 }
 

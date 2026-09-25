@@ -79,7 +79,7 @@ private:
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
 
-        auto resp = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto resp = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
 
         Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }

@@ -16,15 +16,15 @@ const ui64 MagicForFileRecord =     0xA957248FEED9E4CE;
 
 class TTempStorageProxyImp : public ITempStorageProxy {
 public:
-    THolder<ISession> CreateSession();  
-    THolder<IObjectsIterator> CreateIterator(   const TMaybe<TString>& objNamespace = TMaybe<TString>(),
+    std::unique_ptr<ISession> CreateSession();  
+    std::unique_ptr<IObjectsIterator> CreateIterator(   const TMaybe<TString>& objNamespace = TMaybe<TString>(),
                                                 const TMaybe<TString>& objName = TMaybe<TString>(), 
                                                 bool onlyValid = true);    
     TTempStorageExecutionPolicy ExecutionPolicy();
     TOperationResults SetExecutionPolicy(const TTempStorageExecutionPolicy& policy); 
     NThreading::TFuture<TOperationResults> Delete(const TString& objNamespace, const TMaybe<TString>& name);
     TOperationResults LastOperationResults();
-    TTempStorageProxyImp(const TFileStorageConfig & config, const TTempStorageExecutionPolicy & policy, THolder<ISpillStorage>&& storage);
+    TTempStorageProxyImp(const TFileStorageConfig & config, const TTempStorageExecutionPolicy & policy, std::unique_ptr<ISpillStorage>&& storage);
     ~TTempStorageProxyImp();
 
 private:
@@ -55,7 +55,7 @@ public:
     TSessionDataStat GetSessionDataStat();
     TSessionExecutionPolicy ExecutionPolicy(); 
     TOperationResults SetExecutionPolicy(const TSessionExecutionPolicy& policy);
-    std::pair<THolder<IStream>, TOperationResults> OpenStream(const TString& objNamespace, const TString& streamName );
+    std::pair<std::unique_ptr<IStream>, TOperationResults> OpenStream(const TString& objNamespace, const TString& streamName );
     TSessionImp(ui32 sessionId, TAtomicSharedPtr<TNamespacesList> nsList, TAtomicSharedPtr<ISpillStorage> storage);
     ~TSessionImp();
 

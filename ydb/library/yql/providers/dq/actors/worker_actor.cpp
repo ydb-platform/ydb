@@ -217,7 +217,7 @@ private:
             ExtractStats(ev->Get()->Record.MutableIssues(i));
         }
         // hacky conversion to TEvDqFailure
-        auto convertedError = MakeHolder<TEvDqFailure>();
+        auto convertedError = std::make_unique<TEvDqFailure>();
         convertedError->Record.SetStatusCode(ev->Get()->Record.GetStatusCode());
         convertedError->Record.MutableIssues()->Swap(ev->Get()->Record.MutableIssues());
         Y_ABORT_UNLESS(convertedError->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
@@ -228,7 +228,7 @@ private:
         SendFailure(ev->Release());
     }
 
-    void SendFailure(THolder<TEvDqFailure> ev) {
+    void SendFailure(std::unique_ptr<TEvDqFailure> ev) {
         if (!Executer) {
             // Posible Error on Undelivered before OnDqTask
             YQL_CLOG(ERROR, ProviderDq) << "Error " << ev->Record.ShortUtf8DebugString();
@@ -380,7 +380,7 @@ private:
                 Schedule(PingPeriod, new TEvents::TEvWakeup);
             }
         } catch (...) {
-            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage()));
+            SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage()));
         }
     }
 
@@ -393,7 +393,7 @@ private:
             // waiting for initialization
             TPullResponse response;
             response.SetResponseType(EPullResponseType::YIELD);
-            Send(ev->Sender, MakeHolder<TEvPullDataResponse>(response));
+            Send(ev->Sender, std::make_unique<TEvPullDataResponse>(response));
             return;
         }
 
@@ -410,7 +410,7 @@ private:
             auto outputActorId = OutChannelId2ActorId[ev->Get()->ChannelId];
             auto& outChannel = OutputMap[outputActorId];
 
-            auto responseMsg = MakeHolder<TEvPullDataResponse>();
+            auto responseMsg = std::make_unique<TEvPullDataResponse>();
             TPullResponse& response = responseMsg->Record;
 
             auto hasData = !ev->Get()->Data.empty();
@@ -442,7 +442,7 @@ private:
 
             Run(ctx);
         } catch (...) {
-            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage()));
+            SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage()));
         }
     }
 
@@ -468,7 +468,7 @@ private:
             return;
         }
         if (responseType == ERROR) {
-            Send(SelfId(), MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, response.GetErrorMessage()));
+            Send(SelfId(), std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, response.GetErrorMessage()));
             return;
         }
         Y_ABORT_UNLESS(responseType == FINISH || responseType == CONTINUE);
@@ -487,7 +487,7 @@ private:
 
     void OnPingRequest(TEvPingRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
-        Send(ev->Sender, MakeHolder<TEvPingResponse>(), IEventHandle::FlagTrackDelivery);
+        Send(ev->Sender, std::make_unique<TEvPingResponse>(), IEventHandle::FlagTrackDelivery);
     }
 
     void OnPingResponse(TEvPingResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -503,12 +503,12 @@ private:
                 continue;
             }
             if (!channel.PingRequested) {
-                Send(channel.ActorID, MakeHolder<TEvPingRequest>(), IEventHandle::FlagTrackDelivery);
+                Send(channel.ActorID, std::make_unique<TEvPingRequest>(), IEventHandle::FlagTrackDelivery);
                 channel.PingRequested = true;
                 channel.PingStartTime = now;
             } else if ((now - channel.PingStartTime) > PingTimeout) {
                 Stat.AddCounter("PingTimeout", static_cast<ui64>(1));
-                SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::TIMEOUT, "PingTimeout " + TimeoutInfo(channel.ActorID, now, channel.PingStartTime)));
+                SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::TIMEOUT, "PingTimeout " + TimeoutInfo(channel.ActorID, now, channel.PingStartTime)));
             }
         }
 
@@ -551,7 +551,7 @@ private:
                         ? 0
                         : maybeChannel->second.Retries
                 ) + " " + JobDebugInfo(ev->Sender);
-            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, message));
+            SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, message));
         } else if (ev->Get()->SourceType == TEvPullDataRequest::EventType) {
             TActivationContext::Schedule(TDuration::MilliSeconds(100),
                 new IEventHandle(maybeChannel->second.ActorID, SelfId(), new TEvPullDataRequest(INPUT_SIZE), IEventHandle::FlagTrackDelivery)
@@ -606,14 +606,14 @@ private:
                             YQL_CLOG(TRACE, ProviderDq) << "Send TEvPullDataRequest to " <<
                                 channel.ActorID << " from " <<
                                 SelfId();
-                            Send(channel.ActorID, MakeHolder<TEvPullDataRequest>(INPUT_SIZE), IEventHandle::FlagTrackDelivery);
+                            Send(channel.ActorID, std::make_unique<TEvPullDataRequest>(INPUT_SIZE), IEventHandle::FlagTrackDelivery);
                             channel.Requested = true;
                             channel.RequestTime = now;
                         }
                     } else if (channel.Requested && !channel.Finished) {
                         if (PullRequestTimeout && (now - channel.RequestTime) > PullRequestTimeout) {
                             Stat.AddCounter("ReadTimeout", static_cast<ui64>(1));
-                            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::TIMEOUT, "PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime)));
+                            SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::TIMEOUT, "PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime)));
                         }
                     }
                 }
@@ -731,7 +731,7 @@ private:
             source.HasData = true;
             Send(SelfId(), new TEvContinueRun());
         } catch (...) {
-            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, CurrentExceptionMessage()));
+            SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, CurrentExceptionMessage()));
         }
     }
     void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
@@ -740,7 +740,7 @@ private:
         if (fatalCode != NYql::NDqProto::StatusIds::UNSPECIFIED) {
             fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
         }
-        SendFailure(MakeHolder<TEvDqFailure>(fatalCode, ev->Get()->Issues.ToString()));
+        SendFailure(std::make_unique<TEvDqFailure>(fatalCode, ev->Get()->Issues.ToString()));
     }
     void OnSourceDataAck(TEvSourceDataAck::TPtr& ev, const TActorContext& ctx) {
         auto index = ev->Get()->Index;
@@ -759,7 +759,7 @@ private:
         if (fatalCode != NYql::NDqProto::StatusIds::UNSPECIFIED) {
             fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
         }
-        SendFailure(MakeHolder<TEvDqFailure>(fatalCode, issues.ToString()));
+        SendFailure(std::make_unique<TEvDqFailure>(fatalCode, issues.ToString()));
     }
 
     void OnAsyncOutputFinished(ui64 outputIndex) override {
@@ -770,12 +770,12 @@ private:
         Y_UNUSED(state);
         Y_UNUSED(outputIndex);
         Y_UNUSED(checkpoint);
-        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Unimplemented: " << __func__));
+        SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Unimplemented: " << __func__));
     }
 
     void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(outputIndex, checkpoint);
-        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Unimplemented: " << __func__));
+        SendFailure(std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Unimplemented: " << __func__));
     }
 
     void SinkSend(

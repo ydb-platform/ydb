@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(TBTreeTest) {
     };
 
     Y_UNIT_TEST_F(Concurrent, TConcurrentFixture) {
-        TVector<THolder<TWorkerThread>> producers(NumWriters);
+        TVector<std::unique_ptr<TWorkerThread>> producers(NumWriters);
         for (size_t i = 0; i < NumWriters; ++i) {
             producers[i] = TWorkerThread::Spawn([this] {
                 for (size_t k = 0; k < WriteIterations; ++k) {
@@ -528,7 +528,7 @@ Y_UNIT_TEST_SUITE(TBTreeTest) {
             });
         }
 
-        TVector<THolder<TWorkerThread>> consumers(NumReaders);
+        TVector<std::unique_ptr<TWorkerThread>> consumers(NumReaders);
         for (size_t i = 0; i < NumReaders; ++i) {
             consumers[i] = TWorkerThread::Spawn([this, i] {
                 auto it = SafeAccess[i].Iterator();

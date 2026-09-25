@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(RangeOps) {
     }
 
     Y_UNIT_TEST(Intersection) {
-        auto typeRegistry = MakeHolder<NScheme::TKikimrTypeRegistry>();
+        auto typeRegistry = std::make_unique<NScheme::TKikimrTypeRegistry>();
         typeRegistry->CalculateMetadataEtag();
 
         auto typeInfoUi64 = NScheme::TTypeInfo(NScheme::NTypeIds::Uint64);

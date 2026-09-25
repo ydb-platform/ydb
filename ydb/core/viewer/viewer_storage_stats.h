@@ -95,7 +95,7 @@ public:
     }
 
     void RequestSchemeShard(const TString& path) {
-        THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        std::unique_ptr<TEvTxUserProxy::TEvNavigate> request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         auto tokenObj = GetRequest().GetUserTokenObject();
         if (tokenObj) {
             request->Record.SetUserToken(tokenObj);

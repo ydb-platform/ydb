@@ -126,7 +126,7 @@ private:
 }; // TInfoCollector
 
 void TInfoCollector::ReplyAndDie() {
-    auto ev = MakeHolder<TCms::TEvPrivate::TEvClusterInfo>();
+    auto ev = std::make_unique<TCms::TEvPrivate::TEvClusterInfo>();
     ev->Success = BaseConfigReceived
                   && BootstrapConfigReceived
                   && StateStorageInfoReceived;
@@ -280,7 +280,7 @@ void TInfoCollector::RequestBaseConfig() {
         const auto bscId = MakeBSControllerID();
         BscPipe = Register(CreateClient(SelfId(), bscId, TClientConfig(TClientRetryPolicy::WithRetries())));
 
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
         SendData(SelfId(), BscPipe, ev.Release());
     }

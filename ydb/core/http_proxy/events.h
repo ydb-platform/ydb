@@ -42,9 +42,9 @@ namespace NKikimr::NHttpProxy {
         };
 
         struct TEvGrpcRequestResult : public TEventLocal<TEvGrpcRequestResult, EvGrpcRequestResult> {
-            THolder<google::protobuf::Message> Message;
-            THolder<NYdb::TStatus> Status;
-            THolder<THashMap<TString, TString>> QueueTags;
+            std::unique_ptr<google::protobuf::Message> Message;
+            std::unique_ptr<NYdb::TStatus> Status;
+            std::unique_ptr<THashMap<TString, TString>> QueueTags;
         };
 
         // Used in serverless proxy. Do not remove it.
@@ -59,7 +59,7 @@ namespace NKikimr::NHttpProxy {
         };
 
         struct TEvDiscoverDatabaseEndpointResult : public TEventLocal<TEvDiscoverDatabaseEndpointResult, EvDiscoverDatabaseEndpointResult> {
-            THolder<TDatabase> DatabaseInfo;
+            std::unique_ptr<TDatabase> DatabaseInfo;
             NYdb::EStatus Status;
             TString Message;
         };

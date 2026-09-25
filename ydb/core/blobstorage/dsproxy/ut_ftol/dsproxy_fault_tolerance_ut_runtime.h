@@ -62,7 +62,7 @@ public:
             VDisks.emplace_back(vd, GroupInfo->GetActorId(vdisk.OrderNumber));
         }
 
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         constexpr int maxSize = NSan::TSanIsOn() ? 1: 10;
         setup->NodeId = 1;
         setup->ExecutorsCount = 4;

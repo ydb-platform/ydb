@@ -387,7 +387,7 @@ void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     InitSpan = GenerateInitSpan();
-    THolder<TEvWriteInit> event(ev->Release());
+    std::unique_ptr<TEvWriteInit> event(ev->Release());
 
     if constexpr (Protocol == EProtocol::Topic) {
         Request->CountResourcePath(event->Request.init_request().path());
@@ -1228,7 +1228,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvTabletPipe::TEvClientDestroyed::TPt
 }
 
 template <EProtocol Protocol>
-void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
+void TWriteSessionActor<Protocol>::PrepareRequest(std::unique_ptr<TEvWrite>&& ev, const TActorContext& ctx) {
     const auto& writeRequest = ev->Request.write_request();
 
     if (PendingRequests.empty()) {
@@ -1652,7 +1652,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TAc
         NextRequestInited = false;
     }
 
-    PrepareRequest(THolder<TEvWrite>(ev->Release()), ctx);
+    PrepareRequest(std::unique_ptr<TEvWrite>(ev->Release()), ctx);
 }
 
 template <EProtocol Protocol>

@@ -111,7 +111,7 @@ bool TRetryEventsQueue::Heartbeat() {
 }
 
 void TRetryEventsQueue::Connect() {
-    auto connectEvent = MakeHolder<TEvInterconnect::TEvConnectNode>();
+    auto connectEvent = std::make_unique<TEvInterconnect::TEvConnectNode>();
     auto proxyId = TActivationContext::InterconnectProxy(RecipientId.NodeId());
     TActivationContext::Send(
         new IEventHandle(proxyId, SenderId, connectEvent.Release(), 0, 0));
@@ -120,7 +120,7 @@ void TRetryEventsQueue::Connect() {
 void TRetryEventsQueue::Unsubscribe() {
     if (Connected) {
         Connected = false;
-        auto unsubscribeEvent = MakeHolder<TEvents::TEvUnsubscribe>();
+        auto unsubscribeEvent = std::make_unique<TEvents::TEvUnsubscribe>();
         TActivationContext::Send(
             new IEventHandle(TActivationContext::InterconnectProxy(RecipientId.NodeId()), SenderId, unsubscribeEvent.Release(), 0, 0));
     }
@@ -156,7 +156,7 @@ void TRetryEventsQueue::ScheduleRetry() {
         RetryState.ConstructInPlace();
     }
 
-    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
+    auto ev = std::make_unique<TEvRetryQueuePrivate::TEvRetry>(EventQueueId);
     TActivationContext::Schedule(RetryState->GetNextDelay(), new IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
@@ -166,7 +166,7 @@ void TRetryEventsQueue::ScheduleHeartbeat() {
     }
 
     HeartbeatScheduled = true;
-    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvEvHeartbeat>(EventQueueId);
+    auto ev = std::make_unique<TEvRetryQueuePrivate::TEvEvHeartbeat>(EventQueueId);
     TActivationContext::Schedule(TDuration::Seconds(PING_PERIOD_SECONDS), new IEventHandle(SelfId, SelfId, ev.Release()));
 }
 

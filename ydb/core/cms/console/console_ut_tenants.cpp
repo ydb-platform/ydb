@@ -382,7 +382,7 @@ void CheckTenantGeneration(TTenantTestRuntime &runtime,
 
 NKikimrBlobStorage::TEvControllerConfigResponse ReadPoolState(TTenantTestRuntime &runtime, const TString &name)
 {
-    auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto &read = *request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
     read.SetBoxId(1);
     read.AddName(name);
@@ -440,7 +440,7 @@ void SendCaptured(TTenantTestRuntime &runtime, TVector<TAutoPtr<IEventHandle>> &
 }
 
 void LocalMiniKQL(TTenantTestRuntime& runtime, ui64 tabletId, const TString& query) {
-    auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+    auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
     request->Record.MutableProgram()->MutableProgram()->SetText(query);
     ForwardToTablet(runtime, tabletId, runtime.Sender, request.Release());
 
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
         void Execute(ITransaction *transaction, const TActorContext &ctx) override
         {
 
-            THolder<TTestTransaction> tx{dynamic_cast<TTestTransaction*>(transaction)};
+            std::unique_ptr<TTestTransaction> tx{dynamic_cast<TTestTransaction*>(transaction)};
             if (tx->Execute(Allowed)) {
                 Result.push_back(tx->No);
                 tx->Complete(ctx);
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
         }
 
         THashSet<ui64> Allowed;
-        TList<THolder<TTestTransaction>> Postponed;
+        TList<std::unique_ptr<TTestTransaction>> Postponed;
         TVector<ui64> Result;
     };
 
@@ -1874,7 +1874,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
 
     bool CheckAttrsPresent(TTenantTestRuntime& runtime, const TString& tenantName, THashMap<TString, TString> attrs, bool skipAbsent = false) {
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(tenantName);
+        auto request = std::make_unique<TEvSchemeShard::TEvDescribeScheme>(tenantName);
         ForwardToTablet(runtime, SCHEME_SHARD1_ID, runtime.Sender, request.Release());
 
         TAutoPtr<IEventHandle> handle;

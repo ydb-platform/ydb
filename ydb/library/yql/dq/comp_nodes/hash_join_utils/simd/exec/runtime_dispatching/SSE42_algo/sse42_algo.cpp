@@ -2,7 +2,7 @@
 #include <immintrin.h>
 
 template<>
-THolder<Perfomancer::Interface> Perfomancer::Create<SSE42Trait>() {
+std::unique_ptr<Perfomancer::Interface> Perfomancer::Create<SSE42Trait>() {
     Cerr << "SSETrait ";
-    return MakeHolder<Algo<SSE42Trait>>();
+    return std::make_unique<Algo<SSE42Trait>>();
 }

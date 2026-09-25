@@ -39,7 +39,7 @@ public:
             YDB_ACCESSOR(ui64, Start, 0);
 
         private:
-            THolder<NYdb::TValueBuilder> Builder;
+            std::unique_ptr<NYdb::TValueBuilder> Builder;
             TStringBuilder Csv;
             const TBulkDataGenerator& Owner;
             int TableNum;

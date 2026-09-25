@@ -650,7 +650,7 @@ private:
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)
 {
-    return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
+    return std::unique_ptr<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
 }
 
 } // namespace NKikimr::NKqp::NOpt

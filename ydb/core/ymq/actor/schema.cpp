@@ -114,10 +114,10 @@ static void SetOnePartitionPerShardSettings(NKikimrSchemeOp::TTableDescription& 
 
 } // namespace
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeExecuteEvent(const TString& query)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     trans->SetMode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE_AND_EXEC);
     trans->SetFlatMKQL(true);
@@ -126,12 +126,12 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeCreateTableEvent(const TString& root,
                          const TTable& table,
                          size_t queueShardsCount)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
@@ -184,11 +184,11 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeDeleteTableEvent(const TString& root,
                          const TTable& table)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     if (table.Shard == -1) {
@@ -202,10 +202,10 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveDirectoryEvent(const TString& root, const TString& name)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     trans->SetWorkingDir(root);
@@ -215,10 +215,10 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveTopicEvent(const TString& root, const TString& name)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     trans->SetWorkingDir(root);
@@ -228,11 +228,11 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeCreateKesusEvent(const TString& root,
                          const TString& kesusName)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
@@ -246,11 +246,11 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveKesusEvent(const TString& root,
                          const TString& kesusName)
 {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
@@ -295,8 +295,8 @@ void TCreateUserSchemaActor::NextAction() {
     Process();
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> TCreateUserSchemaActor::MakeMkDirRequest(const TString& root, const TString& dirName) {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> TCreateUserSchemaActor::MakeMkDirRequest(const TString& root, const TString& dirName) {
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
     trans->SetWorkingDir(root);
@@ -315,7 +315,7 @@ void TCreateUserSchemaActor::Process() {
             rootSqs.RSplit('/', mainRoot, sqsDirName);
             if (mainRoot.empty() || sqsDirName.empty()) {
                 RLOG_SQS_WARN("Failed to split root directory into components: [" << Root_ << "]");
-                Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(false));
+                Send(Sender_, std::make_unique<TSqsEvents::TEvUserCreated>(false));
                 PassAway();
                 return;
             }
@@ -337,7 +337,7 @@ void TCreateUserSchemaActor::Process() {
             break;
         }
         case ECreating::Finish: {
-            Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(true));
+            Send(Sender_, std::make_unique<TSqsEvents::TEvUserCreated>(true));
             PassAway();
             break;
         }
@@ -368,7 +368,7 @@ void TCreateUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
         }
         RLOG_SQS_WARN("request execution error: " << record);
 
-        Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(false));
+        Send(Sender_, std::make_unique<TSqsEvents::TEvUserCreated>(false));
         PassAway();
     }
 }
@@ -381,7 +381,7 @@ void TCreateUserSchemaActor::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuo
         NextAction();
     } else {
         RLOG_SQS_WARN("Failed to add quoter resource: " << ev->Get()->Record);
-        Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(false));
+        Send(Sender_, std::make_unique<TSqsEvents::TEvUserCreated>(false));
         PassAway();
     }
 }
@@ -452,7 +452,7 @@ void TDeleteUserSchemaActor::Process() {
             break;
         }
         case EDeleting::Finish: {
-            Send(Sender_, MakeHolder<TSqsEvents::TEvUserDeleted>(true));
+            Send(Sender_, std::make_unique<TSqsEvents::TEvUserDeleted>(true));
             PassAway();
             break;
         }
@@ -468,7 +468,7 @@ void TDeleteUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     } else {
         RLOG_SQS_WARN("request execution error: " << record);
 
-        Send(Sender_, MakeHolder<TSqsEvents::TEvUserDeleted>(false, record.GetMiniKQLErrors()));
+        Send(Sender_, std::make_unique<TSqsEvents::TEvUserDeleted>(false, record.GetMiniKQLErrors()));
         PassAway();
     }
 }
@@ -495,11 +495,11 @@ void TAtomicCounterActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     if (SuccessStatusCode(status)) {
         const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
         Send(Sender_,
-                 MakeHolder<TSqsEvents::TEvAtomicCounterIncrementResult>(true, "ok", val["value"]));
+                 std::make_unique<TSqsEvents::TEvAtomicCounterIncrementResult>(true, "ok", val["value"]));
     } else {
         RLOG_SQS_ERROR("Failed to increment the atomic counter: bad status code");
         Send(Sender_,
-                 MakeHolder<TSqsEvents::TEvAtomicCounterIncrementResult>(false));
+                 std::make_unique<TSqsEvents::TEvAtomicCounterIncrementResult>(false));
     }
     PassAway();
 }
@@ -546,7 +546,7 @@ public:
 
 private:
     void RequestQuoterTabletId() {
-        THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+        std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
         auto& descCmd = *request->Record.MutableDescribePath();
         if (QuoterPath.empty()) {
             RLOG_SQS_TRACE("Requesting quoter tablet id for path id " << QuoterPathId);
@@ -600,7 +600,7 @@ private:
     }
 
     void SendErrorAndDie(const TString& reason) {
-        this->Send(Parent, MakeHolder<TEvCmdResult>(Ydb::StatusIds::INTERNAL_ERROR, reason));
+        this->Send(Parent, std::make_unique<TEvCmdResult>(Ydb::StatusIds::INTERNAL_ERROR, reason));
         PassAway();
     }
 

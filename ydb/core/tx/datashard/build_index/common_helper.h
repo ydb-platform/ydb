@@ -363,7 +363,7 @@ inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::T
 
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 
-    auto response = MakeHolder<TResponse>();
+    auto response = std::make_unique<TResponse>();
     FillScanResponseCommonFields(*response, scanId, tabletId, seqNo);
     response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
 

@@ -139,22 +139,22 @@ struct TDirectReadRestoreEnv {
     // Hold CmdPrepareReadResult (re-inject later) to race with ResendRecentRequests after pipe restart.
     std::atomic<ui64> HoldPrepareResponses{0};
     std::atomic<ui64> HeldPrepareResponses{0};
-    TVector<THolder<IEventHandle>> HeldPrepareEvents;
+    TVector<std::unique_ptr<IEventHandle>> HeldPrepareEvents;
 
     // Hold CmdPublishReadResult (re-inject later) / keep restore stuck in Publish.
     std::atomic<ui64> HoldPublishResponses{0};
     std::atomic<ui64> HeldPublishResponses{0};
-    TVector<THolder<IEventHandle>> HeldPublishEvents;
+    TVector<std::unique_ptr<IEventHandle>> HeldPublishEvents;
 
     // Hold CmdForgetReadResult (re-inject later) to keep restore stuck in Forget stage.
     std::atomic<ui64> HoldForgetResponses{0};
     std::atomic<ui64> HeldForgetResponses{0};
-    TVector<THolder<IEventHandle>> HeldForgetEvents;
+    TVector<std::unique_ptr<IEventHandle>> HeldForgetEvents;
 
     // Hold TEvRegisterDirectReadSession (PQ → dread cache) to model late Register after re-lock.
     std::atomic<ui64> HoldRegisterDirectRead{0};
     std::atomic<ui64> HeldRegisterDirectRead{0};
-    TVector<THolder<IEventHandle>> HeldRegisterDirectReadEvents;
+    TVector<std::unique_ptr<IEventHandle>> HeldRegisterDirectReadEvents;
     // Stage/Publish toward cache while Register is held (buffered until Register).
     std::atomic<ui64> StageOrPublishWhileRegisterHeld{0};
     std::atomic<ui64> StageWhileRegisterHeld{0};
@@ -165,13 +165,13 @@ struct TDirectReadRestoreEnv {
     // Hold TEvStageDirectReadData after Stage(M) is buffered so Stage(N) cannot upgrade pending.
     std::atomic<ui64> HoldStageDirectRead{0};
     std::atomic<ui64> HeldStageDirectRead{0};
-    TVector<THolder<IEventHandle>> HeldStageDirectReadEvents;
+    TVector<std::unique_ptr<IEventHandle>> HeldStageDirectReadEvents;
 
     // Hold TEvDeregisterDirectReadSession so Stage(M) is not wiped by MarkSessionRetired on PQ
     // reboot before Publish(N) lands (delayed teardown vs new-gen Publish).
     std::atomic<ui64> HoldDeregisterDirectRead{0};
     std::atomic<ui64> HeldDeregisterDirectRead{0};
-    TVector<THolder<IEventHandle>> HeldDeregisterDirectReadEvents;
+    TVector<std::unique_ptr<IEventHandle>> HeldDeregisterDirectReadEvents;
 
     // Any TEvCloseSession with ErrorCode != OK (ENSURE, empty-queue CloseSessionAndDie, bad ack, …).
     // Teardown DropHooks() clears the observer before gRPC cancel, so shutdown noise is ignored.
@@ -207,7 +207,7 @@ struct TDirectReadRestoreEnv {
         Endpoint = Server->Endpoint;
 
         Server->PrepareNetDataFile();
-        Server->CleverServer = MakeHolder<NKikimr::Tests::TServer>(Server->ServerSettings);
+        Server->CleverServer = std::make_unique<NKikimr::Tests::TServer>(Server->ServerSettings);
         Server->CleverServer->EnableGRpc(Server->GrpcServerOptions);
 
         Server->Log.SetFormatter([](ELogPriority priority, TStringBuf message) {
@@ -223,7 +223,7 @@ struct TDirectReadRestoreEnv {
         // on ListEndpoints (GET_ENDPOINTS_TIMEOUT=10s). With UseRealThreads=false the request
         // is only served while we DispatchEvents — so construct it under RunWithDispatch.
         RunWithDispatch(runtime, [&] {
-            Server->AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(
+            Server->AnnoyingClient = std::make_unique<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(
                 Server->ServerSettings, Server->GrpcPort, TString("/Root"));
             return true;
         });
@@ -474,8 +474,8 @@ struct TGrpcDirectReadClient {
 
     std::shared_ptr<grpc::Channel> Channel;
     std::unique_ptr<TService::Stub> Stub;
-    THolder<grpc::ClientContext> ControlContext;
-    THolder<grpc::ClientContext> DirectContext;
+    std::unique_ptr<grpc::ClientContext> ControlContext;
+    std::unique_ptr<grpc::ClientContext> DirectContext;
     std::unique_ptr<grpc::ClientReaderWriter<StreamReadMessage::FromClient, StreamReadMessage::FromServer>> ControlStream;
     std::unique_ptr<grpc::ClientReaderWriter<StreamDirectReadMessage::FromClient, StreamDirectReadMessage::FromServer>> DirectStream;
     TString SessionId;
@@ -495,7 +495,7 @@ struct TGrpcDirectReadClient {
 
     void InitControlSession(NActors::TTestActorRuntime& runtime) {
         RunWithDispatch(runtime, [&] {
-            ControlContext = MakeHolder<grpc::ClientContext>();
+            ControlContext = std::make_unique<grpc::ClientContext>();
             ControlStream = Stub->StreamRead(ControlContext.Get());
             DR_ENSURE(ControlStream);
 
@@ -547,7 +547,7 @@ struct TGrpcDirectReadClient {
 
     void InitDirectSession(NActors::TTestActorRuntime& runtime) {
         RunWithDispatch(runtime, [&] {
-            DirectContext = MakeHolder<grpc::ClientContext>();
+            DirectContext = std::make_unique<grpc::ClientContext>();
             DirectStream = Stub->StreamDirectRead(DirectContext.Get());
             DR_ENSURE(DirectStream);
 
@@ -1647,7 +1647,7 @@ Y_UNIT_TEST(ResendRecentRequestsResetsWaitForDataWhenDataAvailable) {
 
     // Init control session with max_lag set per-topic to trigger WaitForData = true.
     RunWithDispatch(runtime, [&] {
-        Client.ControlContext = MakeHolder<grpc::ClientContext>();
+        Client.ControlContext = std::make_unique<grpc::ClientContext>();
         Client.ControlStream = Client.Stub->StreamRead(Client.ControlContext.Get());
         DR_ENSURE(Client.ControlStream);
 

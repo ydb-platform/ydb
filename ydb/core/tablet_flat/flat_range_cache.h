@@ -590,7 +590,7 @@ private:
     const TKeyCellDefaults& KeyCellDefaults;
     const TKeyRangeCacheConfig Config;
     const TIntrusivePtr<TKeyRangeCacheNeedGCList> GCList;
-    THolder<TSpecialMemoryPool> Pool;
+    std::unique_ptr<TSpecialMemoryPool> Pool;
     size_t UsedHeapMemory = 0;
     TContainer Entries;
     TIntrusiveList<TKeyRangeEntryLRU> Fresh;

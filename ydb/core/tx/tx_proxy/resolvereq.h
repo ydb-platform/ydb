@@ -18,7 +18,7 @@ namespace NTxProxy {
         TTableId TableId;
         TSerializedCellVec FromValues;
         TSerializedCellVec ToValues;
-        THolder<TKeyDesc> KeyDescription;
+        std::unique_ptr<TKeyDesc> KeyDescription;
         NSchemeCache::TDomainInfo::TPtr DomainInfo;
         NSchemeCache::TSchemeCacheNavigate::EKind Kind;
     };

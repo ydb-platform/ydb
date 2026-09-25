@@ -13,7 +13,7 @@ class TUnimplementedRequestActor
     : public TActionActor<TUnimplementedRequestActor>
 {
 public:
-    TUnimplementedRequestActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb)
+    TUnimplementedRequestActor(const NKikimrClient::TSqsRequest& req, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(req, EAction::Unknown, std::move(cb))
     {
         Response_.MutableGetQueueUrl()->SetRequestId(RequestId_);
@@ -33,12 +33,12 @@ private:
     }
 };
 
-IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb) {
+IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, std::unique_ptr<IReplyCallback> cb) {
     Y_ABORT_UNLESS(req.GetRequestId());
 
 #define REQUEST_CASE(action) \
     case NKikimrClient::TSqsRequest::Y_CAT(k, action): {                \
-        extern IActor* Y_CAT(Y_CAT(Create, action), Actor)(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb); \
+        extern IActor* Y_CAT(Y_CAT(Create, action), Actor)(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb); \
         return Y_CAT(Y_CAT(Create, action), Actor)(req, std::move(cb));  \
     }
 
@@ -80,7 +80,7 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
     Y_ABORT();
 }
 
-IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader) {
+IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, std::unique_ptr<IReplyCallback> cb, bool enableQueueLeader) {
     if (enableQueueLeader && TProxyActor::NeedCreateProxyActor(req)) {
         return new TProxyActor(req, std::move(cb));
     } else {
@@ -88,7 +88,7 @@ IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IR
     }
 }
 
-IActor* CreatePingActor(THolder<IPingReplyCallback> cb, const TString& requestId) {
+IActor* CreatePingActor(std::unique_ptr<IPingReplyCallback> cb, const TString& requestId) {
     return new TPingActor(std::move(cb), requestId);
 }
 

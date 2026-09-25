@@ -34,7 +34,7 @@ TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvNotify& recor
 void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0);
 
 template <typename TEvent>
-void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
+void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, std::unique_ptr<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
     MultiSend(recipients, sender, static_cast<IEventBase*>(ev.Release()), flags, cookie);
 }
 

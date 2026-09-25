@@ -77,8 +77,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreatePqIODiscoveryTransformer(TPqState::TPtr state) {
-    return THolder(new TPqIODiscoveryTransformer(state));
+std::unique_ptr<IGraphTransformer> CreatePqIODiscoveryTransformer(TPqState::TPtr state) {
+    return std::unique_ptr<TPqIODiscoveryTransformer>(new TPqIODiscoveryTransformer(state));
 }
 
 }

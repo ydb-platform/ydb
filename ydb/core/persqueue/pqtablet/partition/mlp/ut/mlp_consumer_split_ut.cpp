@@ -1555,7 +1555,7 @@ void SingleGroupAvailableEventuallyImpl(TDuration pause) {
     }
 
     ACerr << ">>>>> Step: Read and verify" << Endl;
-    THolder<TEvReadResponse> finalRead;
+    std::unique_ptr<TEvReadResponse> finalRead;
     for (TInstant deadline = TDuration::Minutes(1).ToDeadLine(); TInstant::Now() <= deadline;) {
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",

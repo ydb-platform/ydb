@@ -777,14 +777,6 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 TraversalDatabase = operation.DatabaseName;
                 TraversalPathId = operationTable.PathId;
 
-                if (!*isKnown) {
-                    YDB_LOG_DEBUG("ScheduleNextAnalyze. table was deleted, deleting its statistics",
-                        {"tabletId", TabletID()},
-                        {"pathId", operationTable.PathId});
-                    DeleteStatisticsFromTable();
-                    return;
-                }
-
                 TraversalStartTime = TInstant::Now();
                 LastTraversalWasForce = true;
 

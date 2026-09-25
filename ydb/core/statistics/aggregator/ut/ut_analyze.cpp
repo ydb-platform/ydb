@@ -1190,6 +1190,40 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         CreateDatabase(env, "Database");
         const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
+        // Keep the live table out of SchemeShard snapshots. ANALYZE must still
+        // succeed; a missing snapshot entry is not proof that the table was dropped.
+        bool omitted = false;
+        auto hideTable = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+            NKikimrStat::TSchemeShardStats statRecord;
+            if (!statRecord.ParseFromString(ev->Get()->Record.GetStats())) {
+                return;
+            }
+            NKikimrStat::TSchemeShardStats filtered;
+            if (statRecord.HasAreAllStatsFull()) {
+                filtered.SetAreAllStatsFull(statRecord.GetAreAllStatsFull());
+            }
+            bool omittedThisTable = false;
+            for (const auto& entry : statRecord.GetEntries()) {
+                if (TPathId::FromProto(entry.GetPathId()) == tableInfo.PathId) {
+                    omittedThisTable = true;
+                    continue;
+                }
+                *filtered.AddEntries() = entry;
+            }
+            if (!omittedThisTable) {
+                return;
+            }
+            TString stats;
+            UNIT_ASSERT(filtered.SerializeToString(&stats));
+            ev->Get()->Record.SetStats(stats);
+            omitted = true;
+        });
+        runtime.WaitFor("SchemeShard stats without the analyzed table", [&]{ return omitted; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId}, "whilePresent");
+        ValidateStatistics(runtime, tableInfo.PathId);
+        hideTable.Remove();
+
         DropTable(env, "Database", "Table");
 
         auto result = Analyze(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_compaction_priority.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h>
 
@@ -376,7 +377,8 @@ namespace NKikimr {
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
             std::pair<std::optional<TFullCompactionAttrs>, bool> FullCompactionInfo;
-            double MaxRatio = 0.0;
+            // Current LSM pressure and emergency mode used as the compaction broker priority.
+            TCompactionPriority Priority;
 
             TTask() {
                 Clear();
@@ -390,6 +392,7 @@ namespace NKikimr {
                 IsFullCompaction = false;
                 SelectStrategy = ESelectStrategy::None;
                 Forecast.Clear();
+                Priority = {};
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }

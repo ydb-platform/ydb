@@ -45,6 +45,7 @@ namespace NKikimr {
                 }
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::Emergency;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());

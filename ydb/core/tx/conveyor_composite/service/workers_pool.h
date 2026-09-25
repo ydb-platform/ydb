@@ -1,6 +1,7 @@
 #pragma once
 #include "category.h"
 #include "common.h"
+#include "query.h"
 #include "worker.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -49,6 +50,7 @@ private:
         YDB_READONLY_DEF(NActors::TActorId, WorkerId);
         YDB_READONLY(double, CPULimit, 1);
         YDB_ACCESSOR(bool, StopPrepare, false);
+        std::optional<TSchedulerLease> SchedulerLease;
 
     public:
         TWorkerInfo(std::unique_ptr<TWorker>&& worker, const double cpuLimit)
@@ -60,11 +62,11 @@ private:
             CPULimit = value;
         }
 
-        void OnStartTask();
+        void OnStartTask(TSchedulerLease&& schedulerLease);
         void OnStopTask();
     };
 
-    ui64 WorkersCount = 0;
+    YDB_READONLY(ui64, WorkersCount, 0);
     YDB_READONLY(double, MaxWorkerThreads, 0);
     std::vector<TWeightedCategory> CategoryLinks;
     std::vector<TWorkerInfo> Workers;
@@ -75,25 +77,36 @@ private:
     const TString PoolName;
     const NActors::TActorId DistributorId;
     const ui64 WorkersPoolId;
+    TQueryRegistry* const QueryRegistry;
 
     void RemoveFreeWorker(const ui64 workerIdx);
     void UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit);
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
-    void RunTask(std::vector<TWorkerTask>&& tasksBatch);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLease&& schedulerLease, const TSchedulerQueryIdentity& identity);
     TWeightedCategory& FindCategoryLink(const ESpecialTaskCategory category);
+    std::optional<TDuration> GetMinProcessUsage(const TSchedulerQueryIdentity& identity) const;
+
+    struct TQueryCandidate {
+        TSchedulerQueryIdentity Identity;
+        TMonotonic EffectiveDeadline;
+        TDuration MinProcessUsage;
+    };
+    std::vector<TQueryCandidate> BuildQueryCandidates(const TDrainContext& context) const;
+    std::vector<TWorkerTask> BuildTasksBatch(const TSchedulerQueryIdentity& identity);
 
 public:
     static constexpr double Eps = 1e-6;
 
     TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
-        const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
+        const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories,
+        TQueryRegistry* queryRegistry);
 
     const std::shared_ptr<TWorkersPoolCounters>& GetCounters() const {
         return Counters;
     }
 
-    [[nodiscard]] bool DrainTasks();
+    [[nodiscard]] bool DrainTasks(TDrainContext& context);
 
     void AddDeliveryDuration(const TDuration d) {
         DeliveringDuration.Add(d);
@@ -122,6 +135,8 @@ public:
     void ApplyTopologyUpdate(const NConfig::TWorkersPool& config,
         const std::vector<std::shared_ptr<TProcessCategory>>& categories);
     void ClearTopology();
+
+    bool HasProcesses(const TSchedulerQueryIdentity& identity) const;
 };
 
 }   // namespace NKikimr::NConveyorComposite

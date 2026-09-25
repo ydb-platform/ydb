@@ -42,6 +42,78 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
+    Y_UNIT_TEST(RegistrationsKeepCanonicalQueryUntilLastRelease) {
+        /* Scenario:
+            - Register query ID 0 several times; reuse the same pointer.
+            - Remove only after the last release; a subsequent Add creates a new query.
+         */
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        scheduler.AddOrUpdateDatabase("db", {});
+        scheduler.AddOrUpdatePool("db", "pool", {});
+        UNIT_ASSERT(!scheduler.RemoveQuery(0));
+        auto first = scheduler.AddOrUpdateQuery("db", "pool", 0, {});
+        auto pool = first->GetParent();
+        UNIT_ASSERT(scheduler.AddOrUpdateQuery("db", "pool", 0, {.Weight = 2}) == first);
+        UNIT_ASSERT(scheduler.RemoveQuery(0));
+        UNIT_ASSERT(pool->GetQuery(0) == first);
+        UNIT_ASSERT(scheduler.AddOrUpdateQuery("db", "pool", 0, {}) == first);
+        UNIT_ASSERT(scheduler.RemoveQuery(0));
+        UNIT_ASSERT(pool->GetQuery(0) == first);
+        UNIT_ASSERT(scheduler.RemoveQuery(0));
+        UNIT_ASSERT(!pool->GetQuery(0));
+        UNIT_ASSERT(!scheduler.RemoveQuery(0));
+        auto next = scheduler.AddOrUpdateQuery("db", "pool", 0, {});
+        UNIT_ASSERT(next != first);
+        UNIT_ASSERT(scheduler.RemoveQuery(0));
+        UNIT_ASSERT(!scheduler.RemoveQuery(0));
+    }
+
+    Y_UNIT_TEST(ForceRemoveDropsAllRegistrationsWithoutTombstones) {
+        /* Scenario:
+            - Force-remove a query with multiple registrations.
+            - Unknown removes are no-ops; a subsequent Add starts with one registration.
+         */
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        scheduler.AddOrUpdateDatabase("db", {});
+        scheduler.AddOrUpdatePool("db", "pool", {});
+        UNIT_ASSERT(!scheduler.RemoveQuery(42, true));
+        auto first = scheduler.AddOrUpdateQuery("db", "pool", 42, {});
+        UNIT_ASSERT(scheduler.AddOrUpdateQuery("db", "pool", 42, {}) == first);
+        UNIT_ASSERT(scheduler.RemoveQuery(42, true));
+        UNIT_ASSERT(!first->GetParent()->GetQuery(42));
+        UNIT_ASSERT(!scheduler.RemoveQuery(42));
+        UNIT_ASSERT(!scheduler.RemoveQuery(42, true));
+        UNIT_ASSERT(scheduler.AddOrUpdateQuery("db", "pool", 42, {}) != first);
+        UNIT_ASSERT(scheduler.RemoveQuery(42));
+        UNIT_ASSERT(!scheduler.RemoveQuery(42));
+    }
+
+    Y_UNIT_TEST(FailedRegistrationDoesNotAcquireReferenceOrChangePool) {
+        /* Scenario:
+            - Reject invalid attributes, a missing pool and a different database/pool.
+            - Failed adds preserve the original pool and do not acquire registrations.
+         */
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TComputeScheduler scheduler(counters, {.DelayParams = kDefaultDelayParams});
+        scheduler.AddOrUpdateDatabase("db", {});
+        scheduler.AddOrUpdateDatabase("other", {});
+        scheduler.AddOrUpdatePool("db", "pool", {});
+        scheduler.AddOrUpdatePool("db", "other", {});
+        scheduler.AddOrUpdatePool("other", "pool", {});
+        auto query = scheduler.AddOrUpdateQuery("db", "pool", 1, {});
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("db", "pool", 1, {.Weight = 0}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("db", "other", 1, {}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("other", "pool", 1, {}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("db", "missing", 1, {}), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(query->GetFullPoolId().DatabaseId, "db");
+        UNIT_ASSERT_VALUES_EQUAL(query->GetFullPoolId().PoolId, "pool");
+        UNIT_ASSERT(scheduler.RemoveQuery(1));
+        UNIT_ASSERT(!query->GetParent()->GetQuery(1));
+        UNIT_ASSERT(!scheduler.RemoveQuery(1));
+    }
+
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
         /*
             Scenario:

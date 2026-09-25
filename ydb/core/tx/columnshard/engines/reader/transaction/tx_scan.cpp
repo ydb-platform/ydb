@@ -64,6 +64,18 @@ NConveyorComposite::TCPULimitsConfig TTxScan::GetCpuLimits() const {
     return cpuLimits;
 }
 
+std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> TTxScan::GetSchedulerPool() const {
+    const auto& request = Ev->Get()->Record;
+    if (!request.HasDatabaseId() || request.GetDatabaseId().empty() || !request.HasPoolId() || request.GetPoolId().empty() ||
+        !request.HasTxId()) {
+        return std::nullopt;
+    }
+    return NKqp::NScheduler::NHdrf::TFullPoolId{
+        .DatabaseId = request.GetDatabaseId(),
+        .PoolId = request.GetPoolId(),
+    };
+}
+
 const TVersionedPresetSchemas& TTxScan::GetPresetSchemas() const {
     static TVersionedPresetSchemas defaultSchemas(
         0, Self->GetStoragesManager(), Self->GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
@@ -206,12 +218,12 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(diagnostics));
     }
     const ui32 scanPoolId = request.GetUseBatchPool() ? AppDataVerified().BatchPoolId : Max<ui32>();
-    auto scanActorId =
-        ctx.Register(new TColumnShardScan(Self->SelfId(), Ev->Sender, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
-                         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
-                         request.GetScanId(), request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(),
-                         TDuration::MilliSeconds(request.GetTimeoutMs()), readMetadataRange, request.GetDataFormat(),
-                         Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId), TMailboxType::HTSwap, scanPoolId);
+    auto scanActorId = ctx.Register(
+        new TColumnShardScan(Self->SelfId(), Ev->Sender, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
+            Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
+            request.GetScanId(), request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(),
+            TDuration::MilliSeconds(request.GetTimeoutMs()), readMetadataRange, request.GetDataFormat(), Self->Counters.GetScanCounters(),
+            cpuLimits, std::move(orbit), rawPathId, GetSchedulerPool()), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",

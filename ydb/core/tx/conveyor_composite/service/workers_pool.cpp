@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <numeric>
+#include <tuple>
 
 namespace NKikimr::NConveyorComposite {
 
@@ -14,26 +16,34 @@ void TWeightedCategory::SetWeight(const double weight) {
     Counters->ValueWeight->Set(weight);
 }
 
-void TWorkersPool::TWorkerInfo::OnStartTask() {
+void TWorkersPool::TWorkerInfo::OnStartTask(TSchedulerLease&& schedulerLease) {
     Y_ENSURE(!RunningTask, "worker already has a running task");
     Y_ENSURE(!StopPrepare, "cannot assign a task to a worker prepared for removal");
+    Y_ENSURE(schedulerLease, "cannot assign a task without a scheduler lease");
+    Y_ENSURE(!SchedulerLease, "worker already has a scheduler lease");
+    SchedulerLease.emplace(std::move(schedulerLease));
     RunningTask = true;
 }
 
 void TWorkersPool::TWorkerInfo::OnStopTask() {
     Y_ENSURE(RunningTask, "worker has no running task to stop");
+    Y_ENSURE(SchedulerLease, "running worker has no scheduler lease");
+    SchedulerLease.reset();
     RunningTask = false;
 }
 
 TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
-    const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
+    const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories,
+    TQueryRegistry* queryRegistry)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , MaxWorkerThreads(config.GetWorkersCountInfo().GetCPUUsageDouble(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , Counters(counters)
     , MaxBatchSize(config.GetMaxBatchSize())
     , PoolName(poolName)
     , DistributorId(distributorId)
-    , WorkersPoolId(workersPoolId) {
+    , WorkersPoolId(workersPoolId)
+    , QueryRegistry(queryRegistry) {
+    Y_ENSURE(QueryRegistry, "query registry is not initialized");
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         Y_ENSURE((ui64)i.GetCategory() < categories.size(), "worker pool category index is out of range: " << (ui64)i.GetCategory());
@@ -162,7 +172,7 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
-void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLease&& schedulerLease, const TSchedulerQueryIdentity& identity) {
     Y_ENSURE(HasFreeWorker(), "cannot run a task without a free worker");
     Y_ENSURE(tasksBatch.size(), "cannot run an empty task batch");
     const auto workerIdx = ActiveWorkersIdx.back();
@@ -170,14 +180,14 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
-    worker.OnStartTask();
+    worker.OnStartTask(std::move(schedulerLease));
     for (const auto& task : tasksBatch) {
         auto& link = FindCategoryLink(task.GetCategory());
         Y_ENSURE(!link.GetStopPrepare(), "cannot assign a task to a link prepared for removal");
         link.OnTaskStarted();
     }
     TActivationContext::Send(
-        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit()));
+        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit(), identity));
 }
 
 void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
@@ -190,13 +200,45 @@ void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 }
 
-bool TWorkersPool::DrainTasks() {
-    if (ActiveWorkersIdx.empty() || CategoryLinks.empty()) {
-        return false;
+std::optional<TDuration> TWorkersPool::GetMinProcessUsage(const TSchedulerQueryIdentity& identity) const {
+    std::optional<TDuration> result;
+    auto activeLinks = CategoryLinks | std::views::filter([](const auto& link) { return !link.GetStopPrepare(); });
+    for (const auto& link : activeLinks) {
+        const auto usage = link.GetCategory()->GetMinProcessUsage(identity);
+        if (usage && (!result || *usage < *result)) {
+            result = usage;
+        }
     }
-    const auto predHeap = [](const TWeightedCategory& l, const TWeightedCategory& r) {
-        const bool hasL = l.GetCategory()->HasTasks();
-        const bool hasR = r.GetCategory()->HasTasks();
+    return result;
+}
+
+std::vector<TWorkersPool::TQueryCandidate> TWorkersPool::BuildQueryCandidates(const TDrainContext& context) const {
+    const auto& queries = *QueryRegistry;
+    auto candidatesView = queries.GetIdentitiesView()
+        | std::views::filter([&](const auto& identity) {
+              return queries.GetStateVerified(identity).IsReady() && GetMinProcessUsage(identity).has_value();
+          })
+        | std::views::transform([&](const auto& identity) {
+              const auto& state = queries.GetStateVerified(identity);
+              return TQueryCandidate{
+                  .Identity = identity,
+                  .EffectiveDeadline = state.GetWakeUpDeadline().value_or(context.AverageWakeUpDeadline),
+                  .MinProcessUsage = *GetMinProcessUsage(identity),
+              };
+          });
+
+    std::vector<TQueryCandidate> result(std::ranges::begin(candidatesView), std::ranges::end(candidatesView));
+    std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
+        return std::tie(lhs.EffectiveDeadline, lhs.MinProcessUsage, lhs.Identity.QueryId, lhs.Identity.IsServiceQuery)
+            < std::tie(rhs.EffectiveDeadline, rhs.MinProcessUsage, rhs.Identity.QueryId, rhs.Identity.IsServiceQuery);
+    });
+    return result;
+}
+
+std::vector<TWorkerTask> TWorkersPool::BuildTasksBatch(const TSchedulerQueryIdentity& identity) {
+    const auto predHeap = [&](const TWeightedCategory& l, const TWeightedCategory& r) {
+        const bool hasL = l.GetCategory()->HasTasks(identity);
+        const bool hasR = r.GetCategory()->HasTasks(identity);
         if (!hasL && !hasR) {
             return false;
         } else if (!hasL && hasR) {
@@ -209,32 +251,57 @@ bool TWorkersPool::DrainTasks() {
     std::vector<TWeightedCategory> procLocal;
     procLocal.reserve(CategoryLinks.size());
     for (const auto& link : CategoryLinks) {
-        if (!link.GetStopPrepare()) {
+        if (!link.GetStopPrepare() && link.GetCategory()->HasTasks(identity)) {
             procLocal.emplace_back(link);
         }
     }
     std::make_heap(procLocal.begin(), procLocal.end(), predHeap);
-    bool newTask = false;
-    while (ActiveWorkersIdx.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
-        TDuration predicted = TDuration::Zero();
-        std::vector<TWorkerTask> tasks;
-        THashSet<TString> scopes;
-        while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
-               procLocal.front().GetCategory()->HasTasks()) {
-            std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
-            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes);
-            if (!task) {
-                procLocal.pop_back();
-                continue;
-            }
-            tasks.emplace_back(std::move(*task));
-            procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
-            predicted += tasks.back().GetPredictedDuration();
-            std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
+
+    TDuration predicted = TDuration::Zero();
+    std::vector<TWorkerTask> tasks;
+    THashSet<TString> scopes;
+    while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
+           procLocal.front().GetCategory()->HasTasks(identity)) {
+        std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
+        auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes, identity);
+        if (!task) {
+            procLocal.pop_back();
+            continue;
         }
-        newTask = true;
-        if (tasks.size()) {
-            RunTask(std::move(tasks));
+        tasks.emplace_back(std::move(*task));
+        procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
+        predicted += tasks.back().GetPredictedDuration();
+        std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
+    }
+    return tasks;
+}
+
+bool TWorkersPool::DrainTasks(TDrainContext& context) {
+    if (ActiveWorkersIdx.empty() || CategoryLinks.empty()) {
+        return false;
+    }
+
+    auto candidates = BuildQueryCandidates(context);
+    bool newTask = false;
+    for (const auto& identity : candidates | std::views::transform(&TQueryCandidate::Identity)) {
+        if (!HasFreeWorker()) {
+            break;
+        }
+        while (HasFreeWorker()) {
+            if (!GetMinProcessUsage(identity)) {
+                break;
+            }
+            auto startResult = QueryRegistry->GetStateVerified(identity).TryStart(context.Now);
+            if (std::holds_alternative<TMonotonic>(startResult)) {
+                break;
+            }
+            auto schedulerLease = std::get<TSchedulerLease>(std::move(startResult));
+            auto tasks = BuildTasksBatch(identity);
+            if (tasks.empty()) {
+                break;
+            }
+            RunTask(std::move(tasks), std::move(schedulerLease), identity);
+            newTask = true;
         }
     }
     for (auto&& i : CategoryLinks) {
@@ -243,6 +310,12 @@ bool TWorkersPool::DrainTasks() {
         }
     }
     return newTask;
+}
+
+bool TWorkersPool::HasProcesses(const TSchedulerQueryIdentity& identity) const {
+    return std::any_of(CategoryLinks.begin(), CategoryLinks.end(), [&](const auto& link) {
+        return link.GetCategory()->HasProcesses(identity);
+    });
 }
 
 void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId, const ui64 workerIdx) {

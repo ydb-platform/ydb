@@ -50,6 +50,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
+    YDB_READONLY_DEF(TSchedulerQueryIdentity, SchedulerQueryIdentity);
 
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TPositiveControlInteger InProgressTasksCount;
@@ -57,6 +58,8 @@ private:
     TDuration BaseWeight = TDuration::Zero();
 
 public:
+    void MoveToServiceQuery();
+
     ui32 GetInProgressTasksCount() const {
         return InProgressTasksCount.Val();
     }
@@ -99,14 +102,8 @@ public:
         return 1.0;
     }
 
-    TProcess(
-        const ui64 processId, const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
-        : ProcessId(processId)
-        , Scope(scope)
-        , WaitingTasksCount(waitingTasksCount) {
-        AFL_VERIFY(WaitingTasksCount);
-        CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
-    }
+    TProcess(const ui64 processId, const std::shared_ptr<TProcessScope>& scope,
+        const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount, const TSchedulerQueryIdentity& schedulerQueryIdentity);
 
     void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {
         TWorkerTaskPrepare wTask(std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId);

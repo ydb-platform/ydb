@@ -35,7 +35,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
             {"id", SelfId()},
             {"count", results.size()},
             {"d", TMonotonic::Now() - startGlobal});
-        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(results), *ForwardDuration, WorkerIdx, WorkersPoolId).SendTo(DistributorId);
+        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(results), *ForwardDuration, WorkerIdx, WorkersPoolId, QueryIdentity).SendTo(DistributorId);
         ForwardDuration.reset();
     }
 }
@@ -52,7 +52,7 @@ void TWorker::OnWakeup() {
         {"action", "wake_up"},
         {"id", SelfId()},
         {"count", Results.size()});
-    TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(Results), *ForwardDuration, WorkerIdx, WorkersPoolId).SendTo(DistributorId);
+    TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(Results), *ForwardDuration, WorkerIdx, WorkersPoolId, QueryIdentity).SendTo(DistributorId);
     ForwardDuration.reset();
     Results.clear();
     ExecutionDuration.reset();
@@ -65,6 +65,7 @@ void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     const double newLimit = ev->Get()->GetCPULimit();
     Y_ENSURE(std::isfinite(newLimit) && 0 < newLimit && newLimit <= 1, "invalid worker CPU limit: " << newLimit);
     CPULimit = newLimit;
+    QueryIdentity = ev->Get()->GetQueryIdentity();
     const TMonotonic now = TMonotonic::Now();
     ForwardDuration = now - ev->Get()->GetConstructInstant();
     ExecuteTask(ev->Get()->ExtractTasks());

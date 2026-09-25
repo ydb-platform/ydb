@@ -101,6 +101,7 @@ void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, boo
         if (requestIt->second.Query) {
             auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
             removeQueryEvent->QueryId = txId;
+            removeQueryEvent->IsForceRemove = true;
             Y_ENSURE(TlsActivationContext);
             auto* actorSystem = TlsActivationContext->ActorSystem();
             actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());

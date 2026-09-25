@@ -39,15 +39,13 @@ struct TEvExecution {
         YDB_READONLY_DEF(TString, ScopeId);
         YDB_READONLY(ui64, InternalProcessId, 0);
         YDB_READONLY_DEF(TCPULimitsConfig, CPULimits);
+        YDB_READONLY(ui64, TxId, 0);
+        YDB_READONLY_DEF(std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>, SchedulerPool);
 
     public:
         explicit TEvRegisterProcess(
-            const TCPULimitsConfig& cpuLimits, const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId)
-            : Category(category)
-            , ScopeId(scopeId)
-            , InternalProcessId(internalProcessId)
-            , CPULimits(cpuLimits) {
-        }
+            const TCPULimitsConfig& cpuLimits, const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId,
+            ui64 txId = 0, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt);
     };
 
     class TEvUnregisterProcess: public NActors::TEventLocal<TEvUnregisterProcess, EvUnregisterProcess> {

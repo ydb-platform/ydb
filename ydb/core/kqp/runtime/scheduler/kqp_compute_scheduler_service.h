@@ -28,7 +28,7 @@ public:
 
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
     NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
-    bool RemoveQuery(const NHdrf::TQueryId& queryId);
+    bool RemoveQuery(const NHdrf::TQueryId& queryId, bool isForceRemove = false);
 
     void UpdateFairShare();
 
@@ -41,8 +41,12 @@ private:
     std::atomic<bool> Enabled;
 
     TRWMutex Mutex;
-    NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries; // protected by Mutex
+    struct TQueryState {
+        ui64 RegisterLinksCount;
+        NHdrf::NDynamic::TQueryPtr Query;
+    };
+    NHdrf::NDynamic::TRootPtr Root;                 // protected by Mutex
+    THashMap<NHdrf::TQueryId, TQueryState> Queries; // protected by Mutex
 
     // Special virtual queries per each pool to create SchedulableRead upon them, used for datashards and columnshards.
     // TODO: get rid of read queries - just pass somehow the real query to datashards.
@@ -105,6 +109,7 @@ struct TEvAddQuery : public TEventLocal<TEvAddQuery, TEvents::EvAddQuery> {
 
 struct TEvRemoveQuery : public TEventLocal<TEvRemoveQuery, TEvents::EvRemoveQuery> {
     NHdrf::TQueryId QueryId;
+    bool IsForceRemove = false;
 };
 
 struct TEvQueryResponse : public TEventLocal<TEvQueryResponse, TEvents::EvQueryResponse> {

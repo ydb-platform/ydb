@@ -44,15 +44,8 @@ public:
     }
     static TProcessGuard StartProcess(
         const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits,
-        const bool useBatchPool = false) {
-        if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
-            auto& context = NActors::TActorContext::AsActorContext();
-            const NActors::TActorId& selfId = context.SelfID;
-            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, MakeServiceId(selfId.NodeId(), useBatchPool));
-        } else {
-            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, {});
-        }
-    }
+        ui64 txId = 0, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt,
+        const bool useBatchPool = false);
 };
 
 class TInsertServiceOperator {
@@ -84,9 +77,9 @@ public:
     }
 
     static TProcessGuard StartProcess(
-        const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits, const bool useBatchPool = false) {
-        return TServiceOperator::StartProcess(ESpecialTaskCategory::Scan, scopeId, externalProcessId, cpuLimits, useBatchPool);
-    }
+        const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits,
+        ui64 txId = 0, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt,
+        const bool useBatchPool = false);
 };
 
 class TDeduplicationServiceOperator {

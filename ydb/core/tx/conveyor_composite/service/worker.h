@@ -27,6 +27,7 @@ private:
     const ui64 WorkersPoolId;
     std::optional<TDuration> ExecutionDuration;
     std::vector<TWorkerTaskResult> Results;
+    TSchedulerQueryIdentity QueryIdentity = kServiceQueryIdentity;
     TDuration GetWakeupDuration() const;
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);

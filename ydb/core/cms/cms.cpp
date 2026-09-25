@@ -403,8 +403,7 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
 
 void TCms::StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
     const TPermissionRequest &permissionRequest, const TString &requestId,
-    TVector<ui32> nodeIds, TDuration timeout,
-    TNbs2MaintenanceContinuation continuation)
+    TVector<ui32> nodeIds, TNbs2MaintenanceContinuation continuation)
 {
     Y_ABORT_UNLESS(!PendingNbs2MaintenanceCheck);
     Y_ABORT_UNLESS(request && !nodeIds.empty() && continuation);
@@ -426,7 +425,7 @@ void TCms::StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
     }
     pending->Continue = std::move(continuation);
     pending->Checker = RegisterWithSameMailbox(CreateNbs2MaintenanceChecker(
-        SelfId(), pending->AttemptId, pending->NodeIds, timeout));
+        SelfId(), pending->AttemptId, pending->NodeIds, State->Config.InfoCollectionTimeout));
     PendingNbs2MaintenanceCheck = std::move(pending);
 }
 
@@ -1874,6 +1873,40 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
     }
 }
 
+bool TCms::ValidateManualApprovalTargets(const TPermissionRequest &request, TErrorInfo &error) const
+{
+    for (const auto &action : request.GetActions()) {
+        if (action.GetType() != TAction::SHUTDOWN_HOST
+            && action.GetType() != TAction::REBOOT_HOST
+            && action.GetType() != TAction::RESTART_SERVICES)
+        {
+            continue;
+        }
+        if (!IsActionHostValid(action, error)) {
+            return false;
+        }
+        if (action.GetType() == TAction::RESTART_SERVICES) {
+            TServices services;
+            if (!ParseServices(action, services, error)) {
+                return false;
+            }
+            if (!services) {
+                error.Code = TStatus::WRONG_REQUEST;
+                error.Reason = "Empty services list";
+                return false;
+            }
+            const auto nodes = ClusterInfo->HostNodes(action.GetHost());
+            if (std::none_of(nodes.begin(), nodes.end(), [&](const TNodeInfo *node) { return bool(node->Services & services); })) {
+                error.Code = TStatus::NO_SUCH_SERVICE;
+                error.Reason = Sprintf("No such services: %s on host %s",
+                    JoinSeq(", ", action.GetServices()).c_str(), action.GetHost().c_str());
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx)
 {
     if (!IsNbs2MaintenanceChecksEnabled(ctx)) {
@@ -1896,31 +1929,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     auto permissionRequest = it->second.Request;
     permissionRequest.SetPriority(Min<i32>());
     TErrorInfo error;
-    for (const auto &action : permissionRequest.GetActions()) {
-        if (action.GetType() != TAction::SHUTDOWN_HOST
-            && action.GetType() != TAction::REBOOT_HOST
-            && action.GetType() != TAction::RESTART_SERVICES)
-        {
-            continue;
-        }
-        if (!IsActionHostValid(action, error)) {
-            return ReplyWithError<TEvCms::TEvManageRequestResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
-        }
-        if (action.GetType() == TAction::RESTART_SERVICES) {
-            TServices services;
-            if (!ParseServices(action, services, error)) {
-                return ReplyWithError<TEvCms::TEvManageRequestResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
-            }
-            if (!services) {
-                return ReplyWithError<TEvCms::TEvManageRequestResponse>(
-                    ev, TStatus::WRONG_REQUEST, "Empty services list", ctx);
-            }
-            const auto nodes = ClusterInfo->HostNodes(action.GetHost());
-            if (std::none_of(nodes.begin(), nodes.end(), [&](const TNodeInfo *node) { return bool(node->Services & services); })) {
-                return ReplyWithError<TEvCms::TEvManageRequestResponse>(ev, TStatus::NO_SUCH_SERVICE,
-                    Sprintf("No such services: %s on host %s", JoinSeq(", ", action.GetServices()).c_str(), action.GetHost().c_str()), ctx);
-            }
-        }
+    if (!ValidateManualApprovalTargets(permissionRequest, error)) {
+        return ReplyWithError<TEvCms::TEvManageRequestResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
     }
 
     TVector<ui32> nodeIds;
@@ -1932,7 +1942,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     }
 
     StartNbs2MaintenanceCheck(ev.Release(), permissionRequest, requestId,
-        std::move(nodeIds), State->Config.InfoCollectionTimeout,
+        std::move(nodeIds),
         [this](TAutoPtr<IEventHandle> &request,
             const TEvPrivate::TEvNbs2MaintenanceResult &result, const TActorContext &ctx)
         {
@@ -2029,9 +2039,8 @@ void TCms::ProcessManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &
             TErrorInfo error;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += permissionDuration;
-            item->SetPriorityToCheck(Min<i32>());
-            bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
-            item->ResetPriorityToCheck();
+            const bool isLocked = item->IsLocked(
+                error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration, Min<i32>());
             if (isLocked) {
                 return ReplyWithError<TEvCms::TEvManageRequestResponse>(
                     ev, TStatus::WRONG_REQUEST, "Request has already locked items: " + error.Reason.GetMessage(), ctx);
@@ -3041,7 +3050,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
         }
         if (!nodeIds.empty()) {
-            StartNbs2MaintenanceCheck(ev.Release(), rec, {}, std::move(nodeIds), State->Config.InfoCollectionTimeout,
+            StartNbs2MaintenanceCheck(ev.Release(), rec, {}, std::move(nodeIds),
                 [this, requestStartTime](TAutoPtr<IEventHandle> &request,
                     const TEvPrivate::TEvNbs2MaintenanceResult &result, const TActorContext &ctx)
                 {
@@ -3194,7 +3203,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         }
         if (!nodeIds.empty()) {
             StartNbs2MaintenanceCheck(ev.Release(), permissionRequest, rec.GetRequestId(),
-                std::move(nodeIds), State->Config.InfoCollectionTimeout,
+                std::move(nodeIds),
                 [this, requestStartTime](TAutoPtr<IEventHandle> &request,
                     const TEvPrivate::TEvNbs2MaintenanceResult &result, const TActorContext &ctx)
                 {

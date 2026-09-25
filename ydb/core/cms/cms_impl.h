@@ -376,8 +376,7 @@ private:
     // the CMS queue resumes immediately afterwards.
     void StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
         const NKikimrCms::TPermissionRequest &permissionRequest, const TString &requestId,
-        TVector<ui32> nodeIds, TDuration timeout,
-        TNbs2MaintenanceContinuation continuation);
+        TVector<ui32> nodeIds, TNbs2MaintenanceContinuation continuation);
     bool IsNbs2MaintenanceRequestCurrent(const TPendingNbs2MaintenanceCheck &pending) const;
     // Tablet shutdown: discard the continuation without resuming the queue.
     void CancelNbs2MaintenanceCheck(const TActorContext &ctx);
@@ -486,6 +485,7 @@ private:
     void RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx);
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
+    bool ValidateManualApprovalTargets(const NKikimrCms::TPermissionRequest &request, TErrorInfo &error) const;
     void ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void ProcessManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev,
         const TActorContext &ctx, const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);

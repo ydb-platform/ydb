@@ -493,31 +493,41 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
         char name_for_verify[RD_KAFKA_NODENAME_SIZE];
-        char *t;
+        rd_bool_t is_ip_literal;
 
+        /* Extract the bare hostname or address from the nodename (see
+         * rd_kafka_nodename_to_hostname()): both SNI and OpenSSL's
+         * certificate verification expect the bare address of an IPv6
+         * literal, not the bracketed URL form the nodename holds — a
+         * bracketed literal does not parse as an IP address, so it would be
+         * matched against the certificate's dNSName entries instead of its
+         * iPAddress entries and fail verification. Likewise a certificate
+         * cannot assert a zone id: an iPAddress entry holds the 4 or 16
+         * address octets alone (RFC 5280). */
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
-        rd_snprintf(name, sizeof(name), "%s",
-                    rktrans->rktrans_rkb->rkb_nodename);
+        rd_kafka_nodename_to_hostname(rktrans->rktrans_rkb->rkb_nodename, name,
+                                      sizeof(name));
         rd_kafka_broker_unlock(rktrans->rktrans_rkb);
-
-        /* Remove ":9092" port suffix from nodename */
-        if ((t = strrchr(name, ':')))
-                *t = '\0';
 
         /* Normalize hostname (remove trailing dot) for both SNI and certificate
          * verification */
         rd_kafka_ssl_normalize_hostname(name, name_for_verify,
                                         sizeof(name_for_verify));
 
+        /* Is this a numerical address rather than a hostname?
+         * An IP literal must not be sent as SNI (RFC 6066) and must be
+         * verified against the certificate's iPAddress entries rather than its
+         * dNSName entries.
+         * The enclosing brackets were stripped above, so a ':' identifies an
+         * IPv6 literal: a DNS hostname can never contain one. */
+        is_ip_literal = *name_for_verify &&
+                        (strchr(name_for_verify, ':') != NULL ||
+                         /*ipv4*/ strspn(name_for_verify, "0123456789.") ==
+                             strlen(name_for_verify));
+
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (
-                  strchr(name_for_verify, ':') &&
-                  strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
-                      strlen(name_for_verify)) ||
-              /*ipv4*/
-              strspn(name_for_verify, "0123456789.") ==
-                  strlen(name_for_verify)) &&
+        if (!is_ip_literal &&
             !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #endif
@@ -534,19 +544,42 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                            name, name_for_verify);
         }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
-                goto fail;
-#elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
                 X509_VERIFY_PARAM *param;
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
-                if (!X509_VERIFY_PARAM_set1_host(
-                        param, name_for_verify,
-                        strnlen(name_for_verify, sizeof(name_for_verify))))
-                        goto fail;
+                /* Match an IP literal against the certificate's iPAddress
+                 * entries and a hostname against its dNSName entries.
+                 *
+                 * X509_VERIFY_PARAM_*() is used for both rather than
+                 * SSL_set1_host(): both have been available since 1.0.2,
+                 * whereas SSL_set1_host() requires 1.1.0, and its recognition
+                 * of IP literals was added later still, so relying on it would
+                 * silently match a literal against the dNSName entries on
+                 * older versions and never against the iPAddress entries.
+                 *
+                 * Fall back to the dNSName entries if the name only looks
+                 * numerical but is not a valid address: "1.2.3" is a legal
+                 * hostname. */
+                if (is_ip_literal &&
+                    X509_VERIFY_PARAM_set1_ip_asc(param, name_for_verify) == 1)
+                        ; /* verified as an address */
+                else {
+                        if (is_ip_literal) {
+                                /* Discard the address parsing error so that a
+                                 * later failure reports its own reason. */
+                                ERR_clear_error();
+                                is_ip_literal = rd_false;
+                        }
+
+                        if (!X509_VERIFY_PARAM_set1_host(
+                                param, name_for_verify,
+                                strnlen(name_for_verify,
+                                        sizeof(name_for_verify))))
+                                goto fail;
+                }
         }
 #else
         rd_snprintf(errstr, errstr_size,
@@ -557,8 +590,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s",
-                   name_for_verify);
+                   "Enabled endpoint identification using %s %s",
+                   is_ip_literal ? "address" : "hostname", name_for_verify);
 
         return 0;
 
@@ -769,11 +802,16 @@ static EVP_PKEY *rd_kafka_ssl_PKEY_from_string(rd_kafka_t *rk,
 /**
  * Read a PEM formatted cert chain from BIO \p in into \p chainp .
  *
- * @param rk rdkafka instance.
  * @param in BIO to read from.
  * @param chainp Stack to push the certificates to.
+ * @param password_cb Password callback for encrypted certificates.
+ * @param password_cb_opaque Opaque passed to \p password_cb .
  *
  * @return 0 on success, -1 on error.
+ *
+ * @remark The error queue is cleared on entry. On success it is left
+ *         cleared; on error it holds this function's error for the caller
+ *         to report.
  */
 int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                                           STACK_OF(X509) * chainp,
@@ -782,6 +820,9 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
         X509 *ca;
         int r, ret = 0;
         unsigned long err;
+
+        ERR_clear_error();
+
         while (1) {
                 ca = X509_new();
                 if (ca == NULL) {
@@ -800,14 +841,16 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                         break;
                 }
         }
-        /* When the while loop ends, it's usually just EOF. */
+        /* When the while loop ends, it's usually just EOF.
+         * Anything else is a real error and is left on the error queue. */
         err = ERR_peek_last_error();
         if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
-            ERR_GET_REASON(err) == PEM_R_NO_START_LINE)
+            ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
                 ret = 0;
-        else
+                ERR_clear_error();
+        } else {
                 ret = -1; /* some real error */
-        ERR_clear_error();
+        }
 end:
         return ret;
 }
@@ -818,21 +861,32 @@ end:
  *
  * @param str Input PEM string, nul-terminated.
  * @param chainp Stack to push the certificates to.
+ * @param reasonp Set to a static string identifying what could not be read,
+ *                when NULL is returned.
  *
  * @returns a new X509 on success or NULL on error.
  *
- * @remark When NULL is returned the chainp stack is not modified.
+ * @remark When NULL is returned the caller is still responsible for freeing
+ *         any certificate that was pushed to the chainp stack before the
+ *         failing one.
  */
 static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
                                            const char *str,
-                                           STACK_OF(X509) * chainp) {
+                                           STACK_OF(X509) * chainp,
+                                           const char **reasonp) {
         BIO *bio = BIO_new_mem_buf((void *)str, -1);
         X509 *x509;
+
+        /* Start clean so the reason reported below is from this parse only. */
+        ERR_clear_error();
 
         x509 =
             PEM_read_bio_X509(bio, NULL, rd_kafka_transport_ssl_passwd_cb, rk);
 
         if (!x509) {
+                /* Keep neutral: a well-formed block with an invalid payload
+                 * also fails here. The real reason is on the error queue. */
+                *reasonp = "error reading certificate";
                 BIO_free(bio);
                 return NULL;
         }
@@ -846,6 +900,7 @@ static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
                 rd_kafka_log(rk, LOG_WARNING, "SSL",
                              "Failed to read certificate chain from PEM. "
                              "Returning NULL certificate too.");
+                *reasonp = "error reading certificate chain";
                 X509_free(x509);
                 BIO_free(bio);
                 return NULL;
@@ -1317,6 +1372,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                                 return -1;
                         }
 
+                        /* The final read raised a benign "no start line";
+                         * clear it so it isn't mistaken for a real error. */
+                        ERR_clear_error();
+
                         BIO_free(bio);
 
                         rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -1455,6 +1514,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
         if (rk->rk_conf.ssl.cert_pem) {
                 X509 *x509;
+                const char *reason = NULL;
                 STACK_OF(X509) *ca = sk_X509_new_null();
                 if (!ca) {
                         rd_assert(!*"sk_X509_new_null() allocation failed");
@@ -1464,11 +1524,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                              "Loading public key from string");
 
                 x509 = rd_kafka_ssl_X509_from_string(
-                    rk, rk->rk_conf.ssl.cert_pem, ca);
+                    rk, rk->rk_conf.ssl.cert_pem, ca, &reason);
                 if (!x509) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ssl.certificate.pem failed: "
-                                    "not in PEM format?: ");
+                                    "ssl.certificate.pem failed: %s: ", reason);
                         sk_X509_pop_free(ca, X509_free);
                         return -1;
                 }

@@ -73,6 +73,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <fenv.h>
 
 #include "rdhdrhistogram.h"
 #include "rdunittest.h"
@@ -89,6 +90,7 @@ rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
         int64_t largestValueWithSingleUnitResolution;
         int32_t subBucketCountMagnitude;
         int32_t subBucketHalfCountMagnitude;
+        double potentialUnitMagnitude;
         int32_t unitMagnitude;
         int32_t subBucketCount;
         int32_t subBucketHalfCount;
@@ -109,7 +111,8 @@ rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
 
         subBucketHalfCountMagnitude = RD_MAX(subBucketCountMagnitude, 1) - 1;
 
-        unitMagnitude = (int32_t)RD_MAX(floor(log2((double)minValue)), 0);
+        potentialUnitMagnitude = minValue == 0 ? 0 : log2((double)minValue);
+        unitMagnitude = (int32_t)RD_MAX(floor(potentialUnitMagnitude), 0);
 
         subBucketCount =
             (int32_t)pow(2, (double)subBucketHalfCountMagnitude + 1.0);
@@ -656,10 +659,17 @@ static int ut_minmax_trackable(void) {
 
 
 static int ut_unitmagnitude_overflow(void) {
-        rd_hdr_histogram_t *hdr = rd_hdr_histogram_new(0, 200, 4);
-        int r                   = rd_hdr_histogram_record(hdr, 11);
-        RD_UT_ASSERT(r, "record(11) failed\n");
+        rd_hdr_histogram_t *hdr;
+        int r;
 
+        feclearexcept(FE_DIVBYZERO | FE_INVALID);
+        hdr = rd_hdr_histogram_new(0, 200, 4);
+        RD_UT_ASSERT(
+            !fetestexcept(FE_DIVBYZERO | FE_INVALID),
+            "rd_hdr_histogram_new(0,...) raised an FP exception (#4949)");
+
+        r = rd_hdr_histogram_record(hdr, 11);
+        RD_UT_ASSERT(r, "record(11) failed\n");
         rd_hdr_histogram_destroy(hdr);
         RD_UT_PASS();
 }

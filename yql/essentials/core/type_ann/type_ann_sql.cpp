@@ -985,8 +985,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     const TInputs& inputs,
     TExprNode::TPtr* expandedColumns,
     TExtContext& ctx,
-    THashMap<TString, TString> usedInUsing = {},
-    const TExprNode* windows = nullptr)
+    THashMap<TString, TString> usedInUsing={})
 {
     bool hasExternalInput = false;
     for (const auto& i : inputs) {
@@ -1019,7 +1018,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
         }
 
         if (node->IsCallable("YqlWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
-            return RebuildLambdaYqlWin(node, argNode, windows, ctx.Expr);
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
         }
 
         if (node->IsCallable({"YqlStar", "PgStar"})) {
@@ -2976,10 +2975,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     auto expandedColumns = column->HeadPtr();
 
                                     TExprNode::TPtr newRoot;
-                                    const auto windows = GetSetting(options, "window");
-                                    auto status = RebuildLambdaColumns(
-                                        newLambda->TailPtr(), argNode, newRoot, joinInputs, &expandedColumns, ctx,
-                                        repeatedColumnsInUsing, windows ? &windows->Tail() : nullptr);
+                                    auto status = RebuildLambdaColumns(newLambda->TailPtr(), argNode, newRoot, joinInputs, &expandedColumns, ctx, repeatedColumnsInUsing);
                                     if (status == IGraphTransformer::TStatus::Error) {
                                         return IGraphTransformer::TStatus::Error;
                                     }

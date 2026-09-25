@@ -307,6 +307,167 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT(cutter.GetHistoryToCut(0).empty());
     }
 
+    // One barrier per cut entry when every entry sits on its own group. The barrier
+    // generation is the *next* entry's FromGeneration minus one: everything the cut
+    // entry covered is collectable, everything the next entry covers is not.
+    Y_UNIT_TEST(HardBarrierPerCutEntry) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(40, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(10u, 2u);
+        info->Channels[0].History.emplace_back(20u, 3u);
+        THistoryCutter cutter(info);
+        // Nothing seen: [1, 10) and [10, 20) are cuttable, the latest entry never is.
+        auto barriers = cutter.GetHardBarriers(0);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(1), 9);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(2), 19);
+        UNIT_ASSERT(!barriers.contains(3));
+    }
+
+    // A group reused by several cut entries gets a single barrier at the highest
+    // generation. Separate barriers per entry would put several on one group, and a
+    // retry could deliver the lower one last, which reads as a barrier decrease.
+    Y_UNIT_TEST(RepeatedGroupCollapsesIntoHighestBarrier) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(41, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(5u, 2u);
+        info->Channels[0].History.emplace_back(9u, 1u); // group 1 again
+        info->Channels[0].History.emplace_back(20u, 3u);
+        THistoryCutter cutter(info);
+        // Nothing seen: the three leading entries are cuttable.
+        auto barriers = cutter.GetHardBarriers(0);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 2);
+        // Group 1 backs both [1, 5) and [9, 20); one barrier at 19 collects both.
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(1), 19);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(2), 8);
+    }
+
+    // The rule the seenGroups bookkeeping enforces: a group that also backs a history
+    // entry we are keeping must not get a hard barrier, or the barrier would collect
+    // the blobs that entry still owns.
+    Y_UNIT_TEST(NoHardBarrierWhenRetainedEntryUsesSameGroup) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(42, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(5u, 1u); // same group as the retained entry
+        info->Channels[0].History.emplace_back(9u, 2u);
+        THistoryCutter cutter(info);
+        cutter.SeenBlob(HistoryCutterUtBlob(42, 2, 0)); // pins [1, 5)
+        auto toCut = cutter.GetHistoryToCut(0);
+        UNIT_ASSERT_VALUES_EQUAL(toCut.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(toCut[0]->FromGeneration, 5);
+        // [5, 9) is cuttable, but group 1 still backs the retained [1, 5).
+        UNIT_ASSERT(cutter.GetHardBarriers(0).empty());
+    }
+
+    // A retained entry only blocks its own group. Cut entries on other groups keep
+    // their barriers, and the barrier of a group reused after the retained entry is
+    // still raised to the highest cut generation.
+    Y_UNIT_TEST(RetainedEntryBlocksOnlyItsOwnGroup) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(43, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(5u, 2u); // retained
+        info->Channels[0].History.emplace_back(9u, 1u); // group 1 again
+        info->Channels[0].History.emplace_back(20u, 3u);
+        THistoryCutter cutter(info);
+        cutter.SeenBlob(HistoryCutterUtBlob(43, 6, 0)); // pins [5, 9)
+        auto toCut = cutter.GetHistoryToCut(0);
+        UNIT_ASSERT_VALUES_EQUAL(toCut.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(toCut[0]->FromGeneration, 1);
+        UNIT_ASSERT_VALUES_EQUAL(toCut[1]->FromGeneration, 9);
+        auto barriers = cutter.GetHardBarriers(0);
+        // Group 2 is pinned by [5, 9); group 1 is cut on both sides of it.
+        UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(1), 19);
+    }
+
+    // Ablation for the seenGroups walk: the skipped entry [5, 9) must be folded into
+    // seenGroups before its group is considered again, so group 2 stays barrier-free
+    // even though a later cut entry sits on it.
+    Y_UNIT_TEST(GroupOfRetainedEntryStaysBlockedLater) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(44, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(5u, 2u); // retained
+        info->Channels[0].History.emplace_back(9u, 2u); // same group, cuttable
+        info->Channels[0].History.emplace_back(20u, 3u);
+        THistoryCutter cutter(info);
+        cutter.SeenBlob(HistoryCutterUtBlob(44, 6, 0)); // pins [5, 9)
+        auto barriers = cutter.GetHardBarriers(0);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(1), 4);
+        UNIT_ASSERT_C(!barriers.contains(2),
+            "group 2 still backs the retained [5, 9) entry and must not get a hard barrier");
+    }
+
+    Y_UNIT_TEST(NoHardBarriersWhenNothingIsCuttable) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(45, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(10u, 2u);
+        THistoryCutter cutter(info);
+        cutter.SeenBlob(HistoryCutterUtBlob(45, 5, 0)); // pins the only cuttable entry
+        UNIT_ASSERT(cutter.GetHardBarriers(0).empty());
+    }
+
+    Y_UNIT_TEST(NoHardBarriersWhenHistoryHasLessThanTwoEntries) {
+        {
+            TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(46, TTabletTypes::Dummy);
+            info->Channels.emplace_back();
+            THistoryCutter cutter(info);
+            UNIT_ASSERT(cutter.GetHardBarriers(0).empty());
+        }
+        {
+            TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(46, TTabletTypes::Dummy);
+            info->Channels.emplace_back();
+            info->Channels[0].History.emplace_back(1u, 1u);
+            THistoryCutter cutter(info);
+            UNIT_ASSERT(cutter.GetHardBarriers(0).empty());
+        }
+    }
+
+    Y_UNIT_TEST(NoHardBarriersWhenChannelIsUncertain) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(47, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(10u, 2u);
+        THistoryCutter cutter(info);
+        // Without BecomeUncertain this channel would yield a barrier on group 1.
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetHardBarriers(0).size(), 1);
+        cutter.BecomeUncertain(0);
+        UNIT_ASSERT(cutter.GetHardBarriers(0).empty());
+    }
+
+    Y_UNIT_TEST(NoHardBarriersForUnknownChannel) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(48, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(10u, 2u);
+        THistoryCutter cutter(info);
+        // Channel index past the end must be answered, not asserted on.
+        UNIT_ASSERT(cutter.GetHardBarriers(1).empty());
+        UNIT_ASSERT(cutter.GetHardBarriers(Max<ui32>()).empty());
+    }
+
+    Y_UNIT_TEST(HardBarriersAreComputedPerChannel) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(49, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(1u, 1u);
+        info->Channels[0].History.emplace_back(10u, 2u);
+        info->Channels.emplace_back();
+        info->Channels[1].History.emplace_back(1u, 3u);
+        info->Channels[1].History.emplace_back(10u, 4u);
+        THistoryCutter cutter(info);
+        cutter.SeenBlob(HistoryCutterUtBlob(49, 5, 0)); // channel 0 only
+        UNIT_ASSERT(cutter.GetHardBarriers(0).empty());
+        auto barriers = cutter.GetHardBarriers(1);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(barriers.at(3), 9);
+    }
+
     // A pending DoNotKeep mark must pin the history entry that resolves its
     // blob's generation to a group, or the entry is cut before GC delivers the
     // flag and the group becomes irresolvable. Ablation: drop the SeenBlob call
@@ -320,7 +481,10 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         info->Channels[0].History.emplace_back(10u, 1u);
         info->Channels[0].History.emplace_back(100u, 2u);
 
-        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info));
+        TFeatureFlags flags;
+        flags.SetEnableCutHistory(true);
+
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info), flags);
 
         // Put a DoNotKeep blob at generation 50 (inside [10, 100)) into Deleted.
         TGCBlobDelta delta;
@@ -335,6 +499,34 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         auto toCut = gcLogic.HistoryCutter.GetHistoryToCut(0);
         UNIT_ASSERT_C(toCut.empty(),
             "history entry [10, 100) must not be cuttable while gen-50 blob has a pending DoNotKeep mark");
+    }
+
+    Y_UNIT_TEST(CreatedBlobInApplyDeltaPinsHistoryEntry) {
+        const ui64 tabletId = 30;
+
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(tabletId, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        // Two history entries: [10, 100) -> group 1, [100, inf) -> group 2.
+        info->Channels[0].History.emplace_back(10u, 1u);
+        info->Channels[0].History.emplace_back(100u, 2u);
+
+        TFeatureFlags flags;
+        flags.SetEnableCutHistory(true);
+
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info), flags);
+
+        // Put a Keep blob at generation 50 (inside [10, 100)) into Created.
+        TGCBlobDelta delta;
+        delta.Created.push_back(HistoryCutterUtBlob(tabletId, 50, 0));
+
+        // ApplyLogEntry is the public entry point; it calls ApplyDelta internally.
+        TGCLogEntry entry(TGCTime(1, 1), delta);
+        gcLogic.ApplyLogEntry(entry);
+
+        // The history entry covering [10, 100) must be blocked: generation 50
+        // was seen there, so the entry must not appear in the cut list.
+        auto toCut = gcLogic.HistoryCutter.GetHistoryToCut(0);
+        UNIT_ASSERT(toCut.empty());
     }
 
     // The precondition the sentinel guard relies on: generations below the first
@@ -380,8 +572,11 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             info->Channels[ch].History.emplace_back(survivingFromGen, survivingGroup);
         }
 
+        TFeatureFlags flags;
+        flags.SetEnableCutHistory(true);
+
         // Tablet generation must exceed the blob generations below so they are collectable.
-        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 20));
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 20), flags);
         gcLogic.FollowersSyncComplete(true);
 
         TGCBlobDelta delta;

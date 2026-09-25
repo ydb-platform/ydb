@@ -2,9 +2,12 @@
 
 #include "blobstorage.h"
 
+#include <util/generic/map.h>
 #include <util/generic/vector.h>
 
+#include <iterator>
 #include <set>
+#include <unordered_set>
 #include <vector>
 
 namespace NKikimr {
@@ -52,6 +55,38 @@ public:
             }
         }
         return result;
+    }
+
+    // returns map group -> collect generation
+    TMap<ui32, ui32> GetHardBarriers(ui32 channel) const {
+        TMap<ui32, ui32> hardBarriers;
+
+        if (channel >= Info->Channels.size()) {
+            return hardBarriers;
+        }
+
+        const auto historyToCut = GetHistoryToCut(channel);
+        const auto& channelHistory = Info->Channels[channel].History;
+
+        std::unordered_set<ui32> seenGroups;
+        auto allHistoryIt = channelHistory.begin();
+        // We can create a hard barrier if all the history entries referencing it
+        // up to a certain generation are cut. As a barrier removes everything before it,
+        // only one barrier per group is needed.
+        for (const auto* historyEntry : historyToCut) {
+            while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
+                seenGroups.insert(allHistoryIt->GroupID);
+                ++allHistoryIt;
+            }
+            if (!seenGroups.contains(historyEntry->GroupID)) {
+                Y_ENSURE(historyEntry != &channelHistory.back());
+                const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
+                auto& collectGeneration = hardBarriers[historyEntry->GroupID];
+                collectGeneration = Max(collectGeneration, nextFromGeneration - 1);
+            }
+            ++allHistoryIt;
+        }
+        return hardBarriers;
     }
 
     void BecomeUncertain(ui32 channel) {

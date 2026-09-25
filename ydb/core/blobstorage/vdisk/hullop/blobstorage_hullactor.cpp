@@ -270,6 +270,15 @@ namespace NKikimr {
             const double rateThreshold = Config->HullCompLevelRateThreshold;
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
+            params.AppendBlockSize = RTCtx->PDiskCtx->Dsk->AppendBlockSize;
+            // Same placement as THullCompaction::UseStripeSst: Blocks and Barriers go into
+            // the stripe heap, LogoBlobs stay in exclusive chunks.
+            if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
+                if (Config->HeapAllocatorMaxSstInBytes > 0 &&
+                        AppData()->FeatureFlags.GetEnableVDiskHeapAllocator()) {
+                    params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
+                }
+            }
             {
                 const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
                 const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);

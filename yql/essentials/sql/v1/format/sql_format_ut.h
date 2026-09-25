@@ -50,6 +50,12 @@ Y_UNIT_TEST(TruncateTable) {
 
         {"use plato;truncate table `/Root/test/table` with();",
          "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE);\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true,other = false);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE, other = FALSE);\n"},
     };
 
     TSetup setup;

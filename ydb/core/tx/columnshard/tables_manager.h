@@ -391,19 +391,21 @@ private:
 public:
     void AddVersionFromProto(
         const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo) {
-        std::optional<NOlap::TTiering> ttlVersion;
-        if (versionInfo.HasTtlSettings() && versionInfo.GetTtlSettings().HasEnabled()) {
-            NOlap::TTiering deserializedTtl;
-            AFL_VERIFY(deserializedTtl.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).IsSuccess());
-            ttlVersion.emplace(std::move(deserializedTtl));
-        }
         auto& data = Ttl[pathId];
-        if (!data.Versions.empty()) {
-            AFL_VERIFY(snapshot > data.Versions.rbegin()->first)("snapshot", snapshot)("last", data.Versions.rbegin()->first);
+        if (versionInfo.HasTtlSettings()) {
+            std::optional<NOlap::TTiering> ttlVersion;
+            if (versionInfo.GetTtlSettings().HasEnabled()) {
+                NOlap::TTiering deserializedTtl;
+                AFL_VERIFY(deserializedTtl.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).IsSuccess());
+                ttlVersion.emplace(std::move(deserializedTtl));
+            }
+            if (!data.Versions.empty()) {
+                AFL_VERIFY(snapshot > data.Versions.rbegin()->first)("snapshot", snapshot)("last", data.Versions.rbegin()->first);
+            }
+            auto [it, inserted] = data.Versions.emplace(snapshot, ttlVersion);
+            AFL_VERIFY(inserted || it->second == ttlVersion)("snapshot", snapshot);
+            data.LastSettingsProto = versionInfo.GetTtlSettings();
         }
-        auto [it, inserted] = data.Versions.emplace(snapshot, ttlVersion);
-        AFL_VERIFY(inserted || it->second == ttlVersion)("snapshot", snapshot);
-        data.LastSettingsProto = versionInfo.HasTtlSettings() ? std::optional(versionInfo.GetTtlSettings()) : std::nullopt;
     }
 
     std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlSettingsProto(const TInternalPathId pathId) const {

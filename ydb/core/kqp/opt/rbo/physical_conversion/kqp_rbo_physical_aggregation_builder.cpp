@@ -635,6 +635,22 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationUpdateState
     // clang-format on
 }
 
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildSomeAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
+                                                                             bool isOptional) {
+    if (!isOptional) {
+        return lambdaArgState;
+    }
+
+    // We just need first not null value.
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("Coalesce")
+            .Add(0, lambdaArgState)
+            .Add(1, lambdaArgField)
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
                                                                             const TTypeAnnotationNode* itemType) {
     // clang-format off
@@ -973,6 +989,8 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
                                      : BuildAvgAggregationUpdateState(lambdaArgState, lambdaArgField, itemType);
         } else if (aggFunction == "sum") {
             updateState = BuildSumAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
+        } else if (aggFunction == "some") {
+            updateState = BuildSomeAggregationUpdateState(lambdaArgState, lambdaArgField, isOptional);
         } else if (aggFunction == "variance_1_1") {
             updateState = isOptional ? BuildVarianceAggregationUpdateStateOptionalType(lambdaArgState, lambdaArgField, aggTraits.InputItemType)
                                      : BuildVarianceAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);

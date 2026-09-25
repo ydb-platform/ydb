@@ -3568,6 +3568,9 @@ FROM (
                 SELECT stddev_samp(t1.a), stddev_samp(t1.b) from `/Root/t1` as t1;
             )",
             R"(
+                select some(t1.a), some(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
                 select sum(distinct t1.a), max(distinct t1.b) from `/Root/t1` as t1;
             )",
             R"(
@@ -3584,6 +3587,7 @@ FROM (
         const std::vector<std::string> resultsEmptyColumns = {
             R"([[0u]])",
             R"([[0u;0u]])",
+            R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",

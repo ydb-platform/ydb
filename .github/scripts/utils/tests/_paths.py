@@ -8,6 +8,8 @@ from pathlib import Path
 TESTS_ROOT = Path(__file__).resolve().parent
 UTILS = TESTS_ROOT.parent
 ANALYTICS = UTILS / "analytics"
+COLLECTOR = ANALYTICS / "collector"
+GITHUB_ACTIONS = ANALYTICS / "github_actions"
 DASHBOARD = UTILS / "dashboard"
 TEST_METRICS = DASHBOARD / "test_metrics"
 METRICS = UTILS / "metrics"

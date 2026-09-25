@@ -196,7 +196,7 @@ runs:
         GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
-        CI_METRICS_PY=".github/scripts/utils/analytics/ci_metrics.py"
+        CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
         record_ci_start() {
           local name="$1"
           local ya_attempt="${2:-}"
@@ -797,7 +797,7 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
-      run: python3 .github/scripts/utils/analytics/ci_metrics.py send
+      run: python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send
 
     - name: show free space
       if: always()

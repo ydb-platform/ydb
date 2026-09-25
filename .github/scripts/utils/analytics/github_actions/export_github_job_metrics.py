@@ -8,12 +8,18 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
-from ci_metrics import github_get, metrics_from_workflow_run, upload_rows
+_ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
+if str(_ANALYTICS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ANALYTICS_ROOT))
+
+from github_actions.ci_metrics import github_get, metrics_from_workflow_run, upload_rows
 
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Core analytics client: no GitHub / CI context required."""
+"""Collector: no GitHub / CI context required."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from core import (
+from collector import (
     attach_context,
     end,
     enrich,
@@ -30,7 +30,7 @@ from core import (
 )
 
 
-class CoreNormalizeTest(unittest.TestCase):
+class CollectorNormalizeTest(unittest.TestCase):
     def test_generic_row_has_no_github_columns(self):
         row = normalize_metric(
             {
@@ -51,7 +51,7 @@ class CoreNormalizeTest(unittest.TestCase):
         self.assertEqual(json.loads(row["labels"])["tokens"], 12)
 
 
-class CoreLifecycleTest(unittest.TestCase):
+class CollectorLifecycleTest(unittest.TestCase):
     def setUp(self):
         self.saved = {key: os.environ.get(key) for key in ("ANALYTICS_RUN_ID", "GITHUB_RUN_ID", "GITHUB_WORKFLOW")}
         os.environ.pop("GITHUB_RUN_ID", None)
@@ -79,7 +79,7 @@ class CoreLifecycleTest(unittest.TestCase):
             sends.append(path)
             return 0
 
-        import core as client
+        import collector.client as client
 
         original = client.flush_file
         client.flush_file = fake_flush
@@ -252,7 +252,7 @@ class CoreLifecycleTest(unittest.TestCase):
         def factory():
             return Wrapper
 
-        import core as client
+        import collector.client as client
 
         original = client.upsert_metrics
         saved_cred = os.environ.get("ANALYTICS_YDB_CREDENTIALS")

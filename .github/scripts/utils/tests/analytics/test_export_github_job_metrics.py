@@ -14,7 +14,7 @@ add_product_paths(ANALYTICS)
 import os
 import unittest
 
-from export_github_job_metrics import (
+from github_actions.export_github_job_metrics import (
     ALL_WORKFLOWS,
     DEFAULT_WORKFLOWS,
     attach_pull_requests,

@@ -15,7 +15,7 @@ import os
 import tempfile
 import unittest
 
-from runner_info import (
+from github_actions.runner_info import (
     INVENTORY_LABEL,
     USAGE_LABEL,
     apply_runner_labels,

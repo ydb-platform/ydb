@@ -112,7 +112,7 @@ jobs:
         done
         if [ -n "$BINARY" ]; then
           BINARY_SIZE_BYTES=$(stat -L -c%s "$BINARY")
-          python3 .github/scripts/utils/analytics/ci_metrics.py track ydbd_size \
+          python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py track ydbd_size \
             --kind gauge \
             --unit bytes \
             --source nightly_build \
@@ -120,7 +120,7 @@ jobs:
             --label cache_mode=dist_cache \
             --label build_target=ydb/apps/ydbd || true
         fi
-        python3 .github/scripts/utils/analytics/ci_metrics.py send || true
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send || true
     - name: Setup s3cmd
       uses: ./.github/actions/s3cmd
       with:

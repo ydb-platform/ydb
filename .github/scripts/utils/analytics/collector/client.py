@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""JSONL buffer and YDB flush used by ci_metrics.py.
+"""JSONL buffer and YDB flush. Wrappers add their own columns on top.
 
-    python3 ci_metrics.py start my_step --source ya_phase --label cache_mode=dist_cache
-    python3 ci_metrics.py send --conclusion success
+    python3 -m collector start my_step --source my_job --label k=v
+    python3 -m collector send --conclusion success
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ def _ydb_wrapper_cls():
 
         return YDBWrapper
     except ImportError:
-        qa_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "analytics"))
+        qa_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "analytics"))
         if qa_dir not in sys.path:
             sys.path.insert(0, qa_dir)
         from ydb_wrapper import YDBWrapper

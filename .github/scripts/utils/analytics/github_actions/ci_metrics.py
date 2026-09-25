@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""GitHub CI wrapper around core.py: job/PR columns, --runner/--usage, CI table.
+"""GitHub Actions wrapper around collector: job/PR columns, --runner/--usage, CI table.
 
-    python3 .github/scripts/utils/analytics/ci_metrics.py start ydbd_cached_build \\
+    python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start ydbd_cached_build \\
         --source nightly_build --label cache_mode=dist_cache --runner
-    python3 .github/scripts/utils/analytics/ci_metrics.py send --conclusion success --usage
+    python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send --conclusion success --usage
 """
 
 from __future__ import annotations
@@ -16,36 +16,38 @@ import sys
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from runner_info import apply_runner_labels, pop_runner_options
+_ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
+if str(_ANALYTICS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ANALYTICS_ROOT))
 
-from core import (
+from collector.client import _as_uint, _open_ydb_wrapper, _ydb_wrapper_cls
+from collector import (
     add_enrich_cli_args,
-    add_track_cli_args as add_core_cli_args,
-    _as_uint,
-    _open_ydb_wrapper,
-    _ydb_wrapper_cls,
-    build_create_table_sql as core_build_create_table_sql,
+    add_track_cli_args as add_collector_cli_args,
+    build_create_table_sql as collector_build_create_table_sql,
     duration_ms_between,
-    end as core_end,
-    enrich as core_enrich,
-    flush_file as core_flush_file,
+    end as collector_end,
+    enrich as collector_enrich,
+    flush_file as collector_flush_file,
     has_send_credentials,
     merge_defaults,
-    normalize_metric as core_normalize_metric,
+    normalize_metric as collector_normalize_metric,
     parse_datetime,
-    resolve_table_path as core_resolve_table_path,
-    rows_from_jsonl as core_rows_from_jsonl,
+    resolve_table_path as collector_resolve_table_path,
+    rows_from_jsonl as collector_rows_from_jsonl,
     run_cli,
-    send as core_send,
-    start as core_start,
-    track as core_track,
-    upsert_metrics as core_upsert_metrics,
+    send as collector_send,
+    start as collector_start,
+    track as collector_track,
+    upsert_metrics as collector_upsert_metrics,
 )
+from github_actions.runner_info import apply_runner_labels, pop_runner_options
 
 DEFAULT_TABLE_PATH = "analytics/ci_metrics"
 TABLE_CONFIG_KEY = "ci_metrics"
@@ -85,11 +87,11 @@ def default_metrics_file() -> str:
 
 
 def resolve_table_path(ydb_wrapper=None) -> str:
-    return core_resolve_table_path(ydb_wrapper, table_config_key=TABLE_CONFIG_KEY, default=DEFAULT_TABLE_PATH)
+    return collector_resolve_table_path(ydb_wrapper, table_config_key=TABLE_CONFIG_KEY, default=DEFAULT_TABLE_PATH)
 
 
 def build_create_table_sql(table_path: str) -> str:
-    return core_build_create_table_sql(table_path, columns=COLUMNS_SCHEMA, primary_keys=PRIMARY_KEYS)
+    return collector_build_create_table_sql(table_path, columns=COLUMNS_SCHEMA, primary_keys=PRIMARY_KEYS)
 
 
 def guess_build_preset(job_name: Optional[str]) -> Optional[str]:
@@ -272,7 +274,7 @@ def start(
     props = dict(properties or {})
     flag_runner, flag_usage = pop_runner_options(props)
     path = file or default_metrics_file()
-    return core_start(
+    return collector_start(
         name,
         props,
         file=path,
@@ -297,7 +299,7 @@ def end(
     props = dict(properties or {})
     runner, usage, extras = _runner_from(props, fields)
     path = file or default_metrics_file()
-    return core_end(
+    return collector_end(
         name,
         props,
         file=path,
@@ -318,7 +320,7 @@ def enrich(
     path = file or default_metrics_file()
     extras.pop("runner", None)
     extras.pop("usage", None)
-    return core_enrich(name, props, file=path, **extras)
+    return collector_enrich(name, props, file=path, **extras)
 
 
 def track(
@@ -342,7 +344,7 @@ def track(
     props = dict(properties or {})
     flag_runner, flag_usage = pop_runner_options(props)
     path = file or default_metrics_file()
-    core_track(
+    collector_track(
         name,
         props,
         file=path,
@@ -375,7 +377,7 @@ def send(
     table_path = merged.pop("table_path", None)
     merged.pop("info_name", None)
     merged.pop("flush", None)
-    return core_send(
+    return collector_send(
         name,
         merged,
         file=path,
@@ -400,7 +402,7 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
 
 
 def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
-    row = core_normalize_metric(raw, now=now)
+    row = collector_normalize_metric(raw, now=now)
     if row is None:
         return None
     row["github_job_id"] = _as_uint(raw.get("github_job_id")) or 0
@@ -417,7 +419,7 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
 
 
 def rows_from_jsonl(lines: Iterable[str], defaults: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    return core_rows_from_jsonl(lines, defaults=defaults, normalize=normalize_metric)
+    return collector_rows_from_jsonl(lines, defaults=defaults, normalize=normalize_metric)
 
 
 def upsert_metrics(
@@ -426,7 +428,7 @@ def upsert_metrics(
     table_path: Optional[str] = None,
     batch_size: int = 200,
 ) -> int:
-    return core_upsert_metrics(
+    return collector_upsert_metrics(
         ydb_wrapper,
         rows,
         table_path=table_path,
@@ -439,7 +441,7 @@ def upsert_metrics(
 
 
 def flush_file(path: Optional[str] = None, table_path: Optional[str] = None, defaults: Optional[Dict[str, Any]] = None) -> int:
-    return core_flush_file(
+    return collector_flush_file(
         path or default_metrics_file(),
         table_path=table_path,
         defaults=defaults if defaults is not None else github_env_defaults(),
@@ -587,7 +589,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
 
 
 def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optional[str] = None) -> None:
-    add_core_cli_args(parser, kind_default=kind_default)
+    add_collector_cli_args(parser, kind_default=kind_default)
     parser.add_argument(
         "--runner",
         action="store_true",

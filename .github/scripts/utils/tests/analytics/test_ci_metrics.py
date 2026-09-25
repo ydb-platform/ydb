@@ -18,10 +18,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
-import runner_info
-from runner_info import INVENTORY_LABEL, USAGE_LABEL
-
-from core import (
+from collector import (
     append_record,
     build_track_record,
     load_unsent_lines,
@@ -30,7 +27,8 @@ from core import (
     read_pending_spans,
     write_send_offset,
 )
-from ci_metrics import (
+from github_actions import runner_info
+from github_actions.ci_metrics import (
     DEFAULT_TABLE_PATH,
     PRIMARY_KEYS,
     attach_context,
@@ -47,6 +45,7 @@ from ci_metrics import (
     timed,
     track,
 )
+from github_actions.runner_info import INVENTORY_LABEL, USAGE_LABEL
 
 
 class GuessBuildPresetTest(unittest.TestCase):
@@ -660,7 +659,7 @@ class TrackApiTest(unittest.TestCase):
             sends.append(path)
             return 0
 
-        import ci_metrics as client
+        import github_actions.ci_metrics as client
 
         original = client.flush_file
         client.flush_file = fake_flush
@@ -715,7 +714,7 @@ class TrackApiTest(unittest.TestCase):
             sends.append(path)
             return 0
 
-        import ci_metrics as client
+        import github_actions.ci_metrics as client
 
         original = client.flush_file
         client.flush_file = fake_flush
@@ -888,7 +887,7 @@ class RunnerFlagsTest(unittest.TestCase):
             sends.append(path)
             return 0
 
-        import ci_metrics as client
+        import github_actions.ci_metrics as client
 
         original = client.flush_file
         client.flush_file = fake_flush

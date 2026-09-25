@@ -9,6 +9,7 @@ SRCS(
     cms.cpp
     cms.h
     cms_impl.h
+    cms_nbs2.cpp
     cms_state.h
     cms_tx_get_log_tail.cpp
     cms_tx_init_scheme.cpp

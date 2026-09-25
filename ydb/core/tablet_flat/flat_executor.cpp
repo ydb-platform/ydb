@@ -501,6 +501,11 @@ void TExecutor::Active(const TActorContext &ctx) {
     Database = loadedState->Database;
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
+    for (const auto& channel : Owner->Info()->Channels) {
+        if (Owner->IsExecutorGCChannel(channel.Channel)) {
+            GcLogic->InitializeChannel(channel.Channel);
+        }
+    }
     LogicRedo = loadedState->Redo;
     LogicAlter = loadedState->Alter;
     BorrowLogic = loadedState->Loans;
@@ -3421,7 +3426,8 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, OwnerCtx(), Launcher)) {
+    // GC completion may send the pending hard barriers; replies must come here.
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, SelfCtx(), Launcher)) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     VacuumLogic->OnCollectedGarbage(OwnerCtx());

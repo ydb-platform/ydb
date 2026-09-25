@@ -7934,6 +7934,46 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
+    Y_UNIT_TEST(OnlyDelegatedUnusedChannelsAreCollected) {
+        struct TDelegatingTablet : TTestFlatTablet {
+            using TTestFlatTablet::TTestFlatTablet;
+
+            bool IsExecutorGCChannel(ui32 channel) const override {
+                return channel == 2;
+            }
+        };
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) override {
+                auto* info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[2].History.emplace_back(1, 0);
+                info->Channels[3].History.emplace_back(1, 0);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        THashSet<ui32> collectCounters;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                const auto* gc = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                UNIT_ASSERT_C(gc->Channel != 3, "undelegated channel must not be collected");
+                if (gc->Channel == 2 && !gc->Hard) {
+                    // Forwarding through the mock NodeWarden can expose the
+                    // same request twice. Each group has a distinct counter.
+                    collectCounters.insert(gc->PerGenerationCounter);
+                }
+            }
+        });
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TDelegatingTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+        env.WaitForWakeUp();
+        env->WaitFor("GC of the delegated unused channel", [&] { return collectCounters.size() == 2; });
+    }
+
     struct TTxChangeRoom : public ITransaction {
         bool Execute(TTransactionContext &txc, const TActorContext &) override
         {

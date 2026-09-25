@@ -74,6 +74,7 @@ private:
     {
         size_t DirectBlockGroupId = 0;
         THostIndex NewHostIndex = InvalidHostIndex;
+        ui32 DBGConnectionsConfigGeneration = 0;
         NActors::TActorId BSPipeClient;
     };
 
@@ -153,6 +154,10 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
+    [[nodiscard]] std::unique_ptr<
+        NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+    MakeAllocateDDiskBlockGroupRequest() const;
+
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
@@ -175,6 +180,15 @@ private:
         const NYdb::NBS::NBlockStore::TEvService::
             TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    // Replies to the volume with the outcome of its UpdateVolumeConfig request.
+    // The volume matches the reply against TxId and Origin; without them it
+    // drops the reply as belonging to an unknown transaction and never
+    // completes the request.
+    void ReplyUpdateVolumeConfig(
+        const NActors::TActorContext& ctx,
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        NKikimrBlockStore::EStatus status);
 
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
@@ -263,7 +277,7 @@ private:
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
         size_t dbgId,
-        THostIndex newHostIndex);
+        ui32 dbgConnectionsConfigGeneration);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
@@ -294,5 +308,18 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TAllocationResponse
+{
+    NProto::TError Error;
+    const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+        TDirectBlockGroup* Group = nullptr;
+};
+
+[[nodiscard]] TAllocationResponse ValidateAllocationResponse(
+    const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult&
+        msg,
+    size_t dbgId,
+    size_t expectedHostCount);
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -194,10 +194,8 @@ message TEvLoadTestRequest {
 
         // When true, the load test performs reads instead of writes.
         optional bool IsReadLoad = 15 [default = false];
-        // Enable io_uring SQPOLL mode for DDisk direct I/O.
-        optional bool SQPoll = 16 [default = false];
-        // Enable io_uring IOPOLL mode for DDisk direct I/O.
-        optional bool IOPoll = 17 [default = false];
+        reserved 16, 17;
+        reserved "SQPoll", "IOPoll";
         // Request size for read/write operations in bytes.
         optional uint32 IoSizeBytes = 18 [default = 4096];
         // Unmeasured background writes per measured read during IsReadLoad.
@@ -479,6 +477,12 @@ message TEvLoadTestRequest {
             // Enables benchmarking raw single-PB write latency.
             // Reads are not supported when this flag is set; ReadRatio must be 0.
             optional bool DisableReplication = 8 [default = false];
+
+            // Must match the DDisk/PersistentBuffer storage configuration.
+            // When enabled, load workers calculate one checksum per 4 KiB block
+            // and the load tablet forwards them to PersistentBuffer. When
+            // disabled, neither event carries payload checksums.
+            optional bool EnableChecksums = 9 [default = true];
         }
 
         // Load-actor -> worker: "write SizeBytes at this flat address".
@@ -500,6 +504,10 @@ message TEvLoadTestRequest {
                 uint32 PayloadId = 3;
                 // <-- add RDMA here
             }
+
+            // Raw XXH3_64 checksum for every 4 KiB payload block. Present only
+            // when TConfigureTablet.EnableChecksums is true.
+            repeated uint64 Checksums = 4;
         }
 
         // Worker -> load-actor: exactly one reply per TNbsWrite, emitted

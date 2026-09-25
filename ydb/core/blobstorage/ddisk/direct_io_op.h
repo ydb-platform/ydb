@@ -53,7 +53,7 @@ public:
 
     // Read-path integrity zero mask (TIntegrityManager::TReadPlan::Mixed): bit i covers the i-th
     // IntegrityUnitSize block of the read range; unset bits are zero-filled before replying. Must
-    // live in the op because the reply happens on the uring completion thread.
+    // live in the op because the reply happens on the uring I/O thread.
     void SetReadUsedBlocksMask(TDynBitMap&& usedBlocks) { ReadUsedBlocksMask.emplace(std::move(usedBlocks)); }
 
     const TActorId& GetDDiskId() const { return DDiskId; }

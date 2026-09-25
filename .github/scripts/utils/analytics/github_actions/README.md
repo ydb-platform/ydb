@@ -1,12 +1,12 @@
 # github_actions
 
-Обёртка над `collector/` для GitHub Actions: колонки workflow / job / PR / commit, `--runner` / `--usage`, выгрузка job/step после факта.
+Колонки GitHub Actions поверх `collector/`: workflow / job / PR / commit, `--runner` / `--usage`, запись job/step после завершения run.
 
 Таблица: `analytics/ci_metrics`. Профили компиляции сюда не кладём.
 
 PK: `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`. Без `github_job_id` / `run_attempt` / `span_id` строка в YDB не уходит. TTL — 1 год. `CREATE TABLE` на flush не вызывается (`ensure_table=False`).
 
-Связка с GitHub job: в labels пишется `parent_span_id=job-{github_job_id}` (то же у export `queue`/`step`). Job id — строка jobs API, у которой `runner_name` равен `$RUNNER_NAME` (скрипт `resolve_github_job_id.py`, страницы по 100).
+Связь с GitHub job: в labels пишется `parent_span_id=job-{github_job_id}` (то же у export `queue`/`step`). Job id — строка jobs API, у которой `runner_name` равен `$RUNNER_NAME` (скрипт `resolve_github_job_id.py`, страницы по 100).
 
 ## CLI в job
 
@@ -18,13 +18,13 @@ python3 "$CI_METRICS_PY" start my_step --source ya_phase --label cache_mode=dist
 python3 "$CI_METRICS_PY" end my_step --conclusion success
 python3 "$CI_METRICS_PY" enrich my_step --label report_url="$S3_URL"
 python3 "$CI_METRICS_PY" flush          # только закрытые строки
-python3 "$CI_METRICS_PY" send           # закрыть хвосты и выгрузить
+python3 "$CI_METRICS_PY" send           # закрыть открытые span и записать в YDB
 python3 "$CI_METRICS_PY" enrich ya_make_try_1 --label ya_attempt=1 --report "$CURRENT_REPORT"
 ```
 
-`--runner` — один раз снять cpu/ram/disk хоста и повесить на событие. `--usage` — свежий snapshot на это событие.
+`--runner` — один раз снять cpu/ram/disk хоста и записать в событие. `--usage` — свежий замер cpu/ram/disk на это событие.
 
-В `test_ya` то же самое через `record_ci_start` / `record_ci_end` / `record_ci_enrich` / `record_ci_flush`. Новый спан — три строки: start, end, при необходимости enrich и flush. На cancel: `trap TERM INT` → `send --conclusion cancelled`.
+В `test_ya` то же самое через `record_ci_start` / `record_ci_end` / `record_ci_enrich` / `record_ci_flush`. Новый span — три строки: start, end, при необходимости enrich и flush. На cancel: `trap TERM INT` → `send --conclusion cancelled`.
 
 Типичные labels: `cache_mode`, `ya_attempt`, `report_url`, `error`, `tests_status`, `failed_tests`.
 
@@ -45,19 +45,19 @@ python3 "$CI_METRICS_PY" enrich ya_make_try_1 --label ya_attempt=1 --report "$CU
 | `build_preset` | `BUILD_PRESET` (в job; в export — regex по имени job) |
 | `run_attempt` | `GITHUB_RUN_ATTEMPT` |
 
-Файл буфера: `CI_METRICS_FILE`. Креды склада — как у collector.
+Файл буфера: `CI_METRICS_FILE`. Креды YDB — как у collector.
 
-## Job/step после факта
+## Job/step после завершения run
 
-Отдельный job (`collect_analytics_fast.yml` → `github_job_metrics`), не из раннера:
+Отдельный job (`collect_analytics_fast.yml` → `github_job_metrics`), не с runner:
 
 ```bash
 export GITHUB_TOKEN=...
 python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py \
-  --hours 2
+  --hours 36
 ```
 
-Окно GitHub `created` всегда `--hours` (в cron — 36), его watermark не сужает. Пропускается пара `(run_id, run_attempt)`, у которой уже есть `github_job` в этом окне. Ошибка запроса — выгружаем окно целиком, upsert идемпотентный. По умолчанию все active workflows. `--workflow pr_check.yml` ограничивает список. `--org` / `--repo` / `--table-path` по желанию.
+Окно GitHub `created` всегда `--hours` (в cron — 36). Уже записанные пары `(run_id, run_attempt)` это окно не уменьшают. Если запрос к YDB не удался, записываем окно целиком: повтор той же строки безопасен. По умолчанию все активные workflow. `--workflow pr_check.yml` ограничивает список. `--org` / `--repo` / `--table-path` по желанию.
 
 ```bash
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py'

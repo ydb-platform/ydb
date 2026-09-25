@@ -2,7 +2,7 @@
 
 JSONL-буфер и flush в YDB. В другой проект копируется эта папка.
 
-`start` / `end` считают длительность. `track` пишет уже готовое событие. `enrich` дописывает labels в последнюю неотправленную строку с этим именем (длительность не меняет). `flush` выгружает только закрытые строки. `send` закрывает висящие спаны и выгружает всё.
+`start` / `end` считают длительность. `track` пишет уже готовое событие. `enrich` дописывает labels в последнюю неотправленную строку с этим именем (длительность не меняет). `flush` записывает в YDB только закрытые строки. `send` закрывает незакрытые span и записывает всё.
 
 ## CLI
 
@@ -16,7 +16,7 @@ python3 -m collector end my_step --conclusion success
 python3 -m collector enrich my_step --label report_url="$URL"
 python3 -m collector track my_gauge --kind gauge --unit bytes --value 123 --source my_job
 python3 -m collector flush
-python3 -m collector send --conclusion cancelled   # если остались открытые спаны
+python3 -m collector send --conclusion cancelled   # если остались открытые span
 ```
 
 `--file` перекрывает `$CI_METRICS_FILE`.
@@ -35,9 +35,9 @@ track("my_gauge", kind="gauge", unit="bytes", value=123, source="my_job")
 flush_file()
 ```
 
-## Склад
+## Таблица
 
-Таблица по умолчанию: `analytics/events`. Ключ в `ydb_qa_config.json`: `analytics_events`.
+По умолчанию: `analytics/events`. Ключ в `ydb_qa_config.json`: `analytics_events`.
 
 PK: `(event_ts, date, run_id, source, name, kind, span_id)`. `span_id` обязателен; collector сам генерирует его при `start`/`track`. TTL — 1 год на `event_ts` (колонка TTL должна быть первой в PK).
 

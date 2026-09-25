@@ -12,11 +12,15 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/testlib/default
     ydb/core/testlib/actors
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
+    ydb/public/sdk/cpp/src/client/resources
 )
 
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    grpc_choose_proxy_ut.cpp
     msgbus_server_pq_metarequest_ut.cpp
 )
 

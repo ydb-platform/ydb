@@ -11,6 +11,12 @@
 // callers repeat sampling choices. Selected units are read from all parts and
 // memtables through the normal table iterator, with snapshot visibility.
 //
+// Row visibility comes from the caller's MVCC read version; this iterator
+// never reads rows. The layout is a per-Execute view of the LSM used only to
+// cut intervals and may change between Executes. Callers must keep committed
+// decisions: retain a selected unit's bounds until fully read, carry cursor
+// inclusivity, never redraw.
+//
 // Unit iteration uses index pages and memtable keys. SplitPoints estimates
 // main-group I/O and suggests smaller ranges when budgets are exceeded.
 
@@ -72,6 +78,7 @@ namespace NTable {
     };
 
     struct TSplitRequest {
+        // End must not precede the current position; equal positions give an empty result.
         TSerializedCellVec EndKey; // empty = +inf; missing suffix cells = +inf
         bool EndInclusive = false;
         double Rate = 1.0; // independent unit selection probability; finite, (0, 1]

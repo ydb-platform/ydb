@@ -731,6 +731,19 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         UNIT_ASSERT_VALUES_EQUAL(inc.Get().SelectionKey, wide->SelectionKey);
         UNIT_ASSERT_VALUES_EQUAL(exc.Get().SelectionKey, wide->SelectionKey);
 
+        for (bool inclusive : {false, true}) {
+            auto& iter = inclusive ? inc : exc;
+            TSplitRequest request;
+            request.EndKey = Key64(mid);
+            request.EndInclusive = !inclusive;
+            TSplitResult result;
+            result.Truncated = true;
+            UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
+            UNIT_ASSERT(result.Keys.empty() && !result.Truncated);
+            request.EndKey = wide->Bounds.FirstKey;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(iter.SplitPoints(request, result), yexception, "end is before the current position");
+        }
+
         const TKeyBlock* closed = nullptr;
         for (auto it = units.rbegin(); it != units.rend(); ++it) {
             if (!it->FromMemtable && it->Bounds.LastInclusive && it->Bounds.LastKey) {

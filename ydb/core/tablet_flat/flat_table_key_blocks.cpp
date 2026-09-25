@@ -885,6 +885,8 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
     TState::TSplitWalk split{.Request = request};
     split.Start = State->Read.Target;
     split.End = RangeEndOf(request);
+    Y_ENSURE(CmpPos(split.Start, split.End, State->KeyDefaults()) <= 0,
+        "SplitPoints end is before the current position");
     if (CmpPos(split.End, State->Read.End, State->KeyDefaults()) <= 0) {
         // A singleton has no interior boundary and is exempt from both budgets.
         out = {};

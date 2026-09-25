@@ -1392,7 +1392,8 @@ namespace NKikimr {
                 str << NMonitoring::HTTPOKTEXT << response.DebugString();
                 Finish(ctx, new NMon::TEvHttpInfoRes(
                     str.Str(), Ev->Get()->SubRequestId, NMon::TEvHttpInfoRes::Custom));
-            } else if (response.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY)
+            } else if (ForceRecalculation
+                    && response.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY)
                     && !response.HasReport()) {
                 ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(Retry));
             } else {

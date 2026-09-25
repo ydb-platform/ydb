@@ -1107,9 +1107,9 @@ namespace {
             }
 
             ColdCacheRequests->Inc();
-            StartRefresh();
 
-            TString errorReason = "VDisk space report cache is not ready";
+            TString errorReason = "VDisk space report cache is not ready; "
+                "set ForceRecalculation or wait for periodic refresh";
             if (LastAttemptError) {
                 errorReason += ": ";
                 errorReason += LastAttemptError;

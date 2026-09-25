@@ -178,6 +178,18 @@ public:
         return ChunkTracker.GetSharedPoolColor();
     }
 
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetCompactionPressureColor() const {
+        return ChunkTracker.GetCompactionPressureColor();
+    }
+
+    void SetAllocationReserves(ui64 system, ui64 maintenance) {
+        ChunkTracker.SetAllocationReserves(system, maintenance);
+    }
+
+    ui64 GetAllocationHeadroom(EAllocationPurpose purpose) const {
+        return ChunkTracker.GetAllocationHeadroom(purpose);
+    }
+
     NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
         return ChunkTracker.GetPDiskCapacityAlert();
     }

@@ -6,6 +6,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_allocation.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -27,8 +29,13 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
-        // Carried through to TEvHullLogHugeBlob, see there.
+        // New chunks for this put must pass the same bound as its Fresh index.
+        // Unset for recovery writers; those retain their existing BLACK bound.
         std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
+        // Index capacity already charged to Fresh; transferred back to Skeleton
+        // on success or allocation refusal, and held until replay or rejection.
+        TFreshAdmission FreshAdmission;
+        NPDisk::EAllocationPurpose AllocationPurpose = NPDisk::EAllocationPurpose::Recovery;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -94,6 +101,7 @@ namespace NKikimr {
         // The colour at which reserving Fresh chunks for this blob's index record is refused, as for any put
         // of its data kind. Unset for writers Fresh admission does not gate, such as replication.
         const std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
+        TFreshAdmission FreshAdmission;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -261,6 +269,7 @@ namespace NKikimr {
     };
 
     struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
+        NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
         std::vector<TDiskPart> Locations;
         // Heap ownership at allocation time. Do not re-read the feature flag to classify these:
         // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
@@ -270,6 +279,10 @@ namespace NKikimr {
         TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)
             : Locations(std::move(locations))
             , IsStripe(std::move(isStripe))
+        {}
+
+        explicit TEvHugeAllocateSlotsResult(NKikimrProto::EReplyStatus status)
+            : Status(status)
         {}
     };
 

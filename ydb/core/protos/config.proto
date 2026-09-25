@@ -2270,12 +2270,24 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 1 }];
         optional uint64 CompactionAdmissionColor = 10 [(ControlOptions) = {
-            Description: "Space color (TPDiskSpaceColor value) of the shared chunk pool at which PDisk starts to admit "
+            Description: "Worst effective space color (TPDiskSpaceColor value) of the shared pool and dynamic owners at which PDisk starts to admit "
                          "level compactions one at a time (EnableVDiskPlannedCompaction). It stops one color below. "
                          "0 admits them one at a time always",
             MinValue: 0,
             MaxValue: 60,
             DefaultValue: 20 }];
+        optional uint64 SystemReserveChunks = 11 [(ControlOptions) = {
+            Description: "Chunks kept above every dynamic owner's RED boundary for SYSTEM data and common log bursts. "
+                         "USER, maintenance and recovery data allocations cannot spend this reserve. 0 disables the policy",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
+        optional uint64 MaintenanceReserveChunks = 12 [(ControlOptions) = {
+            Description: "Additional PDisk chunks withheld from USER allocations for maintenance/recovery workspace. "
+                         "Effective when SystemReserveChunks is nonzero; only actual chunk releases replenish headroom",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {

@@ -33,7 +33,7 @@ namespace NKikimr {
     // queues too. One reservation is in flight at a time.
     //
     // Only client writes come here: TEvVPut and TEvVMultiPut (for a huge blob, its
-    // index record), TEvVBlock and TEvVCollectGarbage. What serves replication and
+    // index record, reserved before writing the data), TEvVBlock and TEvVCollectGarbage. What serves replication and
     // recovery -- local sync data, Anubis/Osiris, recovered huge blobs, detected
     // phantoms -- is still put into Fresh ungated. Those records are charged to the
     // segment like any other, so they use up its reservation, and a segment they
@@ -63,7 +63,7 @@ namespace NKikimr {
         // `housekeeping` marks writes that serve reclaiming space, such as garbage collection: their chunks are
         // not held back by the static group reserve (see TEvChunkReserve::ForHousekeeping).
         EDecision Decide(const TFreshAdmission& admission, ESpaceColor refuseAtColor, bool housekeeping,
-            const TActorContext& ctx);
+            const TActorContext& ctx, NPDisk::EAllocationPurpose purpose = NPDisk::EAllocationPurpose::Maintenance);
 
         template <typename TEvPtr>
         void Park(TEvPtr& ev) {
@@ -88,6 +88,7 @@ namespace NKikimr {
             TFreshShortfall Split;
             ESpaceColor RefuseAtColor;
             bool Housekeeping;
+            NPDisk::EAllocationPurpose Purpose;
         };
 
         const TIntrusivePtr<TVDiskContext> VCtx;
@@ -100,7 +101,7 @@ namespace NKikimr {
         // The loosest bound PDisk has declined, for ordinary and for housekeeping reservations, until it grants
         // one at that bound or a stricter one. A write no looser is refused without asking again. Forgotten once
         // nothing waits, so a write arriving later always asks.
-        std::optional<ESpaceColor> RefusedAtColor[2];
+        std::optional<ESpaceColor> RefusedAtColor[2][size_t(NPDisk::EAllocationPurpose::Count)];
         bool Draining = false;
         bool StopDraining = false;
 

@@ -15,7 +15,7 @@ namespace NKikimr {
     {}
 
     TFreshAdmissionGate::EDecision TFreshAdmissionGate::Decide(const TFreshAdmission& admission,
-            ESpaceColor refuseAtColor, bool housekeeping, const TActorContext& ctx) {
+            ESpaceColor refuseAtColor, bool housekeeping, const TActorContext& ctx, NPDisk::EAllocationPurpose purpose) {
         if (admission.Empty()) {
             return EDecision::Admitted;
         }
@@ -30,7 +30,7 @@ namespace NKikimr {
             Hull->AdmitToFresh(admission);
             return EDecision::Admitted;
         }
-        if (const auto& refused = RefusedAtColor[housekeeping]; refused && refuseAtColor <= *refused) {
+        if (const auto& refused = RefusedAtColor[housekeeping][size_t(purpose)]; refused && refuseAtColor <= *refused) {
             return EDecision::Refused;
         }
         if (shortfall.Total() > Max<ui32>()) {
@@ -38,7 +38,7 @@ namespace NKikimr {
             return EDecision::Refused;
         }
 
-        InFlight = TReservation{shortfall, refuseAtColor, housekeeping};
+        InFlight = TReservation{shortfall, refuseAtColor, housekeeping, purpose};
         YDB_LOG_DEBUG_CTX(ctx, "Reserving chunks for Fresh",
             {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
             {"logoBlobs", shortfall.LogoBlobs},
@@ -46,9 +46,10 @@ namespace NKikimr {
             {"barriers", shortfall.Barriers},
             {"refuseAtColor", NKikimrBlobStorage::TPDiskSpaceColor::E_Name(refuseAtColor)},
             {"housekeeping", housekeeping},
+            {"purpose", NPDisk::AllocationPurposeName(purpose)},
             {"marker", "BSVSFA01"});
         ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkReserve(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-            ui32(shortfall.Total()), housekeeping, refuseAtColor));
+            ui32(shortfall.Total()), housekeeping, refuseAtColor, purpose));
         return EDecision::Wait;
     }
 
@@ -83,7 +84,8 @@ namespace NKikimr {
             Hull->AddFreshReservedChunks(reservation.Split, msg->ChunkIds);
             // A grant tells nothing of the bounds stricter than its own: a batch refused at its strictest bound
             // and admitted at the next is handled again without asking at the strictest one once more.
-            for (auto& refused : RefusedAtColor) {
+            for (auto& byPurpose : RefusedAtColor) {
+                auto& refused = byPurpose[size_t(reservation.Purpose)];
                 if (refused && reservation.RefuseAtColor <= *refused) {
                     refused.reset();
                 }
@@ -95,14 +97,15 @@ namespace NKikimr {
                 {"result", msg->ToString()},
                 {"refuseAtColor", NKikimrBlobStorage::TPDiskSpaceColor::E_Name(reservation.RefuseAtColor)},
                 {"housekeeping", reservation.Housekeeping},
+                {"purpose", NPDisk::AllocationPurposeName(reservation.Purpose)},
                 {"marker", "BSVSFA02"});
             auto remember = [&](std::optional<ESpaceColor>& refused) {
                 refused = refused ? Max(*refused, reservation.RefuseAtColor) : reservation.RefuseAtColor;
             };
             // A housekeeping reservation is judged more leniently, so its refusal settles ordinary ones too.
-            remember(RefusedAtColor[reservation.Housekeeping]);
+            remember(RefusedAtColor[reservation.Housekeeping][size_t(reservation.Purpose)]);
             if (reservation.Housekeeping) {
-                remember(RefusedAtColor[0]);
+                remember(RefusedAtColor[0][size_t(reservation.Purpose)]);
             }
         }
 
@@ -122,8 +125,11 @@ namespace NKikimr {
             }
         }
         if (Parked.empty()) {
-            RefusedAtColor[0].reset();
-            RefusedAtColor[1].reset();
+            for (auto& byPurpose : RefusedAtColor) {
+                for (auto& refused : byPurpose) {
+                    refused.reset();
+                }
+            }
         }
     }
 
@@ -140,9 +146,12 @@ namespace NKikimr {
                             << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(InFlight->RefuseAtColor) << "<br>";
                     }
                     for (bool housekeeping : {false, true}) {
-                        if (const auto& refused = RefusedAtColor[housekeeping]) {
-                            str << (housekeeping ? "Housekeeping" : "Ordinary") << " refused at "
-                                << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*refused) << "<br>";
+                        for (size_t i = 0; i < size_t(NPDisk::EAllocationPurpose::Count); ++i) {
+                            if (const auto& refused = RefusedAtColor[housekeeping][i]) {
+                                str << NPDisk::AllocationPurposeName(NPDisk::EAllocationPurpose(i))
+                                    << (housekeeping ? " housekeeping" : " ordinary") << " refused at "
+                                    << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*refused) << "<br>";
+                            }
                         }
                     }
                 }

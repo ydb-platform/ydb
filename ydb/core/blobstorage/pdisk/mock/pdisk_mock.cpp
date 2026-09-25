@@ -45,6 +45,8 @@ struct TPDiskMockState::TImpl {
     const ui32 AppendBlockSize;
     const ui32 ChunkSize;
     const ui32 TotalChunks;
+    ui64 SystemReserveChunks = 0;
+    ui64 MaintenanceReserveChunks = 0;
     bool IsDiskReadOnly;
     std::map<ui8, TOwner> Owners;
     std::set<ui32> FreeChunks;
@@ -393,6 +395,11 @@ void TPDiskMockState::TrimQuery() {
     Impl->TrimQuery();
 }
 
+void TPDiskMockState::SetAllocationReserves(ui64 system, ui64 maintenance) {
+    Impl->SystemReserveChunks = system;
+    Impl->MaintenanceReserveChunks = maintenance;
+}
+
 void TPDiskMockState::SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor) {
     Impl->SetStatusFlags(spaceColor);
 }
@@ -466,7 +473,8 @@ class TPDiskMockActor : public TActorBootstrapped<TPDiskMockActor> {
         bool Fits(NPDisk::TOwner /*owner*/, ui32 chunks) const override {
             // the test Handle(TEvChunkReserve) applies
             return Self.Impl.GetNumFreeChunks() >= chunks
-                && Self.EstimateAllocationColor(chunks) < TColor::BLACK;
+                && Self.EstimateAllocationColor(chunks) < TColor::BLACK
+                && chunks <= Self.GetAllocationHeadroom(NPDisk::EAllocationPurpose::Maintenance);
         }
     };
     std::unique_ptr<NPDisk::TCompactionArbiter> Arbiter;
@@ -910,7 +918,8 @@ public:
             const auto estimatedColor = EstimateAllocationColor(msg->SizeChunks);
             res->EstimatedColor = estimatedColor;
             const bool refusedByColor = estimatedColor >= msg->RefuseAtColor;
-            if (Impl.GetNumFreeChunks() < msg->SizeChunks || refusedByColor) {
+            if (Impl.GetNumFreeChunks() < msg->SizeChunks || refusedByColor
+                    || msg->SizeChunks > GetAllocationHeadroom(msg->Purpose)) {
                 const char *error = refusedByColor ? "color bound exceeded" : "no free chunks";
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "Received TEvChunkReserve",
                     {"marker", "PDM09"},
@@ -1016,7 +1025,7 @@ public:
                 {"msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
             if (!msg->ChunkIdx) { // allocate chunk
-                if (!Impl.GetNumFreeChunks()) {
+                if (!Impl.GetNumFreeChunks() || !GetAllocationHeadroom(NPDisk::EAllocationPurpose::Recovery)) {
                     res->Status = NKikimrProto::OUT_OF_SPACE;
                     res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
                     res->ErrorReason = "no free chunks";
@@ -1362,7 +1371,8 @@ public:
             // Without a quota model there are no color boundaries to run into, so
             // everything the disk physically has is headroom.
             const ui64 free = Impl.GetNumFreeChunks();
-            return {true, free, free, free, free, free};
+            return {true, free, free, free, free,
+                Min(free, GetAllocationHeadroom(NPDisk::EAllocationPurpose::Maintenance))};
         }
         GetStatusFlags(); // resyncs the shared quota with the free chunk count
         TSpaceHeadroom headroom;
@@ -1373,8 +1383,22 @@ public:
         headroom.ToBlack = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::BLACK);
         // The mock has no static group reserve to hold anything back, so housekeeping sees
         // exactly the same room as everything else.
-        headroom.AllocatableToBlack = headroom.ToBlack;
+        headroom.AllocatableToBlack = Min(headroom.ToBlack,
+            GetAllocationHeadroom(NPDisk::EAllocationPurpose::Maintenance));
         return headroom;
+    }
+
+    ui64 GetAllocationHeadroom(NPDisk::EAllocationPurpose purpose) {
+        if (!Impl.SystemReserveChunks || purpose == NPDisk::EAllocationPurpose::System) {
+            return Max<ui64>();
+        }
+        GetStatusFlags();
+        const ui64 room = Impl.ChunkSharedQuota
+            ? ui64(Impl.ChunkSharedQuota->GetHeadroomBelow(NKikimrBlobStorage::TPDiskSpaceColor::RED))
+            : Impl.GetNumFreeChunks();
+        const ui64 reserve = Impl.SystemReserveChunks
+            + (purpose == NPDisk::EAllocationPurpose::User ? Impl.MaintenanceReserveChunks : 0);
+        return room > reserve ? room - reserve : 0;
     }
 
     void ErrorHandle(NPDisk::TEvYardInit::TPtr &ev) {

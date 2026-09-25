@@ -1,5 +1,6 @@
 #include "cms_impl.h"
 #include "info_collector.h"
+#include "json_proxy_ddisk.h"
 #include "ut_helpers.h"
 #include "walle.h"
 #include "cms_ut_common.h"
@@ -10,9 +11,12 @@
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/null.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr::NCmsTest {
@@ -24,6 +28,90 @@ using namespace NKikimrCms;
 using namespace NKikimrBlobStorage;
 
 namespace {
+
+class TFakeMonHttpRequest: public NMonitoring::IMonHttpRequest {
+public:
+    TFakeMonHttpRequest(HTTP_METHOD method, TString uri, THttpHeaders headers, TString body)
+        : Method(method)
+        , Uri(std::move(uri))
+        , Headers(std::move(headers))
+        , Body(std::move(body))
+        , Params(TStringBuf(Uri).After('?'))
+        , PostParams(Body)
+    {
+    }
+
+    IOutputStream& Output() override {
+        return Cnull;
+    }
+
+    HTTP_METHOD GetMethod() const override {
+        return Method;
+    }
+
+    TStringBuf GetPath() const override {
+        return TStringBuf(Uri).Before('?');
+    }
+
+    TStringBuf GetPathInfo() const override {
+        return GetPath();
+    }
+
+    TStringBuf GetUri() const override {
+        return Uri;
+    }
+
+    const TCgiParameters& GetParams() const override {
+        return Params;
+    }
+
+    const TCgiParameters& GetPostParams() const override {
+        return PostParams;
+    }
+
+    TStringBuf GetPostContent() const override {
+        return Body;
+    }
+
+    const THttpHeaders& GetHeaders() const override {
+        return Headers;
+    }
+
+    TStringBuf GetHeader(TStringBuf name) const override {
+        if (const auto* header = Headers.FindHeader(name)) {
+            return header->Value();
+        }
+        return {};
+    }
+
+    TStringBuf GetCookie(TStringBuf) const override {
+        return {};
+    }
+
+    TString GetRemoteAddr() const override {
+        return {};
+    }
+
+    TString GetServiceTitle() const override {
+        return {};
+    }
+
+    NMonitoring::IMonPage* GetPage() const override {
+        return nullptr;
+    }
+
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+        return nullptr;
+    }
+
+private:
+    const HTTP_METHOD Method;
+    const TString Uri;
+    const THttpHeaders Headers;
+    const TString Body;
+    const TCgiParameters Params;
+    const TCgiParameters PostParams;
+};
 
 void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
                         const TString &host,
@@ -305,21 +393,25 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (bool swapRoles : {false, true}) {
             TCmsTestEnv env(8);
             env.ConfigureDDiskPool(3);
-            // ConfigureDDiskPool creates PDisk 1000 on each node. Match fake
-            // Whiteboard to this configuration before reporting disk failures.
-            constexpr ui32 pdiskId = 1000;
+            // Use PDisks from the same base config that CMS collects, and
+            // retain the environment's routing to the fake BSC/Whiteboard.
+            THashMap<ui32, ui32> pdiskIds;
             {
                 TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                const auto& config = TFakeNodeWhiteboardService::Config.GetResponse().GetStatus(0).GetBaseConfig();
+                for (const auto& pdisk : config.GetPDisk()) {
+                    pdiskIds.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                }
                 for (ui32 i = 0; i < env.GetNodeCount(); ++i) {
-                    auto& disks = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)].PDiskStateInfo;
-                    disks.clear();
-                    auto& disk = disks[pdiskId];
-                    disk.SetPDiskId(pdiskId);
-                    disk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                    const ui32 nodeId = env.GetNodeId(i);
+                    UNIT_ASSERT(pdiskIds.contains(nodeId));
+                    auto& disks = TFakeNodeWhiteboardService::Info.at(nodeId).PDiskStateInfo;
+                    UNIT_ASSERT(disks.contains(pdiskIds.at(nodeId)));
+                    disks.at(pdiskIds.at(nodeId)).SetState(NKikimrBlobStorage::TPDiskState::Normal);
                 }
             }
             // Supply controlled layouts using these same PDisks.
-            env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
                     auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
                     const ui64 tabletId = record.GetTabletId();
@@ -327,7 +419,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                         record.ClearGroups();
                         auto addDisk = [&](auto* id, ui32 nodeIndex) {
                             id->SetNodeId(env.GetNodeId(nodeIndex));
-                            id->SetPDiskId(pdiskId);
+                            id->SetPDiskId(pdiskIds.at(env.GetNodeId(nodeIndex)));
                             id->SetDDiskSlotId(1);
                         };
                         for (ui32 i = 0; i < 3; ++i) {
@@ -352,7 +444,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                         }
                     }
                 }
-                return TTestActorRuntime::EEventAction::PROCESS;
+                return prev(ev);
             });
             for (ui64 tabletId = 2001; tabletId <= 2003; ++tabletId) {
                 const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
@@ -363,9 +455,63 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                 TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
                 for (ui32 i = 0; i < 2; ++i) {
                     TFakeNodeWhiteboardService::Info[env.GetNodeId(i)]
-                        .PDiskStateInfo[pdiskId].SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
+                        .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(i))).SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
                 }
             }
+            // Exercise the HTTP parameter mapping through the actual proxy and CMS.
+            auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds) {
+                TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET,
+                    "/api/json/ddisk/tablets?" + params, {}, "");
+                const auto edge = env.AllocateEdgeActor();
+                NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+                    TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+                env.Register(new TJsonProxyDDisk(event));
+                TAutoPtr<IEventHandle> handle;
+                const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+                UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
+                NJson::TJsonValue json;
+                const size_t bodyOffset = response->Answer.find("\r\n\r\n");
+                UNIT_ASSERT(bodyOffset != TString::npos);
+                UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response->Answer).SubStr(bodyOffset + 4), &json, true));
+                UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
+                const auto& tablets = json["Tablets"].GetArray();
+                UNIT_ASSERT_VALUES_EQUAL(tablets.size(), expectedIds.size());
+                ui32 i = 0;
+                for (ui64 tabletId : expectedIds) {
+                    UNIT_ASSERT_VALUES_EQUAL(tablets[i++]["TabletId"].GetUInteger(), tabletId);
+                }
+            };
+            checkHttpOrder("sort_by=degrade&sort_desc=0", {2003, 2001, 2002});
+            checkHttpOrder("sort_by=degrade&sort_desc=1", {2002, 2001, 2003});
+            checkHttpOrder("group_by_degrade=1&sort_desc=0", {2002, 2001, 2003});
+            checkHttpOrder("group_by_degrade=1&sort_desc=1", {2002, 2001, 2003});
+            checkHttpOrder("group_by_degrade=0", {2001, 2002, 2003});
+            checkHttpOrder("group_by_degrade=1&offset=1&limit=1&only_problems=1", {2001});
+
+            // Counts must also be populated when parsing is deferred until after paging.
+            for (auto sortBy : {NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID,
+                                NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT}) {
+                NKikimrCms::TDDiskTabletListRequest lazyRequest;
+                lazyRequest.SetSortBy(sortBy);
+                lazyRequest.SetLimit(1);
+                for (ui32 offset = 0; offset < 3; ++offset) {
+                    lazyRequest.SetOffset(offset);
+                    const auto response = env.RequestDDiskTabletList(lazyRequest);
+                    UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+                    UNIT_ASSERT_VALUES_EQUAL(response.GetTotalCount(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 1);
+                    const auto& tablet = response.GetTablets(0);
+                    const ui64 tabletId = tablet.GetTabletId();
+                    UNIT_ASSERT(tabletId >= 2001 && tabletId <= 2003);
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetGroupsCount(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetDegrade(), tabletId == 2003 ? 0 : tabletId - 2000);
+                    const ui32 primary = tabletId == 2001 ? 3 : tabletId == 2002 ? 2 : 0;
+                    const ui32 secondary = tabletId == 2001 ? 3 : tabletId == 2002 ? 1 : 0;
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskCount(), swapRoles ? secondary : primary);
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferCount(), swapRoles ? primary : secondary);
+                }
+            }
+
             NKikimrCms::TDDiskTabletListRequest request;
             request.SetGroupByDegrade(true);
             request.SetLimit(0);
@@ -411,7 +557,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             {
                 TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
                 TFakeNodeWhiteboardService::Info[env.GetNodeId(0)]
-                    .PDiskStateInfo[pdiskId].SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                    .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(0))).SetState(NKikimrBlobStorage::TPDiskState::Normal);
             }
             request.SetOffset(0);
             const auto recovered = env.RequestDDiskTabletList(request);

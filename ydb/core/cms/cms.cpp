@@ -2228,15 +2228,13 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
         ui32 UnavailablePersistentBuffer = 0;
         ui32 Degrade = 0;
     };
-    TVector<TItem> items;
-    items.reserve(State->DDiskInfo.size());
-    for (const auto& [tabletId, info] : State->DDiskInfo) {
-        if (!filter.empty() && !ToString(tabletId).Contains(filter)) {
-            continue;
-        }
-        TItem item{tabletId, &info};
+    // ID/time sorting needs snapshot counts only for the returned page.
+    const bool needsCountsBeforePaging = onlyProblems || request.GetGroupByDegrade()
+        || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE
+        || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT;
+    auto fillCounts = [&](TItem& item) {
         NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-        if (state.ParseFromString(info.State)) {
+        if (state.ParseFromString(item.Info->State)) {
             item.GroupsCount = state.GroupsSize();
             for (const auto& group : state.GetGroups()) {
                 auto countUnavailable = [&](const auto& ids) {
@@ -2256,13 +2254,23 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
                 item.Degrade = Max(item.Degrade, Max(ddisks, buffers));
             }
         }
+    };
+    TVector<TItem> items;
+    items.reserve(State->DDiskInfo.size());
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        if (!filter.empty() && !ToString(tabletId).Contains(filter)) {
+            continue;
+        }
+        TItem item{tabletId, &info};
+        if (needsCountsBeforePaging) {
+            fillCounts(item);
+        }
         if (!onlyProblems || item.Degrade) {
             items.push_back(item);
         }
     }
 
-    // Parse each snapshot once before sorting and paging. Keep unsigned keys
-    // so tablet ids with the high bit set retain their natural ordering.
+    // Keep unsigned keys so tablet ids with the high bit set retain their natural ordering.
     TVector<std::pair<ui64, ui64>> keys;
     keys.reserve(items.size());
     for (const auto& item : items) {
@@ -2301,7 +2309,10 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     // the ui32 range (e.g. both close to Max<ui32>()).
     const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
     for (ui32 i = offset; i < end; ++i) {
-        const auto& item = items[order[i]];
+        auto& item = items[order[i]];
+        if (!needsCountsBeforePaging) {
+            fillCounts(item);
+        }
         auto* tablet = response->Record.AddTablets();
         tablet->SetTabletId(item.TabletId);
         tablet->SetRevision(item.Info->Revision);

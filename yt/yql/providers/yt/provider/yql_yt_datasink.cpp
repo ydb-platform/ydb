@@ -253,6 +253,8 @@ public:
     void FillModifyCallables(THashSet<TStringBuf>& callables) override {
         callables.insert(TYtWriteTable::CallableName());
         callables.insert(TYtDropTable::CallableName());
+        callables.insert(TYtCreateSymlink::CallableName());
+        callables.insert(TYtDropSymlink::CallableName());
         callables.insert(TYtDropView::CallableName());
         callables.insert(TYtConfigure::CallableName());
         callables.insert(TYtCreateTable::CallableName());
@@ -280,18 +282,8 @@ public:
         if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {
             mode = FromString<EYtWriteMode>(m->Tail().Content());
         }
-        if (mode && (*mode == EYtWriteMode::Drop || *mode == EYtWriteMode::DropIfExists)) {
-            if (!node->Child(3)->IsCallable("Void")) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
-                    << "Expected Void, but got: " << node->Child(3)->Content()));
-                return {};
-            }
 
-            TExprNode::TListType children = node->ChildrenList();
-            children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
-            children.resize(4);
-            return ctx.NewCallable(node->Pos(), TYtDropTable::CallableName(), std::move(children));
-        } else if (mode && (*mode == EYtWriteMode::DropObject || *mode == EYtWriteMode::DropObjectIfExists)) {
+        const auto rewriteDrop = [&] (TStringBuf callableName) -> TExprNode::TPtr {
             if (!node->Child(3)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
                     << "Expected Void, but got: " << node->Child(3)->Content()));
@@ -301,7 +293,24 @@ public:
             auto children = node->ChildrenList();
             children[3] = NYql::RemoveSetting(*children[4], EYtSettingType::Initial, ctx);
             children.resize(4);
-            return ctx.NewCallable(node->Pos(), TYtDropView::CallableName(), std::move(children));
+            return ctx.NewCallable(node->Pos(), callableName, std::move(children));
+        };
+
+        if (mode && IsCreateSymlinkMode(*mode)) {
+            if (!TYtTable::Match(node->Child(3))) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
+                    << "Expected " << TYtTable::CallableName() << ", but got: " << node->Child(3)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            return ctx.NewCallable(node->Pos(), TYtCreateSymlink::CallableName(), std::move(children));
+        } else if (mode && IsDropSymlinkMode(*mode)) {
+            return rewriteDrop(TYtDropSymlink::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::Drop || *mode == EYtWriteMode::DropIfExists)) {
+            return rewriteDrop(TYtDropTable::CallableName());
+        } else if (mode && (*mode == EYtWriteMode::DropObject || *mode == EYtWriteMode::DropObjectIfExists)) {
+            return rewriteDrop(TYtDropView::CallableName());
         } else if (mode && (*mode == EYtWriteMode::Create || *mode == EYtWriteMode::CreateIfNotExists)) {
             if (!node->Child(3U)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()

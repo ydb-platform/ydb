@@ -424,6 +424,11 @@ public:
                 }
 
                 table.WriteLock = HasModifyIntents(t.Intents());
+                // Test tables emulate the protection reported by the native gateway.
+                table.SymlinkLock = !options.ReadOnly()
+                    && HasSymlinkIntents(t.Intents());
+                table.ReferenceLock = !options.ReadOnly() && table.Meta->DoesExist
+                    && t.Intents().HasFlags(TYtTableIntent::Referenced);
             }
             result.SetSuccess();
             return MakeFuture<TTableInfoResult>(std::move(result));
@@ -742,7 +747,11 @@ public:
                 future = DoFill(op.Cast(), execCtx, ctx);
             } else if (auto op = opBase.Maybe<TYtTouch>()) {
                 future = DoTouch(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtCreateSymlink>()) {
+                future = DoCreateSymlink(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtDropTable>()) {
+                future = DoDrop(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtDropSymlink>()) {
                 future = DoDrop(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtDropView>()) {
                 future = DoDrop(op.Cast(), execCtx);
@@ -1825,7 +1834,7 @@ private:
     }
 
     static TVector<std::pair<size_t, TString>> BatchLockTables(const NYT::ITransactionPtr& tx, const TVector<TTableReq>& tables,
-        const TVector<size_t>& tablesToLock, TMaybe<ELockMode> lockMode = {})
+        const TVector<size_t>& tablesToLock, TMaybe<ELockMode> lockMode = {}, bool exactNode = false)
     {
         auto batchLock = tx->CreateBatchRequest();
         TVector<TFuture<std::pair<size_t, TString>>> batchLockRes;
@@ -1835,6 +1844,9 @@ private:
             const TTableReq& tableReq = tables[idx];
 
             auto tablePath = tableReq.Table();
+            if (exactNode) {
+                tablePath += '&';
+            }
             ELockMode mode = lockMode.GetOrElse(HasExclusiveModifyIntents(tableReq.Intents()) ? LM_EXCLUSIVE : LM_SHARED);
 
             batchLockRes.push_back(batchLock->Lock(tablePath, mode).Apply([idx](const TFuture<ILockPtr>& res) {
@@ -1880,6 +1892,179 @@ private:
             [] (const TFuture<std::pair<size_t, TString>>& f) { return f.GetValue(); });
 
         return res;
+    }
+
+    static std::pair<TString, TString> GetTableParentAndKey(const TString& tablePath)
+    {
+        TString folder;
+        TString tableName = tablePath;
+        const auto slash = tableName.rfind('/');
+        if (TString::npos != slash) {
+            folder = tableName.substr(0, slash);
+            tableName = tableName.substr(slash + 1);
+        }
+        return {folder, tableName};
+    }
+
+    static void LockMissingTables(
+        const TExecContext<TGetTableInfoOptions>::TPtr& execCtx,
+        const TTransactionCache::TEntry::TPtr& entry,
+        const NYT::ITransactionPtr& lockTx,
+        const TVector<TTableReq>& tables,
+        const TVector<size_t>& missingTables)
+    {
+        TVector<TString> ensureParents;
+        TVector<TString> ensureParentsTmp;
+        auto batchLock = lockTx->CreateBatchRequest();
+        TVector<TFuture<void>> batchLockRes;
+        for (const auto idx : missingTables) {
+            const auto& tableReq = tables[idx];
+            const auto tablePath = NYT::AddPathPrefix(tableReq.Table(), NYT::TConfig::Get()->Prefix);
+            auto [folder, tableName] = GetTableParentAndKey(tablePath);
+            if (folder == "/") {
+                folder = "#" + lockTx->Get("//@id").AsString();
+            } else if (folder) {
+                (tableReq.Anonymous() ? ensureParentsTmp : ensureParents).push_back(tablePath);
+            }
+            YQL_CLOG(INFO, ProviderYt) << "Lock " << tableName.Quote() << " child of "
+                << folder.Quote() << " with " << LM_SHARED << " mode";
+            batchLockRes.push_back(batchLock->Lock(folder, LM_SHARED,
+                TLockOptions().ChildKey(tableName)).Apply([] (const TFuture<ILockPtr>& f) { f.GetValue(); }));
+        }
+        if (ensureParentsTmp) {
+            execCtx->PrepareSecureTmpFolder();
+            CreateParents(ensureParentsTmp, entry->CacheTx);
+        }
+        if (ensureParents) {
+            CreateParents(ensureParents, entry->GetRoot());
+        }
+        batchLock->ExecuteBatch();
+        WaitExceptionOrAll(batchLockRes).GetValue();
+    }
+
+    static THashMap<size_t, TString> GetExactNodeIds(
+        const NYT::ITransactionPtr& tx,
+        const TVector<TTableReq>& tables,
+        const TVector<size_t>& indices)
+    {
+        if (indices.empty()) {
+            return {};
+        }
+        auto batch = tx->CreateBatchRequest();
+        TVector<TFuture<TString>> results;
+        for (auto idx : indices) {
+            results.push_back(batch->Get(tables[idx].Table() + "&/@id").Apply([](const TFuture<NYT::TNode>& f) {
+                try {
+                    return f.GetValue().AsString();
+                } catch (const TErrorResponse& e) {
+                    if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                        throw;
+                    }
+                    return TString();
+                }
+            }));
+        }
+        batch->ExecuteBatch();
+        THashMap<size_t, TString> ids;
+        for (size_t i = 0; i < indices.size(); ++i) {
+            ids.emplace(indices[i], results[i].GetValueSync());
+        }
+        return ids;
+    }
+
+    static void ProcessReferenceLocks(
+        const TTransactionCache::TEntry::TPtr& entry,
+        const TVector<TTableReq>& tables,
+        const TVector<size_t>& referencedTables,
+        ui32 epoch,
+        TTableInfoResult& res)
+    {
+        const auto& tx = entry->Tx;
+        const auto initialIds = GetExactNodeIds(tx, tables, referencedTables);
+        auto batchLock = tx->CreateBatchRequest();
+        TVector<TFuture<bool>> locks;
+        for (size_t i = 0; i < referencedTables.size(); ++i) {
+            if (!initialIds.at(referencedTables[i])) {
+                locks.push_back(MakeFuture(false));
+                continue;
+            }
+            const auto& table = tables[referencedTables[i]];
+            const auto path = NYT::AddPathPrefix(table.Table(), NYT::TConfig::Get()->Prefix);
+            auto [folder, key] = GetTableParentAndKey(path);
+            if (folder == "/") {
+                folder = "#" + tx->Get("//@id").AsString();
+            }
+            YQL_CLOG(INFO, ProviderYt) << "Lock referenced " << key.Quote() << " child of "
+                << folder.Quote() << " with " << LM_SHARED << " mode";
+            locks.push_back(batchLock->Lock(folder, LM_SHARED, TLockOptions().ChildKey(key))
+                .Apply([] (const TFuture<ILockPtr>& f) {
+                    try {
+                        f.GetValue();
+                        return true;
+                    } catch (const TErrorResponse& e) {
+                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                            throw;
+                        }
+                        // The parent disappeared after the identity lookup. Do not recreate it.
+                        return false;
+                    }
+                }));
+        }
+        batchLock->ExecuteBatch();
+        const auto lockedIds = GetExactNodeIds(tx, tables, referencedTables);
+        for (size_t i = 0; i < referencedTables.size(); ++i) {
+            const auto idx = referencedTables[i];
+            const bool locked = locks[i].GetValueSync();
+            const auto& initialId = initialIds.at(idx);
+            const auto& lockedId = lockedIds.at(idx);
+            // A child-key lock can succeed even after the child has been removed or replaced.
+            if (initialId && (!locked || lockedId != initialId)) {
+                YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_CONCURRENT_TABLE_MODIF)
+                    << "Referenced path " << tables[idx].Table().Quote()
+                    << " changed before taking reference lock";
+            }
+            if (tables[idx].LockOnly()) {
+                with_lock(entry->Lock_) {
+                    const auto snapshot = entry->Snapshots.FindPtr(std::make_pair(tables[idx].Table(), epoch));
+                    // A snapshot identifies a resolved table, not a link. Reject late references
+                    // unless the protected entry itself is the snapshotted table.
+                    // Without a snapshot, only a still-missing target can be safely reused.
+                    if (snapshot ? std::get<0>(*snapshot) != "#" + initialId : bool(initialId)) {
+                        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_CONCURRENT_TABLE_MODIF)
+                            << "Referenced path " << tables[idx].Table().Quote()
+                            << " changed before taking reference lock";
+                    }
+                }
+            }
+            res.Data[idx].ReferenceLock = locked && bool(lockedId);
+            if (!res.Data[idx].ReferenceLock && !tables[idx].LockOnly()) {
+                // Keep absence from this lookup: snapshot loading must not accept a concurrently
+                // created target without protection. Query-created targets have their write locks.
+                res.Data[idx].Meta = MakeIntrusive<TYtTableMetaInfo>();
+                res.Data[idx].Meta->DoesExist = false;
+            }
+        }
+    }
+
+    static void ProcessSymlinkLocks(
+        const TExecContext<TGetTableInfoOptions>::TPtr& execCtx,
+        const TTransactionCache::TEntry::TPtr& entry,
+        const TVector<TTableReq>& tables,
+        const TVector<size_t>& symlinksToLock)
+    {
+        const auto locks = BatchLockTables(entry->Tx, tables, symlinksToLock, LM_EXCLUSIVE, /*exactNode=*/true);
+        TVector<size_t> missing;
+        for (const auto& [idx, id] : locks) {
+            if (id) {
+                YQL_CLOG(INFO, ProviderYt) << "Lock symlink node " << tables[idx].Table().Quote()
+                    << " with " << LM_EXCLUSIVE << " mode (" << id << ')';
+            } else {
+                missing.push_back(idx);
+            }
+        }
+        if (missing) {
+            LockMissingTables(execCtx, entry, entry->Tx, tables, missing);
+        }
     }
 
     // Returns tables, which require additional snapshot lock
@@ -1933,31 +2118,25 @@ private:
 
         auto batchGetSort = lockTx->CreateBatchRequest();
         TVector<TFuture<std::pair<size_t, bool>>> batchGetSortRes;
-        TVector<TString> ensureParents;
-        TVector<TString> ensureParentsTmp;
-        auto batchLock = lockTx->CreateBatchRequest();
-        TVector<TFuture<void>> batchLockRes;
+        TVector<size_t> missingTables;
 
         for (auto& lockRes: lockIds) {
             size_t idx = lockRes.first;
             TString id = lockRes.second;
             const TTableReq& tableReq = tables[idx];
             auto tablePath = tableReq.Table();
-            TYtTableMetaInfo::TPtr metaRes;
             if (!tableReq.LockOnly()) {
-                metaRes = res.Data[idx].Meta = MakeIntrusive<TYtTableMetaInfo>();
+                auto metaRes = MakeIntrusive<TYtTableMetaInfo>();
+                metaRes->DoesExist = bool(id);
+                res.Data[idx].Meta = std::move(metaRes);
             }
-            const bool loadMeta = !tableReq.LockOnly();
             const bool exclusive = HasExclusiveModifyIntents(tableReq.Intents());
             if (id) {
-                if (metaRes) {
-                    metaRes->DoesExist = true;
-                }
                 YQL_CLOG(INFO, ProviderYt) << "Lock " << tablePath.Quote() << " with "
                     << (exclusive ? LM_EXCLUSIVE : LM_SHARED)
                     << " mode (" << id << ')';
 
-                if (loadMeta) {
+                if (!tableReq.LockOnly()) {
                     existingIdxs.emplace_back(idx, id);
                 }
                 if (!exclusive) {
@@ -1969,26 +2148,7 @@ private:
                     );
                 }
             } else {
-                if (metaRes) {
-                    metaRes->DoesExist = false;
-                }
-                tablePath = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
-                TString folder;
-                TString tableName = tablePath;
-                auto slash = tableName.rfind('/');
-                if (TString::npos != slash) {
-                    folder = tableName.substr(0, slash);
-                    tableName = tableName.substr(slash + 1);
-                    if (folder == "/") {
-                        folder = "#" + lockTx->Get("//@id").AsString();
-                    } else {
-                        (tableReq.Anonymous() ? ensureParentsTmp : ensureParents).push_back(tablePath);
-                    }
-                }
-                YQL_CLOG(INFO, ProviderYt) << "Lock " << tableName.Quote() << " child of "
-                    << folder.Quote() << " with " << LM_SHARED << " mode";
-                batchLockRes.push_back(batchLock->Lock(folder, LM_SHARED,
-                    TLockOptions().ChildKey(tableName)). Apply([] (const TFuture<ILockPtr>& f) { f.GetValue(); }));
+                missingTables.push_back(idx);
             }
         }
 
@@ -2015,17 +2175,8 @@ private:
             }
         }
 
-        if (ensureParentsTmp) {
-            execCtx->PrepareSecureTmpFolder();
-            CreateParents(ensureParentsTmp, entry->CacheTx);
-        }
-        if (ensureParents) {
-            CreateParents(ensureParents, entry->GetRoot());
-        }
-
-        if (batchLockRes) {
-            batchLock->ExecuteBatch();
-            WaitExceptionOrAll(batchLockRes).GetValue();
+        if (missingTables) {
+            LockMissingTables(execCtx, entry, lockTx, tables, missingTables);
         }
 
         if (existingIdxs) {
@@ -2047,11 +2198,23 @@ private:
 
                 NSorted::TSimpleMap<size_t, TString> existingIdxs;
 
+                TVector<size_t> symlinksToLock;
+                TVector<size_t> referencedTables;
                 TVector<size_t> checkpointsToXLock;
                 TVector<size_t> tablesToXLock;
+                bool hasModifications = false;
                 for (auto idx: grp.second.TableIndicies) {
                     const TTableReq& tableReq = tables[idx];
+                    YQL_ENSURE(!tableReq.Intents().HasFlags(TYtTableIntent::Referenced)
+                        || tableReq.Intents().HasFlags(TYtTableIntent::Read));
+                    if (HasSymlinkIntents(tableReq.Intents())) {
+                        symlinksToLock.push_back(idx);
+                    }
+                    if (tableReq.Intents().HasFlags(TYtTableIntent::Referenced)) {
+                        referencedTables.push_back(idx);
+                    }
                     if (HasModifyIntents(tableReq.Intents())) {
+                        hasModifications = true;
                         if (tableReq.Intents().HasFlags(TYtTableIntent::Flush)) {
                             checkpointsToXLock.push_back(idx);
                         } else {
@@ -2064,7 +2227,16 @@ private:
                 TVector<size_t> tablesToSLock;
                 bool makeUniqSLock = false;
                 if (!readOnly) {
-                    if (tablesToXLock || checkpointsToXLock) {
+                    if (referencedTables) {
+                        ProcessReferenceLocks(entry, tables, referencedTables, epoch, res);
+                    }
+                    if (symlinksToLock) {
+                        ProcessSymlinkLocks(grp.second.ExecContext, entry, tables, symlinksToLock);
+                        for (auto idx : symlinksToLock) {
+                            res.Data[idx].SymlinkLock = true;
+                        }
+                    }
+                    if (hasModifications) {
                         entry->CreateDefaultTmpFolder();
                     }
                     if (tablesToXLock) {
@@ -2081,7 +2253,8 @@ private:
 
                 for (auto idx: grp.second.TableIndicies) {
                     const TTableReq& tableReq = tables[idx];
-                    if (!tableReq.LockOnly() && (readOnly || HasReadIntents(tableReq.Intents()))) {
+                    if (!tableReq.LockOnly() && (readOnly || HasReadIntents(tableReq.Intents())
+                        || HasSymlinkIntents(tableReq.Intents()))) {
                         auto metaRes = res.Data[idx].Meta;
                         if (!metaRes || metaRes->DoesExist) {
                             tablesToSLock.push_back(idx);
@@ -2141,6 +2314,29 @@ private:
                             }
                         }
                     }
+                }
+
+                auto batchGetLinkType = entry->Tx->CreateBatchRequest();
+                TVector<TFuture<void>> linkTypeResults;
+                for (const auto idx : grp.second.TableIndicies) {
+                    const auto meta = res.Data[idx].Meta;
+                    if (meta && !meta->DoesExist) {
+                        const auto tablePath = tables[idx].Table();
+                        linkTypeResults.push_back(batchGetLinkType->Get(tablePath + "&/@type").Apply(
+                            [meta](const TFuture<NYT::TNode>& future) {
+                                try {
+                                    meta->IsLink = future.GetValue().AsString() == "link";
+                                } catch (const TErrorResponse& error) {
+                                    if (!error.IsResolveError() || error.IsNoSuchTransaction()) {
+                                        throw;
+                                    }
+                                }
+                            }));
+                    }
+                }
+                if (linkTypeResults) {
+                    batchGetLinkType->ExecuteBatch();
+                    WaitExceptionOrAll(linkTypeResults).GetValue();
                 }
             }
 
@@ -3050,11 +3246,14 @@ private:
                 }
 
                 auto tablePath = tables[idx.first].Table();
+                auto metaInfo = result.Data[idx.first].Meta;
+                YQL_ENSURE(metaInfo);
                 batchRes.push_back(batchGet->Get(tablePath + "&/@", getOpts).Apply(
-                    [idx, tablePath, &attributes] (const TFuture<NYT::TNode>& f) {
+                    [idx, tablePath, metaInfo, &attributes] (const TFuture<NYT::TNode>& f) {
                         try {
                             NYT::TNode attrs = f.GetValue();
                             if (GetTypeFromAttributes(attrs, false) == "link") {
+                                metaInfo->IsLink = true;
                                 // override some attributes by the link ones
                                 if (attrs.HasKey(QB2Premapper)) {
                                     attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
@@ -5222,6 +5421,21 @@ private:
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             auto entry = execCtx->GetEntry();
             entry->Tx->Remove(path, TRemoveOptions().Force(true));
+        });
+    }
+
+    TFuture<void> DoCreateSymlink(TYtCreateSymlink create, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        const auto linkPath = NYql::TransformPath({}, create.Table().Name().Value(), /*isTempTable=*/false, {});
+        const auto targetPath = NYql::TransformPath({}, create.Target().Name().Value(), /*isTempTable=*/false, {});
+        const auto mode = NYql::GetSetting(create.Settings().Ref(), EYtSettingType::Mode);
+        const bool ignoreExisting = mode
+            && FromString<EYtWriteMode>(mode->Tail().Content()) == EYtWriteMode::CreateSymlinkIfNotExists;
+        YQL_CLOG(INFO, ProviderYt) << "Creating symlink: " << execCtx->Cluster_ << '.' << linkPath
+            << " -> " << targetPath;
+
+        return execCtx->Session_->Async([linkPath, targetPath, ignoreExisting, execCtx]() {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->GetEntry()->Tx->Link(targetPath, linkPath, TLinkOptions().IgnoreExisting(ignoreExisting));
         });
     }
 

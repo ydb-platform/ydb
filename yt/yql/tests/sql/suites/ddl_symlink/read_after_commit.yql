@@ -1,0 +1,9 @@
+USE plato;
+
+CREATE SYMLINK Link TO Input;
+
+COMMIT;
+
+INSERT INTO Output
+SELECT * FROM Link
+WHERE key == '020';

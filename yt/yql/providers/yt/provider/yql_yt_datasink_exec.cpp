@@ -109,7 +109,7 @@ public:
         AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
-        AddHandler({TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
+        AddHandler({TYtCreateSymlink::CallableName(), TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropSymlink::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleIsolatedOp));
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleCommit));
         AddHandler({TYtEquiJoin::CallableName()}, RequireSequenceOf({TYtEquiJoin::idx_World, TYtEquiJoin::idx_Input}),

@@ -1183,6 +1183,16 @@ private:
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateSymlink(const TRule_create_symlink_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_symlink_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropSymlink(const TRule_drop_symlink_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_symlink_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAnalyze(const TRule_analyze_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
@@ -3373,6 +3383,8 @@ TStaticData::TStaticData()
           {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
           {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
           {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},
+          {TRule_create_symlink_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateSymlink)},
+          {TRule_drop_symlink_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropSymlink)},
           {TRule_use_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUse)},
           {TRule_into_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoTable)},
           {TRule_commit_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCommit)},

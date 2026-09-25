@@ -243,6 +243,7 @@ public:
                     data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
                     data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
                     data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                    data.Meta->IsLink = metaNode.HasKey("IsLink") ? metaNode["IsLink"].AsBool() : false;
                     data.Meta->HasRLS = metaNode.HasKey("HasRLS") ? metaNode["HasRLS"].AsBool() : false;
                     data.Meta->SqlView = metaNode["SqlView"].AsString();
                     data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
@@ -268,6 +269,8 @@ public:
                     }
                 }
                 data.WriteLock = valueNode["WriteLock"].AsBool();
+                data.SymlinkLock = valueNode.HasKey("SymlinkLock") && valueNode["SymlinkLock"].AsBool();
+                data.ReferenceLock = valueNode.HasKey("ReferenceLock") && valueNode["ReferenceLock"].AsBool();
                 res.Data.push_back(data);
             }
 
@@ -325,6 +328,7 @@ public:
                         ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
                         ("InferredScheme",data.Meta->InferredScheme)
                         ("IsDynamic",data.Meta->IsDynamic)
+                        ("IsLink",data.Meta->IsLink)
                         ("HasRLS",data.Meta->HasRLS)
                         ("SqlView",data.Meta->SqlView)
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
@@ -356,6 +360,8 @@ public:
                         valueNode("Stat", statNode);
                     }
                     valueNode("WriteLock", data.WriteLock);
+                    valueNode("SymlinkLock", data.SymlinkLock);
+                    valueNode("ReferenceLock", data.ReferenceLock);
 
                     auto value = NYT::NodeToYsonString(valueNode, NYT::NYson::EYsonFormat::Binary);
                     QContext_.GetWriter()->Put({YtGateway_GetTableInfo, key},value).GetValueSync();

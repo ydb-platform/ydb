@@ -35,7 +35,9 @@ public:
         AddHandler({TYtFill::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleFill));
         AddHandler({TYtTouch::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleTouch));
         AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
+        AddHandler({TYtCreateSymlink::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleCreateSymlink));
         AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
+        AddHandler({TYtDropSymlink::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtCreateView::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtDropView::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TCoCommit::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleCommit));
@@ -322,6 +324,24 @@ private:
                 nextDescription.Constraints.RemoveConstraint<TUniqueConstraintNode>();
                 nextDescription.Constraints.RemoveConstraint<TDistinctConstraintNode>();
             }
+        }
+
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateSymlink(TExprBase input, TExprContext& ctx) {
+        Y_UNUSED(ctx);
+        if (SubGraph) {
+            return TStatus::Ok;
+        }
+
+        const auto create = input.Cast<TYtCreateSymlink>();
+        const TYtTableInfo linkInfo(create.Table());
+        if (const auto commitEpoch = linkInfo.CommitEpoch.GetOrElse(0)) {
+            auto& next = State_->TablesData->GetModifTable(
+                create.DataSink().Cluster().StringValue(), linkInfo.Name, commitEpoch);
+            next.ConstraintsReady = false;
+            next.Constraints = create.Target().Ref().GetConstraintSet();
         }
 
         return TStatus::Ok;

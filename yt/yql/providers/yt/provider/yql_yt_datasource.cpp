@@ -565,12 +565,20 @@ public:
                 TStringBuf intent;
                 if (tableDesc.Intents & TYtTableIntent::Drop) {
                     intent = "drop";
+                } else if (tableDesc.Intents & TYtTableIntent::SymlinkDrop) {
+                    intent = "drop_symlink";
                 } else if (tableDesc.Intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Replace)) {
                     intent = "modify";
                 } else if (tableDesc.Intents & TYtTableIntent::Flush) {
                     intent = "flush";
-                } else {
+                } else if (tableDesc.Intents & TYtTableIntent::Create) {
+                    intent = "create";
+                } else if (tableDesc.Intents & TYtTableIntent::SymlinkCreate) {
+                    intent = "create_symlink";
+                } else if (HasReadIntents(tableDesc.Intents)) {
                     intent = "read";
+                } else {
+                    intent = "unknown";
                 }
                 tables[std::make_pair(cluster, table)].emplace(intent);
             }

@@ -379,6 +379,18 @@ Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
                 "ALTER TABLE t\n\tSET ttl interval('P1D') TO EXTERNAL DATA SOURCE `eds`.`archive/data` ON ts\n;\n"}});
 }
 
+Y_UNIT_TEST(SymlinkOperations) {
+    TCases cases = {
+        {"create symlink plato.link to target", "CREATE SYMLINK plato.link TO target;\n"},
+        {"create symlink if not exists link to target", "CREATE SYMLINK IF NOT EXISTS link TO target;\n"},
+        {"drop symlink link", "DROP SYMLINK link;\n"},
+        {"drop symlink if exists plato.link", "DROP SYMLINK IF EXISTS plato.link;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(CreateTable) {
     TCases cases = {
         {"create table user(user int32)", "CREATE TABLE user (\n\tuser int32\n);\n"},

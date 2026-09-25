@@ -2,6 +2,7 @@
 
 #include "sql_ddl_backup.h"
 #include "sql_ddl_resource_pool.h"
+#include "sql_ddl_symlink.h"
 #include "select_yql.h"
 #include "sql_expression.h"
 #include "sql_select.h"
@@ -2265,6 +2266,22 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             blocks.push_back(materializeNode);
             auto refNode = BuildYqlSubqueryRef(materializeNode, ref);
             PushNamedNode(intoPos, varName, refNode);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore71: {
+            auto node = TSymlinkTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core71().GetRule_create_symlink_stmt1());
+            if (!node) {
+                return false;
+            }
+            AddStatementToBlocks(blocks, node);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore72: {
+            auto node = TSymlinkTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core72().GetRule_drop_symlink_stmt1());
+            if (!node) {
+                return false;
+            }
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

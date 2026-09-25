@@ -685,7 +685,8 @@ public:
             ScanYtTableContentTables(dqWrite.Cast().Input().Ptr(), processTable);
         } else if (opBase.Maybe<TYtSort>() || opBase.Maybe<TYtMerge>()
                 || opBase.Maybe<TYtCopy>() || opBase.Maybe<TYtEquiJoin>()
-                || opBase.Maybe<TYtTouch>() || opBase.Maybe<TYtDropTable>()
+                || opBase.Maybe<TYtTouch>() || opBase.Maybe<TYtCreateSymlink>()
+                || opBase.Maybe<TYtDropTable>() || opBase.Maybe<TYtDropSymlink>()
                 || opBase.Maybe<TYtDropView>() || opBase.Maybe<TYtCreateView>()
                 || opBase.Maybe<TYtStatOut>()) {
             // Lambdaless ops: nothing to scan.

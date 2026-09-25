@@ -88,6 +88,8 @@ sql_stmt_core:
   | drop_secret_stmt
   | truncate_table_stmt
   | materialize_stmt
+  | create_symlink_stmt
+  | drop_symlink_stmt
 ;
 
 expr:
@@ -990,6 +992,11 @@ alter_table_alter_index_action:
 
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
+symlink_path: an_id_or_type | bind_parameter;
+symlink_ref: (cluster_expr DOT)? symlink_path;
+create_symlink_stmt: CREATE SYMLINK (IF NOT EXISTS)? symlink_ref TO symlink_path;
+drop_symlink_stmt: DROP SYMLINK (IF EXISTS)? symlink_ref;
+
 create_user_stmt: CREATE USER role_name user_option*;
 alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
 
@@ -1677,6 +1684,7 @@ keyword_as_compat:
   | SUBQUERY
   | SUBSET
   | SYMBOLS
+  | SYMLINK
   | SYNC
   | SYSTEM
   | TABLE
@@ -1922,6 +1930,7 @@ keyword_compat: (
   | SUBQUERY
   | SUBSET
   | SYMBOLS
+  | SYMLINK
   | SYNC
   | SYSTEM
   | TABLE
@@ -2319,6 +2328,7 @@ STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SUBSET: S U B S E T;
 SYMBOLS: S Y M B O L S;
+SYMLINK: S Y M L I N K;
 SYMMETRIC: S Y M M E T R I C;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;

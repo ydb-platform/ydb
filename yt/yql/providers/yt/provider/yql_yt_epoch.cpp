@@ -18,6 +18,18 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
+constexpr ui32 PrimaryTableIndex = 2U;
+constexpr ui32 SymlinkTargetIndex = 3U;
+
+bool IsCreateSymlinkWrite(const TYtWrite& write) {
+    const auto mode = NYql::GetSetting(write.Arg(4).Ref(), EYtSettingType::Mode);
+    return mode && IsCreateSymlinkMode(FromString<EYtWriteMode>(mode->Tail().Content()));
+}
+
+} // namespace
+
 class TYtEpochTransformer : public TSyncTransformerBase {
 public:
     TYtEpochTransformer(TYtState::TPtr state)
@@ -328,10 +340,12 @@ private:
                 }
 
                 TYtWrite write(node);
-                if (write.Arg(2).Maybe<TYtTable>()) {
-                    TYtTableInfo tableInfo(write.Arg(2));
+                const auto registerTableEpoch = [&] (TExprBase table) {
+                    if (!table.Maybe<TYtTable>()) {
+                        return;
+                    }
+                    TYtTableInfo tableInfo(table);
                     if (!tableInfo.Epoch.Defined()) {
-
                         TMaybe<ui32> epoch;
                         for (auto commit: commitDeps) {
                             auto itWrites = tableWritesBeforeCommit.find(commit);
@@ -343,10 +357,14 @@ private:
                         }
 
                         if (0 != epoch.GetOrElse(0)) {
-                            ioEpochs[node.Get()][write.Arg(2).Raw()] = *epoch;
+                            ioEpochs[node.Get()][table.Raw()] = *epoch;
                             State_->EpochDependencies[*epoch].emplace(clusterName, tableInfo.Name);
                         }
                     }
+                };
+                registerTableEpoch(write.Arg(PrimaryTableIndex));
+                if (IsCreateSymlinkWrite(write)) {
+                    registerTableEpoch(write.Arg(SymlinkTargetIndex));
                 }
             }
             else if (auto maybeRead = TMaybeNode<TYtReadTable>(node)) {
@@ -389,9 +407,14 @@ private:
             }
             else if (const auto maybeOpBase = TMaybeNode<TYtIsolatedOpBase>(node)) {
                 const auto cluster = maybeOpBase.Cast().DataSink().Cluster().StringValue();
-                const auto table = maybeOpBase.Cast().Table();
-                if (const auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
-                    State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
+                const auto registerDependency = [this, &cluster] (TYtTable table) {
+                    if (const auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
+                        State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
+                    }
+                };
+                registerDependency(maybeOpBase.Cast().Table());
+                if (const auto maybeCreateSymlink = TMaybeNode<TYtCreateSymlink>(node)) {
+                    registerDependency(maybeCreateSymlink.Cast().Target());
                 }
             }
             return true;
@@ -407,27 +430,42 @@ private:
             if (TYtRead::Match(node.Get()) || TYtWrite::Match(node.Get())) {
                 const auto it = ioEpochs.find(node.Get());
                 if (ioEpochs.cend() != it) {
-                    auto tables = node->ChildPtr(2);
                     auto& tableEpochs = it->second;
-                    TOptimizeExprSettings subSettings(nullptr);
-                    subSettings.VisitChanges = true;
-                    auto subStatus = OptimizeExpr(tables, tables, [&tableEpochs](const TExprNode::TPtr& subNode, TExprContext& ctx) -> TExprNode::TPtr {
-                        if (TYtTable::Match(subNode.Get())) {
-                            auto tableIt = tableEpochs.find(subNode.Get());
-                            if (tableEpochs.cend() != tableIt) {
-                                TYtTableInfo tableInfo = subNode;
-                                tableInfo.Epoch = tableIt->second;
-                                return tableInfo.ToExprNode(ctx, subNode->Pos()).Ptr();
+                    const auto updateTableEpoch = [&] (ui32 index) {
+                        auto tables = node->ChildPtr(index);
+                        TOptimizeExprSettings subSettings(nullptr);
+                        subSettings.VisitChanges = true;
+                        auto subStatus = OptimizeExpr(tables, tables, [&tableEpochs](const TExprNode::TPtr& subNode, TExprContext& ctx) -> TExprNode::TPtr {
+                            if (TYtTable::Match(subNode.Get())) {
+                                auto tableIt = tableEpochs.find(subNode.Get());
+                                if (tableEpochs.cend() != tableIt) {
+                                    TYtTableInfo tableInfo = subNode;
+                                    tableInfo.Epoch = tableIt->second;
+                                    return tableInfo.ToExprNode(ctx, subNode->Pos()).Ptr();
+                                }
                             }
+                            return subNode;
+                        }, ctx, subSettings);
+                        if (subStatus.Level != TStatus::Ok) {
+                            return false;
                         }
-                        return subNode;
-                    }, ctx, subSettings);
-                    if (subStatus.Level != TStatus::Ok) {
+
+                        node->ChildRef(index) = std::move(tables);
+                        return true;
+                    };
+
+                    if (!updateTableEpoch(PrimaryTableIndex)) {
                         return {};
                     }
 
+                    if (TYtWrite::Match(node.Get())) {
+                        TYtWrite write(node);
+                        if (IsCreateSymlinkWrite(write) && !updateTableEpoch(SymlinkTargetIndex)) {
+                            return {};
+                        }
+                    }
+
                     ioEpochs.erase(it);
-                    node->ChildRef(2) = std::move(tables);
                 }
             }
 

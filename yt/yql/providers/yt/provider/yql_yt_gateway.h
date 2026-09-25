@@ -229,6 +229,8 @@ public:
             TYtTableMetaInfo::TPtr Meta;
             TYtTableStatInfo::TPtr Stat;
             bool WriteLock = false;
+            bool SymlinkLock = false;
+            bool ReferenceLock = false;
         };
         TVector<TTableData> Data;
     };

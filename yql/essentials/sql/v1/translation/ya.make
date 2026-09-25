@@ -28,6 +28,7 @@ SRCS(
     context.cpp
     ddl_backup.cpp
     ddl_resource_pool.cpp
+    ddl_symlink.cpp
     join.cpp
     insert.cpp
     list_builtin.cpp
@@ -45,6 +46,7 @@ SRCS(
     sql_call_expr.cpp
     sql_ddl_backup.cpp
     sql_ddl_resource_pool.cpp
+    sql_ddl_symlink.cpp
     sql_expression.cpp
     sql_group_by.cpp
     sql_match_recognize.cpp

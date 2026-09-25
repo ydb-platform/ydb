@@ -1,3 +1,5 @@
+* Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
+
 * Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
 
 * Added `Float16` and `BFloat16` vector index types.

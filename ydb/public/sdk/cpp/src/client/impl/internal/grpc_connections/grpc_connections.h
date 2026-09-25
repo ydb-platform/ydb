@@ -97,6 +97,13 @@ public:
     bool TryCreateContext(IQueueClientContextPtr& context);
     void Stop(bool wait = false);
 
+    std::uint64_t GetMaxOutboundMessageSize() const {
+        if (MaxOutboundMessageSize_ > 0) {
+            return MaxOutboundMessageSize_;
+        }
+        return MaxMessageSize_ > 0 ? MaxMessageSize_ : NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT;
+    }
+
     template<typename TService>
     using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
@@ -136,9 +143,7 @@ public:
         if (MaxInboundMessageSize_ > 0) {
             clientConfig.MaxInboundMessageSize = MaxInboundMessageSize_;
         }
-        if (MaxOutboundMessageSize_ > 0) {
-            clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
-        }
+        clientConfig.MaxOutboundMessageSize = GetMaxOutboundMessageSize();
 
         clientConfig.LoadBalancingPolicy = GRpcLoadBalancingPolicy_;
 

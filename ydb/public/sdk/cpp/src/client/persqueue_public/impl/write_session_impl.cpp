@@ -1261,12 +1261,12 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
+    // Split ready blocks into requests bounded by the driver's outbound limit.
     while(IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sentAtMs = TInstant::Now().MilliSeconds();
-        NGrpc::TRequestSizeLimiter sizeLimiter(2);
+        NGrpc::TRequestSizeLimiter sizeLimiter(2, NGrpc::GetMaxGrpcMessageSize(*Connections));
 
         // Sent blocks while we can without messages reordering
         while (IsReadyToSendNextImpl()) {

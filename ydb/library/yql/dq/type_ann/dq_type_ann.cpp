@@ -653,6 +653,9 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
                                 "Specifying key columns is not allowed for cross join"));
             return IGraphTransformer::TStatus(TStatus::Error);
         }
+    } else if (leftKeysNode.ChildrenSize() == 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftKeysNode.Pos()), "At least one key column must be specified"));
+        return IGraphTransformer::TStatus(TStatus::Error);
     }
 
     std::vector<const TTypeAnnotationNode*> resultItems;

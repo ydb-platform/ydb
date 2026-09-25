@@ -127,7 +127,8 @@ public:
         // Read from DDisk.
         PBufferErasing,
 
-        // The data is erased from the PBuffers.
+        // Every requested host confirmed the erase, or the restore barrier
+        // covers the record: whatever is left on a disabled host is garbage.
         // Read from DDisk.
         PBufferErased,
     };
@@ -171,9 +172,17 @@ public:
     void RequestErase(THostIndex host);
     void ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
-    // Hosts where a write was requested but erase is not yet
-    // requested/confirmed.
+    // Enabled hosts where a write was requested but erase is not yet
+    // requested/confirmed. A disabled host is left to the restore barrier.
     [[nodiscard]] THostMask GetEraseNeeded() const;
+    // True while the data lives only in PBuffers.
+    [[nodiscard]] bool IsPreFlush() const;
+    // True when every enabled host confirmed the erase, yet a disabled one
+    // has not: only the restore barrier can end the record.
+    [[nodiscard]] bool IsWaitingForRestoreBarrier() const;
+    // Ends a record waiting for the restore barrier once the restore barrier is
+    // persisted.
+    void ForgetByRestoreBarrier();
 
     // Update state according to the changed configuration.
     void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
@@ -205,8 +214,11 @@ private:
     void CheckInvariants() const;
 
     void MaybeAdvanceToFlushed();
+    // Moves the record to PBufferErased once every requested host confirmed
+    // the erase, disabled hosts included.
     void MaybeAdvanceToErased();
     void MaybeQueryErase();
+    [[nodiscard]] bool CanForget() const;
 
     [[nodiscard]] TPBufferKey GetPBufferKey() const;
 

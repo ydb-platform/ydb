@@ -81,6 +81,9 @@ TDirtyMapStateProto MakeCompactedDirtyMapState(
             *result.AddDDiskStates() = state.GetDDiskStates(slot);
         }
     }
+    // The restore barrier is not per slot: it survives the compaction.
+    result.SetRestoreBarrierGeneration(state.GetRestoreBarrierGeneration());
+    result.SetRestoreBarrierLsn(state.GetRestoreBarrierLsn());
     return result;
 }
 

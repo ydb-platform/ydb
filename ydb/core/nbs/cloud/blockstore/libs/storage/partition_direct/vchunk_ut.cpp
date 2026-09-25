@@ -284,8 +284,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
                 ->Print());
 
-        // Acknowledging the PBuffer writes does not release the barrier: the
-        // entry stays inflight until it is flushed and erased.
+        // Acknowledging the PBuffer writes does not release the restore
+        // barrier: the entry stays inflight until it is flushed and erased.
         SetWriteResult(TDBGWriteBlocksResponse{.Error = MakeError(S_OK)}, true);
         const auto& result = future.GetValue(TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL_C(
@@ -1586,6 +1586,100 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    // A host goes offline while the erase to it is in flight: the record
+    // cannot be erased there, so the vchunk persists a barrier that covers
+    // it and forgets it once the restore barrier is committed.
+    Y_UNIT_TEST_F(ShouldPersistRestoreBarrierForDisabledHost, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            true,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
+                const auto range = TBlockRange16::WithLength(10, 10);
+                const auto hosts = THostMask::MakeAll(3);
+
+                dirtyMap.RegisterInflightWrite(MakeKey(100), range);
+                dirtyMap.WriteFinished(MakeKey(100), range, hosts, hosts);
+                for (const auto& [route, hint]:
+                     dirtyMap.MakeFlushHint(1).GetAllHints())
+                {
+                    dirtyMap.FlushFinished(
+                        route,
+                        MakePBufferKeys(hint.Segments),
+                        {});
+                }
+                for (const auto& [host, hint]:
+                     dirtyMap.MakeEraseHint(1).GetAllHints())
+                {
+                    if (host != THostIndex{2}) {
+                        dirtyMap.EraseFinished(
+                            host,
+                            MakePBufferKeys(hint.Segments),
+                            {});
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
+
+                // Host 2 goes offline with its erase in flight.
+                vchunk->SetHostState(2, EHostState::TemporaryOffline);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        // The config with the disabled host is persisted, then the dirty map
+        // state with the restore barrier over the record.
+        bool barrierPersisted = false;
+        for (int i = 0; i < 4 && !barrierPersisted; ++i) {
+            ReplyUpdateRequests();
+            DrainExecutor(DirectBlockGroup->GetExecutor());
+            for (const auto& request:
+                 PartitionDirectService->UpdateDirtyMapStateRequests)
+            {
+                if (request.Proto.GetRestoreBarrierLsn() == MakeKey(100).Lsn) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        MakeKey(100).Generation,
+                        request.Proto.GetRestoreBarrierGeneration());
+                    barrierPersisted = true;
+                }
+            }
+            ReplyUpdateDirtyMapStateRequests();
+            DrainExecutor(DirectBlockGroup->GetExecutor());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(true, barrierPersisted);
+
+        // The barrier is committed: the record left the dirty map.
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    0,
+                    AccessBlocksDirtyMap(*vchunk).GetInflightCount());
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
     // A second StartPersist call while a persist is already in flight must

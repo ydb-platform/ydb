@@ -148,8 +148,13 @@ public:
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
-    // Returns an empty proto when no DDisk needs repair.
+    // Returns an empty proto when no DDisk needs repair and no barrier is set.
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
+    // The restore barrier to persist and the one already persisted. A record
+    // waiting for the restore barrier leaves the map once the persisted barrier
+    // is not below its key.
+    [[nodiscard]] TPBufferKey GetRestoreBarrierTarget() const;
+    [[nodiscard]] TPBufferKey GetPersistedRestoreBarrier() const;
     // Predicts the future state after applying vChunkConfig without changing
     // the current in-memory state.
     [[nodiscard]] TDirtyMapStateProto MakeFutureState(
@@ -241,6 +246,12 @@ private:
         TInflightInfo& inflightInfo);
 
     void RemovePBuffer(TPBufferKey pBufferKey);
+    // Raises the restore barrier target over the records waiting for it, but
+    // strictly below every record whose data lives only in PBuffers.
+    void MaybeAdvanceRestoreBarrier();
+    // Forgets the records waiting for the restore barrier that the persisted
+    // barrier now covers.
+    void ForgetBelowRestoreBarrier();
 
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     const IArenaAllocatorPtr ArenaAllocator;
@@ -279,8 +290,12 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
-    // Changes when the behind map changes.
+    // Changes when the behind map or the restore barrier target changes.
     ui32 StateGeneration = 0;
+    TPBufferKey RestoreBarrierTarget;
+    // The state generation in which RestoreBarrierTarget got its value.
+    ui32 RestoreBarrierTargetGeneration = 0;
+    TPBufferKey PersistedRestoreBarrier;
     // Last persisted DDisks states generation.
     ui32 PersistedStateGeneration = 0;
 

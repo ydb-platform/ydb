@@ -966,6 +966,8 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
+    // Persists only when the restore barrier target has risen.
+    StartPersist();
     ScheduleCleaningUp();
 }
 
@@ -1059,6 +1061,8 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
     StartPersist();
+    // The persisted barrier may have forgotten records that gated erases.
+    DoErase(false);
     DemoteIfNeeded();
     ScheduleCleaningUp();
 }

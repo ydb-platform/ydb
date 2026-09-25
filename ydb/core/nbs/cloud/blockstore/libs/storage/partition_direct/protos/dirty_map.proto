@@ -16,4 +16,8 @@ message TDDiskState {
 message TDirtyMapState {
     // The map of behind blocks.
     repeated TDDiskState DDiskStates = 2;
+    // The restore barrier: every PBuffer copy of this vchunk with a key not
+    // above it is garbage and is not restored after a restart.
+    uint32 RestoreBarrierGeneration = 3;
+    uint64 RestoreBarrierLsn = 4;
 }

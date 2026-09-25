@@ -48,7 +48,7 @@ python3 .github/scripts/utils/analytics/ci_metrics.py enrich my_step --label rep
 python3 .github/scripts/utils/analytics/ci_metrics.py send
 ```
 
-`--runner` / `--usage` — только в обёртке (инвентарь хоста и свежий usage). Nightly `ydbd_cached_build` передаёт `--runner` на `start` и `--usage` на `end`.
+`--runner` / `--usage` — только в обёртке (инвентарь хоста и свежий usage). Nightly `ydbd_cached_build` передаёт `--runner` на `start` и `--usage` на `end`. В `test_ya` `cache_mode=dist_cache` ставится по `put_build_results_to_cache` (или заранее из `$CI_CACHE_MODE`).
 
 Таблица CI: `analytics/ci_metrics` (колонки workflow / job / PR / commit + `github.*` в labels).
 

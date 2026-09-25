@@ -230,6 +230,14 @@ runs:
           shift
           python3 "$CI_METRICS_PY" enrich --name "$name" "$@" || true
         }
+        record_ci_flush() {
+          # Completed rows only. Does not close open spans (ya_make still running).
+          python3 "$CI_METRICS_PY" flush || true
+        }
+        record_ci_send_cancelled() {
+          python3 "$CI_METRICS_PY" send --conclusion cancelled || true
+        }
+        trap 'record_ci_send_cancelled' TERM INT
 
         if [ "$COLLECT_COREDUMPS" = "true" ]; then
           sudo mkdir -p /coredumps
@@ -372,6 +380,7 @@ runs:
           else
             record_ci_end graph_compare success
           fi
+          record_ci_flush
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.py returned $RC, build failed"
@@ -413,7 +422,7 @@ runs:
         fi
 
         if [ -z "${CI_CACHE_MODE:-}" ]; then
-          if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+          if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
             CI_CACHE_MODE=dist_cache
           else
             CI_CACHE_MODE=none
@@ -422,6 +431,7 @@ runs:
         echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         python3 "$CI_METRICS_PY" track runner_info --kind info --source ya_phase --runner \
           --label "cache_mode=${CI_CACHE_MODE}" || true
+        record_ci_flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
@@ -579,6 +589,7 @@ runs:
               --label "error=ya make rc=${RC}" \
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
               --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
+            record_ci_flush
             break
           fi
 
@@ -658,6 +669,7 @@ runs:
             --label "report_url=${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
             --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
             --label "artifacts_url=${CURRENT_PUBLIC_DIR_URL}/"
+          record_ci_flush
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -691,6 +703,7 @@ runs:
           record_ci_start upload_tests_results "$RETRY"
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
           record_ci_end upload_tests_results success
+          record_ci_flush
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break

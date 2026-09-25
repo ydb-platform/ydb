@@ -159,8 +159,6 @@ namespace NTabletFlatExecutor {
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
 
-        bool InSyncCommit() const noexcept { return Sync; }
-
         ui64 Stamp() const noexcept
         {
             return NTable::TTxStamp{ Gen, Head };

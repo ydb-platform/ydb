@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
     }
 
-    // Regression: DriveVacuumGc(true) must not cancel another channel's pending backoff retry.
+    // Regression: vacuum progress must not cancel another channel's pending backoff retry.
     Y_UNIT_TEST(BackoffPreservedOnSuccessOfOtherChannel) {
         const ui64 tabletId = 51;
         const ui32 group0 = 301;
@@ -534,7 +534,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             UNIT_ASSERT_C(ch1RetryDelay, "ch1 error must schedule a backoff retry");
         }
 
-        // Simulate DriveVacuumGc(true): a global SendCollectGarbage triggered by ch0 success.
+        // Simulate vacuum progress: a global SendCollectGarbage triggered by ch0 success.
         {
             const auto done = runtime.AllocateEdgeActor();
             runtime.Register(new TCollectGarbageDriver(&gcLogic, done));

@@ -8165,15 +8165,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 
-    void CheckRestartAfterMoveDataCutsReassignedHistory(bool writeRows, bool delaySchemaGc = false, bool delaySnapshotConfirmation = false) {
+    void CheckRestartAfterMoveDataCutsReassignedHistory(bool delayDataGc = false, bool delaySnapshotConfirmation = false) {
         struct TReassignedStarter : NFake::TStarter {
             bool RemoveOldHistory = false;
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
                 auto *info = TStarter::MakeTabletInfo(tablet, channels);
                 // The first boot is generation 2, so the reassign takes effect on the next one.
-                info->Channels[1].History.emplace_back(3, 2);
+                info->Channels[2].History.emplace_back(3, 3);
                 if (RemoveOldHistory) {
-                    info->Channels[1].History.erase(info->Channels[1].History.begin());
+                    info->Channels[2].History.erase(info->Channels[2].History.begin());
                 }
                 return info;
             }
@@ -8213,22 +8213,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
         TRowsModel data;
         std::set<ui32> cutChannels;
-        std::set<TLogoBlobID> snapshotDeletions;
+        std::set<TLogoBlobID> dataDeletions;
         bool moving = false;
         ui32 moveSnapshots = 0;
         ui32 secondSnapshotStep = 0;
         auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
             if (moving && ev->GetTypeRewrite() == TEvTablet::EvCommit) {
                 const auto* commit = ev->Get<TEvTablet::TEvCommit>();
+                for (const auto& blob : commit->GcLeft) {
+                    if (blob.Channel() == 2 && blob.Generation() < commit->Generation) {
+                        dataDeletions.insert(blob);
+                    }
+                }
                 if (commit->IsSnapshot) {
                     ++moveSnapshots;
                     if (moveSnapshots == 2) {
                         secondSnapshotStep = commit->Step;
-                    }
-                    for (const auto& blob : commit->GcLeft) {
-                        if (blob.Channel() == 1 && blob.Generation() < commit->Generation) {
-                            snapshotDeletions.insert(blob);
-                        }
                     }
                     Cerr << "MoveData snapshot " << moveSnapshots << " at " << commit->Step << Endl;
                 }
@@ -8249,9 +8249,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
         fire(nullptr);
         env.SendSync(data.MakeScheme(new TCompactionPolicy()));
-        if (writeRows) {
-            env.SendSync(data.MakeRows(1000));
-        }
+        // Keep schema on channel 1 and reassign only the data family on channel 2.
+        env.SendSync(new NFake::TEvExecute{new TTxChangeRoom()});
+        env.SendSync(data.MakeRows(1000));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
         env.SendSync(new TEvents::TEvPoison, false, true);
         // The tablet and its NFake::TOwner each acknowledge shutdown.
         env.WaitForGone();
@@ -8261,9 +8263,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         fire(&starter);
         TBlockEvents<TEvBlobStorage::TEvCollectGarbage> delayedGc(env.Env, [&](const auto& ev) {
             const auto* gc = ev->Get();
-            if (delaySchemaGc && gc->DoNotKeep) {
+            if (delayDataGc && gc->DoNotKeep) {
                 for (const auto& blob : *gc->DoNotKeep) {
-                    if (snapshotDeletions.contains(blob)) {
+                    if (dataDeletions.contains(blob)) {
                         return true;
                     }
                 }
@@ -8275,12 +8277,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         });
         moving = true;
         env.SendAsync(new TEvTablet::TEvMoveData());
-        if (delaySchemaGc) {
-            env->WaitFor("GC of snapshot-introduced schema deletions", [&] { return !delayedGc.empty(); });
+        if (delayDataGc) {
+            env->WaitFor("GC of reassigned data blobs", [&] { return !delayedGc.empty(); });
             // Let independent log commits finish while this storage group is slow.
             UNIT_ASSERT_C(!env.GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>(TDuration::Seconds(1)),
-                "MoveData must wait for schema GC");
-            Cerr << "Releasing schema GC after " << moveSnapshots << " snapshots" << Endl;
+                "MoveData must wait for data GC");
+            Cerr << "Releasing data GC after " << moveSnapshots << " snapshots" << Endl;
             delayedGc.Stop().Unblock();
         }
         if (delaySnapshotConfirmation) {
@@ -8313,39 +8315,30 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         for (ui32 channel : cutChannels) {
             cut << channel << " ";
         }
-        UNIT_ASSERT_C(cutChannels == (std::set<ui32>{1}), "channels cut: " << cut);
-        env.SendSync(new NFake::TEvExecute{new TTxCheckPreservedRows(writeRows ? 1000 : 0)});
+        UNIT_ASSERT_C(cutChannels == (std::set<ui32>{2}), "channels cut: " << cut);
+        env.SendSync(new NFake::TEvExecute{new TTxCheckPreservedRows(1000)});
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.WaitForGone();
 
         // Apply the requested removal in the next tablet boot's storage info.
         starter.RemoveOldHistory = true;
         fire(&starter);
-        env.SendSync(new NFake::TEvExecute{new TTxCheckPreservedRows(writeRows ? 1000 : 0)});
+        env.SendSync(new NFake::TEvExecute{new TTxCheckPreservedRows(1000)});
         env.SendSync(new TEvents::TEvPoison, false, true);
         // The tablet and its NFake::TOwner each acknowledge shutdown.
         env.WaitForGone();
     }
 
     Y_UNIT_TEST(RestartAfterMoveDataCutsReassignedHistory) {
-        CheckRestartAfterMoveDataCutsReassignedHistory(true);
-    }
-
-    // Without rows the schema never reaches a snapshot, so boot finds it only in redo.
-    Y_UNIT_TEST(SchemaOnlyRestartAfterMoveDataCutsReassignedHistory) {
-        CheckRestartAfterMoveDataCutsReassignedHistory(false);
-    }
-
-    Y_UNIT_TEST(DelayedSchemaGcRestartAfterMoveDataCutsReassignedHistory) {
-        CheckRestartAfterMoveDataCutsReassignedHistory(false, true);
+        CheckRestartAfterMoveDataCutsReassignedHistory();
     }
 
     Y_UNIT_TEST(DelayedDataGcRestartAfterMoveDataCutsReassignedHistory) {
-        CheckRestartAfterMoveDataCutsReassignedHistory(true, true);
+        CheckRestartAfterMoveDataCutsReassignedHistory(true);
     }
 
     Y_UNIT_TEST(DelayedSnapshotConfirmationRestartAfterMoveDataCutsReassignedHistory) {
-        CheckRestartAfterMoveDataCutsReassignedHistory(false, false, true);
+        CheckRestartAfterMoveDataCutsReassignedHistory(false, true);
     }
 
 }

@@ -1044,16 +1044,23 @@ void TExecutor::FollowerGcApplied(ui32 step, TDuration followerSyncDelay) {
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_FOLLOWERSYNC_LATENCY].IncrementFor(followerSyncDelay.MicroSeconds());
 }
 
-void TExecutor::DriveVacuumGc(bool collect) {
-    VacuumLogic->OnCollectedGarbage(OwnerCtx());
-    if (collect && VacuumLogic->NeedGC()) {
-        GcLogic->SendCollectGarbage(ActorContext());
-        // A channel with nothing left to collect sends nothing and brings no result, so re-check right away.
-        VacuumLogic->OnCollectedGarbage(OwnerCtx());
+void TExecutor::ScheduleVacuumProgress() {
+    // Barrier releases may run in a loop or inside a synchronous commit.
+    // Coalesce their work and start snapshots only after that commit has finished.
+    if (Owner && !VacuumProgressScheduled && (VacuumLogic->NeedGC() || VacuumLogic->NeedLogSnaphot())) {
+        VacuumProgressScheduled = true;
+        Send(SelfId(), new TEvPrivate::TEvVacuumProgress());
     }
-    // N.B. PassAway may have already been called
-    // A barrier may be released inside an open sync commit, which then takes the snapshot itself
-    if (Owner && !CommitManager->InSyncCommit() && VacuumLogic->NeedLogSnaphot()) {
+}
+
+void TExecutor::DriveVacuumProgress() {
+    VacuumProgressScheduled = false;
+    if (VacuumLogic->NeedGC()) {
+        GcLogic->SendCollectGarbage(ActorContext());
+    }
+    // Empty channels advance their GC boundary without sending a request.
+    VacuumLogic->CheckGcProgress();
+    if (VacuumLogic->NeedLogSnaphot()) {
         MakeLogSnapshot();
     }
 }
@@ -1067,7 +1074,7 @@ void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
                 Owner->CompletedLoansChanged(OwnerCtx());
             }
         }
-        DriveVacuumGc(true);
+        ScheduleVacuumProgress();
     }
 
     barrier.Drop();
@@ -1475,7 +1482,7 @@ void TExecutor::Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev) {
     }
 
     VacuumLogic->OnGcForStepAckResponse(Generation(), ev->Get()->Step, OwnerCtx());
-    DriveVacuumGc(true);
+    ScheduleVacuumProgress();
 }
 
 void TExecutor::AdvancePendingPartSwitches() {
@@ -2964,7 +2971,7 @@ void TExecutor::MakeLogSnapshot() {
         version->SetHead(ui32(NTable::ECompatibility::Edge));
     }
 
-    LogicAlter->SnapToLog(snap, *commit);
+    LogicAlter->SnapToLog(snap);
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;
@@ -3378,7 +3385,10 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         LogicSnap->Confirm(msg->Step);
         GcLogic->Confirm(ctx);
 
-        VacuumLogic->OnSnapshotCommited(Generation(), step, ctx);
+        VacuumLogic->OnSnapshotCommited(Generation(), step, OwnerCtx());
+        if (!Owner) {
+            return;
+        }
         if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
@@ -3423,7 +3433,7 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
     TActiveTransactionZone activeTransaction(this);
 
     GcLogic->OnConfirmSnapshot(step, ctx);
-    DriveVacuumGc(true);
+    ScheduleVacuumProgress();
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
@@ -3431,7 +3441,9 @@ void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     // An idle tablet sends no more collections by itself; failures keep their own backoff.
-    DriveVacuumGc(ev->Get()->Status == NKikimrProto::OK);
+    if (ev->Get()->Status == NKikimrProto::OK) {
+        ScheduleVacuumProgress();
+    }
 }
 
 void TExecutor::Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx) {
@@ -4488,6 +4500,7 @@ STFUNC(TExecutor::StateWork) {
         cFunc(TEvPrivate::EvUpdateCompactions, UpdateCompactions);
         HFunc(TEvPrivate::TEvLeaseExtend, Handle);
         HFunc(TEvPrivate::TEvRetryGcRequest, Handle);
+        cFunc(TEvPrivate::EvVacuumProgress, DriveVacuumProgress);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvents::TEvFlushLog, Handle);
         hFunc(NSharedCache::TEvResult, Handle);

@@ -31,15 +31,16 @@ namespace NTabletFlatExecutor {
             largeGlobId.MaterializeTo(Log), Bytes += largeGlobId.Bytes;
         }
 
-        void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, TLogCommit &commit)
+        void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
         {
             auto items = snap.MutableSchemeInfoBodies();
             for (const auto &logo : Log)
                 LogoBlobIDFromLogoBlobID(logo, items->Add());
 
-            // The commit's GcLeft collects them in this generation; GcSnapLeft must not list them again or boot deletes them twice.
-            commit.GcDelta.Deleted.insert(commit.GcDelta.Deleted.end(), ObsoleteLog.begin(), ObsoleteLog.end());
-            ObsoleteLog.clear();
+            auto deleted = snap.MutableGcSnapLeft();
+            for (const auto &logo : ObsoleteLog) {
+                LogoBlobIDFromLogoBlobID(logo, deleted->Add());
+            }
         }
 
         void WriteLog(TLogCommit &commit, TString alter)

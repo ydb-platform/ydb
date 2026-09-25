@@ -90,14 +90,6 @@ namespace NBoot {
                     logic->Clear();
                 }
                 logic->RestoreLog(largeGlobId);
-                // A body replayed from redo needs the same reassignment check as a snapshot body, or it stays live forever.
-                if (largeGlobId) {
-                    const auto& blob = largeGlobId.Lead;
-                    const auto* channel = Logic->Info->ChannelInfo(blob.Channel());
-                    if (channel && blob.Generation() < channel->LatestEntry()->FromGeneration) {
-                        Logic->Result().ShouldSnapshotScheme = true;
-                    }
-                }
             }
         }
 

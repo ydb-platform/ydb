@@ -193,6 +193,61 @@ int BlobStorageValueCountInAllGroups(TMyEnvBase& env, const TString& value) {
 Y_UNIT_TEST_SUITE(Vacuum) {
     ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac);
 
+    void CheckCompletion(bool stopTablet) {
+        class TContextCheckingTablet : public NFake::TDummy {
+        public:
+            TContextCheckingTablet(const TActorId& tablet, TTabletStorageInfo* info, const TActorId& edge, bool stopTablet)
+                : TDummy(tablet, info, edge)
+                , Edge(edge)
+                , StopTablet(stopTablet)
+            {}
+
+            void VacuumComplete(ui64 generation, const TActorContext& ctx) override {
+                UNIT_ASSERT_VALUES_EQUAL(ctx.SelfID, SelfId());
+                ctx.Send(Edge, new NFake::TEvDataCleaned(generation));
+                if (StopTablet) {
+                    HandlePoison(ctx);
+                }
+            }
+
+            const TActorId Edge;
+            const bool StopTablet;
+        };
+
+        TMyEnvBase env;
+        env.FireTablet(env.Edge, env.Tablet, [&env, stopTablet](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TContextCheckingTablet(tablet, info, env.Edge, stopTablet);
+        });
+        env.WaitFor<NFake::TEvReady>();
+        ui32 snapshots = 0;
+        ui32 finalSnapshotStep = 0;
+        auto commits = env->AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+            if (ev->Get()->IsSnapshot && ++snapshots == 3) {
+                finalSnapshotStep = ev->Get()->Step;
+            }
+        });
+        auto results = env->AddObserver<TEvTablet::TEvCommitResult>([&](auto& ev) {
+            if (stopTablet && finalSnapshotStep && ev->Get()->Step == finalSnapshotStep) {
+                ev->Get()->YellowMoveChannels.push_back(1);
+            }
+        });
+        env.SendSync(new NFake::TEvCall{[](auto* executor, const auto& ctx) {
+            executor->StartVacuum(234ull);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->VacuumGeneration, 234);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots, 3);
+    }
+
+    Y_UNIT_TEST(CompletionUsesTabletActorContext) {
+        CheckCompletion(false);
+    }
+
+    Y_UNIT_TEST(CompletionMayStopTablet) {
+        CheckCompletion(true);
+    }
+
     Y_UNIT_TEST(StartVacuumNoTables) {
         TMyEnvBase env;
         env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);

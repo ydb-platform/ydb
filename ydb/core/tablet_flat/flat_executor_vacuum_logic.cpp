@@ -179,10 +179,9 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step, const TActorCo
     }
 }
 
-void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
-    Y_UNUSED(ctx);
+void TVacuumLogic::CheckGcProgress() {
     if (auto logl = Logger->Log(ELnLev::Dbg03)) {
-        logl << "TVacuumLogic: OnCollectedGarbage"
+        logl << "TVacuumLogic: CheckGcProgress"
             << " in tablet with id " << Owner->TabletID()
             << ", state: " << State
             << ", current Vacuum tag: " << CurrentVacuumTag;
@@ -233,14 +232,13 @@ void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TAct
     }
 }
 
-bool TVacuumLogic::NeedGC() {
+bool TVacuumLogic::NeedGC() const {
     switch (State) {
         case EVacuumState::PendingSecondSnapshot:
-            return GcLogic->HasGarbageBefore(FirstLogSnaphotStep);
         case EVacuumState::WaitSecondSnapshot:
         case EVacuumState::WaitAllGCs:
         case EVacuumState::WaitTabletGC: {
-            return GcLogic->HasGarbageBefore(SecondLogSnaphotStep);
+            return true;
         }
         default: {
             return false;

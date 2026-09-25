@@ -43,9 +43,9 @@ public:
     bool NeedLogSnaphot();
     void OnMakeLogSnapshot(ui32 generation, ui32 step);
     void OnSnapshotCommited(ui32 generation, ui32 step, const TActorContext& ctx);
-    void OnCollectedGarbage(const TActorContext& ctx);
+    void CheckGcProgress();
     void OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx);
-    bool NeedGC();
+    bool NeedGC() const;
 
 private:
     void CompleteVacuum(const TActorContext& ctx);
@@ -74,7 +74,7 @@ private:
     // two subsequent are snapshots required to force GC
     TGCTime FirstLogSnaphotStep;
     TGCTime SecondLogSnaphotStep;
-    // Taken once nothing deleted before the second snapshot awaits GC, so a restart finds no old deletions to replay.
+    // Persists executor GC progress after everything before the second snapshot is collected.
     TGCTime FinalLogSnaphotStep;
 };
 

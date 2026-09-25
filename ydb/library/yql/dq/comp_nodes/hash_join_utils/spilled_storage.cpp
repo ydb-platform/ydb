@@ -4,10 +4,10 @@
 
 namespace NKikimr::NMiniKQL {
 
-NYql::TChunkedBuffer Serialize(const TDynBitMap& bits) {
+NYql::TChunkedBuffer Serialize(const TMKQLBitMap& bits) {
     NYql::TChunkedBuffer buffer;
     NYql::TChunkedBufferOutput output(buffer);
-    bits.Save(&output);
+    ::Save(&output, bits.Chunks());
     return buffer;
 }
 
@@ -49,12 +49,12 @@ struct TChunkedBufferInput final : public IInputStream {
     NYql::TChunkedBuffer Buffer;
 };
 
-void Parse(NYql::TChunkedBuffer&& buffer, TDynBitMap& bits) {
+void Parse(NYql::TChunkedBuffer&& buffer, TMKQLBitMap& bits) {
     TChunkedBufferInput input(std::move(buffer));
-    TDynBitMap parsed;
-    parsed.Load(&input);
+    TMKQLBitMap parsed;
+    ::Load(&input, parsed.Chunks());
     MKQL_ENSURE(input.Buffer.Empty(), "unexpected trailing data in probe match bitmap");
-    bits.Swap(parsed);
+    bits = std::move(parsed);
 }
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout) {

@@ -3,19 +3,17 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_join_table.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/join_defs.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/mkql_bitmap.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-#include <util/generic/bitmap.h>
-
 namespace NKikimr::NMiniKQL {
 
-
 NYql::TChunkedBuffer Serialize(TPackResult&& result);
-NYql::TChunkedBuffer Serialize(const TDynBitMap& bits);
+NYql::TChunkedBuffer Serialize(const TMKQLBitMap& bits);
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout);
-void Parse(NYql::TChunkedBuffer&& buffer, TDynBitMap& bits);
+void Parse(NYql::TChunkedBuffer&& buffer, TMKQLBitMap& bits);
 
 template <typename T>
 NThreading::TFuture<ISpiller::TKey> Spill(ISpiller& spiller, T&& value) {
@@ -62,9 +60,9 @@ inline ESpillResult Wait() {
 
 struct TSpillingPage {
     void StartSpilling(ISpiller& spiller) {
-        if (ProbeMatchBits) {
-            MatchWrite = Spill(spiller, *ProbeMatchBits);
-            ProbeMatchBits.reset();
+        if (!ProbeMatchBits.Empty()) {
+            MatchWrite = Spill(spiller, ProbeMatchBits);
+            ProbeMatchBits.Reset();
         }
         Write = Spill(spiller, std::move(Page));
     }
@@ -72,7 +70,7 @@ struct TSpillingPage {
     TPackResult Page;
     NThreading::TFuture<ISpiller::TKey> Write;
     std::optional<NThreading::TFuture<ISpiller::TKey>> MatchWrite;
-    std::unique_ptr<TDynBitMap> ProbeMatchBits;
+    TMKQLBitMap ProbeMatchBits;
     ESide Side;
     int BucketIndex;
 };
@@ -264,7 +262,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         if (matched.has_value()) {
             const size_t row = BuildingMatchRows_[tuple.BucketIndex]++;
             BuildingMatchBits_[tuple.BucketIndex].Reserve(row + 1);
-            BuildingMatchBits_[tuple.BucketIndex][row] = *matched;
+            BuildingMatchBits_[tuple.BucketIndex].Set(row, *matched);
         } else {
             MKQL_ENSURE(BuildingMatchRows_[tuple.BucketIndex] == 0,
                         "all rows in a page must use the same match-state format");
@@ -315,8 +313,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                 MKQL_ENSURE(pages.size() == 1, "match bits belong to exactly one building page");
                 MKQL_ENSURE(BuildingMatchRows_[index] == static_cast<size_t>(result.Page.NTuples),
                             "match bitmap must contain one bit per tuple");
-                result.ProbeMatchBits = std::make_unique<TDynBitMap>();
-                result.ProbeMatchBits->Swap(BuildingMatchBits_[index]);
+                result.ProbeMatchBits = std::move(BuildingMatchBits_[index]);
                 BuildingMatchRows_[index] = 0;
             }
             State_.InMemoryPages.push_back(std::move(result));
@@ -326,7 +323,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     State State_;
     const NPackedTuple::TTupleLayout* Layout_;
 
-    TMKQLVector<TDynBitMap> BuildingMatchBits_;
+    TMKQLVector<TMKQLBitMap> BuildingMatchBits_;
     TMKQLVector<size_t> BuildingMatchRows_;
     std::optional<TMKQLVector<TSpillingPage>> SpillingPages_;
     ISpiller::TPtr Spiller_;

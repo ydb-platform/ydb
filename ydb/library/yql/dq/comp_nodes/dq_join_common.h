@@ -277,7 +277,7 @@ struct TTableAndSomeData {
     TMKQLDeque<size_t> FutureGridProbeIndices;
     TMKQLVector<TPendingProbeMatchWrite> PendingMatchWrites;
     std::optional<TPackResult> CurrentProbePack;
-    std::unique_ptr<TDynBitMap> CurrentMatchBits;
+    TMKQLBitMap CurrentMatchBits;
     ui32 ProbeResumeIndex = 0;
     size_t BuildCursor = 0;
     size_t PreservedResumeIndex = 0;
@@ -1030,12 +1030,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                             bool matched = false;
                             if constexpr (TracksProbeMatches()) {
-                                MKQL_ENSURE(table->CurrentMatchBits, "missing current probe page match state");
-                                matched = table->CurrentMatchBits->Get(idx - 1);
+                                MKQL_ENSURE(!table->CurrentMatchBits.Empty(),
+                                            "missing current probe page match state");
+                                matched = table->CurrentMatchBits.Get(idx - 1);
                             }
                             if (!lookupToTable(table->Table, probeTuple, table->BuildCursor, matched)) {
                                 if constexpr (TracksProbeMatches()) {
-                                    (*table->CurrentMatchBits)[idx - 1] = matched;
+                                    table->CurrentMatchBits.Set(idx - 1, matched);
                                 }
                                 table->ProbeResumeIndex = idx - 1;
                                 return EFetchResult::One;
@@ -1044,7 +1045,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 finishProbeRow(probeTuple, matched);
                             }
                             if constexpr (TracksProbeMatches()) {
-                                (*table->CurrentMatchBits)[idx - 1] = matched;
+                                table->CurrentMatchBits.Set(idx - 1, matched);
                             }
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
@@ -1052,16 +1053,17 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                         }
                         if constexpr (TracksProbeMatches()) {
-                            MKQL_ENSURE(table->CurrentMatchBits, "missing current probe page match state");
+                            MKQL_ENSURE(!table->CurrentMatchBits.Empty(),
+                                        "missing current probe page match state");
                             if (!lastProbePass) {
                                 MKQL_ENSURE(IsGrid, "only grid joins replay probe match state");
                                 MKQL_ENSURE(!table->FutureGridProbeIndices.empty(),
                                             "missing current grid probe page index");
                                 table->PendingMatchWrites.push_back(
-                                    {.Write = Spill(*Spiller_, *table->CurrentMatchBits),
+                                    {.Write = Spill(*Spiller_, table->CurrentMatchBits),
                                      .GridProbeIndex = table->FutureGridProbeIndices.front()});
                             }
-                            table->CurrentMatchBits.reset();
+                            table->CurrentMatchBits.Reset();
                             if constexpr (IsGrid) {
                                 table->FutureGridProbeIndices.pop_front();
                             }
@@ -1102,9 +1104,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 std::optional<NYql::TChunkedBuffer> buffer =
                                     ExtractReadyFuture(std::move(*GetFrontOrNull(table->FutureMatchBits)));
                                 MKQL_ENSURE(buffer, "missing queued probe page match state");
-                                table->CurrentMatchBits = std::make_unique<TDynBitMap>();
-                                Parse(std::move(*buffer), *table->CurrentMatchBits);
-                                MKQL_ENSURE(table->CurrentMatchBits->Size() >=
+                                Parse(std::move(*buffer), table->CurrentMatchBits);
+                                MKQL_ENSURE(table->CurrentMatchBits.Size() >=
                                                 static_cast<size_t>(table->CurrentProbePack->NTuples),
                                             "probe page and match bitmap sizes differ");
                             }

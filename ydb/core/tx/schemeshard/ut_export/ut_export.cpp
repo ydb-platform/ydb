@@ -11,6 +11,7 @@
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -5404,6 +5405,64 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
 
         VerifyExportCancelledAndForget(txId, ctx.ExportId);
         FinalizeColumnTableSlowS3Export(ctx);
+    }
+
+    Y_UNIT_TEST(ColumnTableExportHangsAfterReproposeAndSsCsReboots) {
+        InitColumnTableExportSlowS3Test();
+        ui64 txId = 100;
+        const auto tableInfo = CreateColumnTableWithData(txId, "ColumnTable");
+        const auto getAliveCounter = MakeColumnTableExportAliveCounter();
+
+        NKikimrTxColumnShard::TEvProposeTransaction capturedPropose;
+        NActors::TBlockEvents<NKikimr::TEvColumnShard::TEvProposeTransaction> capturePropose(Runtime(), [&](const auto& ev) {
+            if (ev->Get()->Record.GetTxKind() == NKikimrTxColumnShard::TX_KIND_BACKUP) {
+                capturedPropose.CopyFrom(ev->Get()->Record);
+            }
+            return false;
+        });
+
+        // Block SS subscriptions for the backup tx only: SS stays in ProposedWaitParts and CS keeps the
+        // zombie operator until we unblock. The copy-table op uses the same event and must proceed.
+        NActors::TBlockEvents<NKikimr::TEvColumnShard::TEvNotifyTxCompletion> blockNotify(Runtime(), [&](const auto& ev) {
+            return capturedPropose.GetTxId() != 0 && ev->Get()->Record.GetTxId() == capturedPropose.GetTxId();
+        });
+
+        const ui64 exportId = StartColumnTableS3Export(txId, "ColumnTable", "ReproposeHang");
+        Runtime().WaitFor("backup propose captured", [&] {
+            return capturedPropose.GetTxId() != 0;
+        }, TDuration::Seconds(60));
+        Runtime().WaitFor("export finished on CS", [&] {
+            return getAliveCounter() == 0 && !S3Mock().GetData().empty();
+        }, TDuration::Seconds(60));
+        // CountTxInfoRows does a nested GrabEdgeEvent, so it cannot be used as a WaitFor predicate.
+        for (ui32 attempt = 0; NKikimr::NTxUT::CountTxInfoRows(Runtime(), tableInfo.ShardId) != 0; ++attempt) {
+            UNIT_ASSERT_C(attempt < 600, "Timeout while waiting for backup Progress to erase TxInfo");
+            Runtime().SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        capturePropose.Stop();
+
+        auto sender = Runtime().AllocateEdgeActor();
+        auto retry = std::make_unique<NKikimr::TEvColumnShard::TEvProposeTransaction>();
+        retry->Record.CopyFrom(capturedPropose);
+        ActorIdToProto(sender, retry->Record.MutableSource());
+        ForwardToTablet(Runtime(), tableInfo.ShardId, sender, retry.release());
+        {
+            auto ev = Runtime().GrabEdgeEvent<NKikimr::TEvColumnShard::TEvProposeTransactionResult>(sender);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), capturedPropose.GetTxId());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetStatus()), static_cast<ui32>(NKikimrTxColumnShard::PREPARED));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NTxUT::CountTxInfoRows(Runtime(), tableInfo.ShardId), 1u);
+
+        RebootTablet(Runtime(), tableInfo.ShardId, Runtime().AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NTxUT::CountTxInfoRows(Runtime(), tableInfo.ShardId), 1u);
+
+        blockNotify.Stop();
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NTxUT::CountTxInfoRows(Runtime(), tableInfo.ShardId), 0u);
     }
 
     Y_UNIT_TEST(CancelColumnTableExportRebootCSThenCancelAgain) {

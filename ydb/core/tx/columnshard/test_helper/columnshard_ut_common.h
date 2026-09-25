@@ -510,6 +510,8 @@ void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shard
 ui64 CountLocalDbTableRows(
     TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec);
 
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId = TTestTxConfig::TxTablet0);
+
 void VerifyNoBackupOrRestoreArtifacts(
     TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId = TTestTxConfig::TxTablet0);
 

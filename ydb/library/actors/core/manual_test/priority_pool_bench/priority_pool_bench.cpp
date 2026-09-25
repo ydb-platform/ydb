@@ -76,7 +76,7 @@ public:
         // Explicit executors: fixed dedicated workers, no harmonizer or shared
         // pool. Only the activation queue implementation differs.
         config.UsePriority = priority;
-        setup->Executors[0] = new TBasicExecutorPool(config, nullptr);
+        setup->Executors[0] = CreateBasicExecutorPool(config);
         setup->Scheduler.Reset(new TBasicSchedulerThread);
         System = std::make_unique<TActorSystem>(setup);
         System->Start();

@@ -216,7 +216,9 @@ Y_UNIT_TEST(ExecutorPriorityConfiguration) {
                 }
                 actorSystem.Stop();
             };
-            for (auto* pool : actorSystem.GetBasicExecutorPools()) {
+            const auto pools = actorSystem.GetBasicExecutorPools();
+            UNIT_ASSERT_VALUES_EQUAL(pools.size(), observations.size());
+            for (auto* pool : pools) {
                 const bool priority = pool->PoolId == 2;
                 NActors::TExecutorPoolStats poolStats;
                 TVector<NActors::TExecutorThreadStats> threadStats;

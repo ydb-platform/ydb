@@ -11,10 +11,6 @@ namespace NActors {
 // Allocated only for Basic pools with UsePriority enabled. Each mailbox has at
 // most one queued activation; a slot holds its priority and enqueue timestamp.
 class TExecutorPoolBaseMailboxed::TPriorityState {
-public:
-    alignas(64) TRingActivationQueueV4 HighActivations;
-
-private:
     static constexpr ui64 HighBit = ui64(1) << 63;
     static constexpr ui64 TimestampMask = ~HighBit;
 
@@ -30,7 +26,7 @@ private:
     }
 
 public:
-    explicit TPriorityState(ui32 threads);
+    TPriorityState() = default;
     ~TPriorityState();
 
     void Initialize(ui32 hint, bool high);

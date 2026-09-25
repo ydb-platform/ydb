@@ -11,7 +11,7 @@
 
 namespace NActors {
     class TExecutorThread;
-    class TBasicExecutorPool;
+    class TBasicExecutorPoolBase;
     class IExecutorPool;
 
     enum class EThreadState : ui64 {
@@ -38,7 +38,9 @@ namespace NActors {
         std::unique_ptr<TExecutorThread> Thread;
 
     protected:
-        friend class TBasicExecutorPool;
+        friend class TBasicExecutorPoolBase;
+        template<class TQueue>
+        friend class TBasicExecutorPoolImpl;
         friend class TSharedExecutorPool;
         friend class TIOExecutorPool;
         TThreadParkPad WaitingPad;

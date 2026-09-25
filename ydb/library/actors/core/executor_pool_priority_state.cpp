@@ -2,14 +2,7 @@
 
 namespace NActors {
 
-TExecutorPoolBaseMailboxed::TPriorityState::TPriorityState(ui32 threads)
-    : HighActivations(threads)
-{}
-
 TExecutorPoolBaseMailboxed::TPriorityState::~TPriorityState() {
-    // Match TExecutorPoolBase's cleanup of the Normal queue.
-    while (HighActivations.Pop(0))
-        ;
     for (auto& line : Lines) {
         delete line.load(std::memory_order_relaxed);
     }

@@ -1,13 +1,10 @@
 #include "actor_bootstrapped.h"
 #include "executor_pool_basic.h"
-#include "executor_pool_priority_queue.h"
 #include "scheduler_basic.h"
 #include "subsystems/stats.h"
 #include "thread_context.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/scope.h>
-#include <util/system/event.h>
 
 #include <atomic>
 #include <chrono>
@@ -332,66 +329,7 @@ void CheckShutdownWithQueuedWork(bool waker) {
     UNIT_ASSERT_VALUES_EQUAL(eventsDestroyed.load(), 16);
 }
 
-struct TPauseRingPublication {
-    inline static thread_local TManualEvent* Started = nullptr;
-    inline static thread_local TManualEvent* Release = nullptr;
-
-    static void ObserveAfterReserveSlotInFastPush() {
-        if (Started) {
-            Started->Signal();
-            Release->WaitI();
-        }
-    }
-};
-
-class TSmallRingQueue {
-    TMPMCRingQueueV4Correct<4, TPauseRingPublication> Queue;
-public:
-    explicit TSmallRingQueue(ui32 readers) : Queue(readers) {}
-
-    void Push(ui32 value, ui64) {
-        Y_ABORT_UNLESS(Queue.TryPush(value));
-    }
-
-    ui32 Pop(ui64) {
-        return Queue.TryPop().value_or(0);
-    }
-};
-
 Y_UNIT_TEST_SUITE(PriorityExecutorPool) {
-    Y_UNIT_TEST(TemporaryHighMissAllowsNormalWithoutLosingHigh) {
-        TManualEvent started, release;
-        TSmallRingQueue high(2), normal(2);
-        normal.Push(3, 0);
-        std::thread writer([&] {
-            TPauseRingPublication::Started = &started;
-            TPauseRingPublication::Release = &release;
-            high.Push(1, 0);
-        });
-        Y_DEFER {
-            release.Signal();
-            if (writer.joinable()) {
-                writer.join();
-            }
-        };
-        UNIT_ASSERT(started.WaitT(TDuration::Seconds(30)));
-        // The first High slot is reserved but unpublished. The next High is
-        // committed. A single High miss may select Normal; the next poll must
-        // still extract High without waiting for the paused publisher.
-        high.Push(2, 0);
-        bool isHigh = true;
-        const auto pop = [&] { return NActors::NPrivate::PopPriorityActivation(high, normal, 0, isHigh); };
-        UNIT_ASSERT_VALUES_EQUAL(pop(), 3);
-        UNIT_ASSERT(!isHigh);
-        UNIT_ASSERT_VALUES_EQUAL(pop(), 2);
-        UNIT_ASSERT(isHigh);
-        release.Signal();
-        writer.join();
-        UNIT_ASSERT_VALUES_EQUAL(pop(), 1);
-        UNIT_ASSERT(isHigh);
-        UNIT_ASSERT_VALUES_EQUAL(pop(), 0);
-    }
-
     Y_UNIT_TEST(OldestQueuedActivationStats) {
         for (bool waker : {false, true}) {
             for (bool shared : {false, true}) {

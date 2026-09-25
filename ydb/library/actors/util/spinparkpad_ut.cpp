@@ -10,6 +10,7 @@
 namespace NActors {
 
 Y_UNIT_TEST_SUITE(SpinParkPad) {
+    // Smoke change to select this UT in incremental PR-check.
 
     template<class T>
     class TSlowQueue {

@@ -3,6 +3,7 @@
 #include <ydb/library/security/util.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
 namespace NMVP::NOIDC {

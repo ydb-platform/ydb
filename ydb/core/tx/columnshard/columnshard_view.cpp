@@ -6,6 +6,7 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/datetime/base.h>
 

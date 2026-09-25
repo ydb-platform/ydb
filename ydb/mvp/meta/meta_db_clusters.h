@@ -18,6 +18,7 @@
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <library/cpp/json/json_writer.h>
 
 namespace NMVP {
 

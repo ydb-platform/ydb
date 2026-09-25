@@ -21,6 +21,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/client/yc_private/resourcemanager/cloud_service.grpc.pb.h>
+#include <library/cpp/json/json_writer.h>
 
 namespace NMVP {
 

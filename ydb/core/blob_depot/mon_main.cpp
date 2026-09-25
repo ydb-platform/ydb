@@ -9,6 +9,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NBlobDepot {
 

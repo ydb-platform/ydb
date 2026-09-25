@@ -6,6 +6,7 @@
 #include <util/system/env.h>
 
 #include <thread>
+#include <library/cpp/json/json_writer.h>
 
 
 THttpProxyTestMock::THttpProxyTestMock() = default;

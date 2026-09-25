@@ -1,5 +1,6 @@
 #include "result.h"
 #include <ydb/core/util/proto_duration.h>
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NKqp {
 

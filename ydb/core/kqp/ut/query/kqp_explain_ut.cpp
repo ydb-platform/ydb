@@ -8,6 +8,7 @@
 #include <util/folder/dirut.h>
 
 #include <functional>
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr {
 namespace NKqp {

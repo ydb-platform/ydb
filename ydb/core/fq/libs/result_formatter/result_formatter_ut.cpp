@@ -1,6 +1,7 @@
 #include "result_formatter.h"
 
 #include <ydb/services/ydb/ydb_common_ut.h>
+#include <library/cpp/json/json_writer.h>
 
 using namespace NFq;
 

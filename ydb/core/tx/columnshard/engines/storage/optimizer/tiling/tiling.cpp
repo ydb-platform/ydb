@@ -17,6 +17,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
+#include <library/cpp/json/json_writer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

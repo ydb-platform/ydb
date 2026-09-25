@@ -23,6 +23,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <library/cpp/protobuf/json/proto2json.h>

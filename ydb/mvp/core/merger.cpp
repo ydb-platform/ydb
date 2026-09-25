@@ -4,6 +4,7 @@
 #include "mapper.h"
 #include "reducer.h"
 #include "filter.h"
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 using namespace NMVP;

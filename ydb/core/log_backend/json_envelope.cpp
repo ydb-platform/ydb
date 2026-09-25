@@ -1,6 +1,7 @@
 #include "json_envelope.h"
 
 #include <util/charset/utf8.h>
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr {
 

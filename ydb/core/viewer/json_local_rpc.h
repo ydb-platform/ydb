@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 

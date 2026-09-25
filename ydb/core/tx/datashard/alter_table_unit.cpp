@@ -5,10 +5,78 @@
 
 #include <ydb/library/aclib/user_context.h>
 
+#include <utility>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
+
+namespace {
+
+using TFamilyKey = std::pair<TString, ui32>;
+
+TFamilyKey FamilyKey(const TUserTable& table, ui32 id) {
+    if (const auto it = table.Families.find(id); it != table.Families.end()) {
+        const auto name = it->second.GetName();
+        // GetName() returns "default" for every unnamed family.
+        return name == "default" && id != 0 ? TFamilyKey{"", id} : TFamilyKey{name, 0};
+    }
+
+    Y_ENSURE(id == 0, "Unknown column family: " << id);
+    return {"default", 0};
+}
+
+struct TFamilySettings {
+    NTable::NPage::ECodec Codec = NTable::NPage::ECodec::Plain;
+    NTable::NPage::ECacheMode CacheMode = NTable::NPage::ECacheMode::Regular;
+    TString DataPoolKind;
+
+    bool operator==(const TFamilySettings&) const = default;
+};
+
+TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
+    TMap<TFamilyKey, TFamilySettings> result;
+    result.emplace(TFamilyKey{"default", 0}, TFamilySettings{});
+
+    for (const auto& [id, family] : table.Families) {
+        const auto key = FamilyKey(table, id);
+        const TFamilySettings settings{
+            .Codec = family.Codec,
+            .CacheMode = family.CacheMode,
+            .DataPoolKind = family.StorageConfig.GetData().GetPreferredPoolKind(),
+        };
+
+        if (key == TFamilyKey{"default", 0}) {
+            result[key] = settings;
+        } else {
+            Y_ENSURE(result.emplace(key, settings).second, "Duplicate column family: " << key.first);
+        }
+    }
+
+    return result;
+}
+
+bool FamilySchemaChanged(const TUserTable& oldTable, const TUserTable& newTable) {
+    if (FamilySettings(oldTable) != FamilySettings(newTable)) {
+        return true;
+    }
+
+    for (const auto& [id, column] : newTable.Columns) {
+        auto it = oldTable.Columns.find(id);
+        if (it == oldTable.Columns.end()) {
+            continue;
+        }
+
+        if (FamilyKey(oldTable, it->second.Family) != FamilyKey(newTable, column.Family)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -173,7 +241,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }
 
-    bool schemaChanged = false;
+    bool schemaChanged = FamilySchemaChanged(*oldInfo, *newInfo);
     if (alterTableTx.DropColumnsSize()) {
         schemaChanged = true;
     } else {
@@ -239,4 +307,3 @@ THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

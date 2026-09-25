@@ -35,6 +35,7 @@ struct TUserTable : public TThrRefBase {
             : ColumnCodec(family.GetColumnCodec())
             , ColumnCache(family.GetColumnCache())
             , ColumnCacheMode(family.GetColumnCacheMode())
+            , StorageConfig(family.GetStorageConfig())
             , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
             , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
             , Storage(family.GetStorage())
@@ -62,11 +63,35 @@ struct TUserTable : public TThrRefBase {
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
             }
-            if (family.GetStorageConfig().GetExternalThreshold()) {
+            if (family.GetStorageConfig().HasExternalThreshold()) {
                 ExternalThreshold = SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold());
             }
             if (family.HasStorage()) {
                 Storage = family.GetStorage();
+            }
+            if (family.HasStorageConfig()) {
+                const auto& srcStorage = family.GetStorageConfig();
+                if (srcStorage.HasSysLog()) {
+                    StorageConfig.MutableSysLog()->CopyFrom(srcStorage.GetSysLog());
+                }
+                if (srcStorage.HasLog()) {
+                    StorageConfig.MutableLog()->CopyFrom(srcStorage.GetLog());
+                }
+                if (srcStorage.HasData()) {
+                    StorageConfig.MutableData()->CopyFrom(srcStorage.GetData());
+                }
+                if (srcStorage.HasExternal()) {
+                    StorageConfig.MutableExternal()->CopyFrom(srcStorage.GetExternal());
+                }
+                if (srcStorage.HasDataThreshold()) {
+                    StorageConfig.SetDataThreshold(srcStorage.GetDataThreshold());
+                }
+                if (srcStorage.HasExternalThreshold()) {
+                    StorageConfig.SetExternalThreshold(srcStorage.GetExternalThreshold());
+                }
+                if (srcStorage.HasExternalChannelsCount()) {
+                    StorageConfig.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
+                }
             }
             Room.Reset(new TStorageRoom(family.GetRoom()));
         }
@@ -86,6 +111,7 @@ struct TUserTable : public TThrRefBase {
         NKikimrSchemeOp::EColumnCodec ColumnCodec;
         NKikimrSchemeOp::EColumnCache ColumnCache;
         NKikimrSchemeOp::EColumnCacheMode ColumnCacheMode;
+        NKikimrSchemeOp::TStorageConfig StorageConfig;
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;

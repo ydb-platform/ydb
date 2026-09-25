@@ -275,6 +275,16 @@ public:
                     "SCHEMA_CHANGES incompatible with specified stream format");
                 return result;
             }
+
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            const auto& families = context.SS->Tables.at(tablePath.Base()->PathId)->PartitionConfig().GetColumnFamilies();
+            for (const auto& family : families) {
+                if (family.GetId() != 0 && family.GetName().empty()) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "SCHEMA_CHANGES requires names for non-default column families");
+                    return result;
+                }
+            }
         }
 
         TString errStr;

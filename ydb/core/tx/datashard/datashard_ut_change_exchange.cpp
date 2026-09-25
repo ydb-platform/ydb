@@ -2563,6 +2563,33 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
+    void AssertColumn(const NJson::TJsonValue& table, const TString& name,
+            const TString& type, const TString& family)
+    {
+        const auto& columns = table["columns"];
+        UNIT_ASSERT_C(columns.Has(name), "Missing column: " << name);
+        const auto& column = columns[name];
+        UNIT_ASSERT_VALUES_EQUAL(column["type"].GetString(), type);
+        UNIT_ASSERT_VALUES_EQUAL(column["family"].GetString(), family);
+        UNIT_ASSERT_C(table["columnFamilies"].Has(family),
+            "Missing family " << family << " for column " << name);
+    }
+
+    void AssertFamily(const NJson::TJsonValue& table, const TString& name,
+            const TString& compression, const TString& cacheMode, const TString& media = {})
+    {
+        const auto& families = table["columnFamilies"];
+        UNIT_ASSERT_C(families.Has(name), "Missing family: " << name);
+        const auto& family = families[name];
+        UNIT_ASSERT_VALUES_EQUAL(family["compression"].GetString(), compression);
+        UNIT_ASSERT_VALUES_EQUAL(family["cacheMode"].GetString(), cacheMode);
+        if (media) {
+            UNIT_ASSERT_VALUES_EQUAL(family["data"]["media"].GetString(), media);
+        } else {
+            UNIT_ASSERT(!family.Has("data"));
+        }
+    }
+
     void ShouldDeliverChanges(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc, TActionFunc action,
             const TVector<TString>& queriesBefore, const TVector<TString>& queriesAfter, const TVector<TString>& records)
     {
@@ -4717,21 +4744,123 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetMap().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetMap().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetMap().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"]["type"].GetString(), "Uint32");
+        AssertColumn(table, "key", "Uint32", "default");
+        AssertColumn(table, "value", "Uint32", "default");
+        AssertColumn(table, "extra", "Uint32", "default");
 
         const auto& droppedTable = records[3]["tableChanges"][0]["table"];
         UNIT_ASSERT(droppedTable["schemaVersion"].GetUInteger() > table["schemaVersion"].GetUInteger());
         UNIT_ASSERT_VALUES_EQUAL(droppedTable["primaryKeyColumnNames"][0].GetString(), "key");
         UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"].GetMap().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["key"].GetMap().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["value"].GetMap().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["key"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["value"]["type"].GetString(), "Uint32");
+        AssertColumn(droppedTable, "key", "Uint32", "default");
+        AssertColumn(droppedTable, "value", "Uint32", "default");
+    }
+
+    Y_UNIT_TEST(UnnamedColumnFamilyAlter) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        const auto edgeActor = server->GetRuntime()->AllocateEdgeActor();
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable().Families({
+            {.Name = "default", .DataPoolKind = "hdd"},
+        }));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Id = 1, .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4}));
+        WaitTxNotification(server, edgeActor, AsyncSetEnableFilterByKey(server, "/Root", "Table", true));
+    }
+
+    Y_UNIT_TEST(SchemaChangesColumnFamilies) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
+            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4, .DataPoolKind = "hdd"}));
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        RebootTablet(runtime, shards.front(), edgeActor);
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecPlain}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "empty", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "archive", .DataPoolKind = "ssd"}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "archive", .ResetDataPoolKind = true}));
+        RebootTablet(runtime, shards.front(), edgeActor);
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "archive", .ColumnCacheMode = NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory}));
+        WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
+            {.Name = "archive", .ColumnCacheMode = NKikimrSchemeOp::ColumnCacheModeRegular}));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddColumnToFamily(server, "/Root", "Table", "extra", "archive"));
+        WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
+            {.Name = "default"}));
+        WaitTxNotification(server, edgeActor, AsyncAlterDropColumn(server, "/Root", "Table", "extra"));
+        WaitTxNotification(server, edgeActor, AsyncSetEnableFilterByKey(server, "/Root", "Table", true));
+
+        const auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+        });
+
+        const auto tableAt = [&](size_t index) -> const NJson::TJsonValue& {
+            return records[index]["tableChanges"][0]["table"];
+        };
+
+        const auto& added = tableAt(1);
+        AssertColumn(added, "key", "Uint32", "default");
+        AssertColumn(added, "value", "Uint32", "archive");
+        UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"].GetMap().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["default"]["compression"].GetString(), "off");
+        AssertFamily(added, "archive", "lz4", "regular", "hdd");
+
+        const auto& modified = tableAt(3);
+        AssertFamily(modified, "archive", "off", "regular", "hdd");
+        AssertColumn(modified, "value", "Uint32", "archive");
+
+        const auto& empty = tableAt(4);
+        UNIT_ASSERT_VALUES_EQUAL(empty["columnFamilies"].GetMap().size(), 3);
+        AssertFamily(empty, "empty", "lz4", "regular");
+        AssertFamily(empty, "archive", "off", "regular", "hdd");
+
+        AssertFamily(tableAt(5), "archive", "off", "regular", "ssd");
+        AssertFamily(tableAt(6), "archive", "off", "regular");
+        AssertFamily(tableAt(7), "archive", "off", "in_memory");
+        AssertFamily(tableAt(8), "archive", "off", "regular");
+        AssertColumn(tableAt(9), "extra", "Uint32", "archive");
+        AssertColumn(tableAt(10), "value", "Uint32", "default");
+        AssertColumn(tableAt(10), "extra", "Uint32", "archive");
+
+        const auto& droppedColumn = tableAt(11);
+        UNIT_ASSERT(!droppedColumn["columns"].Has("extra"));
+        AssertFamily(droppedColumn, "empty", "lz4", "regular");
     }
 
     Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {
@@ -4779,10 +4908,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key1");
         UNIT_ASSERT_VALUES_EQUAL(pk[1].GetString(), "key2");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key1"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key2"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"]["type"].GetString(), "Uint32");
+        AssertColumn(table, "key1", "Uint32", "default");
+        AssertColumn(table, "key2", "Uint32", "default");
+        AssertColumn(table, "value", "Uint32", "default");
+        AssertColumn(table, "extra", "Uint32", "default");
     }
 
     Y_UNIT_TEST(SchemaChangesMultipleShards) {
@@ -4807,6 +4936,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )");
 
         WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+        WaitTxNotification(server, edgeActor, AsyncSetColumnFamily(server, "/Root", "Table", "value",
+            {.Name = "archive", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4}));
 
         const auto& pqDesc = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
         const size_t partitionCount = pqDesc.GetPartitions().size();
@@ -4816,49 +4947,58 @@ Y_UNIT_TEST_SUITE(Cdc) {
         for (ui32 iteration = 0; ; ++iteration) {
             UNIT_ASSERT_C(iteration < 60, "Timed out waiting for schema change records in all partitions");
 
-            bool allHaveSchemaChange = true;
+            bool allHaveSchemaChanges = true;
             for (ui32 i = 0; i < records.size(); ++i) {
                 records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);
-                const bool hasSchemaChange = AnyOf(records[i], [](const auto& rec) {
+                const size_t schemaChanges = CountIf(records[i], [](const auto& rec) {
                     return rec.second.Contains("tableChanges");
                 });
-                allHaveSchemaChange = allHaveSchemaChange && hasSchemaChange;
+                allHaveSchemaChanges = allHaveSchemaChanges && schemaChanges >= 2;
             }
-            if (allHaveSchemaChange) {
+            if (allHaveSchemaChanges) {
                 break;
             }
             SimulateSleep(server, TDuration::Seconds(1));
         }
 
-        ui32 schemaChangeCount = 0;
-        TString schemaChangeBody;
+        TVector<TString> schemaChangeBodies;
         for (const auto& partitionRecords : records) {
+            TVector<TString> partitionSchemaChanges;
             for (const auto& rec : partitionRecords) {
                 if (rec.second.Contains("tableChanges")) {
-                    ++schemaChangeCount;
-                    if (schemaChangeBody.empty()) {
-                        schemaChangeBody = rec.second;
-                    } else {
-                        AssertJsonsEqual(rec.second, schemaChangeBody);
-                    }
+                    partitionSchemaChanges.push_back(rec.second);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(partitionSchemaChanges.size(), 2);
+            if (schemaChangeBodies.empty()) {
+                schemaChangeBodies = std::move(partitionSchemaChanges);
+            } else {
+                for (size_t i = 0; i < schemaChangeBodies.size(); ++i) {
+                    AssertJsonsEqual(partitionSchemaChanges[i], schemaChangeBodies[i]);
                 }
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(schemaChangeCount, partitionCount);
-        AssertJsonsEqual(schemaChangeBody, R"({"tableChanges":"***","ts":"***"})");
+        AssertJsonsEqual(schemaChangeBodies[0], R"({"tableChanges":"***","ts":"***"})");
+        AssertJsonsEqual(schemaChangeBodies[1], R"({"tableChanges":"***","ts":"***"})");
 
         NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(schemaChangeBody, &json));
+        UNIT_ASSERT(NJson::ReadJsonTree(schemaChangeBodies[0], &json));
         const auto& table = json["tableChanges"][0]["table"];
         UNIT_ASSERT(table.Has("schemaVersion"));
         const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"]["type"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"]["type"].GetString(), "Uint32");
+        AssertColumn(table, "key", "Uint32", "default");
+        AssertColumn(table, "value", "Uint32", "default");
+        AssertColumn(table, "extra", "Uint32", "default");
+
+        NJson::TJsonValue familyJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(schemaChangeBodies[1], &familyJson));
+        const auto& familyTable = familyJson["tableChanges"][0]["table"];
+        AssertColumn(familyTable, "value", "Uint32", "archive");
+        AssertFamily(familyTable, "archive", "lz4", "regular");
     }
 
 } // Cdc

@@ -4061,6 +4061,44 @@ state: STATE_ENABLED
         )"));
     }
 
+    Y_UNIT_TEST(UnknownSystemViewTypeIsNotExported) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        const TString path = "/MyRoot/.sys/partition_stats";
+        const auto pathId = DescribePath(Runtime(), path).GetPathDescription().GetSelf().GetPathId();
+        constexpr ui32 futureType = 1000000;
+        UNIT_ASSERT(!NKikimrSysView::ESysViewType_IsValid(futureType));
+
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        const auto status = LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, Sprintf(R"((
+            (let key '('('PathId (Uint64 '%lu))))
+            (let row '('('SysViewType (Uint32 '%u))))
+            (return (AsList (UpdateRow 'SysView key row)))
+        ))", pathId, futureType), result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+
+        const auto description = DescribePath(Runtime(), path);
+        UNIT_ASSERT(!description.GetPathDescription().GetSysViewDescription().HasType());
+
+        ui64 txId = 100;
+        auto request = NDescUT::TExportRequest(S3Port(), {
+            R"(
+                items {
+                    source_path: "/MyRoot/.sys/partition_stats"
+                    destination_prefix: "/partition_stats"
+                }
+            )",
+        });
+        TestExport(Runtime(), ++txId, "/MyRoot", request.GetRequest());
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(!HasS3File("/partition_stats/system_view.pb"));
+        UNIT_ASSERT(!DescribePath(Runtime(), path).GetPathDescription().GetSysViewDescription().HasType());
+    }
+
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {
       Env();
       ui64 txId = 100;

@@ -214,19 +214,25 @@ Y_UNIT_TEST(CreateSymlinkTargetDoesNotAcceptCluster) {
 Y_UNIT_TEST_SUITE(LiteralPathAliases) {
 Y_UNIT_TEST(SharedPathBuilder) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.PathPrefix = "/canonical";
     settings.NormalizePath = [](TStringBuf cluster, TStringBuf path) {
         if (cluster == "plato" && path.StartsWith('/')) {
             return path == "/alias/table" ? TString("/canonical/table") : TString("/wrong");
         }
         return TString(path);
     };
-    for (const TString sql : {"SELECT * FROM `/alias/table`;", "$p = '/alias/table'; SELECT * FROM $p;", "SELECT * FROM table;"}) {
-        const auto result = SqlToYqlWithMode("USE plato; " + sql, NSQLTranslation::ESqlMode::QUERY,
-                                             10, "kikimr", EDebugOutput::None, false, settings);
-        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
-        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "/canonical/table");
-        UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(result).find("/wrong"), TString::npos);
+    for (const TString prefix : {"", "/canonical"}) {
+        settings.PathPrefix = prefix;
+        for (const TString sql : {"SELECT * FROM `/alias/table`;", "$p = '/alias/table'; SELECT * FROM $p;",
+                                  "PRAGMA TablePathPrefix = '/canonical'; SELECT * FROM table;",
+                                  "DROP VIEW `/alias/table`;", "DROP EXTERNAL DATA SOURCE `/alias/table`;",
+                                  "DROP ASYNC REPLICATION `/alias/table`;", "DROP TRANSFER `/alias/table`;", "DROP SECRET `/alias/table`;",
+                                  "CREATE ASYNC REPLICATION replication FOR `/alias/remote` AS `/alias/table` WITH (ENDPOINT = 'localhost:2135', DATABASE = '/Root');"}) {
+            const auto result = SqlToYqlWithMode("USE plato; " + sql, NSQLTranslation::ESqlMode::QUERY,
+                                                 10, "kikimr", EDebugOutput::None, false, settings);
+            UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+            UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "/canonical/table");
+            UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(result).find("/wrong"), TString::npos);
+        }
     }
     settings.DynamicClusterProvider = "kikimr";
     const auto external = SqlToYqlWithSettings("SELECT * FROM `/remote/source`.`/alias/table`;", settings);

@@ -207,7 +207,7 @@ namespace NYdb::inline Dev::NPathAliasingTests {
 
             NQuery::TQueryClient canonicalQuery(*Canonical);
             Check(Await(canonicalQuery.ExecuteQuery(
-                "CREATE VIEW `" + P("view") + "` WITH (security_invoker = TRUE) AS " + Select(A("table")),
+                "CREATE VIEW `" + A("view") + "` WITH (security_invoker = TRUE) AS " + Select(A("table")),
                 NQuery::TTxControl::NoTx())));
 
             NView::TViewClient views(*Alias);

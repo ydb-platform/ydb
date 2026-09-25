@@ -155,11 +155,11 @@ bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
 }
 
 bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
-                            const TRule_replication_target& in, TTranslation& ctx)
-{
+                            const TRule_replication_target& in, TTranslation& ctx,
+                            const std::function<TString(TStringBuf)>& normalizePath) {
     const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
     const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
-    out.emplace_back(remote, BuildTablePath(prefixPath, local));
+    out.emplace_back(remote, BuildTablePath(prefixPath, local, normalizePath));
     return true;
 }
 
@@ -1036,13 +1036,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            const auto normalizePath = Ctx_.GetPathNormalizer(context.Cluster);
 
             std::vector<std::pair<TString, TString>> targets;
-            if (!AsyncReplicationTarget(targets, prefixPath, node.GetRule_replication_target6(), *this)) {
+            if (!AsyncReplicationTarget(targets, prefixPath, node.GetRule_replication_target6(), *this, normalizePath)) {
                 return false;
             }
             for (auto& block : node.GetBlock7()) {
-                if (!AsyncReplicationTarget(targets, prefixPath, block.GetRule_replication_target2(), *this)) {
+                if (!AsyncReplicationTarget(targets, prefixPath, block.GetRule_replication_target2(), *this, normalizePath)) {
                     return false;
                 }
             }
@@ -1054,7 +1055,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx_.Pos(), BuildTablePath(prefixPath, id),
+            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx_.Pos(), BuildTablePath(prefixPath, id, normalizePath),
                                                                      std::move(targets), std::move(settings), context));
             break;
         }
@@ -1071,7 +1072,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx_.Pos(),
-                                                                   BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                                   BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id, Ctx_.GetPathNormalizer(context.Cluster)),
                                                                    node.HasBlock5(), context));
             break;
         }
@@ -1332,7 +1333,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildAlterAsyncReplication(Ctx_.Pos(),
-                                                                    BuildTablePath(prefixPath, id),
+                                                                    BuildTablePath(prefixPath, id, Ctx_.GetPathNormalizer(context.Cluster)),
                                                                     std::move(settings), context));
             break;
         }
@@ -1537,7 +1538,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id),
+            AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id, Ctx_.GetPathNormalizer(context.Cluster)),
                                                              source, target, transformLambda, std::move(settings), context));
             break;
         }
@@ -1586,7 +1587,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildAlterTransfer(Ctx_.Pos(),
-                                                            BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                            BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id, Ctx_.GetPathNormalizer(context.Cluster)),
                                                             std::move(transformLambda), std::move(settings), context));
             break;
         }
@@ -1603,7 +1604,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropTransfer(Ctx_.Pos(),
-                                                           BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                           BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id, Ctx_.GetPathNormalizer(context.Cluster)),
                                                            node.HasBlock4(), context));
             break;
         }
@@ -1836,7 +1837,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 blocks,
                 BuildCreateSecret(
                     Ctx_.Pos(),
-                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId, Ctx_.GetPathNormalizer(context.Cluster)),
                     secretParams,
                     context,
                     Ctx_.Scoped,
@@ -1886,7 +1887,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 blocks,
                 BuildAlterSecret(
                     Ctx_.Pos(),
-                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId, Ctx_.GetPathNormalizer(context.Cluster)),
                     secretParams,
                     context,
                     Ctx_.Scoped,
@@ -1926,7 +1927,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 blocks,
                 BuildDropSecret(
                     Ctx_.Pos(),
-                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId, Ctx_.GetPathNormalizer(context.Cluster)),
                     context,
                     Ctx_.Scoped,
                     missingOk));

@@ -586,6 +586,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
             MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
             MERGE_CFG_FROM_APP_CFG(ReplicationConfig);
+            MERGE_CFG_FROM_APP_CFG(IamConfig);
             MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
             MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
             MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);

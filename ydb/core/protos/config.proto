@@ -3558,6 +3558,27 @@ message TUdfStoreConfig {
     optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
+// Identity of YDB as a Yandex Cloud service and the IAM endpoints it calls as that service.
+// Used by the IAM delegation secrets (IAM_DELEGATION secrets of external data sources).
+// TokenServiceEndpoint, ServiceId, MicroserviceId, ResourceType and EnableSsl fall back to
+// ReplicationConfig.IamServiceControl when left empty here, so a cluster that already has that
+// section configured needs only ServiceControlEndpoint (and ResourceManagerEndpoint, optionally).
+message TIamConfig {
+    // IAM Token Service, serves IamTokenService.CreateForService (ts.private-api.<env>:4282).
+    optional string TokenServiceEndpoint = 1;
+    // IAM control plane, serves ServiceControlService and OperationService
+    // (iam.private-api.<env>:4283). A different service from the token service above.
+    optional string ServiceControlEndpoint = 2;
+    optional string ServiceId = 3;          // "ydb"
+    optional string MicroserviceId = 4;     // "data-plane"
+    optional string ResourceType = 5;       // "resource-manager.cloud"
+    optional bool EnableSsl = 6 [default = true];
+    // Resource Manager, serves FolderService.Resolve (rm.private-api.<env>:4284). Used together with
+    // ServiceAccountService.Get on the control plane to find the cloud of a service account when a
+    // delegation secret is created without RESOURCE; when empty, the cloud of the database is used.
+    optional string ResourceManagerEndpoint = 7;
+}
+
 // Local path-prefix aliases. Rules are ordered and take effect on node restart.
 message TPathRewriteConfig {
     message TRule {
@@ -3697,6 +3718,9 @@ message TAppConfig {
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
     optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
+
+    // YDB's identity as a Yandex Cloud service and the IAM endpoints it calls as that service.
+    optional TIamConfig IamConfig = 125;
 }
 
 message TYdbVersion {

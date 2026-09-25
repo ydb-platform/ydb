@@ -69,3 +69,4 @@ ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
+ydb/tools/mnc/viewer/ut py3test.sole chunk

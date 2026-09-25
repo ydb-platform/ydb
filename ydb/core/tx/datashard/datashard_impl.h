@@ -1933,9 +1933,14 @@ public:
         if (!HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
             Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
+                NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();
+    }
+
+    bool IsHnswCacheMemoryLimitKnown() const {
+        return HnswCacheMemoryTracker && HnswCacheMemoryTracker->HasLimit();
     }
 
     std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes) {
@@ -3632,6 +3637,7 @@ protected:
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3824,6 +3830,7 @@ protected:
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event",

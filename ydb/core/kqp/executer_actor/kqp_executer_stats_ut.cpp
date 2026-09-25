@@ -116,6 +116,21 @@ Y_UNIT_TEST_SUITE(KqpExecuterStats) {
         UNIT_ASSERT_VALUES_EQUAL(stage.Nodes.at(7).Tasks, 1);
         UNIT_ASSERT_VALUES_EQUAL(stage.Nodes.at(7).Finished, 1);
     }
+
+    Y_UNIT_TEST(NodeStateMemQueryAllocated) {
+        TNodeExecutionStats node;
+        node.SetHistorySampleCount(32);
+
+        NYql::NDqProto::TEvNodeState state;
+        state.SetLocalInflightBytes(1_MB);
+        state.SetMemQueryAllocated(3_MB);
+        node.UpdateStats(state);
+
+        UNIT_ASSERT_VALUES_EQUAL(node.GlobalMemoryUsage.Value.LocalInflightBytes, 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(node.GlobalMemoryUsage.Value.MemQueryAllocated, 3_MB);
+        UNIT_ASSERT(!node.GlobalMemoryUsage.History.empty());
+        UNIT_ASSERT_VALUES_EQUAL(node.GlobalMemoryUsage.History.back().second.MemQueryAllocated, 3_MB);
+    }
 }
 
 } // namespace NKikimr::NKqp

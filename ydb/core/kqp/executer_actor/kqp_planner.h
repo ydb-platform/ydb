@@ -21,6 +21,7 @@
 namespace NKikimr::NKqp {
 
 class TExecutionTrace;
+class TQueryQuotaManager;
 
 class TKqpPlanner {
 
@@ -148,7 +149,7 @@ private:
     TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-    TIntrusivePtr<NRm::TTxState> TxInfo;
+    std::shared_ptr<TQueryQuotaManager> QueryQuotaManager;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;

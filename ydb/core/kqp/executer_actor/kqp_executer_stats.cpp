@@ -899,6 +899,7 @@ void TNodeExecutionStats::UpdateStats(const NYql::NDqProto::TEvNodeState& state)
         .InputInflightBytes = state.GetInputInflightBytes(),
         .OutputInflightBytes = state.GetOutputInflightBytes(),
         .LocalInflightBytes = state.GetLocalInflightBytes(),
+        .MemQueryAllocated = state.GetMemQueryAllocated(),
     });
 }
 
@@ -1740,6 +1741,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                         stats.SetInputInflightBytes((usage.InputInflightBytes + 512_KB) / 1_MB);
                         stats.SetOutputInflightBytes((usage.OutputInflightBytes + 512_KB) / 1_MB);
                         stats.SetLocalInflightBytes((usage.LocalInflightBytes + 512_KB) / 1_MB);
+                        stats.SetMemQueryAllocated((usage.MemQueryAllocated + 512_KB) / 1_MB);
                     }
                 }
             }

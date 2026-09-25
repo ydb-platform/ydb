@@ -19,7 +19,7 @@ python3 -m collector flush
 python3 -m collector send --conclusion cancelled   # если остались открытые спаны
 ```
 
-То же самое: `python3 collector/client.py …`. `--file` перекрывает `$CI_METRICS_FILE`.
+`--file` перекрывает `$CI_METRICS_FILE`.
 
 Полезные флаги: `--kind duration|gauge|count|event|info`, `--source`, `--value`, `--unit`, `--duration-ms`, `--started-epoch`, `--finished-epoch`, `--conclusion`, `--error`, `--label key=value` (можно несколько), `--run-id`.
 

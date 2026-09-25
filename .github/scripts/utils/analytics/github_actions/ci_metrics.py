@@ -20,12 +20,13 @@ _ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
 if str(_ANALYTICS_ROOT) not in sys.path:
     sys.path.insert(0, str(_ANALYTICS_ROOT))
 
-from collector.cli import add_enrich_cli_args, add_track_cli_args as add_collector_cli_args
+from collector.cli import build_parser
 from collector.flush import flush_file as collector_flush_file
 from collector.flush import rows_from_jsonl as collector_rows_from_jsonl
 from collector.flush import upsert_metrics as collector_upsert_metrics
 from collector.schema import _ydb_wrapper_cls
 from collector.schema import build_create_table_sql as collector_build_create_table_sql
+from collector.schema import default_metrics_file
 from collector.schema import resolve_table_path as collector_resolve_table_path
 from collector.spans import end as collector_end
 from collector.spans import enrich as collector_enrich
@@ -76,10 +77,6 @@ PRIMARY_KEYS = (
     "kind",
     "span_id",
 )
-
-
-def default_metrics_file() -> str:
-    return os.environ.get("CI_METRICS_FILE") or "ci_metrics.jsonl"
 
 
 def resolve_table_path(ydb_wrapper=None) -> str:
@@ -204,70 +201,31 @@ def _runner_from(properties: Optional[Dict[str, Any]], fields: Dict[str, Any]) -
     return runner, usage, extras
 
 
-def start(
-    name: str,
-    properties: Optional[Dict[str, Any]] = None,
-    *,
-    file: Optional[str] = None,
-    kind: Optional[str] = None,
-    source: Optional[str] = None,
-    started_at: Optional[str] = None,
-    started_epoch: Optional[str] = None,
-    conclusion: Optional[str] = None,
-    labels: Optional[Dict[str, Any]] = None,
-    runner: bool = False,
-    usage: bool = False,
-    **_ignored: Any,
-) -> str:
-    props = dict(properties or {})
-    flag_runner, flag_usage = pop_runner_options(props)
-    path = file or default_metrics_file()
-    return collector_start(
-        name,
-        props,
-        file=path,
-        kind=kind,
-        source=source,
-        started_at=started_at,
-        started_epoch=started_epoch,
-        conclusion=conclusion,
-        labels=labels,
-        attach=attach_context,
-        enrich=_ci_enrich(runner or flag_runner, usage or flag_usage, path),
-    )
-
-
-def end(
-    name: Optional[str] = None,
-    properties: Optional[Dict[str, Any]] = None,
-    *,
-    file: Optional[str] = None,
-    **fields: Any,
-) -> int:
+def _bound(properties: Optional[Dict[str, Any]], file: Optional[str], fields: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
     props = dict(properties or {})
     runner, usage, extras = _runner_from(props, fields)
     path = file or default_metrics_file()
-    return collector_end(
-        name,
-        props,
-        file=path,
-        enrich=_ci_enrich(runner, usage, path),
-        **extras,
-    )
+    extras["file"] = path
+    extras["attach"] = attach_context
+    extras["enrich"] = _ci_enrich(runner, usage, path)
+    return props, extras
 
 
-def enrich(
-    name: str,
-    properties: Optional[Dict[str, Any]] = None,
-    *,
-    file: Optional[str] = None,
-    **fields: Any,
-) -> int:
-    props = dict(properties or {})
-    _runner, _usage, extras = _runner_from(props, fields)
-    path = file or default_metrics_file()
-    extras.pop("runner", None)
-    extras.pop("usage", None)
+def start(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> str:
+    props, extras = _bound(properties, file, fields)
+    return collector_start(name, props, **extras)
+
+
+def end(name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> int:
+    props, extras = _bound(properties, file, fields)
+    extras.pop("attach", None)
+    return collector_end(name, props, **extras)
+
+
+def enrich(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> int:
+    props, extras = _bound(properties, file, fields)
+    extras.pop("attach", None)
+    extras.pop("enrich", None)
     ya_attempt = extras.get("ya_attempt")
     extra_labels = extras.get("labels")
     if ya_attempt in (None, "") and isinstance(extra_labels, dict):
@@ -276,71 +234,18 @@ def enrich(
         ya_attempt = props["labels"].get("ya_attempt")
     if ya_attempt not in (None, ""):
         extras["match_labels"] = {"ya_attempt": ya_attempt}
-    return collector_enrich(name, props, file=path, **extras)
+    return collector_enrich(name, props, **extras)
 
 
-def track(
-    name: str,
-    properties: Optional[Dict[str, Any]] = None,
-    *,
-    file: Optional[str] = None,
-    kind: Optional[str] = None,
-    source: Optional[str] = None,
-    value: Optional[float] = None,
-    unit: Optional[str] = None,
-    started_at: Optional[str] = None,
-    started_epoch: Optional[str] = None,
-    finished_epoch: Optional[str] = None,
-    conclusion: Optional[str] = None,
-    labels: Optional[Dict[str, Any]] = None,
-    runner: bool = False,
-    usage: bool = False,
-    **_ignored: Any,
-) -> None:
-    props = dict(properties or {})
-    flag_runner, flag_usage = pop_runner_options(props)
-    path = file or default_metrics_file()
-    collector_track(
-        name,
-        props,
-        file=path,
-        kind=kind,
-        source=source,
-        value=value,
-        unit=unit,
-        started_at=started_at,
-        started_epoch=started_epoch,
-        finished_epoch=finished_epoch,
-        conclusion=conclusion,
-        labels=labels,
-        attach=attach_context,
-        enrich=_ci_enrich(runner or flag_runner, usage or flag_usage, path),
-    )
+def track(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> None:
+    props, extras = _bound(properties, file, fields)
+    collector_track(name, props, **extras)
 
 
-def send(
-    name: Optional[str] = None,
-    properties: Optional[Dict[str, Any]] = None,
-    *,
-    file: Optional[str] = None,
-    **fields: Any,
-) -> int:
-    props = dict(properties or {})
-    runner, usage, extras = _runner_from(props, fields)
-    merged = dict(props)
-    merged.update(extras)
-    path = file or default_metrics_file()
-    table_path = merged.pop("table_path", None)
-    merged.pop("flush", None)
-    return collector_send(
-        name,
-        merged,
-        file=path,
-        attach=attach_context,
-        enrich=_ci_enrich(runner, usage, path),
-        flush=flush_file,
-        table_path=table_path,
-    )
+def send(name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> int:
+    props, extras = _bound(properties, file, fields)
+    table_path = extras.pop("table_path", None)
+    return collector_send(name, props, flush=flush_file, table_path=table_path, **extras)
 
 
 def skip_reason(raw: Dict[str, Any]) -> Optional[str]:
@@ -437,20 +342,9 @@ def flush_file(
     )
 
 
-def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optional[str] = None) -> None:
-    add_collector_cli_args(parser, kind_default=kind_default)
-    parser.add_argument(
-        "--runner",
-        action="store_true",
-        default=False,
-        help="Attach static runner inventory (cpu/ram/disk); collected once and reused",
-    )
-    parser.add_argument(
-        "--usage",
-        action="store_true",
-        default=False,
-        help="Attach a fresh CPU/RAM/disk usage snapshot for this event only",
-    )
+def _add_runner_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--runner", action="store_true", default=False, help="Attach cached cpu/ram/disk inventory")
+    parser.add_argument("--usage", action="store_true", default=False, help="Attach a fresh cpu/ram/disk snapshot")
 
 
 def _cli_runner_flags(args: argparse.Namespace) -> Dict[str, Any]:
@@ -463,18 +357,7 @@ def _cli_runner_flags(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="CI analytics: start/end/track + batch send")
-    sub = parser.add_subparsers(dest="command", required=True)
-    add_track_cli_args(sub.add_parser("start", help="Open a span (auto start time + CI resource)"), kind_default="duration")
-    add_track_cli_args(sub.add_parser("end", help="Close open span(s); duration is computed"))
-    add_track_cli_args(sub.add_parser("track", help="Queue a completed event (no open span)"))
-    add_enrich_cli_args(sub.add_parser("enrich", help="Add labels to last unsent record; duration stays"))
-    send_p = sub.add_parser("send", help="End leftover spans and export the batch")
-    add_track_cli_args(send_p)
-    send_p.add_argument("--table-path", default=None)
-    flush_p = sub.add_parser("flush", help="Export completed events only")
-    flush_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
-    flush_p.add_argument("--table-path", default=None)
+    parser, sub = build_parser("CI analytics: start/end/track + batch send", track_extra=_add_runner_flags)
     tests_p = sub.add_parser("track-tests", help="Count pass/fail/skip/muted from a ya report")
     tests_p.add_argument("--report", required=True, help="orig/transformed ya report JSON")
     tests_p.add_argument("--source", default="ya_phase")

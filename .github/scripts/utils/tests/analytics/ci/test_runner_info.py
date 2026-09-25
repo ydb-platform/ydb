@@ -134,7 +134,7 @@ class LiveProcTest(unittest.TestCase):
     def test_usage_is_fresh_snapshot(self):
         if not os.path.isfile("/proc/stat"):
             self.skipTest("not linux")
-        snap = collect_usage(sample_sec=0)
+        snap = collect_usage()
         self.assertIn("cpu_pct", snap)
         self.assertIn("mem_used_bytes", snap)
         self.assertIn("disk_used_bytes", snap)

@@ -7,10 +7,15 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+_ANALYTICS_ROOT = Path(__file__).resolve().parents[1] / "utils" / "analytics"
+if str(_ANALYTICS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ANALYTICS_ROOT))
+
+from github_actions.github_api import github_get
 
 PER_PAGE = 100
 
@@ -33,18 +38,7 @@ def pick_job(jobs: List[Dict[str, Any]], preset: str) -> Optional[Dict[str, Any]
 
 
 def github_get_json(url: str, token: str, params: Optional[Dict[str, Any]] = None) -> Any:
-    query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
-    full = f"{url}?{query}" if query else url
-    request = Request(
-        full,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urlopen(request, timeout=60) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return github_get(url, params, token=token)
 
 
 def list_run_jobs(

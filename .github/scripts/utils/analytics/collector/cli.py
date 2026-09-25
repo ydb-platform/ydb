@@ -62,14 +62,15 @@ def run_cli(
 ) -> int:
     """Dispatch start/end/track/send/flush/enrich. Wrappers pass their own fns."""
     if start_fn is None or end_fn is None or track_fn is None or send_fn is None or flush_fn is None or enrich_fn is None:
-        from . import client as client_mod
+        from . import flush as flush_mod
+        from . import spans as spans_mod
 
-        start_fn = start_fn or client_mod.start
-        end_fn = end_fn or client_mod.end
-        track_fn = track_fn or client_mod.track
-        send_fn = send_fn or client_mod.send
-        flush_fn = flush_fn or client_mod.flush_file
-        enrich_fn = enrich_fn or client_mod.enrich
+        start_fn = start_fn or spans_mod.start
+        end_fn = end_fn or spans_mod.end
+        track_fn = track_fn or spans_mod.track
+        send_fn = send_fn or spans_mod.send
+        flush_fn = flush_fn or flush_mod.flush_file
+        enrich_fn = enrich_fn or spans_mod.enrich
     file = getattr(args, "file", None) or default_file
     extra = extra_kwargs_fn(args) if extra_kwargs_fn else {}
     if args.command == "flush":
@@ -177,28 +178,41 @@ def add_enrich_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--file", default=None, help="JSONL path")
 
 
-def parse_args(argv=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Analytics: start/end/track + batch send")
+def build_parser(
+    description: str = "Analytics: start/end/track + batch send",
+    *,
+    track_extra: Optional[Callable[[argparse.ArgumentParser], None]] = None,
+) -> tuple[argparse.ArgumentParser, argparse._SubParsersAction]:
+    parser = argparse.ArgumentParser(description=description)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    start_p = sub.add_parser("start", help="Open a span (auto start time)")
-    add_track_cli_args(start_p, kind_default="duration")
+    def add_track(name: str, help_text: str, *, kind_default: Optional[str] = None) -> argparse.ArgumentParser:
+        command = sub.add_parser(name, help=help_text)
+        add_track_cli_args(command, kind_default=kind_default)
+        if track_extra:
+            track_extra(command)
+        return command
 
-    end_p = sub.add_parser("end", help="Close open span(s); duration is computed")
-    add_track_cli_args(end_p)
-
-    track_p = sub.add_parser("track", help="Queue a completed event (no open span)")
-    add_track_cli_args(track_p)
-
-    enrich_p = sub.add_parser("enrich", help="Add labels to last unsent record; duration stays")
-    add_enrich_cli_args(enrich_p)
-
-    send_p = sub.add_parser("send", help="End leftover spans and export the batch")
-    add_track_cli_args(send_p)
+    add_track("start", "Open a span (auto start time)", kind_default="duration")
+    add_track("end", "Close open span(s); duration is computed")
+    add_track("track", "Queue a completed event (no open span)")
+    add_enrich_cli_args(sub.add_parser("enrich", help="Add labels to last unsent record; duration stays"))
+    send_p = add_track("send", "End leftover spans and export the batch")
     send_p.add_argument("--table-path", default=None)
-
     flush_p = sub.add_parser("flush", help="Export completed events only")
     flush_p.add_argument("--file", default=None, help="JSONL path")
     flush_p.add_argument("--table-path", default=None)
+    return parser, sub
 
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser, _sub = build_parser()
     return parser.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    try:
+        return run_cli(parse_args(argv))
+    except Exception as exc:  # noqa: BLE001 — telemetry must not fail the caller
+        print(f"Warning: analytics failed: {exc}", file=sys.stderr)
+        return 0

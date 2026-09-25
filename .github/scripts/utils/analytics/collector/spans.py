@@ -323,9 +323,9 @@ def send(
     extras.pop("attach", None)
     end(name, extras, file=path, enrich=enrich)
     if flush is None:
-        from .flush import flush_file as default_flush
+        from . import flush as flush_mod
 
-        flush = default_flush
+        flush = flush_mod.flush_file
     if table_path:
         return flush(path, table_path=table_path)
     return flush(path)

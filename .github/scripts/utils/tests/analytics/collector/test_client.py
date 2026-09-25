@@ -100,10 +100,10 @@ class CollectorLifecycleTest(unittest.TestCase):
             sends.append(path)
             return 0
 
-        import collector.client as client
+        import collector.flush as flush_mod
 
-        original = client.flush_file
-        client.flush_file = fake_flush
+        original = flush_mod.flush_file
+        flush_mod.flush_file = fake_flush
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 path = os.path.join(tmp, "analytics.jsonl")
@@ -154,7 +154,7 @@ class CollectorLifecycleTest(unittest.TestCase):
                 self.assertEqual(names["my_step"]["labels"]["tokens"], "12")
                 self.assertEqual(sends, [path])
         finally:
-            client.flush_file = original
+            flush_mod.flush_file = original
 
     def test_track_sets_source(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -229,10 +229,10 @@ class CollectorLifecycleTest(unittest.TestCase):
             sends.append(path)
             return 0
 
-        import collector.client as client
+        import collector.flush as flush_mod
 
-        original = client.flush_file
-        client.flush_file = fake_flush
+        original = flush_mod.flush_file
+        flush_mod.flush_file = fake_flush
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 path = os.path.join(tmp, "analytics.jsonl")
@@ -240,7 +240,7 @@ class CollectorLifecycleTest(unittest.TestCase):
                 self.assertFalse(os.path.exists(path))
                 self.assertEqual(sends, [path])
         finally:
-            client.flush_file = original
+            flush_mod.flush_file = original
 
     def test_start_without_name_returns_error(self):
         self.assertEqual(main(["start"]), 1)
@@ -297,11 +297,11 @@ class CollectorLifecycleTest(unittest.TestCase):
         def factory():
             return Wrapper
 
-        import collector.client as client
+        import collector.flush as flush_mod
 
-        original = client.upsert_metrics
+        original = flush_mod.upsert_metrics
         saved_cred = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
-        client.upsert_metrics = lambda wrapper, rows, **kwargs: len(rows)
+        flush_mod.upsert_metrics = lambda wrapper, rows, **kwargs: len(rows)
         os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -311,16 +311,16 @@ class CollectorLifecycleTest(unittest.TestCase):
             self.assertEqual(uploaded, 1)
             self.assertEqual(len(created), 1)
         finally:
-            client.upsert_metrics = original
+            flush_mod.upsert_metrics = original
             if saved_cred is None:
                 os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
             else:
                 os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved_cred
 
     def test_flush_error_uses_sys_stderr(self):
-        import collector.client as client
+        import collector.flush as flush_mod
 
-        original = client.upsert_metrics
+        original = flush_mod.upsert_metrics
         saved = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
         os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
 
@@ -340,7 +340,7 @@ class CollectorLifecycleTest(unittest.TestCase):
             def get_table_path(self, key):
                 raise KeyError(key)
 
-        client.upsert_metrics = boom
+        flush_mod.upsert_metrics = boom
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 path = os.path.join(tmp, "analytics.jsonl")
@@ -356,19 +356,19 @@ class CollectorLifecycleTest(unittest.TestCase):
             self.assertIn("ydb down", buf.getvalue())
             self.assertNotIn("NameError", buf.getvalue())
         finally:
-            client.upsert_metrics = original
+            flush_mod.upsert_metrics = original
             if saved is None:
                 os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
             else:
                 os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved
 
     def test_mixed_batch_writes_skipped_file(self):
-        import collector.client as client
+        import collector.flush as flush_mod
 
-        original = client.upsert_metrics
+        original = flush_mod.upsert_metrics
         saved = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
         os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
-        client.upsert_metrics = lambda wrapper, rows, **kwargs: len(rows)
+        flush_mod.upsert_metrics = lambda wrapper, rows, **kwargs: len(rows)
 
         class Wrapper:
             def __enter__(self):
@@ -406,7 +406,7 @@ class CollectorLifecycleTest(unittest.TestCase):
                 skipped = Path(path + ".skipped").read_text(encoding="utf-8")
                 self.assertIn("invalid json", skipped)
         finally:
-            client.upsert_metrics = original
+            flush_mod.upsert_metrics = original
             if saved is None:
                 os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
             else:

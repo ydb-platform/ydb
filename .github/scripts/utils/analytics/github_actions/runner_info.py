@@ -71,7 +71,7 @@ def collect_inventory() -> Dict[str, Any]:
         return {}
 
 
-def collect_usage(*, sample_sec: float = 0) -> Dict[str, Any]:
+def collect_usage() -> Dict[str, Any]:
     try:
         return _collect_usage()
     except Exception:  # noqa: BLE001 — telemetry must not fail CI

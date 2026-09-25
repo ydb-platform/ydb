@@ -93,7 +93,11 @@ protected:
 
     std::vector<TKeyName> GetContext(const std::vector<TKeyName>& key);
 
-    void AppendValue(const TString& value);
+    template <typename T>
+    void AppendValue(const T& value) {
+        auto str = TTypesMapping::ToString(value);
+        JsonWriter.WriteString(str);
+    }
 };
 
 class TJsonWriter {
@@ -111,7 +115,9 @@ protected:
     struct TValueWriter : public TBaseValueWriter<TJsonWriter> {
         TValueWriter(TJsonWriter& writer);
 
-        void operator()(const TString& value) const;
+        void operator()(const auto& value) const {
+            Writer.KeyValueWriter->AppendKeyValue(*KeyName, value);
+        }
     };
 
     TBaseMessageWriter<TJsonWriter> MessageWriter{*this};

@@ -40,10 +40,6 @@ std::vector<TKeyName> TJsonKeyValueWriter::GetContext(const std::vector<TKeyName
     return result;
 }
 
-void TJsonKeyValueWriter::AppendValue(const TString& value) {
-    JsonWriter.WriteString(value);
-}
-
 TJsonWriter::TJsonWriter(const TJsonKeyValueWriter::TNameSet& reservedKeyNames)
     : ReservedKeyNames{reservedKeyNames}
 {}
@@ -63,8 +59,5 @@ TJsonWriter::TValueWriter::TValueWriter(TJsonWriter& writer)
     : TBaseValueWriter<TJsonWriter>(writer)
 {}
 
-void TJsonWriter::TValueWriter::operator()(const TString& value) const {
-    Writer.KeyValueWriter->AppendKeyValue(*KeyName, value);
-}
 
 }  // namespace NActors::NStructuredLog

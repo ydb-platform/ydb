@@ -28,6 +28,7 @@ const TStatKey Hop_FarFutureStateSize("MultiHop_FarFutureStateSize", false);
 
 constexpr ui32 StateVersion = 1;
 constexpr ui32 StateVersionWithFutureEvents = 2;
+constexpr ui32 StateVersionWithMinWindowStart = 3;
 using EPolicy = NYql::NHoppingWindow::EPolicy;
 
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
@@ -140,10 +141,23 @@ public:
                     break;
                 }
             }
+<<<<<<< HEAD
             // when no FutureEvents present, saves backward-compatible version 1 state;
             // when FutureEvents present, saves incompatible version 2 state;
             // acceptable since FutureEvents are only present in not-yet-released watermark code
             TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, (hasFutureEvents ? StateVersionWithFutureEvents : StateVersion), Ctx);
+=======
+
+            const auto version = Self_->CheckMinWindowStart_
+                                     ? StateVersionWithMinWindowStart
+                                     : (hasFutureEvents ? StateVersionWithFutureEvents : StateVersion);
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, version, Ctx_);
+
+            if (Self_->CheckMinWindowStart_) {
+                out(MinWindowStartIndex_);
+                hasFutureEvents = true;
+            }
+>>>>>>> a3f58c72cc6 (add into hopping state min window start index)
 
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
@@ -191,7 +205,12 @@ public:
         void LoadStateImpl(TInputSerializer& in) {
             const auto loadStateVersion = in.GetStateVersion();
             bool hasFutureEvents = false;
-            if (loadStateVersion == StateVersionWithFutureEvents) {
+            MinWindowStartIndex_ = 0;
+
+            if (loadStateVersion == StateVersionWithMinWindowStart) {
+                in(MinWindowStartIndex_);
+                hasFutureEvents = true;
+            } else if (loadStateVersion == StateVersionWithFutureEvents) {
                 hasFutureEvents = true;
             } else if (loadStateVersion != StateVersion) {
                 THROW yexception() << "Invalid state version " << loadStateVersion;
@@ -436,7 +455,11 @@ public:
         }
 
         TKeyState& GetOrCreateKeyState(NUdf::TUnboxedValue& key, ui64 hopIndex) {
+<<<<<<< HEAD
             i64 keyHopIndex = Max<i64>(hopIndex + 1 - IntervalHopCount, 0);
+=======
+            const i64 keyHopIndex = Max<i64>(hopIndex + 1 - IntervalHopCount_, Self_->CheckMinWindowStart_ ? MinWindowStartIndex_ : 0);
+>>>>>>> a3f58c72cc6 (add into hopping state min window start index)
             // For first element we shouldn't forget windows in the past
             // Overflow is not possible, because hopIndex is a product of a division
             const auto iter = StatesMap.try_emplace(
@@ -588,10 +611,22 @@ public:
         }
 
         void CloseOldBuckets(ui64 watermarkTs, i64& newHops, i64& farFutureStateSizeChange) {
+<<<<<<< HEAD
             const auto watermarkIndex = watermarkTs / HopTime;
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
                 ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
+=======
+            const auto watermarkIndex = watermarkTs / HopTime_;
+            const ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount_, 0);
+
+            if (Self_->CheckMinWindowStart_ && watermarkTs != Max<ui64>()) {
+                MinWindowStartIndex_ = Max(MinWindowStartIndex_, closeBeforeIndex);
+            }
+
+            EraseNodesIf(StatesMap_, [&](auto& iter) {
+                auto& [key, val] = iter;
+>>>>>>> a3f58c72cc6 (add into hopping state min window start index)
                 const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops, farFutureStateSizeChange);
                 if (keyStateBecameEmpty) {
                     key.UnRef();
@@ -629,9 +664,16 @@ public:
             THashFunc, TEqualsFunc,
             TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, TKeyState>>>;
 
+<<<<<<< HEAD
         TStatesMap StatesMap;                  // Map of states for each key
         std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results
         bool Finished = false;
+=======
+        TStatesMap StatesMap_;                  // Map of states for each key
+        std::deque<NUdf::TUnboxedValue> Ready_; // buffer for fetching results
+        bool Finished_ = false;
+        ui64 MinWindowStartIndex_ = 0;
+>>>>>>> a3f58c72cc6 (add into hopping state min window start index)
 
         TComputationContext& Ctx;
         std::optional<TWatermarkTracker> DataWatermarkTracker;
@@ -666,8 +708,10 @@ public:
         IComputationNode* latePolicy,
         TType* keyType,
         TType* stateType,
-        TWatermark& watermark)
+        TWatermark& watermark,
+        bool checkMinWindowStart)
         : TBaseComputation(mutables)
+<<<<<<< HEAD
         , Stream(stream)
         , Item(item)
         , Key(key)
@@ -701,6 +745,42 @@ public:
         , IsTuple(false)
         , UseIHash(false)
         , Watermark(watermark)
+=======
+        , Stream_(stream)
+        , Item_(item)
+        , Key_(key)
+        , State_(state)
+        , State2_(state2)
+        , Time_(time)
+        , InSave_(inSave)
+        , InLoad_(inLoad)
+        , KeyExtract_(keyExtract)
+        , OutTime_(outTime)
+        , OutInit_(outInit)
+        , OutUpdate_(outUpdate)
+        , OutSave_(outSave)
+        , OutLoad_(outLoad)
+        , OutMerge_(outMerge)
+        , OutFinish_(outFinish)
+        , Hop_(hop)
+        , Interval_(interval)
+        , Delay_(delay)
+        , DataWatermarks_(dataWatermarks)
+        , WatermarkMode_(watermarkMode)
+        , FarFutureSizeLimit_(farFutureSizeLimit)
+        , FarFutureTimeLimitUs_(farFutureTimeLimitUs)
+        , EarlyPolicy_(earlyPolicy)
+        , LatePolicy_(latePolicy)
+        , KeyType_(keyType)
+        , StateType_(stateType)
+        , KeyPacker_(mutables)
+        , StatePacker_(mutables)
+        , KeyTypes_()
+        , IsTuple_(false)
+        , UseIHash_(false)
+        , Watermark_(watermark)
+        , CheckMinWindowStart_(checkMinWindowStart)
+>>>>>>> a3f58c72cc6 (add into hopping state min window start index)
     {
         Stateless_ = false;
         bool encoded;
@@ -837,8 +917,19 @@ private:
     bool UseIHash;
     TWatermark& Watermark;
 
+<<<<<<< HEAD
     NUdf::IEquate::TPtr Equate;
     NUdf::IHash::TPtr Hash;
+=======
+    TKeyTypes KeyTypes_;
+    bool IsTuple_;
+    bool UseIHash_;
+    TWatermark& Watermark_;
+    const bool CheckMinWindowStart_;
+
+    NUdf::IEquate::TPtr Equate_;
+    NUdf::IHash::TPtr Hash_;
+>>>>>>> a3f58c72cc6 (add into hopping state min window start index)
 };
 
 } // namespace
@@ -896,12 +987,14 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
     IComputationNode* latePolicy = GET_OPTIONAL_NODE(24);
 #undef GET_OPTIONAL_NODE
 
+    const bool checkMinWindowStart = callable.GetInputsCount() > 25 && AS_VALUE(TDataLiteral, callable.GetInput(25))->AsValue().Get<bool>();
+
     return new TMultiHoppingCoreWrapper(ctx.Mutables,
                                         stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
                                         outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
                                         hop, interval, delay, dataWatermarks, watermarkMode,
                                         farFutureSizeLimit, farFutureTimeLimitUs, earlyPolicy, latePolicy,
-                                        keyType, stateType, watermark);
+                                        keyType, stateType, watermark, checkMinWindowStart);
 }
 
 } // namespace NMiniKQL

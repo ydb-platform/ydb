@@ -177,7 +177,12 @@ class DistributedWorker:
             host_ids = template_value.get("host_ids")
             if not isinstance(host_ids, list) or any(not isinstance(host, str) for host in host_ids):
                 raise BenchmarkError("Template host IDs must be a list of strings")
-            template = execution_template(template_value, set(host_ids), value.get("tenant"), multiple_cli=True)
+            deploy = value.get("deploy", False)
+            if type(deploy) is not bool:
+                raise BenchmarkError("deploy must be boolean")
+            template = execution_template(
+                template_value, set(host_ids), value.get("tenant"), multiple_cli=True, deploy=deploy
+            )
             local = [node for node in template["nodes"] if node["host_id"] == self.host_id]
             if not local:
                 raise BenchmarkError("This host has no nodes in the execution template")
@@ -186,6 +191,7 @@ class DistributedWorker:
             if type(reset) is not bool:
                 raise BenchmarkError("reset_disks must be boolean")
             payload = {
+                "deploy": deploy,
                 "template": template,
                 "tenant": value["tenant"],
                 "actor_system": actor_system,
@@ -194,6 +200,7 @@ class DistributedWorker:
             if self.state is None:
                 root = self.root / reference["session_id"]
                 self.state = {
+                    "deploy": deploy,
                     "reference": reference,
                     "root": root,
                     "template": template,
@@ -825,7 +832,7 @@ class DistributedWorker:
         return {tenant: self._ready_tenant(state, tenant) for tenant in tenants}
 
     def _ready_tenant(self, state, tenant):
-        cli = self._cli_node(state)
+        cli = None if state.get("deploy") else self._cli_node(state)
         targets = [
             node for node in state["cluster_nodes"].values() if node["role"] == "dynamic" and node["tenant"] == tenant
         ]
@@ -841,6 +848,8 @@ class DistributedWorker:
                 request,
                 ready=lambda response: response.Status == 1,
             )
+        if state.get("deploy"):
+            return {"ready": True}
         _, endpoint = self._static_endpoint(state)
         expected = {(node["hostname"].lower(), node["ports"]["grpc_port"]) for node in targets}
         deadline = time.monotonic() + 120

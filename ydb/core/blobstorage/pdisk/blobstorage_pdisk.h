@@ -873,12 +873,23 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     // compaction is the only thing that can free anything, so refusing it leaves the
     // owner stuck for good. It still stops at black.
     bool ForHousekeeping;
+    // DDisk waits for a terminal reply even when PDisk stops with this request queued.
+    bool IsDDisk = false;
+    // Refuse the reservation unless the owner's colour after it stays strictly better
+    // than this, the same sense TSpaceHeadroom::ToPreOrange and GetHeadroomBelow() use.
+    // BLACK, the default, is the historical rule: refused only when it would black out
+    // the disk. A caller funding newly accepted data names a stricter bound so PDisk
+    // decides under StateMutex, instead of the caller reserving and then discovering
+    // from the reply that it has already moved the colour.
+    NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK;
 
-    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false)
+    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false,
+            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SizeChunks(sizeChunks)
         , ForHousekeeping(forHousekeeping)
+        , RefuseAtColor(refuseAtColor)
     {}
 
     TString ToString() const {
@@ -891,6 +902,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
         str << " ownerRound# " << record.OwnerRound;
         str << " SizeChunks# " << record.SizeChunks;
         str << " ForHousekeeping# " << record.ForHousekeeping;
+        str << " RefuseAtColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(record.RefuseAtColor);
         str << "}";
         return str.Str();
     }
@@ -902,6 +914,10 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
     TStatusFlags StatusFlags;
     TString ErrorReason;
     TSpaceHeadroom Headroom;
+    // Colour the owner would be in once these chunks are taken, which is what
+    // RefuseAtColor was compared against. Reported on refusal too, so a caller that
+    // named a bound can tell how far past it the disk already is.
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimatedColor = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TEvChunkReserveResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
         : Status(status)
@@ -924,6 +940,7 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << " Headroom# " << record.Headroom.ToString();
+        str << " EstimatedColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(record.EstimatedColor);
         str << "}";
         return str.Str();
     }
@@ -936,6 +953,8 @@ struct TEvChunkForget : TEventLocal<TEvChunkForget, TEvBlobStorage::EvChunkForge
     TOwner Owner;
     TOwnerRound OwnerRound;
     TVector<TChunkIdx> ForgetChunks;
+    // Opt in to DDisk lifecycle replies, execution-time session validation, and cookies.
+    bool IsDDisk = false;
 
     TEvChunkForget(TOwner owner, TOwnerRound ownerRound)
         : Owner(owner)
@@ -1588,7 +1607,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     ui32 FreeChunks; // contains SharedQuota.Free
     ui32 TotalChunks; // contains OwnerQuota.HardLimit(owner), Total != Free + Used
     ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
-    ui32 NumSlots; // number of VDisks over PDisk, not their weight
+    ui32 NumOwners; // number of registered PDisk owners (including VDisks and DDisks), not their weight
     ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].GroupSizeInUnits / PDisk.SlotSizeInUnits)} $
     double NormalizedOccupancy = 0;
     double VDiskSlotUsage = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
@@ -1605,7 +1624,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
             ui32 freeChunks,
             ui32 totalChunks,
             ui32 usedChunks,
-            ui32 numSlots,
+            ui32 numOwners,
             ui32 numActiveSlots,
             ui32 expectedSlotCount,
             TString errorReason,
@@ -1615,7 +1634,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , FreeChunks(freeChunks)
         , TotalChunks(totalChunks)
         , UsedChunks(usedChunks)
-        , NumSlots(numSlots)
+        , NumOwners(numOwners)
         , NumActiveSlots(numActiveSlots)
         , ExpectedSlotCount(expectedSlotCount)
         , ErrorReason(std::move(errorReason))
@@ -1629,7 +1648,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " FreeChunks# " << FreeChunks;
         str << " TotalChunks# " << TotalChunks;
         str << " UsedChunks# " << UsedChunks;
-        str << " NumSlots# " << NumSlots;
+        str << " NumOwners# " << NumOwners;
         str << " NumActiveSlots# " << NumActiveSlots;
         str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";

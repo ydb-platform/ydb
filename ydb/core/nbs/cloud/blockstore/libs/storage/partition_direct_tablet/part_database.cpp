@@ -21,12 +21,6 @@ TVChunkConfigProto ToProto(const TVChunkConfig& cfg)
         if (!disabled.Get(i)) {
             proto.AddEnabledHosts(i);
         }
-
-        if (const auto watermark = cfg.GetWatermark(i)) {
-            auto* w = proto.AddWatermarks();
-            w->SetHostIndex(i);
-            w->SetValue(watermark.value());
-        }
     }
 
     return proto;
@@ -37,7 +31,6 @@ TVChunkConfig FromProto(const TVChunkConfigProto& proto)
     THostRoles pbufferHosts(proto.PBufferHostRolesSize());
     THostRoles ddiskHosts(proto.DDiskHostRolesSize());
     THostMask enabledHosts;
-    TVector<std::optional<ui64>> watermarks(proto.DDiskHostRolesSize());
 
     for (THostIndex i = 0; i < proto.PBufferHostRolesSize(); ++i) {
         pbufferHosts.SetRole(
@@ -55,16 +48,11 @@ TVChunkConfig FromProto(const TVChunkConfigProto& proto)
         enabledHosts.Set(static_cast<THostIndex>(proto.GetEnabledHosts(i)));
     }
 
-    for (const auto& w: proto.GetWatermarks()) {
-        watermarks[w.GetHostIndex()] = w.GetValue();
-    }
-
     return TVChunkConfig::Make(
         proto.GetVChunkIndex(),
         pbufferHosts,
         ddiskHosts,
-        enabledHosts,
-        std::move(watermarks));
+        enabledHosts);
 }
 
 }   // namespace

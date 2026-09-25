@@ -176,7 +176,9 @@ void TController::SwitchToWork(const TActorContext& ctx) {
     }
 
     for (const auto& [key, barrier] : SchemaBarriers) {
-        if (barrier.Phase == ESchemaBarrierPhase::Altering) {
+        if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
+            StartSchemaChangeTargetFlush(key, ctx);
+        } else if (barrier.Phase == ESchemaBarrierPhase::Altering) {
             StartSchemaChangeDstAlter(key, ctx);
         }
     }
@@ -201,14 +203,13 @@ void TController::Reset() {
     CompleteWorkerSets.clear();
     SchemaBarriers.clear();
     DeferredAlters.clear();
+    SchemaTargetFlushes.clear();
+    ActiveSchemaTargetFlush.reset();
 }
 
 bool TController::HasActiveSchemaBarrier(ui64 replicationId) const {
     return AnyOf(SchemaBarriers, [replicationId](const auto& item) {
-        return item.first.first == replicationId
-            && item.second.Phase != ESchemaBarrierPhase::Error
-            && (item.second.Phase != ESchemaBarrierPhase::Applied
-                || item.second.CompletedWorkers.size() != item.second.ExpectedWorkers.size());
+        return item.first.first == replicationId && item.second.IsActive();
     });
 }
 
@@ -787,7 +788,7 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
 void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
     const auto barrier = SchemaBarriers.find({id.ReplicationId(), id.TargetId()});
     if (barrier == SchemaBarriers.end()
-        || barrier->second.Phase != ESchemaBarrierPhase::Applied
+        || !barrier->second.IsDestinationSchemaReady()
         || !barrier->second.AppliedWorkers.contains(id)
         || barrier->second.CompletedWorkers.contains(id))
     {

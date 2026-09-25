@@ -141,6 +141,9 @@ void TSchedulableBase::StopExecution() {
         }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
+        if (const auto now = TMonotonic::Now(); now > StartThrottle) {
+            SchedulableTask->IncreaseBurstThrottle(now - StartThrottle);
+        }
         Resume();
     }
 }
@@ -152,21 +155,22 @@ TDuration TSchedulableBase::CalculateDelay(TMonotonic) const {
     const auto snapshot = query->GetSnapshot();
     const auto share = snapshot ? snapshot->FairShare : 1; // TODO: check if each query is allowed minimum fair-share?
 
+    TDuration delayDuration;
     if (share < 1e-9) {
-        return query->DelayParams->MaxDelay;
+        delayDuration = query->DelayParams->MaxDelay;
+    } else {
+        i64 delay =
+            + (query->CurrentTasksTime / share)                                          // current tasks to complete
+            + (query->WaitingTasksTime / share)                                          // waiting tasks to complete
+            // TODO: (currentUsage - averageUsage) * penalty                             // penalty for usage since last snapshot
+            - (ExecuteAttempts * query->DelayParams->AttemptBonus.MicroSeconds())        // bonus for number of attempts
+            + (RandomNumber<ui64>() % query->DelayParams->MaxRandomDelay.MicroSeconds()) // random delay
+        ;
+        delayDuration = Min(query->DelayParams->MaxDelay, Max(query->DelayParams->MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
     }
 
-    i64 delay =
-        + (query->CurrentTasksTime / share)                                          // current tasks to complete
-        + (query->WaitingTasksTime / share)                                          // waiting tasks to complete
-        // TODO: (currentUsage - averageUsage) * penalty                             // penalty for usage since last snapshot
-        - (ExecuteAttempts * query->DelayParams->AttemptBonus.MicroSeconds())        // bonus for number of attempts
-        + (RandomNumber<ui64>() % query->DelayParams->MaxRandomDelay.MicroSeconds()) // random delay
-    ;
-
-    auto delayDuration = Min(query->DelayParams->MaxDelay, Max(query->DelayParams->MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
-    if (query->Delay) {
-        query->Delay->Collect(delayDuration.MicroSeconds());
+    if (auto* pool = query->GetParent()) {
+        pool->CollectDelay(delayDuration.MicroSeconds());
     }
     return delayDuration;
 }

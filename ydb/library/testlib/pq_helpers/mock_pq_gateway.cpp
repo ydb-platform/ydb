@@ -632,6 +632,21 @@ class TMockPqGateway final : public IMockPqGateway {
         //// IDeferredPublishClient interface implementation
 
         NYdb::NTopic::TAsyncBeginPublicationResult BeginPublication(const TString& extPublicationId, const NYdb::NTopic::TBeginPublicationSettings& settings) final {
+            if (const auto handler = GetRequestHandler()) {
+                ui64 intId = 0;
+                with_lock (Mutex) {
+                    intId = ++PublicationIntId;
+                }
+                return DispatchRequest<NYdb::NTopic::TBeginPublicationResult>(handler, {
+                    .Method = EMethod::Begin,
+                    .PublicationId = intId,
+                    .ExternalId = extPublicationId,
+                    .WriterIdentity = settings.WriterIdentity_,
+                }, [intId, extPublicationId](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary>) {
+                    return NYdb::NTopic::TBeginPublicationResult(NYdb::TStatus(status, {}), NYdb::NTopic::TDeferredPublication(intId, extPublicationId));
+                });
+            }
+
             ui64 intId = 0;
             with_lock (Mutex) {
                 intId = ++PublicationIntId;
@@ -648,6 +663,16 @@ class TMockPqGateway final : public IMockPqGateway {
         NYdb::NTopic::TAsyncPublishResult Publish(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TPublishSettings& settings) final {
             Y_UNUSED(settings);
 
+            if (const auto handler = GetRequestHandler()) {
+                return DispatchRequest<NYdb::NTopic::TPublishResult>(handler, {
+                    .Method = EMethod::Publish,
+                    .PublicationId = publication.IntPublicationId,
+                    .ExternalId = publication.ExtPublicationId ? TString(*publication.ExtPublicationId) : TString(),
+                }, [](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary>) {
+                    return NYdb::NTopic::TPublishResult(NYdb::TStatus(status, {}));
+                });
+            }
+
             const ui64 intId = publication.IntPublicationId;
 
             with_lock (Mutex) {
@@ -662,6 +687,16 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
         NYdb::NTopic::TAsyncCancelPublicationResult CancelPublication(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TCancelPublicationSettings& /*settings*/) final {
+            if (const auto handler = GetRequestHandler()) {
+                return DispatchRequest<NYdb::NTopic::TCancelPublicationResult>(handler, {
+                    .Method = EMethod::Cancel,
+                    .PublicationId = publication.IntPublicationId,
+                    .ExternalId = publication.ExtPublicationId ? TString(*publication.ExtPublicationId) : TString(),
+                }, [](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary>) {
+                    return NYdb::NTopic::TCancelPublicationResult(NYdb::TStatus(status, {}));
+                });
+            }
+
             with_lock (Mutex) {
                 const auto it = OpenedPublications.find(publication.IntPublicationId);
                 if (it == OpenedPublications.end()) {
@@ -678,6 +713,15 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
         NYdb::NTopic::TAsyncListPublicationsResult ListPublications(const NYdb::NTopic::TListPublicationsSettings& settings) final {
+            if (const auto handler = GetRequestHandler()) {
+                return DispatchRequest<NYdb::NTopic::TListPublicationsResult>(handler, {
+                    .Method = EMethod::List,
+                    .WriterIdentity = settings.WriterIdentity_,
+                }, [](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary> publications) {
+                    return NYdb::NTopic::TListPublicationsResult(NYdb::TStatus(status, {}), std::move(publications));
+                });
+            }
+
             std::vector<NYdb::NTopic::TPublicationSummary> publications;
             with_lock (Mutex) {
                 for (const auto& [intId, info] : OpenedPublications) {
@@ -694,6 +738,12 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
         //// Mock API implementation
+
+        void SetRequestHandler(TRequestHandler handler) final {
+            with_lock (Mutex) {
+                RequestHandler = std::move(handler);
+            }
+        }
 
         void EnsureOpenedPublications(ui64 count, const TString& nameSubstring) final {
             with_lock (Mutex) {
@@ -772,6 +822,22 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
     private:
+        TRequestHandler GetRequestHandler() {
+            with_lock (Mutex) {
+                return RequestHandler;
+            }
+        }
+
+        template <typename TResult, typename TMakeResult>
+        static NThreading::TFuture<TResult> DispatchRequest(const TRequestHandler& handler, TRequest request, TMakeResult makeResult) {
+            auto promise = NThreading::NewPromise<TResult>();
+            request.Reply = [promise, makeResult = std::move(makeResult)](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary> publications) mutable {
+                promise.SetValue(makeResult(status, std::move(publications)));
+            };
+            handler(std::move(request));
+            return promise.GetFuture();
+        }
+
         NYdb::NTopic::TPublishResult DoCommitDeferredPublication(ui64 intId) {
             Y_ENSURE(OpenedPublications.erase(intId) == 1, "Publication #" << intId << " is not opened");
 
@@ -784,6 +850,7 @@ class TMockPqGateway final : public IMockPqGateway {
 
         const TDuration OperationTimeout;
         TMutex Mutex;
+        TRequestHandler RequestHandler;
         ui64 PublicationIntId = 0;
         std::unordered_set<TString> CreatedExtPublicationIds;
         std::unordered_map<ui64, TPublicationInfo> OpenedPublications;

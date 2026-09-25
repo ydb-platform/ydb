@@ -15,6 +15,8 @@
 #include <yql/essentials/sql/v1/ide/completion/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/ide/completion/name/service/union/name_service.h>
 
+#include <yql/essentials/sql/v1/ide/pure_ast/parser.h>
+
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -505,35 +507,35 @@ Y_UNIT_TEST(Pragma) {
             {.Kind = PragmaName, .Content = "yson.CastToString"},
             {.Kind = PragmaName, .Content = "yt.RuntimeCluster"},
             {.Kind = PragmaName, .Content = "yt.RuntimeClusterSelection"}};
-        auto completion = engine->Complete({.Text = "PRAGMA "}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA "}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "yson.CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA ys"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA ys"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "ys");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "yson.CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA yson"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA yson"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "yson");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA yson."}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA yson."}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA yson.cast"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA yson.cast"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "cast");
     }
@@ -996,7 +998,7 @@ Y_UNIT_TEST(FunctionName) {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "DateTime::Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT Date"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT Date"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "Date");
     }
@@ -1004,14 +1006,14 @@ Y_UNIT_TEST(FunctionName) {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT DateTime:"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT DateTime:"}}).GetValueSync();
         UNIT_ASSERT(completion.Candidates.empty());
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT DateTime::"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT DateTime::"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
@@ -1019,7 +1021,7 @@ Y_UNIT_TEST(FunctionName) {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT DateTime::s"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT DateTime::s"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "s");
     }
@@ -2326,7 +2328,7 @@ Y_UNIT_TEST(Typing) {
     auto engine = MakeSqlCompletionEngineUT();
 
     const auto check = [&](TStringBuf prefix) {
-        TCompletionInput input = {.Text = prefix};
+        TCompletionInput input = {{.Text = prefix}};
         TCompletion completion = engine->Complete(input).GetValueSync();
         Y_DO_NOT_OPTIMIZE_AWAY(completion);
     };
@@ -2353,12 +2355,23 @@ Y_UNIT_TEST(Tabbing) {
     query += query + ";";
     query += query + ";";
 
+    auto parser = NSQLPureAST::MakeParser();
+    auto tree = parser->Parse(query);
+
     auto engine = MakeSqlCompletionEngineUT();
 
     const auto check = [&](size_t position) {
-        TCompletionInput input = {.Text = query, .CursorPosition = position};
-        TCompletion completion = engine->Complete(input).GetValueSync();
-        Y_DO_NOT_OPTIMIZE_AWAY(completion);
+        TCompletion treeless =
+            engine
+                ->Complete({{.Text = query, .CursorPosition = position}, nullptr})
+                .GetValueSync();
+
+        TCompletion treefull =
+            engine
+                ->Complete({{.Text = query, .CursorPosition = position}, tree})
+                .GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(treeless.Candidates, treefull.Candidates);
     };
 
     size_t position = 0;
@@ -2396,15 +2409,15 @@ Y_UNIT_TEST(InvalidStatementsRecovery) {
 Y_UNIT_TEST(InvalidCursorPosition) {
     auto engine = MakeSqlCompletionEngineUT();
 
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"", 0}).GetValueSync());
-    UNIT_ASSERT_EXCEPTION(engine->Complete({"", 1}).GetValueSync(), yexception);
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"", 0}}).GetValueSync());
+    UNIT_ASSERT_EXCEPTION(engine->Complete({{"", 1}}).GetValueSync(), yexception);
 
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"s", 0}).GetValueSync());
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"s", 1}).GetValueSync());
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"s", 0}}).GetValueSync());
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"s", 1}}).GetValueSync());
 
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"ы", 0}).GetValueSync());
-    UNIT_ASSERT_EXCEPTION(engine->Complete({"ы", 1}).GetValueSync(), yexception);
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"ы", 2}).GetValueSync());
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"ы", 0}}).GetValueSync());
+    UNIT_ASSERT_EXCEPTION(engine->Complete({{"ы", 1}}).GetValueSync(), yexception);
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"ы", 2}}).GetValueSync());
 }
 
 Y_UNIT_TEST(DefaultNameService) {
@@ -2670,7 +2683,7 @@ Y_UNIT_TEST(ThreadSafetyStressTyping) {
         pool->SafeAddFunc([&] {
             TString prefix(Reserve(input.size()));
             for (wchar32 c : TUtfIterCode(input)) {
-                TCompletionInput input = {.Text = prefix};
+                TCompletionInput input = {{.Text = prefix}};
                 TCompletion completion = engine->Complete(input).GetValueSync();
                 Y_DO_NOT_OPTIMIZE_AWAY(completion);
 

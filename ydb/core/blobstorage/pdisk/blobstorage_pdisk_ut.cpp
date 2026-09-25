@@ -7,6 +7,8 @@
 #include "blobstorage_pdisk_ut_env.h"
 
 #include <type_traits>
+#include <library/cpp/logger/record.h>
+#include <library/cpp/logger/stream.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -66,20 +68,45 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
 }
 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
-    Y_UNIT_TEST(ReservedChunksSurviveOwnerReinit) {
+    // A reservation that was never committed leaves no persistent trace, so the owner's
+    // next incarnation cannot reference it. PDisk releases it at YardInit instead of
+    // keeping it DATA_RESERVED -- holding quota that nobody can free -- until the PDisk
+    // itself restarts, with the VDisk only able to log it as a leak.
+    Y_UNIT_TEST(UncommittedReservationsReleasedOnOwnerReinit) {
         TActorTestContext testCtx{{}}; // Real PDisk with a sector-map device.
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
-        vdisk.ReserveChunk();
-        const ui32 chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+
+        auto usedChunks = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK)->UsedChunks;
+        };
+
+        const ui32 before = usedChunks();
+        vdisk.ReserveChunk(4);
+        const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
+        UNIT_ASSERT_VALUES_EQUAL(reserved.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(usedChunks(), before + 4);
 
         const auto reinit = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
             new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
                 testCtx.TestCtx.PDiskGuid, testCtx.Sender), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.front(), chunk);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 0);
         vdisk.PDiskParams = reinit->PDiskParams;
         vdisk.ReadLog();
+        // The new incarnation has no memory of the reservations either.
+        vdisk.Chunks[EChunkState::RESERVED].clear();
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            for (TChunkIdx chunk : reserved) {
+                const auto& state = p->ChunkState[chunk];
+                UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::FREE);
+                UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, NPDisk::OwnerUnallocated);
+            }
+        });
+        // The quota comes back too, not only the chunk states.
+        UNIT_ASSERT_VALUES_EQUAL(usedChunks(), before);
 
         testCtx.RestartPDiskSync();
         // InitFull verifies that PDisk reports exactly the committed chunks: none here.
@@ -145,6 +172,493 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         // Nothing was committed along the way, so PDisk must not report anything as owned.
         testCtx.RestartPDiskSync();
         vdisk.InitFull();
+    }
+
+    Y_UNIT_TEST(ChunkForgetRejectsCommittedChunksAndPreservesCookies) {
+        for (const bool mock : {false, true}) {
+            for (const bool isDDisk : {false, true}) {
+                auto settings = FewChunksSettings();
+                settings.UsePDiskMock = mock;
+                TActorTestContext testCtx(settings);
+                TVDiskMock vdisk(&testCtx);
+                vdisk.InitFull();
+                vdisk.ReserveChunk();
+                const ui32 committed = *vdisk.Chunks[EChunkState::RESERVED].begin();
+                vdisk.CommitReservedChunks();
+                vdisk.ReserveChunk();
+                const ui32 reserved = *vdisk.Chunks[EChunkState::RESERVED].begin();
+                auto sendForget = [&](TVector<ui32> chunks, auto status) {
+                    auto* ev = new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner,
+                        vdisk.PDiskParams->OwnerRound, std::move(chunks));
+                    UNIT_ASSERT(!ev->IsDDisk);
+                    ev->IsDDisk = isDDisk;
+                    // Cover cookie propagation through actor admission.
+                    testCtx.Send(ev, 98765);
+                    auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkForgetResult>(
+                        testCtx.Sender, TDuration::Seconds(10));
+                    UNIT_ASSERT(reply);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, mock || isDDisk ? 98765 : 0);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, status);
+                };
+                if (mock && !isDDisk) {
+                    // The legacy mock permits forgetting committed chunks.
+                    sendForget({reserved, committed}, NKikimrProto::OK);
+                } else {
+                    // Rejection is atomic and leaves the reservation available for cleanup.
+                    sendForget({reserved, committed}, NKikimrProto::ERROR);
+                    sendForget({reserved}, NKikimrProto::OK);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ChunkForgetErrorCookiesRemainOptIn) {
+        for (const bool mock : {false, true}) {
+            auto settings = FewChunksSettings();
+            settings.UsePDiskMock = mock;
+            TActorTestContext testCtx(settings);
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            // Both actors enter their existing error state on PDiskStop. The mock
+            // does not acknowledge this control request; same-sender ordering suffices.
+            testCtx.Send(new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr));
+            for (const bool isDDisk : {false, true}) {
+                auto* ev = new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner,
+                    vdisk.PDiskParams->OwnerRound, TVector<ui32>{123});
+                ev->IsDDisk = isDDisk;
+                testCtx.Send(ev, 54321);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkForgetResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::CORRUPTED);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? 54321 : 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ChunkForgetReadOnlyCookiesRemainOptIn) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        testCtx.SafeRunOnPDisk([](auto* p) { p->Cfg->ReadOnly = true; });
+        for (const bool isDDisk : {false, true}) {
+            auto* ev = new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner,
+                vdisk.PDiskParams->OwnerRound, TVector<ui32>{123});
+            ev->IsDDisk = isDDisk;
+            testCtx.Send(ev, 54321);
+            auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkForgetResult>(
+                testCtx.Sender, TDuration::Seconds(10));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::CORRUPTED);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? 54321 : 0);
+        }
+    }
+
+    Y_UNIT_TEST(ChunkForgetRevalidatesOwnerRoundAtExecution) {
+        for (const bool isDDisk : {false, true}) {
+            TActorTestContext testCtx(FewChunksSettings());
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            // The specimen has to outlive the re-init below, or there is nothing left for the
+            // stale forget to act on. An uncommitted reservation does not -- YardInit releases
+            // it -- so decommit a committed chunk instead: a decommitted chunk has a persistent
+            // trace, survives re-init, and is still something TEvChunkForget accepts.
+            vdisk.ReserveChunk();
+            vdisk.CommitReservedChunks();
+            const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+            vdisk.DecommitCommitedChunks();
+            // DATA_DECOMMITTED is set by OnLogCommitDone(), which need not have run by the time
+            // TEvLogResult arrives. The forget below behaves differently in the transitional
+            // DATA_COMMITTED_DECOMMIT_IN_PROGRESS state, so wait for the final one.
+            const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+            while (!testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+                return p->ChunkState[chunk].CommitState == NPDisk::TChunkState::DATA_DECOMMITTED;
+            })) {
+                UNIT_ASSERT_C(TMonotonic::Now() < deadline, "chunk never reached DATA_DECOMMITTED");
+                Sleep(TDuration::MilliSeconds(1));
+            }
+            auto* pdisk = testCtx.GetPDisk();
+            NPDisk::TEvChunkForget ev(vdisk.PDiskParams->Owner,
+                vdisk.PDiskParams->OwnerRound, TVector<ui32>{chunk});
+            ev.IsDDisk = isDDisk;
+            auto* request = pdisk->ReqCreator.CreateFromEv<NPDisk::TChunkForget>(ev, testCtx.Sender, 12345);
+            UNIT_ASSERT(testCtx.SafeRunOnPDisk([&](auto* p) { return p->PreprocessRequest(request); }));
+            const auto reinit = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                    testCtx.TestCtx.PDiskGuid, testCtx.Sender), NKikimrProto::OK);
+            vdisk.PDiskParams = reinit->PDiskParams;
+            vdisk.ReadLog();
+            testCtx.SafeRunOnPDisk([&](auto* p) { p->ChunkForget(*request); });
+            delete request;
+            auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkForgetResult>(
+                testCtx.Sender, TDuration::Seconds(10));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? 12345 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::INVALID_ROUND);
+            testCtx.SafeRunOnPDisk([&](auto* p) {
+                UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitState, NPDisk::TChunkState::DATA_DECOMMITTED);
+            });
+        }
+    }
+
+    // What makes the check above matter: YardInit hands a restarted owner's reservations back to
+    // the free pool, and its new incarnation may reserve the same chunks again. A forget the old
+    // incarnation sends late must not take them away from it.
+    Y_UNIT_TEST(ChunkForgetFromPreviousOwnerRoundLeavesReservationsAlone) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto staleRound = vdisk.PDiskParams->OwnerRound;
+
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->Owner, owner);
+        vdisk.ReserveChunk();
+        const TChunkIdx chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+            new NPDisk::TEvChunkForget(owner, staleRound, TVector<ui32>{chunk}), NKikimrProto::INVALID_ROUND);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            const auto& state = p->ChunkState[chunk];
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_RESERVED);
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+        });
+        // The current incarnation still forgets its own reservations as usual.
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+            new NPDisk::TEvChunkForget(owner, vdisk.PDiskParams->OwnerRound, TVector<ui32>{chunk}), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(ChunkForgetAndReserveReceiveOneTerminalReplyOnStop) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        auto* pdisk = testCtx.GetPDisk();
+        pdisk->PDiskThread.StopSync();
+        // Pair legacy and DDisk requests in every queue.
+        for (const bool isDDisk : {false, true}) {
+            for (ui64 queue = 1; queue <= 5; ++queue) {
+                const ui64 cookie = queue + (isDDisk ? 0 : 10);
+                if (queue <= 2) {
+                    NPDisk::TEvChunkReserve ev(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1);
+                    UNIT_ASSERT(!ev.IsDDisk);
+                    ev.IsDDisk = isDDisk;
+                    auto* request = pdisk->ReqCreator.CreateFromEv<NPDisk::TChunkReserve>(ev, testCtx.Sender, cookie);
+                    if (queue == 1) {
+                        pdisk->InputRequest(request);
+                    } else {
+                        pdisk->FastOperationsQueue.emplace_back(request);
+                    }
+                } else {
+                    NPDisk::TEvChunkForget ev(vdisk.PDiskParams->Owner,
+                        vdisk.PDiskParams->OwnerRound, TVector<ui32>{123});
+                    ev.IsDDisk = isDDisk;
+                    auto* request = pdisk->ReqCreator.CreateFromEv<NPDisk::TChunkForget>(ev, testCtx.Sender, cookie);
+                    if (queue == 3) {
+                        pdisk->InputRequest(request);
+                    } else if (queue == 4) {
+                        pdisk->FastOperationsQueue.emplace_back(request);
+                    } else {
+                        pdisk->JointChunkForgets.emplace_back(request);
+                    }
+                }
+            }
+        }
+        pdisk->Stop();
+        pdisk->Stop();
+        testCtx.GetRuntime()->Send(new IEventHandle(testCtx.Sender, testCtx.Sender, new TEvents::TEvWakeup));
+        std::set<ui64> replies;
+        for (;;) {
+            TAutoPtr<IEventHandle> handle;
+            auto [reserve, forget, barrier] = testCtx.GetRuntime()->GrabEdgeEventsRethrow<
+                NPDisk::TEvChunkReserveResult, NPDisk::TEvChunkForgetResult, TEvents::TEvWakeup>(
+                    handle, TDuration::Seconds(10));
+            UNIT_ASSERT(handle);
+            if (barrier) {
+                break;
+            }
+            UNIT_ASSERT_C(replies.insert(handle->Cookie).second, "duplicate terminal reply");
+            UNIT_ASSERT_VALUES_EQUAL(reserve ? reserve->Status : forget->Status, NKikimrProto::CORRUPTED);
+        }
+        UNIT_ASSERT(replies == std::set<ui64>({1, 2, 3, 4, 5}));
+    }
+
+    Y_UNIT_TEST(ChunkForgetTransitionalRejectionsPreserveStateAndSeverity) {
+        class TForgetLogBackend : public TStreamLogBackend {
+        public:
+            TForgetLogBackend(IOutputStream* stream, TManualEvent* logged)
+                : TStreamLogBackend(stream)
+                , Logged(logged)
+            {}
+
+            void WriteData(const TLogRecord& record) override {
+                TStreamLogBackend::WriteData(record);
+                if (TStringBuf(record.Data, record.Len).Contains("BPD91")) {
+                    Logged->Signal();
+                }
+            }
+
+        private:
+            TManualEvent* const Logged;
+        };
+
+        using TState = NPDisk::TChunkState;
+        for (const bool isDDisk : {false, true}) {
+            for (const auto state : {TState::DATA_ON_QUARANTINE,
+                    TState::DATA_RESERVED_DELETE_IN_PROGRESS, TState::DATA_COMMITTED_DELETE_IN_PROGRESS,
+                    TState::DATA_RESERVED_DELETE_ON_QUARANTINE, TState::DATA_COMMITTED_DELETE_ON_QUARANTINE,
+                    TState::DATA_COMMITTED}) {
+                TStringStream log;
+                TManualEvent logged;
+                {
+                    auto settings = FewChunksSettings();
+                    settings.LogBackend = new TForgetLogBackend(&log, &logged);
+                    TActorTestContext testCtx(settings);
+                    TVDiskMock vdisk(&testCtx);
+                    vdisk.InitFull();
+                    vdisk.ReserveChunk();
+                    const ui32 chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+                    auto* pdisk = testCtx.GetPDisk();
+                    NPDisk::TEvChunkForget ev(vdisk.PDiskParams->Owner,
+                        vdisk.PDiskParams->OwnerRound, TVector<ui32>{chunk});
+                    ev.IsDDisk = isDDisk;
+                    auto* request = pdisk->ReqCreator.CreateFromEv<NPDisk::TChunkForget>(ev, testCtx.Sender);
+                    testCtx.SafeRunOnPDisk([&](auto* p) {
+                        // Exercise execution atomically so background reclamation cannot race this fixture.
+                        p->ChunkState[chunk].CommitState = state;
+                        p->ChunkForget(*request);
+                        UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].CommitState, state);
+                        UNIT_ASSERT_VALUES_EQUAL(p->ChunkState[chunk].OwnerId, vdisk.PDiskParams->Owner);
+                        p->ChunkState[chunk].CommitState = TState::DATA_RESERVED;
+                    });
+                    delete request;
+                    auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkForgetResult>(
+                        testCtx.Sender, TDuration::Seconds(10));
+                    UNIT_ASSERT(reply);
+                    UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::ERROR);
+                    UNIT_ASSERT_C(reply->Get()->ErrorReason.Contains("BPD91"), reply->Get()->ErrorReason);
+                    // The reply and the log use different actors. Keep the runtime alive
+                    // until the logger writes BPD91; shutdown does not drain its mailbox.
+                    UNIT_ASSERT_C(logged.WaitT(TDuration::Seconds(10)), "BPD91 was not written by the logger");
+                }
+                const TString text = log.Str();
+                const size_t marker = text.find("BPD91");
+                UNIT_ASSERT_C(marker != TString::npos, text);
+                const size_t lineStart = text.rfind(":BS_PDISK ", marker);
+                UNIT_ASSERT_C(lineStart != TString::npos, text);
+                const auto line = text.substr(lineStart, marker - lineStart);
+                UNIT_ASSERT_C(line.Contains(isDDisk && state != TState::DATA_COMMITTED ? "WARN" : "ERROR"), line);
+            }
+        }
+    }
+
+    void TestChunkForgetWaitsForRawIo(bool write, bool failRead = false) {
+        auto settings = FewChunksSettings();
+        settings.PlainDataChunks = true;
+        TActorTestContext testCtx(settings);
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto chunks = ReserveUntilOutOfSpace(testCtx, vdisk);
+        UNIT_ASSERT_GT(chunks.size(), 1);
+        const ui32 chunk = chunks.back();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto ownerRound = vdisk.PDiskParams->OwnerRound;
+        auto* pdisk = testCtx.GetPDisk();
+
+        struct TReadGate {
+            TManualEvent Entered;
+            TManualEvent Resume;
+        };
+        auto gate = std::make_shared<TReadGate>();
+        Y_SCOPE_EXIT(&) {
+            gate->Resume.Signal();
+            testCtx.TestCtx.SectorMap->SetReadCallback({});
+        };
+        // The sector-map device has one I/O worker. Holding a read also keeps
+        // subsequent raw writes queued before they can touch the device.
+        testCtx.TestCtx.SectorMap->SetReadCallback([gate] {
+            gate->Entered.Signal();
+            gate->Resume.WaitI();
+        });
+        testCtx.Send(new NPDisk::TEvChunkReadRaw(owner, ownerRound,
+            write ? chunks.front() : chunk, 0, 4096));
+        UNIT_ASSERT_C(gate->Entered.WaitT(TDuration::Seconds(10)), "raw read did not reach the device");
+        if (write) {
+            for (ui32 offset : {0, 4096}) {
+                testCtx.Send(new NPDisk::TEvChunkWriteRaw(owner, ownerRound, chunk, offset,
+                    TRope(PrepareData(4096))));
+            }
+        }
+
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+            new NPDisk::TEvChunkForget(owner, ownerRound, TVector<ui32>{chunk}), NKikimrProto::OK);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            const auto& state = p->ChunkState[chunk];
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_ON_QUARANTINE);
+            UNIT_ASSERT_VALUES_EQUAL(state.OperationsInProgress.load(), write ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(p->OwnerData[owner].InFlight->ChunkReads.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(p->OwnerData[owner].InFlight->ChunkWrites.load(), write ? 2 : 0);
+        });
+        testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+            new NPDisk::TEvChunkReserve(owner, ownerRound, 1), NKikimrProto::OUT_OF_SPACE);
+
+        if (failRead) {
+            testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
+        }
+        gate->Resume.Signal();
+        testCtx.TestResponse<NPDisk::TEvChunkReadRawResult>(nullptr,
+            failRead ? NKikimrProto::ERROR : NKikimrProto::OK);
+        if (write) {
+            for (ui32 i = 0; i < 2; ++i) {
+                testCtx.TestResponse<NPDisk::TEvChunkWriteRawResult>(nullptr, NKikimrProto::OK);
+            }
+        }
+
+        // Replies precede completion destruction, and quarantine is cleared by
+        // the PDisk worker. Wait for both before checking that allocation works.
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (!testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            return p->ChunkState[chunk].CommitState == NPDisk::TChunkState::FREE
+                && !p->OwnerData[owner].InFlight->ChunkReads.load()
+                && !p->OwnerData[owner].InFlight->ChunkWrites.load();
+        })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "raw I/O did not release the quarantined chunk");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->ChunkState[chunk].OperationsInProgress.load(), 0);
+        testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+            new NPDisk::TEvChunkReserve(owner, ownerRound, 1), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(ChunkForgetWaitsForRawReads) {
+        TestChunkForgetWaitsForRawIo(false);
+    }
+
+    Y_UNIT_TEST(ChunkForgetWaitsForRawWrites) {
+        TestChunkForgetWaitsForRawIo(true);
+    }
+
+    // A restarted owner's reservations are released only once the previous incarnation's I/O is
+    // over: YardInit waits for it, so nothing is handed out while a write may still land in it.
+    Y_UNIT_TEST(OwnerReinitReleasesReservationsAfterIoDrains) {
+        auto settings = FewChunksSettings();
+        settings.PlainDataChunks = true;
+        TActorTestContext testCtx(settings);
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk(2);
+        const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
+        const TChunkIdx chunk = *reserved.begin();
+        const auto owner = vdisk.PDiskParams->Owner;
+
+        struct TReadGate {
+            TManualEvent Entered;
+            TManualEvent Resume;
+        };
+        auto gate = std::make_shared<TReadGate>();
+        Y_SCOPE_EXIT(&) {
+            gate->Resume.Signal();
+            testCtx.TestCtx.SectorMap->SetReadCallback({});
+        };
+        testCtx.TestCtx.SectorMap->SetReadCallback([gate] {
+            gate->Entered.Signal();
+            gate->Resume.WaitI();
+        });
+        testCtx.Send(new NPDisk::TEvChunkReadRaw(owner, vdisk.PDiskParams->OwnerRound, chunk, 0, 4096));
+        UNIT_ASSERT_C(gate->Entered.WaitT(TDuration::Seconds(10)), "raw read did not reach the device");
+
+        const ui64 newRound = TVDiskMock::OwnerRound.fetch_add(1);
+        testCtx.Send(new NPDisk::TEvYardInit(newRound, vdisk.VDiskID, testCtx.TestCtx.PDiskGuid, testCtx.Sender));
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (!testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) { return p->OwnerData[owner].OwnerRound == newRound; })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "YardInit did not start");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        // The new round is in effect, but the read of the previous one still holds the chunk.
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            const auto& state = p->ChunkState[chunk];
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_RESERVED);
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+            UNIT_ASSERT_VALUES_EQUAL(state.OperationsInProgress.load(), 1);
+        });
+
+        gate->Resume.Signal();
+        testCtx.TestResponse<NPDisk::TEvChunkReadRawResult>(nullptr);
+        const auto reinit = testCtx.Recv<NPDisk::TEvYardInitResult>();
+        UNIT_ASSERT_VALUES_EQUAL(reinit->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 0);
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            for (TChunkIdx idx : reserved) {
+                const auto& state = p->ChunkState[idx];
+                UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::FREE);
+                UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, NPDisk::OwnerUnallocated);
+            }
+        });
+    }
+
+    // Should a reservation still be busy when its owner restarts all the same, it goes to
+    // quarantine, is not reported as owned, and is released once the I/O is over.
+    Y_UNIT_TEST(BusyUncommittedReservationQuarantinedOnOwnerReinit) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk(1);
+        const TChunkIdx chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const auto owner = vdisk.PDiskParams->Owner;
+
+        // YardInit waits for the owner's requests to drain, so this can not be staged with real I/O.
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            auto& state = p->ChunkState[chunk];
+            state.IsDirty = true; // keeps the release from writing a sys log record from this thread
+            ++state.OperationsInProgress;
+            UNIT_ASSERT_VALUES_EQUAL(p->ReleaseUncommittedChunks(owner), 1);
+            UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_ON_QUARANTINE);
+            UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, owner);
+        });
+
+        const auto reinit = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+            new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                testCtx.TestCtx.PDiskGuid, testCtx.Sender), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 0);
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            --p->ChunkState[chunk].OperationsInProgress;
+        });
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (!testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            return p->ChunkState[chunk].CommitState == NPDisk::TChunkState::FREE
+                && p->ChunkState[chunk].OwnerId == NPDisk::OwnerUnallocated;
+        })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "quarantine did not release the chunk");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+    }
+
+    // Counterpart to UncommittedReservationsReleasedOnOwnerReinit: releasing uncommitted
+    // reservations at YardInit must leave a committed chunk exactly where it was.
+    Y_UNIT_TEST(CommittedChunksSurviveOwnerRestart) {
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        vdisk.ReserveChunk(2);
+        vdisk.CommitReservedChunks();
+        const TSet<TChunkIdx> committed = vdisk.Chunks[EChunkState::COMMITTED];
+        UNIT_ASSERT_VALUES_EQUAL(committed.size(), 2);
+
+        vdisk.InitFull();
+
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            for (TChunkIdx chunk : committed) {
+                const auto& state = p->ChunkState[chunk];
+                UNIT_ASSERT_VALUES_EQUAL(state.CommitState, NPDisk::TChunkState::DATA_COMMITTED);
+                UNIT_ASSERT_VALUES_EQUAL(state.OwnerId, vdisk.PDiskParams->Owner);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ChunkForgetWaitsForFailedRawRead) {
+        TestChunkForgetWaitsForRawIo(false, true);
     }
 
     Y_UNIT_TEST(ForgottenReservedChunkIsReusedAsEmpty) {
@@ -1723,6 +2237,89 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_C(false, "never reached CYAN");
     }
 
+    // TEvChunkReserve::RefuseAtColor lets the caller have PDisk decide, under the same
+    // lock that does the allocation, whether the reservation is worth the colour it
+    // would cost -- instead of reserving first and discovering from the reply that the
+    // colour has already moved.
+    Y_UNIT_TEST(ChunkReserveRefusesAtColorBound) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({
+            .DiskSize = 10_GB,
+            .SmallDisk = true,
+            .EnableTightPDiskSpaceColors = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto ownerRound = vdisk.PDiskParams->OwnerRound;
+
+        auto reserve = [&](TColor::E bound, NKikimrProto::EReplyStatus expected) {
+            return testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(owner, ownerRound, 1, false, bound), expected);
+        };
+        auto reserveDefault = [&](NKikimrProto::EReplyStatus expected) {
+            return testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(owner, ownerRound, 1), expected);
+        };
+        auto forget = [&](ui32 chunk) {
+            testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+                new NPDisk::TEvChunkForget(owner, ownerRound, TVector<ui32>{chunk}), NKikimrProto::OK);
+        };
+
+        // The bound is "stay strictly better than this colour", the sense
+        // GetHeadroomBelow() uses. On an empty disk the estimate is GREEN, so a GREEN
+        // bound can never be satisfied and nothing is taken.
+        {
+            auto refused = reserve(TColor::GREEN, NKikimrProto::OUT_OF_SPACE);
+            UNIT_ASSERT_VALUES_EQUAL(refused->EstimatedColor, TColor::GREEN);
+            UNIT_ASSERT(refused->ChunkIds.empty());
+            UNIT_ASSERT_C(refused->ErrorReason.Contains("refuseAtColor# GREEN"), refused->ErrorReason);
+        }
+
+        // The default bound is BLACK, which reproduces the historical rule exactly: an
+        // allocation is refused only when it would black out the disk.
+        {
+            auto ok = reserveDefault(NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(ok->ChunkIds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ok->EstimatedColor, TColor::GREEN);
+            forget(ok->ChunkIds.front());
+        }
+
+        // Now drive the disk to CYAN and check the bound at a real boundary rather than
+        // at the degenerate GREEN one.
+        bool reachedCyan = false;
+        for (int i = 0; i < 100000 && !reachedCyan; ++i) {
+            auto space = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(owner, ownerRound), NKikimrProto::OK);
+            if (StatusFlagToSpaceColor(space->StatusFlags) >= TColor::CYAN) {
+                reachedCyan = true;
+                break;
+            }
+            UNIT_ASSERT_GT(space->FreeChunks, 0);
+            ui32 n = 1;
+            if (space->NormalizedOccupancy < 0.70 && space->FreeChunks > 16) {
+                n = Min<ui32>(16, space->FreeChunks - 16);
+            }
+            vdisk.ReserveChunk(n);
+            vdisk.CommitReservedChunks();
+        }
+        UNIT_ASSERT_C(reachedCyan, "never reached CYAN");
+
+        {
+            auto refused = reserve(TColor::CYAN, NKikimrProto::OUT_OF_SPACE);
+            UNIT_ASSERT_GE(refused->EstimatedColor, TColor::CYAN);
+            UNIT_ASSERT(refused->ChunkIds.empty());
+        }
+        {
+            // Same disk, same instant: only the bound differs.
+            auto ok = reserveDefault(NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(ok->ChunkIds.size(), 1);
+            UNIT_ASSERT_GE(ok->EstimatedColor, TColor::CYAN);
+            forget(ok->ChunkIds.front());
+        }
+    }
+
     Y_UNIT_TEST(SpaceColorDcbOverride) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
@@ -2270,7 +2867,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         double expectedNormalizedOccupancy,
         double expectedVDiskSlotUsage,
         double expectedPDiskUsage,
-        ui32 expectedNumSlots,
+        ui32 expectedNumOwners,
         ui32 expectedNumActiveSlots,
         NKikimrBlobStorage::TPDiskSpaceColor::E expectedColor
     ) {
@@ -2286,7 +2883,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             << " VDiskSlotUsage# " << expectedVDiskSlotUsage
             << " VDiskRawUsage# " << expectedVDiskRawUsage
             << " PDiskUsage# " << expectedPDiskUsage
-            << " NumSlots# " << expectedNumSlots
+            << " NumOwners# " << expectedNumOwners
             << " NumActiveSlots# " << expectedNumActiveSlots
             << " Color# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(expectedColor)
             << Endl);
@@ -2302,7 +2899,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->FreeChunks, expectedFreeChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedTotalChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->UsedChunks, expectedUsedChunks);
-        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumSlots, expectedNumSlots);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumOwners, expectedNumOwners);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumActiveSlots, expectedNumActiveSlots);
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), expectedColor);
 

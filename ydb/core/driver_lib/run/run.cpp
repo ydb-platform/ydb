@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
@@ -240,7 +241,13 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
         server->Stop();
     }
 
-    wrapper->Servers.clear();
+    // Do not destroy TGRpcServer objects here.
+    // KikimrStop() calls StopGRpcServers() before ActorSystem->Stop(), so destroying the
+    // servers here would leave dangling TServer* pointers in any
+    // TGRpcStreamingRequest objects that are still alive when the actor system
+    // destroys their holding actors. The servers are destroyed later when
+    // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
+    // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
 }
 
 } // anonymous namespace
@@ -1523,6 +1530,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
 
+    AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(runConfig.AppConfig.GetResourcePathPrefixMapping());
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {
@@ -2499,6 +2507,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (ActorSystem) {
         ActorSystem->Cleanup();
     }
+
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+    // Disconnect tasks posted during actor shutdown have run on the NBS
+    // executors. Join those threads before ~TKikimrRunner frees TActorSystem.
+    NYdb::NBS::NBlockStore::StopNbsExecutors();
+#endif
 
     if (YdbDriver) {
         YdbDriver->Stop(true);

@@ -43,6 +43,8 @@ def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
+    os.environ["YDB_TEST_NODES_MANAGER_CHECK_PERIOD_MS"] = param.get("nodes_manager_check_period_ms", "5000")
+    os.environ["YDB_TEST_NODES_MANAGER_START_DELAY_MS"] = param.get("nodes_manager_start_delay_ms", "5000")
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
@@ -596,6 +598,14 @@ class Kikimr:
 
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
+
+        # Tenant slots start before the full config reaches CMS. Keep this setting
+        # in the bootstrap config so KQP honors it for the first test queries.
+        table_service_config = full_yaml_config.get("table_service_config", {})
+        if "enable_compile_cache_warmup" in table_service_config:
+            config.yaml_config["table_service_config"] = {
+                "enable_compile_cache_warmup": table_service_config["enable_compile_cache_warmup"]
+            }
 
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)

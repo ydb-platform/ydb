@@ -94,4 +94,14 @@ ui32 TOracleConfig::GetMinSuccessesCountBeforeReturningOnline() const
         100);
 }
 
+ui32 TOracleConfig::GetMaxInflightWritesForDirectWrite() const
+{
+    // GetFromConfig treats 0 as unset, so it cannot express "adaptive off".
+    const auto& cfg = StorageConfig->GetOracleConfig();
+    if (!cfg.HasMaxInflightWritesForDirectWrite()) {
+        return DefaultMaxInflightWritesForDirectWrite;
+    }
+    return cfg.GetMaxInflightWritesForDirectWrite();
+}
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

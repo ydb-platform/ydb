@@ -437,6 +437,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
         filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(
+            kikimr, client, sql + filter, data, expected,
+            R'predicate: ((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP \".*hello2.*\") IS NOT DISTINCT FROM TRUE)')  # YQ-5727
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -508,6 +512,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (Unwrap(COALESCE(`event`, `data`)) IS DISTINCT FROM \\"event1\\")')
         filter = ' tobytes(coalesce(cast(event as Utf8), cast(data as utf8))) IS distinct FROM "event1"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(COALESCE(CAST(`event` AS Utf8?), CAST(`data` AS Utf8?)) AS String) IS DISTINCT FROM \\"event1\\")')
+        filter = ' (CAST(data AS Utf8) REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(
+            kikimr, client, sql + filter, data, expected,
+            R'predicate: ((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP \".*hello2.*\") IS NOT DISTINCT FROM TRUE)')  # YQ-5727
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

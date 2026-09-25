@@ -1177,7 +1177,7 @@ struct TSorterSelector<TCompactFlatMap<K, V, N>, C, TSortedTag>
 template <class C, class... T>
 struct TSorterSelector<std::unordered_multimap<T...>, C, TSortedTag>
 {
-    using TSorter = TCollectionSorter<std::unordered_map<T...>, TKeyValueSorterComparer<C>>;
+    using TSorter = TCollectionSorter<std::unordered_multimap<T...>, TKeyValueSorterComparer<C>>;
 };
 
 template <class C, class... T>

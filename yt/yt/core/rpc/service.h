@@ -14,6 +14,8 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/string/guid.h>
@@ -221,6 +223,10 @@ struct IServiceContext
      */
     virtual void SetRawResponseInfo(std::string info, bool incremental) = 0;
 
+    //! Return the lists accumulating annotations, or null when logging is disabled.
+    virtual NLogging::TLoggingTagList* GetRequestAnnotations() = 0;
+    virtual NLogging::TLoggingTagList* GetResponseAnnotations() = 0;
+
     //! Returns the memory usage tracker for request/response messages.
     virtual const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const = 0;
 
@@ -263,6 +269,24 @@ struct IServiceContext
 
     template <class... TArgs>
     void SetIncrementalResponseInfo(TFormatString<TArgs...> format, TArgs&&... args);
+
+    //! Annotates the request: |context->AnnotateRequest().With("Key", value)|.
+    /*!
+     *  The tags are committed when the returned guard dies, i.e. at the end of the enclosing
+     *  full-expression. Committing with #flush emits the request log message, so that must
+     *  be the last request annotation for this context. Without it the tags are just
+     *  remembered -- for code annotating on behalf of a handler that has yet to run -- and
+     *  are logged when the context is replied.
+     */
+    auto AnnotateRequest(bool flush = true);
+
+    //! Annotates the response: |context->AnnotateResponse().With("Key", value)|.
+    /*!
+     *  Appends to the annotations accumulated so far; they are logged when the context is
+     *  replied. Nothing is committed at the end of the chain, so -- unlike #AnnotateRequest
+     *  -- this returns a bare builder, as #TClientRequest::Annotate does.
+     */
+    auto AnnotateResponse();
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);

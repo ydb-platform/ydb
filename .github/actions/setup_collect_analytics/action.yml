@@ -1,9 +1,6 @@
 name: setup_collect_analytics
-description: Checkout, YDB access, and pip deps for collect-analytics jobs
+description: YDB access and pip deps for collect-analytics jobs. Checkout the repo first.
 inputs:
-  commit_sha:
-    required: false
-    default: ""
   extra_packages:
     required: false
     default: ""
@@ -15,10 +12,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        ref: ${{ inputs.commit_sha }}
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

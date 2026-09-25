@@ -113,12 +113,11 @@ class FederationRecipe(object):
 
         self.__clusters[name] = cluster
         node = list(cluster.nodes.values())[0]
-        grpc_port = list(cluster.nodes.values())[0].grpc_port
+        grpc_port = node.grpc_port
         self.__cluster_ports[name] = grpc_port
         _setenv("{}_port".format(name), str(grpc_port))
-        _setenv("{}_kafka_port".format(name), str(node.kafka_api_port))
-        logger.info("YDB cluster {} started on grpc port {}, kafka port {}".format(
-            name, grpc_port, node.kafka_api_port))
+        _setenv("{}_kafka_static_port".format(name), str(node.kafka_api_port))
+        logger.info("YDB cluster {} started on grpc port {}".format(name, grpc_port))
         return cluster, grpc_port
 
     def _setup_ydb_cluster(self, name, cluster, grpc_port):
@@ -129,10 +128,17 @@ class FederationRecipe(object):
                 "/Root/logbroker-federation/{}".format(account),
                 storage_pool_units_count={'hdd': 1},
             )
-            cluster.register_and_start_slots(
+            slots = cluster.register_and_start_slots(
                 "/Root/logbroker-federation/{}".format(account),
                 count=1,
             )
+
+            if account in PRE_INSTALLED_ACCOUNTS:
+                # Kafka metadata initialization requires the node's tenant to match the database.
+                kafka_port = slots[0].kafka_api_port
+                _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
+                logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
+
 
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(grpc_port),

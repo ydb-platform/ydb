@@ -1,6 +1,10 @@
+import sys
+import sysconfig
 import types
 
 import pytest
+
+FREETHREADED = bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
 
 
 def test_proxies(multidict_module: types.ModuleType) -> None:
@@ -67,6 +71,32 @@ def test_create_cimultidict_proxy_from_cimultidict_proxy_from_ci(
     assert p == d
     p2 = multidict_module.CIMultiDictProxy(p)
     assert p2 == p
+
+
+@pytest.mark.skipif(
+    FREETHREADED,
+    reason="getrefcount is not meaningful under the free-threaded build",
+)
+@pytest.mark.c_extension
+@pytest.mark.parametrize(
+    ("dict_class_name", "proxy_class_name"),
+    (("MultiDict", "MultiDictProxy"), ("CIMultiDict", "CIMultiDictProxy")),
+)
+def test_proxy_reinitialization_releases_old_target(
+    multidict_module: types.ModuleType,
+    dict_class_name: str,
+    proxy_class_name: str,
+) -> None:
+    dict_class = getattr(multidict_module, dict_class_name)
+    proxy_class = getattr(multidict_module, proxy_class_name)
+    original = dict_class()
+    replacement = dict_class()
+    proxy = proxy_class(original)
+    original_refcount = sys.getrefcount(original)
+
+    proxy.__init__(replacement)
+
+    assert sys.getrefcount(original) == original_refcount - 1
 
 
 def test_create_cimultidict_proxy_from_nonmultidict(

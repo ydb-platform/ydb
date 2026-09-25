@@ -15,10 +15,10 @@ import os
 import pkgutil
 import subprocess
 import sys
+from collections.abc import Generator
 from itertools import chain
 from pathlib import Path
 from types import ModuleType
-from typing import Generator
 
 import pytest
 

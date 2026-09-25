@@ -421,9 +421,9 @@ private:
     std::vector<TCurrentTaskStats> CurrentTaskStats;
     ui64 CurrentMemoryBytes = 0;
     ui64 CurrentReadIngressBytes = 0;
-    ui64 CurrentTableReadBytes = 0;
     ui64 ObservedPeakComputeMemoryBytes = 0;
     ui64 CurrentStatsSequenceNo = 0;
+    bool CollectCurrentQueryStats = false;
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
     THashMap<ui32, TNodeExecutionStats> NodeStats;
@@ -472,12 +472,13 @@ public:
     bool CollectStatsByLongTasks = false;
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
-        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
+        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs, bool collectCurrentQueryStats = false)
         : StatsMode(statsMode)
         , TasksGraph(tasksGraph)
         , Result(result)
         , DeadlockTimeoutUs(deadlockTimeoutMs * 1000)
     {
+        CollectCurrentQueryStats = collectCurrentQueryStats;
         HistorySampleCount = 32;
     }
 

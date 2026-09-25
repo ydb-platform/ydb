@@ -2558,6 +2558,9 @@ public:
     }
 
     void UpdateCurrentQueryStats(const TCurrentExecStatsReport& report) {
+        if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
         if (QueryState->RuntimeStats.Update(report)) {
             ScheduleCurrentQueryStatsPublish();
         }
@@ -2568,16 +2571,22 @@ public:
         if (!QueryState || ev->Get()->Tag != QueryState->QueryId) {
             return;
         }
+        if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
         if (auto publish = QueryState->RuntimeStats.Publish(TMonotonic::Now())) {
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,
                 publish->SequenceNo, std::move(publish->Stats)));
-            if (publish->ScheduleStaleCheck) {
+            if (publish->ScheduleNextPublish) {
                 Schedule(QueryState->RuntimeStats.GetInterval(), new TEvents::TEvWakeup(QueryState->QueryId));
             }
         }
     }
 
     void FinishCurrentExecutionStats() {
+        if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
         if (QueryState->RuntimeStats.Finish()) {
             ScheduleCurrentQueryStatsPublish();
         }

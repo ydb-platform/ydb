@@ -233,6 +233,9 @@ public:
     }
 
     void PublishCurrentStats() {
+        if (UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
         const auto now = TMonotonic::Now();
         if (LastCurrentStatsPublish + UserRequestContext->CurrentQueryStatsInterval > now) {
             return;
@@ -252,12 +255,16 @@ public:
     }
 
     void HandleCurrentStats(TEvKqpExecuter::TEvCurrentExecutionStats::TPtr& ev) {
-        if (ExecuterToPartition.contains(ev->Sender)) {
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero()
+            && ExecuterToPartition.contains(ev->Sender)) {
             UpdateCurrentStats(ev->Sender, ev->Get()->Report);
         }
     }
 
     void FillCurrentStats() {
+        if (UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
         if (auto current = CurrentQueryStats.Get()) {
             current->ComputeMemoryBytes = 0;
             ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{*current, ++CurrentStatsSequenceNo};
@@ -282,7 +289,7 @@ public:
             return TryFinishExecution();
         }
 
-        if (ev->Get()->CurrentExecutionStats) {
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero() && ev->Get()->CurrentExecutionStats) {
             UpdateCurrentStats(ev->Sender, *ev->Get()->CurrentExecutionStats);
         }
         auto [_, partInfo] = *it;
@@ -450,7 +457,7 @@ public:
             return TryFinishExecution();
         }
 
-        if (ev->Get()->CurrentExecutionStats) {
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero() && ev->Get()->CurrentExecutionStats) {
             UpdateCurrentStats(ev->Sender, *ev->Get()->CurrentExecutionStats);
         }
         auto [_, partInfo] = *it;
@@ -771,10 +778,12 @@ private:
     }
 
     void ForgetExecuterAndBuffer(const TBatchPartitionInfo::TPtr& partInfo) {
-        if (auto it = ChildCurrentStats.find(partInfo->ExecuterId); it != ChildCurrentStats.end()) {
-            CurrentQueryStats.Finish(it->second);
-            ChildCurrentStats.erase(it);
-            PublishCurrentStats();
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero()) {
+            if (auto it = ChildCurrentStats.find(partInfo->ExecuterId); it != ChildCurrentStats.end()) {
+                CurrentQueryStats.Finish(it->second);
+                ChildCurrentStats.erase(it);
+                PublishCurrentStats();
+            }
         }
         YQL_ENSURE(ExecuterToPartition.erase(partInfo->ExecuterId) == 1);
         YQL_ENSURE(BufferToPartition.erase(partInfo->BufferId) == 1);

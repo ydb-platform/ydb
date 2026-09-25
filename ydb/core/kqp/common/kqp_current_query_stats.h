@@ -27,16 +27,14 @@ struct TCurrentExecStatsReport {
 
 class TCurrentQueryStats {
 public:
-    using TSnapshot = TCurrentQueryResources;
-
-    struct TPublishedSnapshot : TSnapshot {
+    struct TPublishedSnapshot : TCurrentQueryResources {
         // Average ingress throughput since the previous published snapshot.
         // Empty when there was no fresh execution report in that interval.
         std::optional<ui64> ReadIngressBytesRate;
     };
 
     struct TSourceState {
-        TSnapshot Previous;
+        TCurrentQueryResources Previous;
         ui64 SequenceNo = 0;
     };
 
@@ -62,12 +60,12 @@ public:
         return true;
     }
 
-    std::optional<TSnapshot> Get() const {
+    std::optional<TCurrentQueryResources> Get() const {
         return HasReports ? std::make_optional(Total) : std::nullopt;
     }
 
 private:
-    void UpdateSnapshot(TSnapshot& previous, TSnapshot current) {
+    void UpdateSnapshot(TCurrentQueryResources& previous, TCurrentQueryResources current) {
         current.CpuTimeUs = std::max(current.CpuTimeUs, previous.CpuTimeUs);
         current.ReadIngressBytes = std::max(current.ReadIngressBytes, previous.ReadIngressBytes);
         Total.CpuTimeUs += current.CpuTimeUs - previous.CpuTimeUs;
@@ -80,47 +78,8 @@ private:
         HasReports = true;
     }
 
-    TSnapshot Total;
+    TCurrentQueryResources Total;
     bool HasReports = false;
-};
-
-class TCurrentQueryStatsWindow {
-public:
-    struct TPublishResult {
-        TCurrentQueryStats::TPublishedSnapshot Snapshot;
-        bool ScheduleStaleCheck = false;
-    };
-
-    explicit TCurrentQueryStatsWindow(TMonotonic publishedAt)
-        : LastPublishedAt(publishedAt)
-    {}
-
-    void MarkUpdated() {
-        UpdatedSincePublish = true;
-    }
-
-    TPublishResult Publish(TCurrentQueryStats::TSnapshot snapshot, TMonotonic now) {
-        TCurrentQueryStats::TPublishedSnapshot published;
-        static_cast<TCurrentQueryStats::TSnapshot&>(published) = snapshot;
-        const bool hasNewStats = UpdatedSincePublish;
-        if (hasNewStats) {
-            const auto elapsed = now - LastPublishedAt;
-            if (elapsed != TDuration::Zero()) {
-                published.ReadIngressBytesRate = (snapshot.ReadIngressBytes - LastPublishedReadIngressBytes)
-                    * TDuration::Seconds(1).MicroSeconds() / elapsed.MicroSeconds();
-            }
-        }
-
-        LastPublishedReadIngressBytes = snapshot.ReadIngressBytes;
-        LastPublishedAt = now;
-        UpdatedSincePublish = false;
-        return {std::move(published), hasNewStats};
-    }
-
-private:
-    ui64 LastPublishedReadIngressBytes = 0;
-    TMonotonic LastPublishedAt;
-    bool UpdatedSincePublish = false;
 };
 
 class TCurrentQueryStatsPublisher {
@@ -128,11 +87,11 @@ public:
     struct TPublication {
         TCurrentQueryStats::TPublishedSnapshot Stats;
         ui64 SequenceNo = 0;
-        bool ScheduleStaleCheck = false;
+        bool ScheduleNextPublish = false;
     };
 
     TCurrentQueryStatsPublisher(TMonotonic startedAt, TDuration interval)
-        : Window(startedAt)
+        : LastPublishedAt(startedAt)
         , Interval(interval)
     {}
 
@@ -140,7 +99,7 @@ public:
         if (!Stats.Update(Source, report)) {
             return false;
         }
-        Window.MarkUpdated();
+        UpdatedSincePublish = true;
         return true;
     }
 
@@ -148,7 +107,7 @@ public:
         if (!Stats.Finish(Source)) {
             return false;
         }
-        Window.MarkUpdated();
+        UpdatedSincePublish = true;
         return true;
     }
 
@@ -167,9 +126,21 @@ public:
             return std::nullopt;
         }
 
-        auto published = Window.Publish(*current, now);
-        PublishScheduled = published.ScheduleStaleCheck;
-        return TPublication{std::move(published.Snapshot), ++SequenceNo, published.ScheduleStaleCheck};
+        TCurrentQueryStats::TPublishedSnapshot published;
+        static_cast<TCurrentQueryResources&>(published) = *current;
+        if (UpdatedSincePublish) {
+            const auto elapsed = now - LastPublishedAt;
+            if (elapsed != TDuration::Zero()) {
+                published.ReadIngressBytesRate = (current->ReadIngressBytes - LastPublishedReadIngressBytes)
+                    * TDuration::Seconds(1).MicroSeconds() / elapsed.MicroSeconds();
+            }
+        }
+
+        LastPublishedReadIngressBytes = current->ReadIngressBytes;
+        LastPublishedAt = now;
+        PublishScheduled = UpdatedSincePublish;
+        UpdatedSincePublish = false;
+        return TPublication{std::move(published), ++SequenceNo, PublishScheduled};
     }
 
     TDuration GetInterval() const {
@@ -179,7 +150,9 @@ public:
 private:
     TCurrentQueryStats Stats;
     TCurrentQueryStats::TSourceState Source;
-    TCurrentQueryStatsWindow Window;
+    ui64 LastPublishedReadIngressBytes = 0;
+    TMonotonic LastPublishedAt;
+    bool UpdatedSincePublish = false;
     TDuration Interval;
     ui64 SequenceNo = 0;
     bool PublishScheduled = false;

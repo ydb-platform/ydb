@@ -110,24 +110,15 @@ bool TLeaderTabletInfo::InitiateAssignTabletGroups() {
 ui32 TLeaderTabletInfo::GetBlockStorageGeneration() const {
     // We block right below the first unconfirmed history entry: a tablet running at that generation
     // or later has blocked at least this generation itself, so our versioned block fails and reveals it.
-    // KnownGeneration can't be used here, since it is increased on reassign and may be updated by the tablet.
-    std::optional<ui32> firstUnconfirmedGeneration;
-    if (ConfirmedStorageVersion != Max<ui32>()) {
-        for (const TTabletChannelInfo& channel : TabletStorageInfo->Channels) {
-            // the first entry of a channel does not replace anything, so it needs no block
-            for (size_t i = 1; i < channel.History.size(); ++i) {
-                const auto& entry = channel.History[i];
-                if (entry.Version > ConfirmedStorageVersion) {
-                    firstUnconfirmedGeneration = Min(firstUnconfirmedGeneration.value_or(Max<ui32>()), entry.FromGeneration);
-                }
-            }
+    // KnownGeneration can't always be used here, since it is increased on reassign and may be updated by the tablet.
+    ui32 firstUnconfirmedGeneration = KnownGeneration + 1;
+    for (const TTabletChannelInfo& channel : TabletStorageInfo->Channels) {
+        auto unconfirmedIt = std::ranges::upper_bound(channel.History, ConfirmedStorageVersion, std::less<ui32>(), [] (auto&& entry) { return entry.Version; });
+        if (unconfirmedIt != channel.History.end()) {
+            firstUnconfirmedGeneration = std::min(firstUnconfirmedGeneration, unconfirmedIt->FromGeneration);
         }
     }
-    if (firstUnconfirmedGeneration && *firstUnconfirmedGeneration > 0) {
-        return *firstUnconfirmedGeneration - 1;
-    }
-    // storage version was not tracked when the reassign started
-    return KnownGeneration;
+    return firstUnconfirmedGeneration - 1;
 }
 
 bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects) {

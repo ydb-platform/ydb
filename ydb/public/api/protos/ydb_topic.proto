@@ -398,6 +398,9 @@ message StreamReadMessage {
         // New SDKs must fill this list.
         // An empty list means the behavior of old SDKs: batch codecs are not accepted,
         // all single-message codecs are accepted.
+        // If the queue contains a message with a codec that the client does not support
+        // and the server is unable to re-encode it into a supported codec,
+        // the stream is closed with a non-retryable error.
         SupportedCodecs supported_codecs = 7;
 
         // Allow the server to send data encoded with any codec, ignoring supported_codecs.

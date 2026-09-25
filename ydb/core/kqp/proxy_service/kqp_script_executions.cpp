@@ -39,7 +39,6 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>

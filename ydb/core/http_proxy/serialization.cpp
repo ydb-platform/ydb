@@ -2,7 +2,6 @@
 #include "json_proto_conversion.h"
 
 #include <nlohmann/json.hpp>
-#include <library/cpp/json/json_writer.h>
 
 
 namespace NKikimr::NHttpProxy {

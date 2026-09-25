@@ -7,7 +7,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
-#include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <optional>

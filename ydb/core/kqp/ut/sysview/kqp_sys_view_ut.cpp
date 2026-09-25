@@ -2,7 +2,6 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json.h>
 
 #include <unordered_map>

@@ -25,7 +25,6 @@
 
 #include <util/generic/hash_set.h>
 #include <random>
-#include <library/cpp/json/json_writer.h>
 
 namespace NMVP {
 

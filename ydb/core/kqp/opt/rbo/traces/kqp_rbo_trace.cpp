@@ -7,7 +7,6 @@
 #include <sstream>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr {
 namespace NKqp {

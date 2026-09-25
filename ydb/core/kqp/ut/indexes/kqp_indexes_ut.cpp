@@ -15,7 +15,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
 
 #include <util/string/printf.h>
 

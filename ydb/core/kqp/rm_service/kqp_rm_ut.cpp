@@ -418,6 +418,7 @@ public:
         UNIT_TEST(SpillingPercentReconfigure);
         UNIT_TEST(TotalLimitReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
+        UNIT_TEST(QueryQuotaManager);
         UNIT_TEST(ServiceMemoryQuota);
         UNIT_TEST(ConcurrentServiceMemoryQuota);
         UNIT_TEST(SnapshotSharingByExchanger);
@@ -485,6 +486,7 @@ public:
     void SpillingPercentReconfigure();
     void TotalLimitReconfigure();
     void TaskQuotaManagerOptional();
+    void QueryQuotaManager();
     void ServiceMemoryQuota();
     void ConcurrentServiceMemoryQuota();
     void SnapshotSharing();
@@ -808,9 +810,10 @@ void KqpRm::ConcurrentChannels() {
 
     {
         auto tx = MakeTx(1, rm);
+        auto query = CreateQueryQuotaManager(tx);
 
         {
-            auto qm = CreateChannelQuotaManager(rm, tx, 0, 16);
+            auto qm = CreateChannelQuotaManager(query, 0, 16);
 
             NPar::LocalExecutor().RunAdditionalThreads(10);
             std::atomic<ui64> failedAllocations = 0;
@@ -838,6 +841,9 @@ void KqpRm::ConcurrentChannels() {
             }, 0, 10, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
             UNIT_ASSERT_GT(failedAllocations.load(), 0);
+            // every resource manager grant of the channel quota manager is counted by the query quota manager
+            UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), tx->TxScanQueryMemory.load());
+            UNIT_ASSERT_GT(query->GetMaxMemorySize(), 0);
 
             // the channel quota manager exposes the node level memory availability of its tx,
             // DQ channels 2.0 propagate a negative value to the senders as back pressure. The load above
@@ -856,6 +862,7 @@ void KqpRm::ConcurrentChannels() {
             tx->TotalMemoryCookie->MemoryAvailability.store(saved);
         }
 
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 0);
         AssertResourceManagerStats(rm, 1000, 100);
         AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 1);
     }
@@ -1119,32 +1126,43 @@ void KqpRm::TaskQuotaManagerOptional() {
 
     {
         auto tx = MakeTx(1, rm);
+        auto query = CreateQueryQuotaManager(tx);
+        // the query quota manager counts what the tx holds, the external memory included
+        auto assertHeld = [&](ui64 expected) {
+            UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(tx->TxScanQueryMemory.load() + tx->TxExternalDataQueryMemory.load(), expected);
+        };
         const ui64 taskId = 1;
         const ui64 initialLimit = 100;
         // the node service prepays the initial limit as external memory before the task starts; the memory arena
         // charges it to the node total (900 left, the spilling threshold at 800) until the task quota manager dies
-        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialLimit}));
+        UNIT_ASSERT(query->AllocateResources(taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialLimit}));
         AssertResourceBrokerSensors(0, 100, 0, 0, 1);
-        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100}));
+        assertHeld(100);
+        UNIT_ASSERT(query->AllocateResources(taskId, NRm::TKqpResourcesRequest{.Memory = 100}));
         AssertResourceBrokerSensors(0, 200, 0, 0, 2);
+        assertHeld(200);
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 600);
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
         const auto statsBefore = rm->GetLocalResources();
         UNIT_ASSERT_VALUES_EQUAL(statsBefore.Memory, 800);
 
         // task level manager: 1 MB allocation step, more than the tx availability
-        auto qm = CreateTaskQuotaManager(rm, tx, taskId, initialLimit);
+        auto qm = CreateTaskQuotaManager(query, taskId, initialLimit);
         UNIT_ASSERT(qm->AllocateQuota(50, /* isOptional = */ true)); // fits in the prepaid limit
         UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 600 + 50); // tx value plus the local leftover
+        assertHeld(200);
         UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // 1 MB step > 600: refused in advance
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // the resource manager was not asked
+        assertHeld(200);
         // a negative tx value dominates the local leftover
         tx->TotalMemoryCookie->MemoryAvailability.store(-7);
         UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), -7);
         tx->TotalMemoryCookie->MemoryAvailability.store(700);
         qm->FreeQuota(50);
         qm.reset();
+        assertHeld(100);
         // the task quota manager returned the prepay, and the periodic pass the arena memory to the node total
         TickArenaAdjust();
         const auto statsAfterTask = rm->GetLocalResources();
@@ -1153,7 +1171,7 @@ void KqpRm::TaskQuotaManagerOptional() {
 
         // channel level manager: 16 byte allocation step. The tx reports less than the aligned request although
         // the resource manager has 700 bytes and would grant it: refused in advance, the resource manager not asked
-        auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
+        auto cm = CreateChannelQuotaManager(query, 0, 16);
         tx->TotalMemoryCookie->MemoryAvailability.store(100);
         UNIT_ASSERT(!cm->AllocateQuota(200, /* isOptional = */ true)); // 208 > 100: refused in advance
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory);
@@ -1164,29 +1182,106 @@ void KqpRm::TaskQuotaManagerOptional() {
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory - 208);
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700 - 208); // the cookie follows the allocation
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        assertHeld(100 + 208);
         cm->FreeQuota(200); // the 208 stay prepaid in the channel manager until it dies
+        assertHeld(100 + 208);
         // a mandatory request beyond the node memory does reach the resource manager and is refused there:
         // 1500 - 208 prepaid = 1292, aligned to 1296 > 692 left on the node
         UNIT_ASSERT(!cm->AllocateQuota(1500, /* isOptional = */ false));
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 1296);
+        assertHeld(100 + 208);
 
         // the resource manager refuses a small request (below 10 steps) that the pre-check let through: a
         // mandatory one is tolerated as over-quoting, an optional one is refused and the prepaid quota restored
-        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600})); // 92 bytes left on the node
+        UNIT_ASSERT(query->AllocateResources(2, NRm::TKqpResourcesRequest{.Memory = 600})); // 92 bytes left on the node
+        assertHeld(100 + 208 + 600);
         tx->TotalMemoryCookie->MemoryAvailability.store(1'000'000); // the pre-check passes
         UNIT_ASSERT(!cm->AllocateQuota(300, /* isOptional = */ true)); // 300 - 208 prepaid = 92, aligned to 96 > 92
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 96); // refused by the resource manager
         UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208); // the prepaid quota is intact
+        assertHeld(100 + 208 + 600);
         UNIT_ASSERT(cm->AllocateQuota(300, /* isOptional = */ false)); // the mandatory request is over-quoted
         UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208 - 300);
+        assertHeld(100 + 208 + 600); // the over-quoted bytes never reached the resource manager
         cm->FreeQuota(300);
         UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208);
         tx->TotalMemoryCookie->MemoryAvailability.store(700);
-        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600});
+        query->FreeResources(2, NRm::TKqpResourcesRequest{.Memory = 600});
+        assertHeld(100 + 208);
         cm.reset();
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory);
+        assertHeld(100);
 
-        rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100});
+        query->FreeResources(taskId, NRm::TKqpResourcesRequest{.Memory = 100});
+        assertHeld(0);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The query quota manager is the only path between the tx and the resource manager: it forwards every request as
+// is, the task id included, and counts what the query holds - the start prepay (external memory) and the grants
+// of the task and channel quota managers. The children keep it alive and return the prepay through it
+void KqpRm::QueryQuotaManager() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        auto query = CreateQueryQuotaManager(tx);
+        auto held = [&tx]() -> ui64 {
+            return tx->TxScanQueryMemory.load() + tx->TxExternalDataQueryMemory.load();
+        };
+
+        // the node service prepays 2 tasks (100 each) and the channels (50)
+        UNIT_ASSERT(query->AllocateResources(0, NRm::TKqpResourcesRequest{.ExecutionUnits = 2, .ExternalMemory = 100 + 100 + 50}));
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 250);
+        UNIT_ASSERT_VALUES_EQUAL(held(), 250);
+
+        auto t1 = CreateTaskQuotaManager(query, 1, 100);
+        auto t2 = CreateTaskQuotaManager(query, 2, 100);
+        auto cm = CreateChannelQuotaManager(query, 50, 16);
+
+        // 100 - 50 prepaid = 50, aligned to 64: granted by the resource manager
+        UNIT_ASSERT(cm->AllocateQuota(100, /* isOptional = */ false));
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 314);
+        UNIT_ASSERT_VALUES_EQUAL(held(), 314);
+
+        // a refusal is not counted, the fail reason keeps the task id
+        auto result = query->AllocateResources(7, NRm::TKqpResourcesRequest{.Memory = 100'000});
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetFailReason(), "taskId: 7");
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 100'000);
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 314);
+        UNIT_ASSERT_VALUES_EQUAL(held(), 314);
+
+        // the query level interface: Memory, task id 0
+        UNIT_ASSERT(query->AllocateQuota(10, /* isOptional = */ false));
+        UNIT_ASSERT_VALUES_EQUAL(query->GetCurrentQuota(), 324);
+        UNIT_ASSERT_VALUES_EQUAL(held(), 324);
+        query->FreeQuota(10);
+        UNIT_ASSERT_VALUES_EQUAL(query->GetCurrentQuota(), 314);
+        UNIT_ASSERT_VALUES_EQUAL(query->GetMaxMemorySize(), 324); // the peak stays
+        UNIT_ASSERT_VALUES_EQUAL(query->GetMemoryAvailability(), tx->GetMemoryAvailability());
+
+        // the children outlive the owner (the query manager actor dies before the compute actors are destroyed)
+        std::weak_ptr<TQueryQuotaManager> weak = query;
+        query.reset();
+        t1.reset();
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetAllocatedMemory(), 214);
+        t2.reset();
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetAllocatedMemory(), 114);
+        cm->FreeQuota(100); // stays prepaid in the channel quota manager
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetAllocatedMemory(), 114);
+        cm.reset();
+        UNIT_ASSERT(weak.expired());
+        UNIT_ASSERT_VALUES_EQUAL(held(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 0);
+
+        // the periodic pass returns the arena memory of the prepay to the node total
+        TickArenaAdjust();
     }
 
     AssertResourceManagerStats(rm, 1000, 100);
@@ -2203,22 +2298,28 @@ void KqpRm::ArenaSpillingPressure() {
 
     {
         auto tx = MakeTx(1, rm);
-        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 850}));
+        auto query = CreateQueryQuotaManager(tx);
+        UNIT_ASSERT(query->AllocateResources(1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 850}));
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -50); // 800 - 850
         AssertResourceManagerStats(rm, 150, 99);
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 850);
 
-        auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
+        auto cm = CreateChannelQuotaManager(query, 0, 16);
         UNIT_ASSERT(!cm->AllocateQuota(16, /* isOptional = */ true));
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // refused in advance
         cm.reset();
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 850);
 
-        UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 200}));
-        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 150}));
+        UNIT_ASSERT(!query->AllocateResources(1, NRm::TKqpResourcesRequest{.Memory = 200}));
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 850);
+        UNIT_ASSERT(query->AllocateResources(1, NRm::TKqpResourcesRequest{.Memory = 150}));
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 1000);
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -200);
         AssertResourceManagerStats(rm, 0, 99);
 
-        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 150});
-        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 850});
+        query->FreeResources(1, NRm::TKqpResourcesRequest{.Memory = 150});
+        query->FreeResources(1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 850});
+        UNIT_ASSERT_VALUES_EQUAL(query->GetAllocatedMemory(), 0);
         TickArenaAdjust();
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
         AssertResourceManagerStats(rm, 1000, 100);

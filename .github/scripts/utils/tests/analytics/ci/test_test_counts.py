@@ -50,7 +50,7 @@ class CountReportTests(unittest.TestCase):
                 },
             )
 
-    def test_track_tests_cli_writes_count_events(self):
+    def test_enrich_report_writes_tests_on_the_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
             report = Path(tmp) / "report.json"
             metrics = Path(tmp) / "ci_metrics.jsonl"
@@ -58,17 +58,24 @@ class CountReportTests(unittest.TestCase):
                 json.dumps({"results": [{"status": "PASSED"}, {"status": "MUTE"}, {"status": "SKIPPED"}]}),
                 encoding="utf-8",
             )
+            path = str(metrics)
             self.assertEqual(
-                main(["track-tests", "--report", str(report), "--file", str(metrics), "--source", "ya_phase"]),
+                main(["start", "ya_make_try_1", "--file", path, "--source", "ya_phase", "--label", "ya_attempt=1"]),
+                0,
+            )
+            self.assertEqual(main(["end", "ya_make_try_1", "--file", path, "--conclusion", "success"]), 0)
+            self.assertEqual(
+                main(["enrich", "ya_make_try_1", "--file", path, "--label", "ya_attempt=1", "--report", str(report)]),
                 0,
             )
             rows = [json.loads(line) for line in metrics.read_text(encoding="utf-8").splitlines() if line.strip()]
-            by_name = {row["name"]: row for row in rows}
-            self.assertEqual(by_name["tests_passed"]["value"], 1)
-            self.assertEqual(by_name["tests_muted"]["value"], 1)
-            self.assertEqual(by_name["tests_skipped"]["value"], 1)
-            self.assertEqual(by_name["tests_total"]["value"], 3)
-            self.assertEqual(by_name["tests_failed"]["kind"], "count")
+            self.assertEqual([row["name"] for row in rows], ["ya_make_try_1"])
+            tests = rows[0]["labels"]["tests"]
+            self.assertEqual(tests["passed"], 1)
+            self.assertEqual(tests["muted"], 1)
+            self.assertEqual(tests["skipped"], 1)
+            self.assertEqual(tests["failed"], 0)
+            self.assertEqual(tests["total"], 3)
 
 
 if __name__ == "__main__":

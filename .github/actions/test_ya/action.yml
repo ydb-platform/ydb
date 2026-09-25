@@ -610,8 +610,7 @@ runs:
           record_ci_start fail_checker "$RETRY"
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-          python3 "$CI_METRICS_PY" track-tests --report "$CURRENT_REPORT" --source ya_phase \
-            --label "ya_attempt=${RETRY}" || true
+          record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --report "$CURRENT_REPORT"
           if [ $TESTS_RESULT = 0 ]; then
             record_ci_end fail_checker success
             record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --label "tests_status=passed"

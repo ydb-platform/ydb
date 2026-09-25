@@ -182,6 +182,7 @@ def build_parser(
     description: str = "Analytics: start/end/track + batch send",
     *,
     track_extra: Optional[Callable[[argparse.ArgumentParser], None]] = None,
+    enrich_extra: Optional[Callable[[argparse.ArgumentParser], None]] = None,
 ) -> tuple[argparse.ArgumentParser, argparse._SubParsersAction]:
     parser = argparse.ArgumentParser(description=description)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -196,7 +197,10 @@ def build_parser(
     add_track("start", "Open a span (auto start time)", kind_default="duration")
     add_track("end", "Close open span(s); duration is computed")
     add_track("track", "Queue a completed event (no open span)")
-    add_enrich_cli_args(sub.add_parser("enrich", help="Add labels to last unsent record; duration stays"))
+    enrich_p = sub.add_parser("enrich", help="Add labels to last unsent record; duration stays")
+    add_enrich_cli_args(enrich_p)
+    if enrich_extra:
+        enrich_extra(enrich_p)
     send_p = add_track("send", "End leftover spans and export the batch")
     send_p.add_argument("--table-path", default=None)
     flush_p = sub.add_parser("flush", help="Export completed events only")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Dict
 
 COUNT_NAMES = ("passed", "failed", "errors", "skipped", "muted", "total")
 
@@ -32,10 +32,3 @@ def count_report_tests(path: str) -> Dict[str, int]:
     return counts
 
 
-def track_report_counts(path: str, **track_kwargs: Any) -> Dict[str, int]:
-    from github_actions.ci_metrics import track
-
-    counts = count_report_tests(path)
-    for name, value in counts.items():
-        track(f"tests_{name}", kind="count", value=value, **track_kwargs)
-    return counts

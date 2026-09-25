@@ -19,7 +19,7 @@ python3 "$CI_METRICS_PY" end my_step --conclusion success
 python3 "$CI_METRICS_PY" enrich my_step --label report_url="$S3_URL"
 python3 "$CI_METRICS_PY" flush          # только закрытые строки
 python3 "$CI_METRICS_PY" send           # закрыть хвосты и выгрузить
-python3 "$CI_METRICS_PY" track-tests --report "$CURRENT_REPORT"   # pass/fail/skip/muted/total
+python3 "$CI_METRICS_PY" enrich ya_make_try_1 --label ya_attempt=1 --report "$CURRENT_REPORT"
 ```
 
 `--runner` — один раз снять cpu/ram/disk хоста и повесить на событие. `--usage` — свежий snapshot на это событие.

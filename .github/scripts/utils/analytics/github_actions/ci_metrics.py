@@ -33,11 +33,11 @@ from collector.spans import enrich as collector_enrich
 from collector.spans import send as collector_send
 from collector.spans import start as collector_start
 from collector.spans import track as collector_track
-from collector.values import _as_json, _as_uint, merge_defaults, normalize_skip_reason, parse_labels
+from collector.values import _as_json, _as_uint, merge_defaults, normalize_skip_reason
 from collector.values import normalize_metric as collector_normalize_metric
 from collector import run_cli
 from github_actions.runner_info import apply_runner_labels, pop_runner_options
-from github_actions.test_counts import track_report_counts
+from github_actions.test_counts import count_report_tests
 
 DEFAULT_TABLE_PATH = "analytics/ci_metrics"
 TABLE_CONFIG_KEY = "ci_metrics"
@@ -356,28 +356,30 @@ def _cli_runner_flags(args: argparse.Namespace) -> Dict[str, Any]:
     return flags
 
 
+def _add_report_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--report", default=None, help="ya report JSON; write counts into labels.tests")
+
+
 def parse_args(argv=None) -> argparse.Namespace:
-    parser, sub = build_parser("CI analytics: start/end/track + batch send", track_extra=_add_runner_flags)
-    tests_p = sub.add_parser("track-tests", help="Count pass/fail/skip/muted from a ya report")
-    tests_p.add_argument("--report", required=True, help="orig/transformed ya report JSON")
-    tests_p.add_argument("--source", default="ya_phase")
-    tests_p.add_argument("--file", default=None)
-    tests_p.add_argument("--label", action="append", default=[], help="key=value")
+    parser, _sub = build_parser(
+        "CI analytics: start/end/track + batch send",
+        track_extra=_add_runner_flags,
+        enrich_extra=_add_report_flag,
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
-        if args.command == "track-tests":
-            labels = parse_labels(args.label)
-            track_report_counts(
-                args.report,
-                file=args.file or default_metrics_file(),
-                source=args.source,
-                labels=labels or None,
-            )
-            return 0
+
+        def enrich_cli(name, properties=None, **fields):
+            props = dict(properties or {})
+            report = getattr(args, "report", None)
+            if report:
+                props["tests"] = count_report_tests(report)
+            return enrich(name, props, **fields)
+
         return run_cli(
             args,
             start_fn=start,
@@ -385,7 +387,7 @@ def main(argv=None) -> int:
             track_fn=track,
             send_fn=send,
             flush_fn=flush_file,
-            enrich_fn=enrich,
+            enrich_fn=enrich_cli,
             default_file=default_metrics_file(),
             extra_kwargs_fn=_cli_runner_flags,
         )

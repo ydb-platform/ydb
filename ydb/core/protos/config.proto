@@ -2048,6 +2048,13 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {

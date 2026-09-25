@@ -33,7 +33,8 @@ response.raise_for_status()
 node = response.json()["SystemStateInfo"][0]
 assert node["NumberOfCpus"] == expected_cpus, node
 pools = {pool["Name"]: pool["Threads"] for pool in node["PoolStats"]}
-assert pools == {"Common": expected_cpus, "IO": 1}, pools
+assert set(pools) == {"System", "User", "Batch", "IO", "IC"}, pools
+assert pools["IO"] == 1, pools
 '
 
     run_sql "$container" \

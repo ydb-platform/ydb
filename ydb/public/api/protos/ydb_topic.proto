@@ -156,7 +156,7 @@ message StreamWriteMessage {
         // Otherwise session will be closed with BAD_REQUEST.
         SupportedCodecs supported_codecs = 4;
 
-        // Allows sending message batches to the server.
+        // Indicates that server supports batching.
         bool is_batching_supported = 5;
     }
 
@@ -400,7 +400,7 @@ message StreamReadMessage {
         // If the queue contains a message with a codec that the client does not support
         // and the server is unable to re-encode it into a supported codec,
         // the stream is closed with a non-retryable error.
-        SupportedCodecs supported_codecs = 7;
+        SupportedCodecs client_codecs = 7;
     }
 
     // Handshake response.
@@ -463,7 +463,7 @@ message StreamReadMessage {
             repeated MessageData message_data = 1;
 
             // Messages encoded as blobs. Filled if codec is a batch codec.
-            repeated ReadEncodedBatch encoded_batches = 7;
+            ReadEncodedBatch encoded_batch = 7;
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];
@@ -489,13 +489,9 @@ message StreamReadMessage {
                 // Number of messages in the batch.
                 int64 messages_count = 3;
 
-                // Sequence numbers of the first and the last messages of the batch, both inclusive.
-                int64 min_seq_no = 4;
-                int64 max_seq_no = 5;
-
                 // Partition offsets occupied by the messages of the batch.
                 // Note that, unlike min_seq_no/max_seq_no, this range is half-open: offsets.end is exclusive.
-                OffsetsRange offsets = 6;
+                OffsetsRange offsets = 4;
             }
         }
 

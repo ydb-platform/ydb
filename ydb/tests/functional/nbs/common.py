@@ -35,19 +35,20 @@ class NbsTestBase:
     @pytest.fixture(autouse=True)
     def setup(self):
         nbs_database_name = "/Root/NBS"
-        self.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                enable_nbs=True,
-                nbs_database_name=nbs_database_name,
-                additional_log_configs={
-                    'NBS_PARTITION': LogLevels.INFO,
-                    'NBS2_LOAD_TEST': LogLevels.DEBUG,
-                    'NBS_VOLUME': LogLevels.DEBUG,
-                    'NBS_SS_PROXY': LogLevels.DEBUG,
-                },
-            )
+        configurator = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            enable_nbs=True,
+            nbs_database_name=nbs_database_name,
+            additional_log_configs={
+                'NBS_PARTITION': LogLevels.INFO,
+                'NBS2_LOAD_TEST': LogLevels.DEBUG,
+                'NBS_VOLUME': LogLevels.DEBUG,
+                'NBS_SS_PROXY': LogLevels.DEBUG,
+            },
         )
+        # These load-actor/vhost tests are not limited to a single disk.
+        configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {'enabled': False}
+        self.cluster = KiKiMR(configurator)
         self.cluster.start()
         self.start_nbs(nbs_database_name)
 
@@ -101,13 +102,34 @@ class NbsTestBase:
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
 
-    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
+    def _dstool_nbs_partition_json(self, args, operation_name, disk_id):
         """
-        Create a disk and return the parsed CreatePartition JSON result.
+        Invoke ``dstool nbs partition ...`` and parse the JSON object it prints.
         """
         proc = execute_dstool_grpc(
             self.cluster,
             "token",
+            args,
+            check_exit_code=False,
+            return_process=True,
+        )
+
+        stdout = proc.std_out.decode('utf-8')
+        stderr = proc.std_err.decode('utf-8')
+
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as e:
+            assert False, (
+                f"{operation_name} for disk {disk_id} did not return JSON: "
+                f"{e}; stdout={stdout}, stderr={stderr}"
+            )
+
+    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
+        """
+        Create a disk and return the parsed CreatePartition JSON result.
+        """
+        return self._dstool_nbs_partition_json(
             [
                 'nbs',
                 'partition',
@@ -120,22 +142,9 @@ class NbsTestBase:
                 '--disk-id',
                 disk_id,
             ],
-            check_exit_code=False,
-            return_process=True,
+            'CreatePartition',
+            disk_id,
         )
-
-        stdout = proc.std_out.decode('utf-8')
-        stderr = proc.std_err.decode('utf-8')
-
-        try:
-            output = json.loads(stdout)
-        except json.JSONDecodeError as e:
-            assert False, (
-                f"CreatePartition for disk {disk_id} did not return JSON: "
-                f"{e}; stdout={stdout}, stderr={stderr}"
-            )
-
-        return output
 
     def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
         """
@@ -160,6 +169,44 @@ class NbsTestBase:
         assert output.get('status') == 'SUCCESS', (
             f"CreatePartition failed for disk {disk_id}: {output}"
         )
+
+    def resize_partition(self, disk_id, blocks_count):
+        """
+        Grow a disk to ``blocks_count`` blocks and return the parsed JSON.
+        """
+        return self._dstool_nbs_partition_json(
+            [
+                'nbs',
+                'partition',
+                'resize',
+                '--disk-id',
+                disk_id,
+                f'--blocks-count={blocks_count}',
+            ],
+            'ResizePartition',
+            disk_id,
+        )
+
+    def resize_disk(self, disk_id, blocks_count):
+        """
+        Grow a disk to ``blocks_count`` blocks via ResizePartition.
+
+        Returns the BlocksCount reported by the RPC (scheme size). The
+        partition tablet currently accepts the alter as a no-op, so IO
+        still uses the original capacity.
+        """
+        output = self.resize_partition(disk_id, blocks_count)
+        assert output.get('status') == 'SUCCESS', (
+            f"ResizePartition failed for disk {disk_id}: {output}"
+        )
+        grown = output.get('blocksCount')
+        assert grown is not None, (
+            f"ResizePartition did not return blocksCount: {output}"
+        )
+        assert int(grown) == int(blocks_count), (
+            f"ResizePartition returned blocksCount={grown}, expected {blocks_count}"
+        )
+        return int(grown)
 
     def on_create_unavailable(self):
         """Hook for shared-cluster suites to recover a wedged NBS tenant."""
@@ -324,20 +371,27 @@ class NbsTestBase:
         )
 
     def get_load_actor_adapter_actor_id(self, disk_id):
-        get_load_actor_res = json.loads(
-            execute_dstool_grpc(
-                self.cluster,
-                "token",
-                ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+        """
+        Return the load-actor adapter id once the partition has registered it.
+
+        A zero id means the tablet answered before the adapter existed.
+        """
+        deadline = time.time() + 40
+        last = None
+        while time.time() < deadline:
+            last = json.loads(
+                execute_dstool_grpc(
+                    self.cluster,
+                    "token",
+                    ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+                )
             )
-        )
-
-        status = get_load_actor_res["status"]
-        actor_id = get_load_actor_res["actorId"]
-        assert status == "success"
-        assert actor_id != ""
-
-        return actor_id
+            status = last.get("status")
+            actor_id = last.get("actorId") or ""
+            if status == "success" and actor_id not in ("", "[0:0:0]"):
+                return actor_id
+            time.sleep(1)
+        assert False, f"Load actor adapter is not ready for disk {disk_id}: {last}"
 
     def write(self, actor_id, index, data):
         execute_dstool_grpc(
@@ -516,7 +570,7 @@ class NbsTestBase:
         """
         # Verify basic success (Result field may not be present, which means success)
         if 'Result' in results:
-            assert results['Result'] == 0, "Load actor run finished with error"
+            assert results['Result'] == 0, f"Load actor run finished with error: {results}"
 
         # Verify IOPS and throughput are non-zero
         assert 'Iops' in results, f"Missing Iops in results: {results}"

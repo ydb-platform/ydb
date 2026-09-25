@@ -54,6 +54,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/bridge/proxy
     ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common

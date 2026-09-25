@@ -137,7 +137,8 @@ public:
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
-    bool GetDiskFd;
+    bool GetUringRouterClient;
+    ui32 UringIdleSpinUs;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -147,7 +148,8 @@ public:
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
         , GroupSizeInUnits(ev.GroupSizeInUnits)
-        , GetDiskFd(ev.GetDiskFd)
+        , GetUringRouterClient(ev.GetUringRouterClient)
+        , UringIdleSpinUs(ev.UringIdleSpinUs)
     {}
 
     ERequestType GetType() const override {
@@ -167,7 +169,8 @@ public:
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
         str << " GroupSizeInUnits# " << GroupSizeInUnits;
-        str << " GetDiskFd# " << GetDiskFd;
+        str << " GetUringRouterClient# " << GetUringRouterClient;
+        str << " UringIdleSpinUs# " << UringIdleSpinUs;
         str << "}";
         return str.Str();
     }
@@ -752,14 +755,27 @@ public:
 class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
+    bool ForHousekeeping;
+    bool IsDDisk;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
+        , ForHousekeeping(ev.ForHousekeeping)
+        , IsDDisk(ev.IsDDisk)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkReserve;
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!IsDDisk) {
+            return;
+        }
+        TString errorReason = "PDisk stopped before processing chunk reserve";
+        actorSystem->Send(Sender, new NPDisk::TEvChunkReserveResult(
+            NKikimrProto::CORRUPTED, 0, errorReason), 0, Cookie);
     }
 };
 
@@ -769,14 +785,25 @@ public:
 class TChunkForget : public TRequestBase {
 public:
     TVector<TChunkIdx> ForgetChunks;
+    bool IsDDisk;
 
     TChunkForget(const NPDisk::TEvChunkForget &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkForget, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::LogWrite)
         , ForgetChunks(std::move(ev.ForgetChunks))
+        , IsDDisk(ev.IsDDisk)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkForget;
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!IsDDisk) {
+            return;
+        }
+        TString errorReason = "PDisk stopped before processing chunk forget";
+        actorSystem->Send(Sender, new NPDisk::TEvChunkForgetResult(
+            NKikimrProto::CORRUPTED, 0, errorReason), 0, Cookie);
     }
 
     void EstimateCost(const TDriveModel &) override {
@@ -1286,11 +1313,13 @@ class TChangeExpectedSlotCount : public TRequestBase {
 public:
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
     TChangeExpectedSlotCount(const NPDisk::TEvChangeExpectedSlotCount &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChangeExpectedSlotCount, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ExpectedSlotCount(ev.ExpectedSlotCount)
         , SlotSizeInUnits(ev.SlotSizeInUnits)
+        , ExpectedSlotSize(ev.ExpectedSlotSize)
     {}
 
     ERequestType GetType() const override {
@@ -1302,6 +1331,7 @@ public:
         str << "TChangeExpectedSlotCount {"
             << " ExpectedSlotCount# " << ExpectedSlotCount
             << " SlotSizeInUnits# " << SlotSizeInUnits
+            << " ExpectedSlotSize# " << ExpectedSlotSize
             << " }";
         return str.Str();
     }

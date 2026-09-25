@@ -47,6 +47,10 @@ constexpr ui64 SmallDiskSizeBoundary = 800ull * (1 << 30);
 constexpr ui64 TinyDiskSizeBoundary = 80ull * (1 << 30);
 constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20);
 
+// Physical chunk size is always a multiple of this, whether it is derived from the user-accessible
+// chunk size or set explicitly.
+constexpr ui32 ChunkSizeAlignment = 2 * (1 << 20);
+
 // reserved log: 200 chunks, reserved static log: 70 chunks
 // - 200GB
 // linear interpolation
@@ -57,6 +61,7 @@ constexpr ui64 SmallDiskSizeLogBoundary = 200ull * (1 << 30);
 constexpr ui64 TinyDiskSizeLogBoundary = 8ull * (1 << 30);
 constexpr i64 MaxCommonLogChunks = 200; // default, can also be set from ICB
 constexpr i64 CommonStaticLogChunks = 70; // default, can also be set from ICB
+constexpr ui32 StaticGroupChunkReservePerMille = 25; // 2,5%; default, can also be set from ICB
 constexpr i64 TinyDiskMaxCommonLogChunks = 20;
 constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 

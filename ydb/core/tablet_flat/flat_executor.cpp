@@ -31,6 +31,7 @@
 #include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -5081,6 +5082,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     }
 
+    cfg.DataKind = DataKindByTabletType(Owner->TabletType());
+
     TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
 
     if (auto logl = Logger->Log(ELnLev::Info)) {
@@ -5250,6 +5253,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();
     }
+
+    comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);

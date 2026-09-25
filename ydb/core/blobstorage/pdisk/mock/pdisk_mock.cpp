@@ -58,6 +58,7 @@ struct TPDiskMockState::TImpl {
     ESpaceColorPolicy SpaceColorPolicy;
     std::shared_ptr<NPDisk::TQuotaRecord> ChunkSharedQuota;
     double Occupancy = 0;
+    bool ReportVDiskMetrics = false;
 
     struct TShredState {
         enum class EPhase : ui8 {
@@ -336,6 +337,10 @@ struct TPDiskMockState::TImpl {
         StatusFlags = SpaceColorToStatusFlag(spaceColor);
     }
 
+    void SetReportVDiskMetrics(bool reportVDiskMetrics) {
+        ReportVDiskMetrics = reportVDiskMetrics;
+    }
+
     void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
         if (isReadOnly) {
             ReadOnlyVDisks.insert(vDiskId.GroupID.GetRawId());
@@ -396,6 +401,10 @@ void TPDiskMockState::SetStatusFlags(NPDisk::TStatusFlags flags) {
 
 void TPDiskMockState::SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
     Impl->SetReadOnly(vDiskId, isReadOnly);
+}
+
+void TPDiskMockState::SetReportVDiskMetrics(bool reportVDiskMetrics) {
+    Impl->SetReportVDiskMetrics(reportVDiskMetrics);
 }
 
 bool TPDiskMockState::IsDiskReadOnly() const {
@@ -470,22 +479,24 @@ public:
         p->SetAvailableSize((ui64)(Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
         p->SetTotalSize((ui64)Impl.TotalChunks * Impl.ChunkSize);
         p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+
         // report a full performance metrics set (like a real PDisk does) so that BSC considers the PDisk complete
         p->SetMaxIOPS(1000);
         p->SetMaxReadThroughput(1'000'000'000);
         p->SetMaxWriteThroughput(1'000'000'000);
-
-        // report per-VDisk metrics with normalized occupancy; deliberately do not touch status flags
-        for (const auto& [ownerId, owner] : Impl.Owners) {
-            auto *m = record.AddVDisksMetrics();
-            VDiskIDFromVDiskID(owner.VDiskId, m->MutableVDiskId());
-            auto *vslotId = m->MutableVSlotId();
-            vslotId->SetNodeId(Impl.NodeId);
-            vslotId->SetPDiskId(Impl.PDiskId);
-            vslotId->SetVSlotId(owner.SlotId);
-            m->SetNormalizedOccupancy(GetOccupancy());
-            m->SetAllocatedSize((ui64)owner.CommittedChunks.size() * Impl.ChunkSize);
-            m->SetAvailableSize(p->GetAvailableSize());
+        if (Impl.ReportVDiskMetrics) {
+            // report per-VDisk metrics with normalized occupancy; deliberately do not touch status flags
+            for (const auto& [ownerId, owner] : Impl.Owners) {
+                auto *m = record.AddVDisksMetrics();
+                VDiskIDFromVDiskID(owner.VDiskId, m->MutableVDiskId());
+                auto *vslotId = m->MutableVSlotId();
+                vslotId->SetNodeId(Impl.NodeId);
+                vslotId->SetPDiskId(Impl.PDiskId);
+                vslotId->SetVSlotId(owner.SlotId);
+                m->SetNormalizedOccupancy(GetOccupancy());
+                m->SetAllocatedSize((ui64)owner.CommittedChunks.size() * Impl.ChunkSize);
+                m->SetAvailableSize(p->GetAvailableSize());
+            }
         }
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
 
@@ -721,6 +732,10 @@ public:
         // send the results
         for (auto& msg : results) {
             auto *ev = msg->CastAsLocal<NPDisk::TEvLogResult>();
+            // Filled in here rather than where the result was created: the whole queue
+            // has been applied by now, so this describes the disk the VDisk is about to
+            // be told about, not the one it was when the batch started.
+            ev->Headroom = GetSpaceHeadroom();
             const TActorId& recipient = msg->Recipient;
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Sending TEvLogResult",
                 {"marker", "PDM12"},
@@ -762,7 +777,17 @@ public:
                 {"msg", msg->ToString()},
                 {"VDiskId", owner.VDiskId});
             for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
-                Impl.DeleteChunk(owner, chunkIdx);
+                if (msg->IsDDisk && !owner.ReservedChunks.contains(chunkIdx)) {
+                    status = NKikimrProto::ERROR;
+                    errorReason = TStringBuilder() << "Can't forget chunkIdx# " << chunkIdx
+                        << ": chunk is not reserved or decommitted by this owner";
+                    break;
+                }
+            }
+            if (status == NKikimrProto::OK) {
+                for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
+                    Impl.DeleteChunk(owner, chunkIdx);
+                }
             }
         }
         Send(ev->Sender, new NPDisk::TEvChunkForgetResult(status, {}, errorReason), 0, ev->Cookie);
@@ -822,6 +847,7 @@ public:
                     {"marker", "PDM10"},
                     {"msg", res->ToString()});
             }
+            res->Headroom = GetSpaceHeadroom();
         }
         Send(ev->Sender, res.release());
     }
@@ -972,6 +998,8 @@ public:
                 {"marker", "PDM16"},
                 {"msg", res->ToString()});
         }
+        // After the write, so that a chunk this request allocated is already counted.
+        res->Headroom = GetSpaceHeadroom();
         Send(ev->Sender, res.release());
     }
 
@@ -1115,6 +1143,7 @@ public:
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
             Impl.Owners.size(), 0u, 0, TString());
         res->NormalizedOccupancy = GetOccupancy();
+        res->Headroom = GetSpaceHeadroom();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
     }
@@ -1229,6 +1258,27 @@ public:
             : Impl.Occupancy;
     }
 
+    TSpaceHeadroom GetSpaceHeadroom() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+            // Without a quota model there are no color boundaries to run into, so
+            // everything the disk physically has is headroom.
+            const ui64 free = Impl.GetNumFreeChunks();
+            return {true, free, free, free, free, free};
+        }
+        GetStatusFlags(); // resyncs the shared quota with the free chunk count
+        TSpaceHeadroom headroom;
+        headroom.Valid = true;
+        headroom.ToPreOrange = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::PRE_ORANGE);
+        headroom.ToOrange = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::ORANGE);
+        headroom.ToRed = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::RED);
+        headroom.ToBlack = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::BLACK);
+        // The mock has no static group reserve to hold anything back, so housekeeping sees
+        // exactly the same room as everything else.
+        headroom.AllocatableToBlack = headroom.ToBlack;
+        return headroom;
+    }
+
     void ErrorHandle(NPDisk::TEvYardInit::TPtr &ev) {
         Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, State->GetStateErrorReason()));
     }
@@ -1300,7 +1350,8 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()),
+            0, ev->Get()->IsDDisk ? ev->Cookie : 0);
     }
 
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {

@@ -800,9 +800,49 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(checksum, 0xE);
     }
 
-    Y_UNIT_TEST(ReadModifyWriteAfterEvictionPreservesUntouchedChecksums) {
+    Y_UNIT_TEST(ChecksumReadHitRefreshesBlockStateLru) {
         TIntegrityManager manager(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
-            TIntegrityManager::BlockStateApproxBytes);
+            2 * TIntegrityManager::BlockStateApproxBytes);
+        const TKey key{.TabletId = 10, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 790;
+        MakeReady(manager, key, 810, &nextIntegrityChunkIdx);
+
+        auto persist = [&](ui32 pairIdx, ui64 checksum) {
+            const ui64 operationId = manager.BeginBlocksWrite(key,
+                pairIdx * ChecksumsPerIntegrityBlock * IntegrityUnitSize,
+                IntegrityUnitSize, {checksum});
+            TActionLog actions = Drain(manager);
+            UNIT_ASSERT_VALUES_EQUAL(actions.Writes.size(), 1);
+            manager.OnIoCompleted(actions.Writes[0].IoId);
+            UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, operationId);
+        };
+        auto readFirstBlock = [&] {
+            const ui64 operationId = manager.BeginChecksumRead(key, 0, IntegrityUnitSize);
+            UNIT_ASSERT(Drain(manager).Reads.empty());
+            const auto result = TakeOnlyCompletion(manager);
+            UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+            UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(result.Checksums.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.Checksums[0], 0xA);
+        };
+
+        persist(0, 0xA);
+        persist(1, 0xB);
+        readFirstBlock();
+
+        // A third metadata block must evict the unread second block, preserving the read hit.
+        persist(2, 0xC);
+        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 2);
+        readFirstBlock();
+        ui64 checksum = 0;
+        UNIT_ASSERT(!manager.GetBlockChecksum(key, ChecksumsPerIntegrityBlock, &checksum));
+        UNIT_ASSERT(manager.GetBlockChecksum(key, 2 * ChecksumsPerIntegrityBlock, &checksum));
+        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xC);
+    }
+
+    void TestReadModifyWriteAfterEvictionPreservesUntouchedChecksums(bool cacheDisabled) {
+        TIntegrityManager manager(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
+            cacheDisabled ? 0 : TIntegrityManager::BlockStateApproxBytes);
         const TKey key{.TabletId = 17, .VChunkIndex = 0};
         TChunkIdx nextIntegrityChunkIdx = 796;
         MakeReady(manager, key, 830, &nextIntegrityChunkIdx);
@@ -823,7 +863,7 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
 
         persist(0, 2, {0xAA, 0xBB});
         persist(ChecksumsPerIntegrityBlock, 1, {0xCC});
-        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), cacheDisabled ? 0 : 1);
         ui64 checksum = 0;
         UNIT_ASSERT(!manager.GetBlockChecksum(key, 0, &checksum));
         UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0),
@@ -861,11 +901,25 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         const auto result = TakeOnlyCompletion(manager);
         UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
         UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
-        UNIT_ASSERT(manager.GetBlockChecksum(key, 0, &checksum));
-        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xDD);
-        UNIT_ASSERT(manager.GetBlockChecksum(key, 1, &checksum));
-        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xBB);
+        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), cacheDisabled ? 0 : 1);
+        if (cacheDisabled) {
+            UNIT_ASSERT(!manager.GetBlockChecksum(key, 0, &checksum));
+            UNIT_ASSERT(!manager.GetBlockChecksum(key, 1, &checksum));
+        } else {
+            UNIT_ASSERT(manager.GetBlockChecksum(key, 0, &checksum));
+            UNIT_ASSERT_VALUES_EQUAL(checksum, 0xDD);
+            UNIT_ASSERT(manager.GetBlockChecksum(key, 1, &checksum));
+            UNIT_ASSERT_VALUES_EQUAL(checksum, 0xBB);
+        }
         UNIT_ASSERT_VALUES_EQUAL(manager.GetIntegrityBlockDigest(key, 0), expectedDigest);
+    }
+
+    Y_UNIT_TEST(ReadModifyWriteAfterEvictionPreservesUntouchedChecksums) {
+        TestReadModifyWriteAfterEvictionPreservesUntouchedChecksums(false);
+    }
+
+    Y_UNIT_TEST(ReadModifyWriteAfterEvictionPreservesUntouchedChecksumsWithoutCache) {
+        TestReadModifyWriteAfterEvictionPreservesUntouchedChecksums(true);
     }
 
     Y_UNIT_TEST(BlockStatesDroppedOnDelete) {
@@ -1525,7 +1579,7 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT(!result.LostWriteDetected);
     }
 
-    Y_UNIT_TEST(PendingMultiPairReadPinsChecksumStates) {
+    void TestPendingMultiPairReadPinsChecksumStates(bool cacheDisabled) {
         TIntegrityManager original(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid);
         const TKey key{.TabletId = 45, .VChunkIndex = 0};
         TChunkIdx nextIntegrityChunkIdx = 950;
@@ -1533,7 +1587,7 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         const auto snapshot = original.SnapshotMapping();
 
         TIntegrityManager restored(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
-            TIntegrityManager::BlockStateApproxBytes);
+            cacheDisabled ? 0 : TIntegrityManager::BlockStateApproxBytes);
         restored.ApplyMappingSnapshot(snapshot);
         const auto ref = *restored.FindExtentRef(key);
         const ui64 chunkGeneration =
@@ -1560,10 +1614,33 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.Checksums.size(), blocks);
         UNIT_ASSERT_VALUES_EQUAL(result.Checksums.front(), 0xAA);
         UNIT_ASSERT_VALUES_EQUAL(result.Checksums.back(), 0xBB);
-        UNIT_ASSERT_VALUES_EQUAL(restored.CachedBlockStates(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(restored.CachedBlockStates(), cacheDisabled ? 0 : 1);
+
+        if (cacheDisabled) {
+            const ui64 repeatId = restored.BeginChecksumRead(key, 0, IntegrityUnitSize);
+            TActionLog repeat = Drain(restored);
+            UNIT_ASSERT_VALUES_EQUAL(repeat.Reads.size(), 1);
+            restored.OnReadIoCompleted(repeat.Reads[0].IoId, MakeIntegrityPair(
+                MakeIntegrityBlock(key, ref, chunkGeneration, 0, 0, {{0, 0xAA}}),
+                MakeIntegrityBlock(key, ref, chunkGeneration, 0, 1, {{0, 0xAA}})));
+            const auto repeatedResult = TakeOnlyCompletion(restored);
+            UNIT_ASSERT_VALUES_EQUAL(repeatedResult.OperationId, repeatId);
+            UNIT_ASSERT_EQUAL(repeatedResult.Status, TIntegrityManager::EOperationStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(repeatedResult.Checksums.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(repeatedResult.Checksums[0], 0xAA);
+            UNIT_ASSERT_VALUES_EQUAL(restored.CachedBlockStates(), 0);
+        }
     }
 
-    Y_UNIT_TEST(PendingMultiPairWritePinsChecksumStates) {
+    Y_UNIT_TEST(PendingMultiPairReadPinsChecksumStates) {
+        TestPendingMultiPairReadPinsChecksumStates(false);
+    }
+
+    Y_UNIT_TEST(PendingMultiPairReadPinsChecksumStatesWithoutCache) {
+        TestPendingMultiPairReadPinsChecksumStates(true);
+    }
+
+    void TestPendingMultiPairWritePinsChecksumStates(bool cacheDisabled) {
         TIntegrityManager original(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid);
         const TKey key{.TabletId = 47, .VChunkIndex = 0};
         TChunkIdx nextIntegrityChunkIdx = 970;
@@ -1571,7 +1648,7 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         const auto snapshot = original.SnapshotMapping();
 
         TIntegrityManager restored(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
-            TIntegrityManager::BlockStateApproxBytes);
+            cacheDisabled ? 0 : TIntegrityManager::BlockStateApproxBytes);
         restored.ApplyMappingSnapshot(snapshot);
         const auto ref = *restored.FindExtentRef(key);
         const ui64 chunkGeneration =
@@ -1617,6 +1694,15 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         auto result = TakeOnlyCompletion(restored);
         UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
         UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(restored.CachedBlockStates(), cacheDisabled ? 0 : 1);
+    }
+
+    Y_UNIT_TEST(PendingMultiPairWritePinsChecksumStates) {
+        TestPendingMultiPairWritePinsChecksumStates(false);
+    }
+
+    Y_UNIT_TEST(PendingMultiPairWritePinsChecksumStatesWithoutCache) {
+        TestPendingMultiPairWritePinsChecksumStates(true);
     }
 
     Y_UNIT_TEST(MultiPairCorruptionKeepsDeletionBusyForSiblingIo) {

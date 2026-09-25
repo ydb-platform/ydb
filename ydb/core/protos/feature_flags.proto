@@ -353,4 +353,11 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
+    // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
+    // size-class slots. Reads of the stripe format work even when this flag is off.
+    optional bool EnableVDiskHeapAllocator = 324 [default = false];
+    // Judges a VDisk write by the space color the disk will be in once the Fresh
+    // it holds has been compacted, rather than by the color it is in while the
+    // write is still cheap.
+    optional bool EnableVDiskFreshSpaceProjection = 331 [default = false, (RequireRestart) = true];
 }

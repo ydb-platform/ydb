@@ -2,7 +2,9 @@
 
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
@@ -536,6 +538,79 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
     }
 
+    Y_UNIT_TEST(ValidateConfigInferPDiskSlotSizeSettings) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* inferSettings = proposed.MutableBlobStorageConfig()->MutableInferPDiskSlotCountSettings();
+        inferSettings->MutableRot()->SetSlotSize(600ull << 30);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("MaxSlots is mandatory with SlotSize or UnitSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        inferSettings->MutableRot()->SetMaxSlots(16);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+
+        inferSettings->MutableRot()->SetUnitSize(100ull << 30);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("SlotSize is mutually exclusive with UnitSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExpectedSlotSizeRequiresMaxSlots) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* pdiskConfig = proposed.MutableBlobStorageConfig()
+            ->AddDefineHostConfig()
+            ->AddDrive()
+            ->MutablePDiskConfig();
+        pdiskConfig->SetExpectedSlotSize(600ull << 30);
+
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("ExpectedSlotSize requires MaxSlots"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        pdiskConfig->SetMaxSlots(16);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+
+        pdiskConfig->SetExpectedSlotCount(4);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("ExpectedSlotSize is mutually exclusive with ExpectedSlotCount"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigMaxSlotsRequiresExpectedSlotSize) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* pdiskConfig = proposed.MutableBlobStorageConfig()
+            ->AddDefineHostConfig()
+            ->AddDrive()
+            ->MutablePDiskConfig();
+        pdiskConfig->SetMaxSlots(16);
+
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_C(err[0].Contains("MaxSlots requires ExpectedSlotSize"), err[0]);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+
+        pdiskConfig->SetExpectedSlotSize(600ull << 30);
+        err.clear();
+        res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
     Y_UNIT_TEST(ValidateConfigDomainEmpty) {
         NKikimrConfig::TAppConfig proposed;
         auto* domains = proposed.MutableDomainsConfig();
@@ -623,6 +698,39 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(err.size(), 1);
         UNIT_ASSERT_EQUAL(err[0], "Domains is not defined in DomainsConfig");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+}
+
+Y_UNIT_TEST_SUITE(NbsConsoleLogConfigValidation) {
+    Y_UNIT_TEST(ShouldDefaultToInfo) {
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_VALUES_EQUAL(config.GetNbsConfig().GetConsoleLogLevel(), 5);
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
+    Y_UNIT_TEST(ShouldAcceptSupportedLevels) {
+        for (ui32 level = 0; level <= 8; ++level) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetConsoleLogLevel(level);
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldRejectUnsupportedLevels) {
+        for (ui32 level: {9u, 256u, Max<ui32>()}) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetConsoleLogLevel(level);
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                errors.front(),
+                TStringBuilder() << "NbsConfig.ConsoleLogLevel: expected 0..8, got " << level);
+        }
     }
 }
 

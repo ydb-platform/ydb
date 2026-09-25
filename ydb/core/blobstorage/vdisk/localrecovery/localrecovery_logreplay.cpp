@@ -146,6 +146,8 @@ namespace NKikimr {
                 // end
                 LocRecCtx->RecovInfo->FinishDispatching();
                 LocRecCtx->RepairedHuge->FinishRecovery(ctx);
+                ResolveStripeSsts();
+                RegisterHugeBlobs();
                 VerifyOwnedChunks(ctx);
 
                 LocRecCtx->VCtx->LocalRecoveryErrorStr = "";
@@ -614,7 +616,7 @@ namespace NKikimr {
 
             ui64 lsn = record.Lsn;
             TRlas res = LocRecCtx->RepairedHuge->ApplySlotsDeletion(ctx, lsn, TDiskPartVec(pb.GetRemovedHugeBlobs()),
-                TDiskPartVec(pb.GetAllocatedHugeBlobs()), dbType);
+                TDiskPartVec(pb.GetAllocatedHugeBlobs()), TDiskPartVec(pb.GetAllocatedStripeBlobs()), dbType);
             if (!res.Ok)
                 return EDispatchStatus::Error;
 
@@ -799,6 +801,62 @@ namespace NKikimr {
                     break;
             }
             Y_FAIL_S("Unexpected case: " << record.Signature.ToString());
+        }
+
+        // An SST that lives in the stripe heap is recognized by the chunk it sits in, so this has to run after the huge
+        // keeper has finished recovering and before chunk ownership is verified: a stripe chunk is legitimately
+        // claimed both by the heap and by the SSTs inside it.
+        //
+        // Nothing about the contents of a stripe chunk is persisted. Log replay only establishes which chunks the
+        // stripe heap owns; which extents inside them are live is decided here, by what the recovered database still
+        // references. That makes the two self-correcting: a chunk the entry point named but nobody references turns
+        // out empty and goes back to the slot heap, and there is no accumulated extent state to fall out of step with
+        // the hull across a log cut.
+        void ResolveStripeSsts() {
+            THashSet<TChunkIdx> stripeChunks;
+            LocRecCtx->RepairedHuge->CollectStripeChunks(stripeChunks);
+            if (stripeChunks.empty()) {
+                return;
+            }
+            LocRecCtx->HullDbRecovery->ResolveStripeSsts(stripeChunks);
+            LocRecCtx->HullDbRecovery->ForEachStripeExtent(stripeChunks, [this](const TDiskPart& part) {
+                LocRecCtx->RepairedHuge->RecoveryOccupyDerived(part);
+            });
+            LocRecCtx->RepairedHuge->FinishStripeDerivation();
+        }
+
+        // Track the slot size of every huge blob the database still points at. This runs after the log has been
+        // replayed because it has to tell slot addresses from stripe ones, and that question is only answerable once
+        // every chunk claim in the log has been seen: a chunk that became a stripe chunk after the keeper's last entry
+        // point is claimed back by replay, and before that its stripes look like badly aligned slots.
+        void RegisterHugeBlobs() {
+            TIntrusivePtr<TLogoBlobsDs>& logoBlobs = LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs;
+            TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>::TSstIterator iter(logoBlobs->CurSlice.Get(),
+                logoBlobs->CurSlice->Level0CurSstsNum());
+
+            for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                struct TMerger {
+                    TThis* const Self;
+
+                    void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
+                            const TKeyLogoBlob& /*key*/, ui64 /*circaLsn*/, const void* /*sst*/) {
+                        if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
+                            TDiskDataExtractor extr;
+                            memRec.GetDiskData(&extr, outbound);
+                            for (const TDiskPart *location = extr.Begin; location != extr.End; ++location) {
+                                if (location->ChunkIdx && location->Size) {
+                                    Self->LocRecCtx->RepairedHuge->RegisterBlob(*location);
+                                }
+                            }
+                        }
+                    }
+                } merger{this};
+
+                TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator blobIter(iter.Get().SstPtr.Get());
+                for (blobIter.SeekToFirst(); blobIter.Valid(); blobIter.Next()) {
+                    blobIter.PutToMerger(&merger);
+                }
+            }
         }
 
         void VerifyOwnedChunks(const TActorContext& ctx) {

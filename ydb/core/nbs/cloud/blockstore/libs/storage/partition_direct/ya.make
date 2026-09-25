@@ -49,6 +49,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    session
     dirty_map
     model
     mon_page

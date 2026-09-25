@@ -9,9 +9,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/blobstorage/base
     ydb/core/protos
     ydb/core/formats/arrow/serializer
     library/cpp/protobuf/json
+    library/cpp/logger
 )
 
 END()

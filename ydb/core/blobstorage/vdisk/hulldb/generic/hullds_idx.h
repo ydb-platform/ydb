@@ -296,6 +296,10 @@ namespace NKikimr {
             return Fresh.GetFreeInPlaceSizeApproximation();
         }
 
+        TFreshSpaceDebt GetFreshSpaceDebt() const {
+            return Fresh.GetSpaceDebt();
+        }
+
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
             return Fresh.FindSegmentForCompaction();
         }
@@ -309,6 +313,9 @@ namespace NKikimr {
         }
         void FreshCompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
             Fresh.CompactionSstCreated(std::move(freshSegment));
+        }
+        void FreshCompactionAborted() {
+            Fresh.CompactionAborted();
         }
 
         // Fresh Appendix Compaction
@@ -379,6 +386,20 @@ namespace NKikimr {
             Fresh.GetOwnedChunks(chunks);
             // include slice
             CurSlice->GetOwnedChunks(chunks);
+        }
+
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            CurSlice->ResolveStripeSsts(stripeChunks);
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            Fresh.ForEachHugeBlob([&](const TDiskPart& part) {
+                if (stripeChunks.contains(part.ChunkIdx)) {
+                    callback(part);
+                }
+            });
+            CurSlice->ForEachStripeExtent(stripeChunks, callback);
         }
 
         void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const {

@@ -945,6 +945,7 @@ public:                                                                         
                 COUNTER_INIT(BlobsBalanceLevel, true);
                 COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
+                COUNTER_INIT(BlobsEmergency, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
                 COUNTER_INIT(BlocksPromoteSsts, true);
@@ -963,6 +964,7 @@ public:                                                                         
             COUNTER_DEF(BlobsBalanceLevel);
             COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
+            COUNTER_DEF(BlobsEmergency);
             COUNTER_DEF(BlobsSqueeze);
 
             COUNTER_DEF(BlocksPromoteSsts);

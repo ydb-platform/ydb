@@ -45,15 +45,6 @@ enum class EVChunkStatsDetail
     PerVChunk,
 };
 
-// Controls whether a DBG monitoring snapshot includes its VChunk state.
-enum class EDbgMonSnapshotDetail
-{
-    // Common DBG state only, used by pages that gather every DBG.
-    Summary,
-    // Includes every VChunk config, used by one DBG's detail page.
-    PerVChunk,
-};
-
 enum class ELatencyPercentile
 {
     P50,
@@ -116,6 +107,7 @@ struct TDbgVChunkSnapshot
 struct TDbgSnapshot
 {
     size_t Index = 0;
+    size_t VChunkCount = 0;
     TVector<TDbgVChunkSnapshot> VChunks;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
@@ -185,6 +177,8 @@ struct TMonPageData
     TVector<TDbgSnapshot> Dbgs;
     // DBG detail index (absent => list view).
     std::optional<ui32> SelectedDbg;
+    // Zero-based VChunk page on the DBG detail view.
+    size_t VChunkPage = 0;
 
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;

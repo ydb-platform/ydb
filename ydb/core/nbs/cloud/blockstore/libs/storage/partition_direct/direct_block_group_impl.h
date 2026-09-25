@@ -165,7 +165,8 @@ public:
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
-        EDbgMonSnapshotDetail detail) const override;
+        size_t vChunkFrom,
+        size_t vChunkCount) const override;
 
     void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
 
@@ -284,7 +285,8 @@ private:
     void DoBalanceDDisks(EDDiskBalanceStrategy strategy);
 
     [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot(
-        EDbgMonSnapshotDetail detail) const;
+        size_t vChunkFrom,
+        size_t vChunkCount) const;
 
     [[nodiscard]] TVChunkStatsGatherResult DoGatherVChunkStats(
         EVChunkStatsDetail detail) const;

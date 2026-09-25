@@ -1031,6 +1031,7 @@ void TExecutor::FollowerSyncComplete() {
 }
 
 void TExecutor::FollowerGcApplied(ui32 step, TDuration followerSyncDelay) {
+    // Runs on the leader after followers have applied the part switch.
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl << NFmt::Do(*this) << " switch applied on followers, step " << step;
     }

@@ -3454,6 +3454,53 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
     }
 
+    Y_UNIT_TEST(VacuumWaitsForFollowerGc) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac));
+        env.FireDummyFollower(1);
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        ui32 leaderStep = 0;
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(1, leaderStep)});
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(2, leaderStep)});
+
+        TActorId leaderActor;
+        env.SendSync(new NFake::TEvCall{[&](auto*, const auto& ctx) {
+            leaderActor = ctx.SelfID;
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        ui32 appliedOnLeader = 0;
+        auto applied = env->AddObserver<TEvTablet::TEvFollowerGcApplied>([&](auto& ev) {
+            // This notification releases the leader's barrier, not a follower's.
+            UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, leaderActor);
+            ++appliedOnLeader;
+        });
+        TBlockEvents<TEvTablet::TEvFGcAck> delayedFollowerGc(env.Env);
+        env.SendSync(new NFake::TEvCall{[](auto* executor, const auto& ctx) {
+            executor->StartVacuum(234ull);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        env->WaitFor("follower GC acknowledgement", [&] { return !delayedFollowerGc.empty(); });
+        UNIT_ASSERT_C(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(1)),
+            "Vacuum must wait for the follower to release its old parts");
+
+        delayedFollowerGc.Stop().Unblock();
+        auto completed = env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10));
+        UNIT_ASSERT_C(completed, "Vacuum must resume after follower GC acknowledgement");
+        UNIT_ASSERT_VALUES_EQUAL(completed->Get()->VacuumGeneration, 234);
+        UNIT_ASSERT(appliedOnLeader > 0);
+
+        TString data;
+        env.SendFollowerSync(new NFake::TEvExecute{new TTxCheckRows(data)});
+        UNIT_ASSERT_VALUES_EQUAL(data,
+            "Key 1 = Upsert value = Set key1value\n"
+            "Key 2 = Upsert value = Set key2value\n");
+    }
+
     struct TFollowerEarlyRebootObserver {
         using EEventAction = TTestActorRuntimeBase::EEventAction;
 

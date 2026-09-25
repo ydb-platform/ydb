@@ -12,6 +12,12 @@
 
 `YDBWrapper` по-прежнему из `.github/scripts/analytics/ydb_wrapper.py`.
 
+Unit-тесты лежат отдельно в `tests/analytics/` (не рядом с клиентом):
+
+```bash
+python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
+```
+
 ## Core (Arcadia / LLM / любой CI)
 
 Нет GitHub-контекста. `run_id` — только из `--run-id` или `$ANALYTICS_RUN_ID` (не `$GITHUB_RUN_ID`). Файл — `$ANALYTICS_FILE`. Свой контекст можно передать `--json` / `--attr` или `attach=` в Python.

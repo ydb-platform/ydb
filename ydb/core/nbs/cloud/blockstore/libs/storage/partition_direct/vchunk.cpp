@@ -507,7 +507,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         bundle->GetPBufferKey());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
-    StartPersist();
+    MaybeStartPersist();
     ScheduleCleaningUp();
 }
 
@@ -559,7 +559,7 @@ void TVChunk::OnCopyProgress(ui64 totalBytes)
         LogTitle.GetWithTime().c_str(),
         totalBytes);
 
-    StartPersist();
+    MaybeStartPersist();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -580,7 +580,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::DoStart()
@@ -879,7 +879,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    StartPersist();
+    MaybeStartPersist();
     ScheduleCleaningUp();
 }
 
@@ -985,7 +985,7 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::StartPersist()
+void TVChunk::MaybeStartPersist()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1058,7 +1058,7 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
     Persisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
-    StartPersist();
+    MaybeStartPersist();
     DemoteIfNeeded();
     ScheduleCleaningUp();
 }
@@ -1169,7 +1169,7 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -1201,7 +1201,7 @@ void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
         .PrepareConfig = std::move(prepareConfig),
         .Message = std::move(message)});
 
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::PersistNextPendingConfig()
@@ -1225,7 +1225,7 @@ void TVChunk::PersistNextPendingConfig()
             message.Quote().c_str(),
             config.DebugPrint().c_str());
 
-        StartPersist();
+        MaybeStartPersist();
         return;
     }
 
@@ -1288,7 +1288,7 @@ void TVChunk::OnConfigPersisted(
     PersistedFreshDDisks = freshDDisks;
     ApplyConfig(config, message);
     DirectBlockGroup->CommitDDiskPromotion(config);
-    StartPersist();
+    MaybeStartPersist();
     DemoteIfNeeded();
 }
 
@@ -1459,7 +1459,7 @@ void TVChunk::OnCopyComplete(
     }
 
     Copiers.erase(hostIndex);
-    StartPersist();
+    MaybeStartPersist();
 }
 
 void TVChunk::DemoteIfNeeded()

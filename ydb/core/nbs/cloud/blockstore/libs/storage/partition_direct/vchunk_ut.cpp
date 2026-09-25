@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
                 dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
                 MakeDirtyMapNeedPersist(dirtyMap);
-                InvokeStartPersist(*vchunk);
+                InvokeMaybeStartPersist(*vchunk);
 
                 // The config must wait for the in-flight dirty map persist.
                 vchunk->SetHostState(3, EHostState::TemporaryOffline);
@@ -603,7 +603,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                     dirtyMap.BeginRangeSync(3, TBlockRange16::WithLength(5, 5));
                 dirtyMap.EndRangeSync(sync.SyncId, true);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
-                InvokeStartPersist(*vchunk);
+                InvokeMaybeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -1552,7 +1552,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 MakeDirtyMapNeedPersist(dirtyMap);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
 
-                InvokeStartPersist(*vchunk);
+                InvokeMaybeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -1588,7 +1588,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    // A second StartPersist call while a persist is already in flight must
+    // A second MaybeStartPersist call while a persist is already in flight must
     // be a no-op: no duplicate UpdateDirtyMapState request is issued.
     Y_UNIT_TEST_F(
         ShouldNotPersistDirtyMapStateWhileAlreadyPersisting,
@@ -1623,8 +1623,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
                 // First call starts a persist; second call must be ignored
                 // while it is still in flight.
-                InvokeStartPersist(*vchunk);
-                InvokeStartPersist(*vchunk);
+                InvokeMaybeStartPersist(*vchunk);
+                InvokeMaybeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -1641,7 +1641,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    // With no dirty map changes NeedPersist() is false, so StartPersist
+    // With no dirty map changes NeedPersist() is false, so MaybeStartPersist
     // must not issue any UpdateDirtyMapState request.
     Y_UNIT_TEST_F(ShouldNotPersistDirtyMapStateWhenNothingChanged, TBaseFixture)
     {
@@ -1669,7 +1669,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     false,
                     AccessBlocksDirtyMap(*vchunk).NeedPersist());
-                InvokeStartPersist(*vchunk);
+                InvokeMaybeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));

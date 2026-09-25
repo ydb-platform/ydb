@@ -47,7 +47,7 @@ public:
             const auto& request = *ev->Get<TEvKqp::TEvQueryRequest>();
             if (request.GetQuery().Contains("DECLARE $key AS String;")
                 && request.GetQuery().Contains("`/Root/aggregationState`")) {
-                auto response = MakeHolder<TEvKqp::TEvQueryResponse>(MakeIntrusive<NActors::TProtoArenaHolder>());
+                auto response = std::make_unique<TEvKqp::TEvQueryResponse>(MakeIntrusive<NActors::TProtoArenaHolder>());
                 if (Handler(request, *response)) {
                     Send(ev->Sender, response.Release(), 0, ev->Cookie);
                     return;

@@ -27,7 +27,7 @@ namespace NYdbWorkload {
         ui64 CountFileLines(const TFsPath& path) {
             ui64 count = 0;
             TString line;
-            auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path));
+            auto input = OpenOwnedMaybeCompressedInput(std::make_unique<TFileInput>(path));
             while (input->ReadLine(line)) {
                 ++count;
             }

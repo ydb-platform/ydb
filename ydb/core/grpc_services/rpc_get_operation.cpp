@@ -114,7 +114,7 @@ class TGetOperationRPC
     // SA-specific navigation (two-hop, mirrors TRpcAnalyzeOperationRequestActor)
     void ResolveStatisticsAggregatorForAnalyze() {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto req = MakeHolder<TNavigate>();
+        auto req = std::make_unique<TNavigate>();
         req->DatabaseName = GetDatabaseName();
         auto& entry = req->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpPath;
@@ -162,7 +162,7 @@ class TGetOperationRPC
 
     void NavigateDomainKeyForSA(const TPathId& domainKey) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto nav = MakeHolder<TNavigate>();
+        auto nav = std::make_unique<TNavigate>();
         nav->DatabaseName = GetDatabaseName();
         auto& entry = nav->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
@@ -313,7 +313,7 @@ private:
         Y_ABORT_UNLESS(pipeActor);
         PipeActorId_ = ctx.Register(pipeActor);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvGetOperationRequest>();
         request->Record.MutableRequest()->set_id(GetProtoRequest()->id());
         request->Record.SetUserToken(Request->GetSerializedToken());
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
@@ -340,7 +340,7 @@ private:
         Y_ABORT_UNLESS(pipeActor);
         PipeActorId_ = ctx.Register(pipeActor);
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(ctx, PipeActorId_, request.Release());
     }

@@ -1072,7 +1072,7 @@ private:
     THashMap<TString, TRemovedTenant> RemovedTenants;
     TTenantsConfig Config;
     TTxProcessor::TPtr TxProcessor;
-    TQueue<THolder<ITransaction>> DelayedTxs;
+    TQueue<std::unique_ptr<ITransaction>> DelayedTxs;
     TSlotStats SlotStats;
     TCounters Counters;
     NKikimrConfig::TFeatureFlags FeatureFlags;

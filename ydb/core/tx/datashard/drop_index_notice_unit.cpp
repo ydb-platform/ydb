@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TDropIndexNoticeUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
+    std::unique_ptr<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
     TDropIndexNoticeUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -73,11 +73,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateDropIndexNoticeUnit(
+std::unique_ptr<TExecutionUnit> CreateDropIndexNoticeUnit(
     TDataShard& dataShard,
     TPipeline& pipeline)
 {
-    return THolder(new TDropIndexNoticeUnit(dataShard, pipeline));
+    return std::unique_ptr<TDropIndexNoticeUnit>(new TDropIndexNoticeUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

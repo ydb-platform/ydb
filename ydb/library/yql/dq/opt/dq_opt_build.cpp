@@ -509,7 +509,7 @@ public:
 
 using TStageOptimizer = std::function<TDqPhyStage (const TDqPhyStage&, TExprContext&)>;
 
-THolder<IGraphTransformer> CreateDqPhyStageTransformer(const TStageOptimizer& func, TTypeAnnotationContext* typesCtx) {
+std::unique_ptr<IGraphTransformer> CreateDqPhyStageTransformer(const TStageOptimizer& func, TTypeAnnotationContext* typesCtx) {
     return CreateFunctorTransformer([=](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
         TOptimizeExprSettings settings(typesCtx);
         settings.CustomInstantTypeTransformer = typesCtx->CustomInstantTypeTransformer.Get();

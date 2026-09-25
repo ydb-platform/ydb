@@ -69,9 +69,9 @@ namespace NTable {
                 Y_ENSURE(prefixLen > 0 && prefixLen <= Scheme->Groups[0].ColsKeyData.size(),
                     "Bloom filter prefix " << prefixLen << " exceeds key column count " << Scheme->Groups[0].ColsKeyData.size());
                 if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) {
-                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TQueue>(fpp));
+                    ByKeyPrefixes.emplace_back(prefixLen, std::make_unique<NBloom::TQueue>(fpp));
                 } else {
-                    ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TWriter>(conf.MaxRows, fpp));
+                    ByKeyPrefixes.emplace_back(prefixLen, std::make_unique<NBloom::TWriter>(conf.MaxRows, fpp));
                 }
             }
 
@@ -1129,7 +1129,7 @@ namespace NTable {
         NPage::TFrameWriter FrameL; /* Large blobs inverted index   */
         NPage::TFrameWriter FrameS; /* Packed blobs inverted index */
         NPage::TExtBlobsWriter Globs;
-        TVector<std::pair<ui32, THolder<NBloom::IWriter>>> ByKeyPrefixes;
+        TVector<std::pair<ui32, std::unique_ptr<NBloom::IWriter>>> ByKeyPrefixes;
         TWriteStats WriteStats;
         TStackVec<TCell, 16> Key;
         TStackVec<TCell, 16> PrevPageLastKey;

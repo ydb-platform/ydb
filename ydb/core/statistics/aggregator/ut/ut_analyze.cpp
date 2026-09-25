@@ -1113,7 +1113,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             MakeAnalyzeRequest({tableInfo.PathId}, "operationId2").release());
         WaitForAggregatorCommit(runtime, tableInfo.SaTabletId);
 
-        auto cancelRequest = MakeHolder<TEvStatistics::TEvAnalyzeCancel>();
+        auto cancelRequest = std::make_unique<TEvStatistics::TEvAnalyzeCancel>();
         cancelRequest->Record.SetOperationId(operationId);
         runtime.SendToPipe(tableInfo.SaTabletId, sender, cancelRequest.Release());
 

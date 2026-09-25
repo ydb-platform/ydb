@@ -61,10 +61,10 @@ void TLoadInRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateLoadInRSUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateLoadInRSUnit(TDataShard &dataShard,
                                                   TPipeline &pipeline)
 {
-    return THolder(new TLoadInRSUnit(dataShard, pipeline));
+    return std::unique_ptr<TLoadInRSUnit>(new TLoadInRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

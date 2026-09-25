@@ -45,13 +45,13 @@ public:
     TDqDataProviderSource(const TDqState::TPtr& state, TExecTransformerFactory execTransformerFactory)
         : State_(state)
         , ConfigurationTransformer_([this]() {
-            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Settings, *State_->TypeCtx, TString{DqProviderName});
+            return std::make_unique<NCommon::TProviderConfigurationTransformer>(State_->Settings, *State_->TypeCtx, TString{DqProviderName});
         })
-        , ExecTransformer_([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State_)); })
+        , ExecTransformer_([this, execTransformerFactory] () { return std::unique_ptr<IGraphTransformer>(execTransformerFactory(State_)); })
         , TypeAnnotationTransformer_([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
         , ConstraintsTransformer_([] () { return CreateDqDataSourceConstraintTransformer(); })
         , StatisticsTransformer_([this]() { return CreateDqsStatisticsTransformer(State_, TBaseProviderContext::Instance()); })
-        , ExecutionValidator_([this]() { return MakeHolder<TDqExecutionValidator>(State_); })
+        , ExecutionValidator_([this]() { return std::make_unique<TDqExecutionValidator>(State_); })
     { }
 
     TStringBuf GetName() const override {

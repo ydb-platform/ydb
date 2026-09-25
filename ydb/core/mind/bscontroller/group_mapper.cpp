@@ -1562,7 +1562,7 @@ namespace NKikimr::NBsController {
     };
 
     TGroupMapper::TPlacementBuilder::TPlacementBuilder(TGroupMapper& mapper)
-        : State(MakeHolder<TState>(mapper))
+        : State(std::make_unique<TState>(mapper))
     {}
 
     TGroupMapper::TPlacementBuilder::~TPlacementBuilder() = default;

@@ -447,7 +447,7 @@ private:
     // when EnableAnalyzeLongRunningOperation is off.
     template<typename TResponse>
     void SendAnalyzeLongRunningOpDisabled(const TActorId& recipient, ui64 cookie) {
-        auto response = MakeHolder<TResponse>();
+        auto response = std::make_unique<TResponse>();
         response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
         auto& issue = *response->Record.AddIssues();
         issue.set_severity(NYql::TSeverityIds::S_ERROR);

@@ -119,13 +119,13 @@ namespace NTabletPipe {
                 return;
             }
 
-            THolder<IEventHandle> result;
+            std::unique_ptr<IEventHandle> result;
             if (msg->HasEvent()) {
-                result = MakeHolder<IEventHandle>(ctx.SelfID, originalSender,
+                result = std::make_unique<IEventHandle>(ctx.SelfID, originalSender,
                         msg->ReleaseEvent().Release(), 0, ev->Cookie, nullptr,
                         std::move(ev->TraceId));
             } else {
-                result = MakeHolder<IEventHandle>(
+                result = std::make_unique<IEventHandle>(
                         msg->Type, 0, ctx.SelfID, originalSender,
                         msg->ReleaseBuffer(), ev->Cookie, nullptr,
                         std::move(ev->TraceId));

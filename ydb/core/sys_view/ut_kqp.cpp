@@ -475,7 +475,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         ui32 staticNode = 0;
 
         auto makeQueryEvent = [&runtime] (ui32 nodeIdx, ui64 endTimeUs, const TString& queryText, ui64 readBytes) {
-            auto stats = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
+            auto stats = std::make_unique<NSysView::TEvSysView::TEvCollectQueryStats>();
             stats->QueryStats.MutableStats()->SetReadBytes(readBytes);
             stats->QueryStats.SetQueryText(queryText);
             stats->QueryStats.SetQueryTextHash(MurmurHash<ui64>(queryText.data(), queryText.size()));

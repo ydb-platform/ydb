@@ -1226,7 +1226,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Loading table metadata from cache",
         {"entityName", GetDebugString(entityName)});
 
-    auto navigate = MakeHolder<TNavigate>();
+    auto navigate = std::make_unique<TNavigate>();
     navigate->ResultSet.emplace_back(entry);
     if (externalEntry) {
         navigate->ResultSet.emplace_back(externalEntry->Entry);
@@ -1238,7 +1238,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         navigate->UserToken = userToken;
     }
 
-    auto ev = MakeHolder<TRequest>(navigate.Release());
+    auto ev = std::make_unique<TRequest>(navigate.Release());
 
     const auto schemeCacheId = MakeSchemeCacheID();
 
@@ -1496,7 +1496,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         NKikimr::NStat::TRequest t;
         t.PathId = NKikimr::TPathId(result.Metadata->PathId.OwnerId(), result.Metadata->PathId.TableId());
 
-        auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        auto event = std::make_unique<NStat::TEvStatistics::TEvGetStatistics>();
         event->Database = database;
         event->StatType = NKikimr::NStat::EStatType::SIMPLE;
         event->StatRequests.push_back(t);

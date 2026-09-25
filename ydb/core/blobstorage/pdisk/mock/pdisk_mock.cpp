@@ -628,7 +628,7 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    std::deque<std::tuple<TActorId, THolder<NPDisk::TEvLog>>> LogQ;
+    std::deque<std::tuple<TActorId, std::unique_ptr<NPDisk::TEvLog>>> LogQ;
 
     void Handle(NPDisk::TEvLog::TPtr ev) {
         Y_VERIFY(!Impl.CheckIsReadOnlyOwner(ev->Get()));
@@ -1309,14 +1309,14 @@ public:
 
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
         const NPDisk::TEvLog &evLog = *ev->Get();
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason(), 0));
+        std::unique_ptr<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason(), 0));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         Send(ev->Sender, result.Release());
     }
 
     void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
         const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason(), 0));
+        std::unique_ptr<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason(), 0));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }
@@ -1325,7 +1325,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvReadLog::TPtr &ev) {
         const NPDisk::TEvReadLog &evReadLog = *ev->Get();
-        THolder<NPDisk::TEvReadLogResult> result(new NPDisk::TEvReadLogResult(
+        std::unique_ptr<NPDisk::TEvReadLogResult> result(new NPDisk::TEvReadLogResult(
             NKikimrProto::CORRUPTED, evReadLog.Position, evReadLog.Position, true, 0, State->GetStateErrorReason(), evReadLog.Owner));
         Send(ev->Sender, result.Release());
     }
@@ -1338,7 +1338,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvChunkRead::TPtr &ev) {
         const NPDisk::TEvChunkRead &evChunkRead = *ev->Get();
-        THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
+        std::unique_ptr<NPDisk::TEvChunkReadResult> result = std::make_unique<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             evChunkRead.ChunkIdx, evChunkRead.Offset, evChunkRead.Cookie, 0, "PDisk is in error state");
         Send(ev->Sender, result.Release());
     }

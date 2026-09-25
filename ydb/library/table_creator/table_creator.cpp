@@ -101,7 +101,7 @@ public:
     }
 
     void RunTableRequest() {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetDatabaseName(Database);
 
         if (IsSystemUser) {
@@ -346,7 +346,7 @@ public:
         NActors::IActor* pipeActor = NTabletPipe::CreateClient(SelfId(), ev->Get()->Record.GetSchemeShardTabletId());
         Y_ABORT_UNLESS(pipeActor);
         SchemePipeActorId = Register(pipeActor);
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
         YDB_LOG_DEBUG("Subscribe on create table",
@@ -763,8 +763,8 @@ private:
 
 namespace NTableCreator {
 
-THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     auto databasePath = SplitPath(database);
     request->DatabaseName = database;
     if (userToken && !userToken->GetSerializedToken().empty()) {
@@ -783,7 +783,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(cons
     return request;
 }
 
-THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
     const TVector<TVector<TString>>& pathsComponents, const TString& database)
 {
     return BuildSchemeCacheNavigateRequest(pathsComponents, database ? database : AppData()->TenantName, nullptr);

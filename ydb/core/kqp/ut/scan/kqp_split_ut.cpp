@@ -27,7 +27,7 @@ namespace NKqp {
 Y_UNIT_TEST_SUITE(KqpSplit) {
     static ui64 RunSchemeTx(
             TTestActorRuntimeBase& runtime,
-            THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+            std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& request,
             TActorId sender = {},
             bool viaActorSystem = false,
             TEvTxUserProxy::TEvProposeTransactionStatus::EStatus expectedStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress)
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             ui64 sourceTablet,
             ui64 splitKey)
     {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
         auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         auto &runtime = *server->GetRuntime();
         auto &settings = server->GetSettings();
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         auto tid = NKikimr::Tests::ChangeStateStorage(NKikimr::Tests::SchemeRoot, settings.Domain);
         runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             if (ToSkip.fetch_sub(1) <= 0 && ToCapture.fetch_sub(1) > 0) {
                 Cerr << "captured evreadresult -----------------------------------------------------------" << Endl;
                 with_lock(CaptureLock) {
-                    Captured.push_back(THolder(ev.Release()));
+                    Captured.push_back(std::unique_ptr<IEventHandle>(ev.Release()));
                 }
                 if (ToCapture.load() <= 0) {
                     ReadsReceived.Signal();
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void SendCaptured(NActors::TTestActorRuntime* runtime) {
-            TVector<THolder<IEventHandle>> tosend;
+            TVector<std::unique_ptr<IEventHandle>> tosend;
             with_lock(CaptureLock) {
                 tosend.swap(Captured);
             }
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         TActorId Client;
 
         TMutex CaptureLock;
-        TVector<THolder<IEventHandle>> Captured;
+        TVector<std::unique_ptr<IEventHandle>> Captured;
         TManualEvent ReadsReceived;
 
         std::atomic<i64> ToCapture;
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 if (isRead && ToSkip.fetch_sub(1) <= 0 && ToCapture.fetch_sub(1) > 0) {
                     Cerr << "captured evread -----------------------------------------------------------" << Endl;
                     with_lock(CaptureLock) {
-                        Captured.push_back(THolder(ev.Release()));
+                        Captured.push_back(std::unique_ptr<IEventHandle>(ev.Release()));
                     }
                     if (ToCapture.load() <= 0) {
                         ReadsReceived.Signal();
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void SendCaptured(NActors::TTestActorRuntime* runtime, bool sendResults = true) {
-            TVector<THolder<IEventHandle>> tosend;
+            TVector<std::unique_ptr<IEventHandle>> tosend;
             with_lock(CaptureLock) {
                 tosend.swap(Captured);
             }
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         std::atomic<i64> ReverseSkip;
 
         TMutex CaptureLock;
-        TVector<THolder<IEventHandle>> Captured;
+        TVector<std::unique_ptr<IEventHandle>> Captured;
         THashMap<TActorId, TReplyPipeStub*> Pipes;
     };
 
@@ -267,8 +267,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         return res;
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql, bool dml) {
-        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql, bool dml) {
+        auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         if (dml) {
             request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
             request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                     collectedKeys->push_back(row.items(0).uint64_value());
                 }
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             if constexpr (OPT == SortOrder::Unspecified) { Name_ = #N "+Unspecified"; }                            \
         }                                                                                                          \
                                                                                                                    \
-        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<Order>>();  }        \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create()  { return ::std::make_unique<TTestCase##N<Order>>();  }        \
         void Execute_(NUnitTest::TTestContext&) override;                                                          \
     };                                                                                                             \
     struct TTestRegistration##N {                                                                                  \
@@ -712,7 +712,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         TTestSetup s(ETestActorType::SorceRead, "/Root/Test", server.Get());
 
         NThreading::TPromise<bool> captured = NThreading::NewPromise<bool>();
-        TVector<THolder<IEventHandle>> evts;
+        TVector<std::unique_ptr<IEventHandle>> evts;
         std::atomic<bool> captureNotify = true;
         s.Runtime->SetObserverFunc(
             [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 switch (ev->GetTypeRewrite()) {
                     case NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType: {
                         Cerr << "captured newasyncdataarrived" << Endl;
-                        evts.push_back(THolder<IEventHandle>(ev.Release()));
+                        evts.push_back(std::unique_ptr<IEventHandle>(ev.Release()));
                         if (!captured.HasValue()) {
                             captured.SetValue(true);
                         }
@@ -758,7 +758,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         s.Runtime->WaitFuture(captured.GetFuture());
 
         for (auto& ev : evts) {
-            auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+            auto undelivery = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
             s.Runtime->Send(ev->Sender, s.Sender, undelivery.Release());
         }
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->ReadsReceived.WaitI();
         Cerr << "delivery problem -----------------------------------------------------------" << Endl;
         UNIT_ASSERT_EQUAL(shards.size(), 1);
-        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+        auto undelivery = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
         UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
         // send delivery problem, read should be restarted (it will be second retry attempt for this read)
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->ReadsReceived.WaitI();
 
         UNIT_ASSERT_EQUAL(shards.size(), 1);
-        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+        auto undelivery = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
         UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
         // send delivery problem, read should be restarted (it will be second retry attempt for this read)
@@ -1127,7 +1127,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->ReadsReceived.WaitI();
 
         UNIT_ASSERT_EQUAL(shards.size(), 1);
-        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+        auto undelivery = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
         UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
         s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
@@ -1173,7 +1173,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->ReadsReceived.WaitI();
 
         UNIT_ASSERT_EQUAL(shards.size(), 1);
-        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+        auto undelivery = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
         UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
         s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
@@ -1220,7 +1220,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         shim->ReadsReceived.WaitI();
 
         UNIT_ASSERT_EQUAL(shards.size(), 1);
-        auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
+        auto undelivery = std::make_unique<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
         UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
         s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());

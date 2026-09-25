@@ -113,7 +113,7 @@ public:
 
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(
+    std::unique_ptr<TProposeResponse> Propose(
         const TString& owner,
         TOperationContext& context) override;
 
@@ -144,9 +144,9 @@ private:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
+            return std::make_unique<TDeleteParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         default:
             return nullptr;
         }
@@ -155,7 +155,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THolder<TProposeResponse> TDropFileStore::Propose(
+std::unique_ptr<TProposeResponse> TDropFileStore::Propose(
     const TString& owner,
     TOperationContext& context)
 {
@@ -172,7 +172,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         {"pathId", operation.GetId()},
     );
 
-    auto result = MakeHolder<TProposeResponse>(
+    auto result = std::make_unique<TProposeResponse>(
         NKikimrScheme::StatusAccepted,
         ui64(OperationId.GetTxId()),
         ui64(ssId));

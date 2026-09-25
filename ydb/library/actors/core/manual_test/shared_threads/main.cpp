@@ -131,8 +131,8 @@ public:
     }
 };
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(bool useSharedThread = true) {
-    auto setup = MakeHolder<TActorSystemSetup>();
+std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(bool useSharedThread = true) {
+    auto setup = std::make_unique<TActorSystemSetup>();
 
     setup->NodeId = 1;
     setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
@@ -159,8 +159,8 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(bool useSharedThread = true) {
     return setup;
 }
 
-THolder<TActorSystemSetup> BuildActorSystemSetupSharedOnlyCore() {
-    auto setup = MakeHolder<TActorSystemSetup>();
+std::unique_ptr<TActorSystemSetup> BuildActorSystemSetupSharedOnlyCore() {
+    auto setup = std::make_unique<TActorSystemSetup>();
 
     setup->NodeId = 1;
     setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
@@ -189,7 +189,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetupSharedOnlyCore() {
     return setup;
 }
 
-void TestSpecificCase(THolder<TActorSystemSetup> actorSystemSetup, i16 firstPoolTaskCount, i16 secondPoolTaskCount) {
+void TestSpecificCase(std::unique_ptr<TActorSystemSetup> actorSystemSetup, i16 firstPoolTaskCount, i16 secondPoolTaskCount) {
     TActorSystem actorSystem(actorSystemSetup);
 
     actorSystem.Start();
@@ -257,7 +257,7 @@ int main(int argc, char **argv) {
     signal(SIGINT, &OnTerminate);
     signal(SIGTERM, &OnTerminate);
 
-    THolder<TActorSystemSetup> actorSystemSetup;
+    std::unique_ptr<TActorSystemSetup> actorSystemSetup;
     i16 firstPoolTaskCount = 0;
     i16 secondPoolTaskCount = 0;
     if (argc > 1) {

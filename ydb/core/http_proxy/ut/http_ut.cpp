@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(TestHttpProxyListen) {
 
         THttpProxyConfig cfg;
         cfg.Config.MutableHttpConfig()->SetPort(port);
-        THolder<IActor> actor(CreateHttpProxy(cfg));
+        std::unique_ptr<IActor> actor(CreateHttpProxy(cfg));
         UNIT_ASSERT(actor);
         AssertCanConnect(host, port);
     }

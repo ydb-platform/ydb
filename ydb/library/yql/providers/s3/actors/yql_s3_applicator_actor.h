@@ -8,7 +8,7 @@
 
 namespace NYql::NDq {
 
-THolder<NActors::IActor> MakeS3ApplicatorActor(
+std::unique_ptr<NActors::IActor> MakeS3ApplicatorActor(
     NActors::TActorId parentId,
     IHTTPGateway::TPtr gateway,
     const TString& queryId,

@@ -129,9 +129,9 @@ class TCreateSecret : public TSubOperation {
         switch (state) {
             case TTxState::Waiting:
             case TTxState::Propose:
-                return MakeHolder<TPropose>(OperationId);
+                return std::make_unique<TPropose>(OperationId);
             case TTxState::Done:
-                return MakeHolder<TDone>(OperationId);
+                return std::make_unique<TDone>(OperationId);
             default:
                 return nullptr;
         }
@@ -142,7 +142,7 @@ public:
 
     virtual const char* Name() const override final { return "TCreateSecret"; }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisting = !Transaction.GetFailOnExist();
@@ -162,7 +162,7 @@ public:
             {"secretDescription", secretDescrWithoutSecretParts.ShortDebugString()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         const auto parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {

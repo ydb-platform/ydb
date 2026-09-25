@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
     Y_UNIT_TEST(SchemeCacheRecoverAfterLookupErrorFails) {
         TKikimrSettings settings;
         // SchemeCache will return only retry errors, so secrets retrieval will be slow due to retries and never succeed
-        auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
+        auto schemeCacheStatusGetter = std::make_unique<TTestSchemeCacheStatusGetter>(
             TTestSchemeCacheStatusGetter::EFailProbability::Always);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
 
     Y_UNIT_TEST(SchemeShardRecoverAfterNotAvailableFails) {
         TKikimrSettings settings;
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ std::numeric_limits<ui32>::max(),
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(

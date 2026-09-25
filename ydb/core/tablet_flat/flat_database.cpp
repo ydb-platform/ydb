@@ -482,7 +482,7 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
     Annex = new TAnnex(*DatabaseImpl->Scheme, DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel);
     Redo = new NRedo::TWriter;
     DatabaseImpl->BeginTransaction();
-    Change = MakeHolder<TChange>(stamp, DatabaseImpl->Serial());
+    Change = std::make_unique<TChange>(stamp, DatabaseImpl->Serial());
     Env = &env;
     NoMoreReadsFlag = false;
     NoMoreUnprechargedReadsFlag = false;

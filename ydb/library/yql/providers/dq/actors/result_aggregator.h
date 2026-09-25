@@ -8,7 +8,7 @@
 #include <ydb/library/actors/core/actor.h>
 
 namespace NYql::NDqs::NExecutionHelpers {
-    THolder<NActors::IActor> MakeResultAggregator(
+    std::unique_ptr<NActors::IActor> MakeResultAggregator(
         const TVector<TString>& columns,
         const NActors::TActorId& executerId,
         const TString& traceId,

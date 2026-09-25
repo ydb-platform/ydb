@@ -162,7 +162,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     if (finished) {
         auto txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
         auto status = NKikimrTxColumnShard::SUCCESS;
-        auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(TabletID(), txKind, txId, status);
+        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(TabletID(), txKind, txId, status);
         result->Record.SetStep(step);
 
         ctx.Send(ev->Get()->GetSource(), result.Release());

@@ -60,7 +60,7 @@ protected:
             IEventHandle::FlagTrackDelivery);
     }
 
-    void SendBatch(THolder<NKqp::TEvKqpCompute::TEvScanData> batch) {
+    void SendBatch(std::unique_ptr<NKqp::TEvKqpCompute::TEvScanData> batch) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::SendBatch: sending scan batch",
             {"actorId", TBase::SelfId()},
             {"rowCount", batch->Rows.size()},
@@ -101,7 +101,7 @@ protected:
             {"sysViewInfo", SysViewInfo.ShortDebugString()},
             {"issues", issues.ToOneLineString()});
 
-        auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
+        auto error = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>();
         error->Record.SetStatus(status);
         IssuesToMessage(issues, error->Record.MutableIssues());
 
@@ -111,7 +111,7 @@ protected:
     }
 
     void ReplyEmptyAndDie() {
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
         TBase::Send(OwnerActorId, batch.Release());
 
@@ -141,7 +141,7 @@ protected:
         static TExtractorsMap extractors;
 
         const auto& record = ev->Get()->Record;
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
         TVector<TCell> cells;
         for (const auto& entry : record.GetEntries()) {
@@ -262,7 +262,7 @@ private:
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = DatabaseName;
         request->ResultSet.push_back({});
 
@@ -278,7 +278,7 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-        THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
+        std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
 
         auto& entry = request->ResultSet.back();

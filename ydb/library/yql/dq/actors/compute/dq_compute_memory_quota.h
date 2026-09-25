@@ -42,7 +42,7 @@ namespace NYql::NDq {
             , MemoryLimits(memoryLimits)
             , TxId(txId)
             , TaskId(taskId)
-            , ProfileStats(profileStats ? MakeHolder<TProfileStats>() : nullptr)
+            , ProfileStats(profileStats ? std::make_unique<TProfileStats>() : nullptr)
             , ActorSystem(actorSystem) {
 
             auto memoryLimit = initialMkqlMemoryLimit;
@@ -267,7 +267,7 @@ namespace NYql::NDq {
         const TComputeMemoryLimits MemoryLimits;
         const TTxId TxId;
         const ui64 TaskId;
-        THolder<TProfileStats> ProfileStats;
+        std::unique_ptr<TProfileStats> ProfileStats;
         NActors::TActorSystem* ActorSystem;
         NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr; // set by BindScopedAlloc
     };

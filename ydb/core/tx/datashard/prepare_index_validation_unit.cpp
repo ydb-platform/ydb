@@ -72,11 +72,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreatePrepareIndexValidationUnit(
+std::unique_ptr<TExecutionUnit> CreatePrepareIndexValidationUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TPrepareIndexValidationUnit(dataShard, pipeline));
+    return std::unique_ptr<TPrepareIndexValidationUnit>(new TPrepareIndexValidationUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

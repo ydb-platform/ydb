@@ -34,7 +34,7 @@ public:
         , TPipeCacheClient(this)
         , Requester(requester)
         , Settings(std::move(settings))
-        , Response(MakeHolder<TEvKafka::TEvTopicOffsetsResponse>())
+        , Response(std::make_unique<TEvKafka::TEvTopicOffsetsResponse>())
     {
         RequestedPartitions.insert(Settings.PartitionIds.begin(), Settings.PartitionIds.end());
     }
@@ -337,7 +337,7 @@ private:
 
     TActorId Requester;
     TTopicOffsetsSettings Settings;
-    THolder<TEvKafka::TEvTopicOffsetsResponse> Response;
+    std::unique_ptr<TEvKafka::TEvTopicOffsetsResponse> Response;
     TActorId DescriberId;
     bool DidUnauthenticatedExistenceCheck = false;
     TInstant RequestStart;

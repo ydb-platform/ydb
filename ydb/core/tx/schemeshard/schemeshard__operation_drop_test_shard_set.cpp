@@ -118,9 +118,9 @@ class TDropTestShardSet : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::ProposedDeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
+            return std::make_unique<TDeleteParts>(OperationId);
         default:
             return nullptr;
         }
@@ -129,7 +129,7 @@ class TDropTestShardSet : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& drop = Transaction.GetDrop();
@@ -142,7 +142,7 @@ public:
             {"drop", drop.ShortDebugString()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
 

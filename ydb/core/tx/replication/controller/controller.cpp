@@ -431,7 +431,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
     Sessions.emplace(nodeId, TSessionInfo());
     TabletCounters->Simple()[COUNTER_SESSIONS] = Sessions.size();
 
-    auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
+    auto ev = std::make_unique<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
         flags = IEventHandle::FlagSubscribeOnSession;
@@ -772,7 +772,7 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
 
-    auto ev = MakeHolder<TEvService::TEvRunWorker>();
+    auto ev = std::make_unique<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
 
     auto& controller = *record.MutableController();
@@ -802,7 +802,7 @@ void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
         return;
     }
 
-    auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
+    auto result = std::make_unique<TEvService::TEvSchemaChangeResult>();
     id.Serialize(*result->Record.MutableWorker());
     result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
     result->Record.SetOffset(offset->second);
@@ -842,7 +842,7 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
 
-    auto ev = MakeHolder<TEvService::TEvStopWorker>();
+    auto ev = std::make_unique<TEvService::TEvStopWorker>();
     auto& record = ev->Record;
 
     auto& controller = *record.MutableController();

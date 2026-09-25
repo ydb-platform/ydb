@@ -24,7 +24,7 @@ TGRpcPQClusterDiscoveryService::TGRpcPQClusterDiscoveryService(
     , GRpcRequestProxyId_(id)
 {
     if (requestsInflightLimit.Defined()) {
-        Limiter = MakeHolder<NYdbGrpc::TGlobalLimiter>(requestsInflightLimit.GetRef());
+        Limiter = std::make_unique<NYdbGrpc::TGlobalLimiter>(requestsInflightLimit.GetRef());
     }
 }
 

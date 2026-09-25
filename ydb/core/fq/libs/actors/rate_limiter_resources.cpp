@@ -57,7 +57,7 @@ public:
             {"owner", OwnerId},
             {"code", codeStr},
             {"details", Issues});
-        auto res = MakeHolder<TEvents::TEvCreateRateLimiterResourceResponse>();
+        auto res = std::make_unique<TEvents::TEvCreateRateLimiterResourceResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
         Send(Sender, res.Release());
@@ -106,7 +106,7 @@ private:
             return;
         }
 
-        auto response = MakeHolder<TEvents::TEvCreateRateLimiterResourceResponse>();
+        auto response = std::make_unique<TEvents::TEvCreateRateLimiterResourceResponse>();
         response->Status = Ydb::StatusIds::SUCCESS;
         response->Record.ConstructInPlace(ev->Get()->Record);
         Send(Sender, response.Release());
@@ -161,7 +161,7 @@ public:
             {"owner", OwnerId},
             {"code", codeStr},
             {"details", Issues});
-        auto res = MakeHolder<TEvents::TEvDeleteRateLimiterResourceResponse>();
+        auto res = std::make_unique<TEvents::TEvDeleteRateLimiterResourceResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
         Send(Sender, res.Release());
@@ -210,7 +210,7 @@ private:
             return;
         }
 
-        auto response = MakeHolder<TEvents::TEvDeleteRateLimiterResourceResponse>();
+        auto response = std::make_unique<TEvents::TEvDeleteRateLimiterResourceResponse>();
         response->Status = Ydb::StatusIds::SUCCESS;
         response->Record.ConstructInPlace(ev->Get()->Record);
         Send(Sender, response.Release());

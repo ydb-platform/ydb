@@ -36,7 +36,7 @@ public:
     }
 
 protected:
-    virtual THolder<TEvQuota::TEvRequest> MakeQuoterRequest() = 0;
+    virtual std::unique_ptr<TEvQuota::TEvRequest> MakeQuoterRequest() = 0;
     void RequestQuota();
     void SleepUntilNextRequest(TDuration duration);
 
@@ -61,7 +61,7 @@ class TKesusQuotaRequester : public TBaseQuotaRequester {
 public:
     TKesusQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent, size_t kesusIndex, size_t resourceIndex);
 
-    THolder<TEvQuota::TEvRequest> MakeQuoterRequest() override;
+    std::unique_ptr<TEvQuota::TEvRequest> MakeQuoterRequest() override;
 
 private:
     TString KesusPath;
@@ -72,7 +72,7 @@ class TLocalResourceQuotaRequester : public TBaseQuotaRequester {
 public:
     TLocalResourceQuotaRequester(const TOptions& opts, TRequestStats& stats, TActorId parent, size_t resourceIndex);
 
-    THolder<TEvQuota::TEvRequest> MakeQuoterRequest() override;
+    std::unique_ptr<TEvQuota::TEvRequest> MakeQuoterRequest() override;
 
 private:
     ui64 ResourceId;

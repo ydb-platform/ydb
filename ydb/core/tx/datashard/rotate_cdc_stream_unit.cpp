@@ -6,7 +6,7 @@
 namespace NKikimr::NDataShard {
 
 class TRotateCdcStreamUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvAddSender> AddSender;
+    std::unique_ptr<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
     TRotateCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
@@ -82,8 +82,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateRotateCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TRotateCdcStreamUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateRotateCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TRotateCdcStreamUnit>(new TRotateCdcStreamUnit(self, pipeline));
 }
 
 } // namespace NKikimr::NDataShard

@@ -46,14 +46,14 @@ private:
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
     void ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept;
 
-    THolder<TUploadParams> OwnedUploadParams;
+    std::unique_ptr<TUploadParams> OwnedUploadParams;
     const TUploadParams& UploadParams;
     NYdbWorkload::TWorkloadDataInitializer::TPtr Initializer;
-    THolder<TProgressBar> Bar;
+    std::unique_ptr<TProgressBar> Bar;
     TAdaptiveLock Lock;
-    THolder<TFastSemaphore> InFlightSemaphore;
+    std::unique_ptr<TFastSemaphore> InFlightSemaphore;
     TAtomic ErrorsCount;
-    THolder<IWriter> Writer;
+    std::unique_ptr<IWriter> Writer;
 };
 
 }

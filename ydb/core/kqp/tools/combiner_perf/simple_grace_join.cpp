@@ -52,8 +52,8 @@ struct IJoinDataSampler
     {
     }
 
-    virtual THolder<IWideStream> MakeLeftStream(const THolderFactory& holderFactory) const = 0;
-    virtual THolder<IWideStream> MakeRightStream(const THolderFactory& holderFactory) const = 0;
+    virtual std::unique_ptr<IWideStream> MakeLeftStream(const THolderFactory& holderFactory) const = 0;
+    virtual std::unique_ptr<IWideStream> MakeRightStream(const THolderFactory& holderFactory) const = 0;
     virtual TType* GetKeyType(const TTypeEnvironment& env) const = 0;
     virtual size_t CountReferenceJoinResults(const THolderFactory& holderFactory) const = 0;
     virtual void VerifyComputedValueVsReference(const THolderFactory& holderFactory, const NUdf::TUnboxedValue& wideStream) const = 0;
@@ -80,20 +80,20 @@ struct TJoinDataSampler: public IJoinDataSampler
         return GetVerySimpleDataType<K>(env);
     }
 
-    THolder<IWideStream> MakeStream(const THolderFactory& holderFactory, const TKVStream<K, V, true>::TSamples& samples) const {
+    std::unique_ptr<IWideStream> MakeStream(const THolderFactory& holderFactory, const TKVStream<K, V, true>::TSamples& samples) const {
         if (LongKeys) {
-            return THolder(new TKVStream<K, ui64, false, 1>(holderFactory, samples, StreamNumIters));
+            return std::unique_ptr<TKVStream<K, ui64, false, 1>>(new TKVStream<K, ui64, false, 1>(holderFactory, samples, StreamNumIters));
         } else {
-            return THolder(new TKVStream<K, ui64, true, 1>(holderFactory, samples, StreamNumIters));
+            return std::unique_ptr<TKVStream<K, ui64, true, 1>>(new TKVStream<K, ui64, true, 1>(holderFactory, samples, StreamNumIters));
         }
     }
 
-    THolder<IWideStream> MakeLeftStream(const THolderFactory& holderFactory) const override
+    std::unique_ptr<IWideStream> MakeLeftStream(const THolderFactory& holderFactory) const override
     {
         return MakeStream(holderFactory, SamplesLeft);
     }
 
-    THolder<IWideStream> MakeRightStream(const THolderFactory& holderFactory) const override
+    std::unique_ptr<IWideStream> MakeRightStream(const THolderFactory& holderFactory) const override
     {
         return MakeStream(holderFactory, SamplesRight);
     }
@@ -208,7 +208,7 @@ struct TJoinDataSampler: public IJoinDataSampler
     }
 };
 
-THolder<IJoinDataSampler> CreateJoinSamplerFromParams(const TRunParams& params)
+std::unique_ptr<IJoinDataSampler> CreateJoinSamplerFromParams(const TRunParams& params)
 {
     Y_ENSURE(params.RandomSeed.has_value());
     Y_ENSURE(params.JoinRightRows > 0);
@@ -223,7 +223,7 @@ THolder<IJoinDataSampler> CreateJoinSamplerFromParams(const TRunParams& params)
         auto next = [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
             using SamplerType = TJoinDataSampler<MapImpl, std::string, ui64>;
-            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.JoinRightRows, params.NumKeys, params.LongStringKeys, params.JoinOverlap);
+            return std::make_unique<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.JoinRightRows, params.NumKeys, params.LongStringKeys, params.JoinOverlap);
         };
         return DispatchByMap<std::string, TPackedValueChain, IJoinDataSampler>(params.ReferenceHashType, next);
     }
@@ -231,7 +231,7 @@ THolder<IJoinDataSampler> CreateJoinSamplerFromParams(const TRunParams& params)
         auto next = [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
             using SamplerType = TJoinDataSampler<MapImpl, ui64, ui64>;
-            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.JoinRightRows, params.NumKeys, false, params.JoinOverlap);
+            return std::make_unique<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.JoinRightRows, params.NumKeys, false, params.JoinOverlap);
         };
         return DispatchByMap<ui64, TPackedValueChain, IJoinDataSampler>(params.ReferenceHashType, next);
     }
@@ -240,7 +240,7 @@ THolder<IJoinDataSampler> CreateJoinSamplerFromParams(const TRunParams& params)
 
 
 template<bool LLVM, bool Spilling>
-THolder<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared_ptr<ISpillerFactory> spillerFactory, IJoinDataSampler& sampler)
+std::unique_ptr<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared_ptr<ISpillerFactory> spillerFactory, IJoinDataSampler& sampler)
 {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -308,7 +308,7 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
 {
     TSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
-    THolder<IJoinDataSampler> sampler = CreateJoinSamplerFromParams(params);
+    std::unique_ptr<IJoinDataSampler> sampler = CreateJoinSamplerFromParams(params);
 
 
     auto measureGraphTime = [&](auto& computeGraphPtr) {

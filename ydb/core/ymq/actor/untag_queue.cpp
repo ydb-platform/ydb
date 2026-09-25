@@ -29,7 +29,7 @@ public:
         return true;
     }
 
-    TUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::UntagQueue, std::move(cb))
     {
         for (const auto& key : Request().tagkeys()) {
@@ -147,7 +147,7 @@ private:
             bool updated = val["updated"];
             if (updated) {
                 RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-                Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+                Send(QueueLeader_, std::make_unique<TSqsEvents::TEvClearQueueAttributesCache>());
             } else {
                 auto message = "Untag queue query failed, conflicting query in parallel";
                 RLOG_SQS_ERROR(message << ": " << record);
@@ -170,7 +170,7 @@ private:
     TString CustomQueueName_ = "";
 };
 
-IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TUntagQueueActor(sourceSqsRequest, std::move(cb));
 }
 

@@ -35,7 +35,7 @@ void TDLQMoverActor::Bootstrap() {
         SQSQueueName = tokens[2];
 
         this->Send(NSQS::MakeSqsServiceID(this->SelfId().NodeId()),
-            MakeHolder<NSQS::TSqsEvents::TEvGetConfiguration>(
+            std::make_unique<NSQS::TSqsEvents::TEvGetConfiguration>(
                 TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << Settings.PartitionId << "/" << SelfId(),
                 SQSUserName,
                 SQSQueueName,

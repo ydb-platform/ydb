@@ -104,9 +104,9 @@ void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outDat
     TString path = EnsurePDiskExists(tc);
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
         VERBOSE_COUT("  Performing Pread of " << dataSize);
         device->PreadSync(outData.Get(), dataSize, 0, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
@@ -139,11 +139,11 @@ ui64 DestroyLastSectors(TTestContext *tc, NPDisk::TAlignedData &dataBefore, NPDi
     ui64 offset = ((lastDifference - 8) / sectorSize + 1 - count) * sectorSize;
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         NPDisk::TAlignedData buffer(sectorSize * count);
         memset(buffer.Get(), 0xf, sectorSize * count);
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Get(), sectorSize * count);
         device->PwriteSync(buffer.Get(), sectorSize * count, offset, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
@@ -178,9 +178,9 @@ ui64 RestoreLastSectors(TTestContext *tc, NPDisk::TAlignedData &dataBefore, NPDi
     ui64 offset = ((lastDifference - 8) / sectorSize + 1 - count) * sectorSize;
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
         VERBOSE_COUT("Offset = " << offset << " sectorIdx = " << offset/sectorSize);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(dataBefore.Get() + offset, sectorSize * count);
@@ -216,9 +216,9 @@ void FillDeviceWithPattern(TTestContext *tc, ui64 chunkSize, ui64 pattern) {
 
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
         VERBOSE_COUT("Filling first " << data.Size() << "bytes of device with data");
         device->PwriteSync(data.Get(), data.Size(), 0, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
@@ -239,9 +239,9 @@ void WriteSectors(TTestContext *tc, NPDisk::TAlignedData &dataAfter, ui64 firstS
     ui64 offset = firstSector * sectorSize;
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
         VERBOSE_COUT("Offset = " << offset << " sectorIdx = " << offset/sectorSize);
         device->PwriteSync(dataAfter.Get() + offset, sectorSize * count, offset, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
@@ -258,14 +258,14 @@ void DestroySectors(TTestContext *tc, const NPDisk::TAlignedData &dataAfter,
     ui32 sectorSize = 4096;
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         NPDisk::TAlignedData buffer((dataSize + sectorSize - 1)/ sectorSize * sectorSize);
         memcpy(buffer.Get(), dataAfter.Get(), dataSize);
         for (ui64 i = firstSector; i < dataSize / sectorSize; i += period) {
             memset(buffer.Get() + i * sectorSize, 0xf, sectorSize);
         }
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Get(), buffer.Size());
         device->PwriteSync(buffer.Get(), buffer.Size(), 0, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});

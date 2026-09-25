@@ -41,7 +41,7 @@ namespace NYdb {
 
         private:
             template<class T>
-            using TEventQueues = std::vector<THolder<TAutoLockFreeQueue<T>>>;
+            using TEventQueues = std::vector<std::unique_ptr<TAutoLockFreeQueue<T>>>;
 
             void CollectThreadEvents();
             template<class T>
@@ -81,7 +81,7 @@ namespace NYdb {
 
             std::shared_ptr<std::atomic_bool> ErrorFlag;
 
-            THolder<TTopicWorkloadStats> WindowStats;
+            std::unique_ptr<TTopicWorkloadStats> WindowStats;
             TTopicWorkloadStats TotalStats;
 
             // Set in Init() before workers start; read-only afterwards.

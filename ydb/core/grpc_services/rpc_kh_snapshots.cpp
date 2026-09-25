@@ -103,7 +103,7 @@ public:
             reqTimeout = TDuration::MilliSeconds(REQUEST_TIMEOUT_MS);
         }
 
-        auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto req = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
         auto token = Request_->GetSerializedToken();
@@ -240,7 +240,7 @@ public:
             reqTimeout = TDuration::MilliSeconds(REQUEST_TIMEOUT_MS);
         }
 
-        auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto req = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
         auto token = Request_->GetSerializedToken();
@@ -382,7 +382,7 @@ public:
             reqTimeout = TDuration::MilliSeconds(REQUEST_TIMEOUT_MS);
         }
 
-        auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto req = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
         auto token = Request_->GetSerializedToken();

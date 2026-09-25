@@ -113,11 +113,11 @@ private:
 
 namespace NYql::NPureCalc {
 
-THolder<IStream<NKikimr::NReplication::NTransfer::TOutputMessage*>> TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec>::ConvertPullListWorkerToOutputType(
+std::unique_ptr<IStream<NKikimr::NReplication::NTransfer::TOutputMessage*>> TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec>::ConvertPullListWorkerToOutputType(
     const NKikimr::NReplication::NTransfer::TMessageOutputSpec& outputSpec,
     TWorkerHolder<IPullListWorker> worker
 ) {
-    return MakeHolder<NKikimr::NReplication::NTransfer::TOutputListImpl>(outputSpec, std::move(worker));
+    return std::make_unique<NKikimr::NReplication::NTransfer::TOutputListImpl>(outputSpec, std::move(worker));
 }
 
 }

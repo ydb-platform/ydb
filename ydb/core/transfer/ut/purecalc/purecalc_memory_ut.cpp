@@ -189,7 +189,7 @@ struct NYql::NPureCalc::TOutputSpecTraits<TUsedProbeSpec> {
     static const constexpr bool SupportPullListMode = true;
 
     using TOutputItemType = TOutputMessage*;
-    using TPullListReturnType = THolder<IStream<TOutputItemType>>;
+    using TPullListReturnType = std::unique_ptr<IStream<TOutputItemType>>;
 
     static TPullListReturnType ConvertPullListWorkerToOutputType(
         const TUsedProbeSpec& outputSpec,
@@ -204,7 +204,7 @@ struct NYql::NPureCalc::TOutputSpecTraits<TUsedProbeSpec> {
 
 namespace {
 
-THolder<TPullListProgram<TMessageInputSpec, TUsedProbeSpec>> MakePositionsProgram(
+std::unique_ptr<TPullListProgram<TMessageInputSpec, TUsedProbeSpec>> MakePositionsProgram(
     TStringBuf llvmSettings,
     ui64* usedAtBind)
 {
@@ -241,7 +241,7 @@ TVector<ui64> ApplyPositions(
             .Message = topicMessage,
         };
 
-        auto stream = program.Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+        auto stream = program.Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
         used.push_back(usedAtBind);
         UNIT_ASSERT(stream->Fetch());
         if (consumeToEos) {

@@ -11,7 +11,7 @@ public:
     }
     void Init(const char* path) {
         if (TStringBuf(path)) {
-            Handler = MakeHolder<google_breakpad::ExceptionHandler>(google_breakpad::MinidumpDescriptor(path), nullptr, DumpCallback, nullptr, true, -1, true);
+            Handler = std::make_unique<google_breakpad::ExceptionHandler>(google_breakpad::MinidumpDescriptor(path), nullptr, DumpCallback, nullptr, true, -1, true);
         }
     }
 
@@ -19,7 +19,7 @@ public:
 
     private:
     static bool DumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void* context, bool succeeded);
-    THolder<google_breakpad::ExceptionHandler> Handler;
+    std::unique_ptr<google_breakpad::ExceptionHandler> Handler;
 };
 
 TMinidumper Minidumper(getenv("BREAKPAD_MINIDUMPS_PATH"));

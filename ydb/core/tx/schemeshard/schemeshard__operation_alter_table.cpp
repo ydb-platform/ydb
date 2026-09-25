@@ -553,15 +553,15 @@ public:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -578,7 +578,7 @@ public:
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterTable();
@@ -598,7 +598,7 @@ public:
             {"pathId", pathId},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!alter.HasName() && !pathId) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "No table name or pathId in Alter");
@@ -819,14 +819,14 @@ ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) 
 }
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
-    auto obj = MakeHolder<TAlterTable>(id, tx);
+    auto obj = std::make_unique<TAlterTable>(id, tx);
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
 }
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    auto obj = MakeHolder<TAlterTable>(id, state);
+    auto obj = std::make_unique<TAlterTable>(id, state);
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
 }

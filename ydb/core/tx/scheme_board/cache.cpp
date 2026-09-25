@@ -124,7 +124,7 @@ namespace {
             entry.Operation = TNavigate::EOp::OpPath;
             entry.RedirectRequired = false;
 
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             request->ResultSet.emplace_back(std::move(entry));
             request->DomainOwnerId = DomainOwnerId;
@@ -2988,7 +2988,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
         auto& record = *response->Record.MutableCacheResponse();
 
         record.SetItemsTotalCount(Cache.Size());

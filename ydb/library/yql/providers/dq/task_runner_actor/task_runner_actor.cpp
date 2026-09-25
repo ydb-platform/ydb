@@ -160,7 +160,7 @@ public:
             default: {
                 auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
                 auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
-                auto reply = MakeHolder<NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue});
+                auto reply = std::make_unique<NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue});
                 Send(ParentId, reply.Release());
             }
         }
@@ -249,7 +249,7 @@ private:
         return {status, filteredStderr};
     }
 
-    static THolder<TEvDq::TEvAbortExecution> MakeError(
+    static std::unique_ptr<TEvDq::TEvAbortExecution> MakeError(
         const TEvError::TStatus& status,
         TIntrusivePtr<TDqConfiguration> settings,
         ui64 stageId,
@@ -277,7 +277,7 @@ private:
             }
         }
         Y_ABORT_UNLESS(queryStatus != NYql::NDqProto::StatusIds::SUCCESS);
-        return MakeHolder<NDq::TEvDq::TEvAbortExecution>(queryStatus, TVector<TIssue>{issue});
+        return std::make_unique<NDq::TEvDq::TEvAbortExecution>(queryStatus, TVector<TIssue>{issue});
     }
 
     void PassAway() override {
@@ -477,7 +477,7 @@ private:
                 }
                 auto finished = sink->IsFinished();
                 bool changed = finished || ev->Get()->Size > 0 || hasCheckpoint;
-                auto event = MakeHolder<TEvSinkData>(
+                auto event = std::make_unique<TEvSinkData>(
                     ev->Get()->Index,
                     std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
                 event->Batch = std::move(batch);
@@ -559,7 +559,7 @@ private:
                 i64 val = (TInstant::Now()-startTime).MicroSeconds();
                 sensors.push_back({sensorName, val, val, val, val, 1});
 
-                auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
+                auto event = std::make_unique<TEvTaskRunnerCreateFinished>(
                     taskRunner->GetSecureParams(),
                     taskRunner->GetTaskParams(),
                     taskRunner->GetReadRanges(),
@@ -684,7 +684,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THolder<NYql::NDq::TDqMemoryQuota>&&) override
+        std::unique_ptr<NYql::NDq::TDqMemoryQuota>&&) override
     {
         auto* actor = new TTaskRunnerActor(parent, alloc, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);
         return std::make_tuple(

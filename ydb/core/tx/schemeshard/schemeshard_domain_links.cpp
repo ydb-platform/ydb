@@ -18,7 +18,7 @@ TParentDomainLink::TParentDomainLink(NKikimr::NSchemeShard::TSchemeShard *self)
     };
 }
 
-THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg() const {
+std::unique_ptr<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg() const {
     Y_ABORT_UNLESS(Self->SubDomains.contains(Self->RootPathId()));
     auto& rootPath = Self->PathsById.at(Self->RootPathId());
 
@@ -39,7 +39,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
         .TenantWasmCompileController = ui64(rootSubdomain->GetTenantWasmCompileControllerID()),
         .RootACL = rootPath->ACL
     });
-    return THolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
+    return std::unique_ptr<TEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
 }
 
 void TParentDomainLink::SendSync(const TActorContext &ctx) {

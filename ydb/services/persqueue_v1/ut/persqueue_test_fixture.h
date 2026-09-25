@@ -62,7 +62,7 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
 
         void InitializePQ() {
             Y_ABORT_UNLESS(Server == nullptr);
-            Server = MakeHolder<NPersQueue::TTestServer>(GetServerSettings(), false);
+            Server = std::make_unique<NPersQueue::TTestServer>(GetServerSettings(), false);
             Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
             Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLBFrontEnabled(true);
             Server->ServerSettings.PQConfig.SetACLRetryTimeoutSec(1);
@@ -119,7 +119,7 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
                 .SetDatabase("/Root")
                 .SetAuthToken(BUILTIN_ACL_ROOT);
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
-            PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
+            PersQueueClient = std::make_unique<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 
             Cerr << "=== InitializePQ completed" << Endl;
         }
@@ -219,13 +219,13 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
 
     public:
         const bool TenantMode;
-        THolder<NPersQueue::TTestServer> Server;
+        std::unique_ptr<NPersQueue::TTestServer> Server;
         TSimpleSharedPtr<TPortManager> PortManager;
         std::shared_ptr<grpc::Channel> InsecureChannel;
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> ServiceStub;
 
         std::shared_ptr<NYdb::TDriver> YdbDriver;
-        THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
+        std::unique_ptr<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
     };
 
     struct TPersQueueV1TestServerSettings {
@@ -327,14 +327,14 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
             }
         }
 /*
-        THolder<IProducer> StartProducer(const TString& topicPath, bool compress = false) {
+        std::unique_ptr<IProducer> StartProducer(const TString& topicPath, bool compress = false) {
             TString fullPath = TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
             TProducerSettings producerSettings;
             producerSettings.Server = TServerSetting("localhost", Server->GrpcPort);
             producerSettings.Topic = fullPath;
             producerSettings.SourceId = "TRateLimiterTestSetupSourceId";
             producerSettings.Codec = compress ? "gzip" : "raw";
-            THolder<IProducer> producer = PQLib->CreateProducer(producerSettings);
+            std::unique_ptr<IProducer> producer = PQLib->CreateProducer(producerSettings);
             auto startResult = producer->Start();
             UNIT_ASSERT_EQUAL_C(Ydb::StatusIds::SUCCESS, startResult.GetValueSync().Response.status(), "Response: " << startResult.GetValueSync().Response);
             return producer;

@@ -162,7 +162,7 @@ private:
 // row to another table in the same transaction (cross-table atomicity).
 class TTxAttachPart : public ITransaction {
 public:
-    TTxAttachPart(TActorId owner, ui32 tableId, THolder<TDirectPartResult> result,
+    TTxAttachPart(TActorId owner, ui32 tableId, std::unique_ptr<TDirectPartResult> result,
                   bool hasCross, ui32 crossTableId, i64 crossKey, TString crossValue,
                   bool sawBackpressure)
         : Owner(owner)
@@ -195,7 +195,7 @@ public:
 private:
     TActorId Owner;
     ui32 TableId;
-    THolder<TDirectPartResult> Result;
+    std::unique_ptr<TDirectPartResult> Result;
     bool HasCross;
     ui32 CrossTableId;
     i64 CrossKey;
@@ -392,7 +392,7 @@ private:
     EState State = EBoot;
     bool Stopping = false;
 
-    THolder<TDirectPartWriter> Writer;
+    std::unique_ptr<TDirectPartWriter> Writer;
     ui32 WriteTableId = 0;
     EWriteMode Mode = ModeCommit;
     bool HasCross = false;

@@ -260,14 +260,14 @@ TReplicationTestInfo StartReplication(
 }
 
 void SendHeartbeat(TTestEnv& env, ui64 controllerId, const TWorkerId& worker, const TRowVersion& version) {
-    auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>();
+    auto heartbeat = std::make_unique<TEvService::TEvHeartbeat>();
     worker.Serialize(*heartbeat->Record.MutableWorker());
     version.ToProto(heartbeat->Record.MutableVersion());
     env.SendAsync(controllerId, heartbeat.Release());
 }
 
 void AttachWorkers(TTestEnv& env, ui64 controllerId, std::initializer_list<TWorkerId> workers) {
-    auto status = MakeHolder<TEvService::TEvStatus>();
+    auto status = std::make_unique<TEvService::TEvStatus>();
     for (const auto& id : workers) {
         id.Serialize(*status->Record.AddWorkers());
     }
@@ -277,7 +277,7 @@ void AttachWorkers(TTestEnv& env, ui64 controllerId, std::initializer_list<TWork
 
 TWorkerId RegisterSecondWorkerAndCompleteSet(TTestEnv& env, ui64 controllerId, const TWorkerId& first) {
     const TWorkerId second(first.ReplicationId(), first.TargetId(), first.WorkerId() + 1);
-    auto run = MakeHolder<TEvService::TEvRunWorker>();
+    auto run = std::make_unique<TEvService::TEvRunWorker>();
     second.Serialize(*run->Record.MutableWorker());
     env.SendAsync(controllerId, run.Release());
     env.SendAsync(controllerId, new TEvPrivate::TEvCompleteWorkerSet(first.ReplicationId(), first.TargetId()));
@@ -286,13 +286,13 @@ TWorkerId RegisterSecondWorkerAndCompleteSet(TTestEnv& env, ui64 controllerId, c
 }
 
 auto DescribeReplication(TTestEnv& env, const TReplicationTestInfo& info) {
-    auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+    auto request = std::make_unique<TEvController::TEvDescribeReplication>();
     info.PathId.ToProto(request->Record.MutablePathId());
     return env.Send<TEvController::TEvDescribeReplicationResult>(info.ControllerId, std::move(request));
 }
 
 void RequestPause(TTestEnv& env, const TReplicationTestInfo& info, ui64 txId) {
-    auto request = MakeHolder<TEvController::TEvAlterReplication>();
+    auto request = std::make_unique<TEvController::TEvAlterReplication>();
     info.PathId.ToProto(request->Record.MutablePathId());
     request->Record.MutableConfig()->CopyFrom(info.Config);
     request->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
@@ -304,7 +304,7 @@ void RequestPause(TTestEnv& env, const TReplicationTestInfo& info, ui64 txId) {
 }
 
 void RequestConfigUpdate(TTestEnv& env, const TReplicationTestInfo& info, ui64 txId) {
-    auto request = MakeHolder<TEvController::TEvAlterReplication>();
+    auto request = std::make_unique<TEvController::TEvAlterReplication>();
     info.PathId.ToProto(request->Record.MutablePathId());
     request->Record.MutableConfig()->CopyFrom(info.Config);
     request->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
@@ -377,7 +377,7 @@ struct TSchemaAltererTestEnv {
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(),
             NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
 
-        auto description = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        auto description = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
         description->Record.SetStatus(NKikimrScheme::StatusSuccess);
         auto* table = description->Record.MutablePathDescription()->MutableTable();
         for (const auto& column : Schema.GetColumns()) {
@@ -1307,7 +1307,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         // worker and acknowledges STATUS_RUNNING. That acknowledgement must
         // receive the durable recovery release, not only the initial status
         // worker list.
-        auto running = MakeHolder<TEvService::TEvWorkerStatus>(
+        auto running = std::make_unique<TEvService::TEvWorkerStatus>(
             first, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
         env.SendAsync(controllerId, running.Release());
         const auto replayed = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());

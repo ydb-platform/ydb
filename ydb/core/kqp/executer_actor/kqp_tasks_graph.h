@@ -104,7 +104,7 @@ struct TStageInfoMeta {
 
     THashSet<TKeyDesc::ERowOperation> AccessCheckOperations;
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
-    THolder<TKeyDesc> ShardKey;
+    std::unique_ptr<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
     // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps.
@@ -122,7 +122,7 @@ struct TStageInfoMeta {
         TString TablePath;
         TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
 
-        THolder<TKeyDesc> ShardKey;
+        std::unique_ptr<TKeyDesc> ShardKey;
     };
 
     TVector<TIndexMeta> IndexMetas;

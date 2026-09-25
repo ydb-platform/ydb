@@ -105,9 +105,9 @@ namespace NKikimr::NPQ {
             return NPQ::MakeBlobId(Partition, Blobs[pos]);
         }
 
-        THolder<TEvKeyValue::TEvRequest> MakeKvRequest() const
+        std::unique_ptr<TEvKeyValue::TEvRequest> MakeKvRequest() const
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             for (auto& blob : Blobs) {
                 if (blob.Empty()) {
                     // add reading command
@@ -120,7 +120,7 @@ namespace NKikimr::NPQ {
         }
 
         /// @note We should return blobs of size ~25 Mb. It's about 3 well-filled blobs.
-        THolder<TEvPQ::TEvBlobResponse> MakePQResponse(const TActorContext& ctx, TErrorInfo error = TErrorInfo())
+        std::unique_ptr<TEvPQ::TEvBlobResponse> MakePQResponse(const TActorContext& ctx, TErrorInfo error = TErrorInfo())
         {
             static const ui64 MAX_RESPONSE_SIZE = 24_MB;
 
@@ -145,7 +145,7 @@ namespace NKikimr::NPQ {
                     {"blobsSize", Blobs.size()});
             }
 
-            return MakeHolder<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error);
+            return std::make_unique<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error);
         }
     };
 
@@ -274,7 +274,7 @@ namespace NKikimr::NPQ {
         {
             ui32 fromCache = GetBlobs(ctx, kvReq);
 
-            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = std::make_unique<TCacheL2Request>(TabletId);
 
             for (const auto& blob : kvReq.Blobs) {
                 // Touching blobs in L2. We don't need data here
@@ -282,20 +282,20 @@ namespace NKikimr::NPQ {
                 blobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Key.GetSuffix(), nullptr);
             }
 
-            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            auto l2Request = std::make_unique<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             return fromCache;
         }
 
         void SaveHeadBlobs(const TActorContext& ctx, const TKvRequest& kvReq)
         {
-            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = std::make_unique<TCacheL2Request>(TabletId);
 
             DeleteBlobs(kvReq, *reqData, ctx);
             RenameBlobs(kvReq, *reqData, ctx);
             SaveBlobs(kvReq, *reqData, ctx);
 
-            auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+            auto l2Request = std::make_unique<TEvPqCache::TEvCacheL2Request>(reqData.Release());
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
         }
 
@@ -388,7 +388,7 @@ namespace NKikimr::NPQ {
         {
             AFL_ENSURE(store.size() == kvReq.Blobs.size());
 
-            auto reqData = MakeHolder<TCacheL2Request>(TabletId);
+            auto reqData = std::make_unique<TCacheL2Request>(TabletId);
 
             bool haveSome = false;
             for (ui32 i = 0; i < kvReq.Blobs.size(); ++i) {
@@ -421,7 +421,7 @@ namespace NKikimr::NPQ {
             }
 
             if (haveSome) {
-                auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+                auto l2Request = std::make_unique<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }
@@ -463,18 +463,18 @@ namespace NKikimr::NPQ {
             RemoveEvicted();
 
             if (L1Strategy) {
-                auto reqData = MakeHolder<TCacheL2Request>(TabletId);
+                auto reqData = std::make_unique<TCacheL2Request>(TabletId);
 
                 TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch();
                 PrepareTouch(ctx, reqData, needTouch);
 
-                auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
+                auto l2Request = std::make_unique<TEvPqCache::TEvCacheL2Request>(reqData.Release());
                 ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
             }
         }
 
     private:
-        void PrepareTouch(const TActorContext& ctx, THolder<TCacheL2Request>& reqData, const TDeque<TBlobId>& used)
+        void PrepareTouch(const TActorContext& ctx, std::unique_ptr<TCacheL2Request>& reqData, const TDeque<TBlobId>& used)
         {
             Y_UNUSED(ctx);
             for (auto& blob : used) {
@@ -569,7 +569,7 @@ namespace NKikimr::NPQ {
     private:
         TMapType Cache;
         TCounters Counters;
-        THolder<TCacheEvictionStrategy> L1Strategy;
+        std::unique_ptr<TCacheEvictionStrategy> L1Strategy;
 
         void RemoveBlob(const TMapType::iterator& it)
         {

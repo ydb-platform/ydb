@@ -126,18 +126,18 @@ struct TSchemaOpEnv {
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
         NKikimrScheme::EStatus ssStatus = NKikimrScheme::StatusSuccess)
     {
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
         ev->Record.SetSchemeShardTabletId(SCHEME_SHARD_TABLET);
         ev->Record.SetTxId(TX_ID);
         ev->Record.SetSchemeShardStatus(ssStatus);
         Runtime.Send(new IEventHandle(ActorId, Edge, ev.Release()));
     }
 
-    THolder<TEvSchemaOperationResponse> GrabResponse(TDuration timeout = TDuration::Seconds(5)) {
+    std::unique_ptr<TEvSchemaOperationResponse> GrabResponse(TDuration timeout = TDuration::Seconds(5)) {
         auto handle = Runtime.GrabEdgeEvent<TEvSchemaOperationResponse>(Edge, timeout);
         UNIT_ASSERT(handle);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 7u);
-        return THolder(handle->Release());
+        return std::unique_ptr<TEvSchemaOperationResponse>(handle->Release().Release());
     }
 };
 

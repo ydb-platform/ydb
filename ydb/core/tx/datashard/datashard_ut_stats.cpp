@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
     NKikimrTableStats::TTableStats GetTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 tableId) {
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
+        auto request = std::make_unique<TEvDataShard::TEvGetTableStats>(tableId);
         runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(sender);
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         }
 
         // each batch ~70KB, ~700KB in total
-        auto counters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+        auto counters = std::make_unique<TSharedPageCacheCounters>(GetServiceCounters(runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
         Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
         UNIT_ASSERT_LE(counters->Owners->Val(), 2);
         UNIT_ASSERT_LE(counters->PageCollectionOwners->Val(), 2);
@@ -915,7 +915,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             << ", toFollower=" << toFollower
             << Endl;
 
-        auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
+        auto request = std::make_unique<TEvDataShard::TEvGetTableStats>(tableId);
         request->Record.SetCollectKeySample(collectKeySample);
 
         auto pipeConfig = GetPipeConfigWithRetries();

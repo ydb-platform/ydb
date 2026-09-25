@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
 
         void CreateSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& scheme) {
             auto edge = runtime.AllocateEdgeActor(0);
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
             tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
             tx->SetWorkingDir(workingDir);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+            auto notifyReq = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
             notifyReq->Record.SetTxId(msg->Record.GetTxId());
             runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
             runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
 
         void DropSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& name) {
             auto edge = runtime.AllocateEdgeActor(0);
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
             tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
             tx->SetWorkingDir(workingDir);
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+            auto notifyReq = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
             notifyReq->Record.SetTxId(msg->Record.GetTxId());
             runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
             runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         TPathId DescribeSequence(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
             TAutoPtr<IEventHandle> handle;
 
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->SetPath(path);
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
@@ -142,12 +142,12 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         }
 
         void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
-            auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
+            auto request = std::make_unique<TEvSequenceProxy::TEvNextVal>(path);
             runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
         }
 
         void SendGetSequenceRequest(TTestActorRuntime& runtime, const TActorId& sender, const TPathId& pathId) {
-            auto request = MakeHolder<TEvSequenceProxy::TEvGetSequence>(pathId);
+            auto request = std::make_unique<TEvSequenceProxy::TEvGetSequence>(pathId);
             runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
         }
 

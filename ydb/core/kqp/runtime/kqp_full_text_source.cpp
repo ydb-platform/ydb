@@ -190,7 +190,7 @@ public:
         , ResultColumnIds(resultColumnIds)
     {}
 
-    void SetPartitionInfo(const THolder<TKeyDesc>& keyDesc) {
+    void SetPartitionInfo(const std::unique_ptr<TKeyDesc>& keyDesc) {
         YQL_ENSURE(keyDesc->TableId == TableId, "Table ID mismatch");
         PartitionInfo = keyDesc->Partitioning;
     }
@@ -303,7 +303,7 @@ public:
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
 
-        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(
+        request->ResultSet.emplace_back(std::make_unique<TKeyDesc>(
             TableId, range, TKeyDesc::ERowOperation::Read,
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
@@ -2973,7 +2973,7 @@ public:
     void PassAway() override {
         {
             for (auto& [id, state] : ReadsState.GetReads()) {
-                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+                auto cancel = std::make_unique<TEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
                 this->Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
             }

@@ -511,7 +511,7 @@ private:
         using TPtr = TIntrusivePtr<TWriteRequestBatchInfo>;
 
         // Source requests from user (grpc session object)
-        std::deque<THolder<TEvPQProxy::TEvWrite>> UserWriteRequests;
+        std::deque<std::unique_ptr<TEvPQProxy::TEvWrite>> UserWriteRequests;
 
         // Formed write request's size
         ui64 ByteSize = 0;
@@ -521,7 +521,7 @@ private:
     };
 
     // Nonprocessed source client requests
-    std::deque<THolder<TEvPQProxy::TEvWrite>> Writes;
+    std::deque<std::unique_ptr<TEvPQProxy::TEvWrite>> Writes;
 
     // Formed, but not sent, batch requests to partition actor
     std::deque<TWriteRequestBatchInfo::TPtr> FormedWrites;
@@ -579,7 +579,7 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NYdb::NPersQueue::TCounterPtr BytesWrittenByUserAgent;
 
-    THolder<NPersQueue::TTopicNamesConverterFactory> ConverterFactory;
+    std::unique_ptr<NPersQueue::TTopicNamesConverterFactory> ConverterFactory;
     NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
     NPersQueue::TTopicConverterPtr FullConverter;
 
@@ -902,7 +902,7 @@ private:
     TDuration CommitInterval;
     ui32 CommitsInfly;
 
-    std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
+    std::deque<std::unique_ptr<TEvPQProxy::TEvRead>> Reads;
 
     ui64 Cookie;
     TString Authority;
@@ -951,7 +951,7 @@ private:
     NPersQueue::TTopicsListController TopicsHandler;
     NPersQueue::TTopicsToConverter TopicsList;
 
-    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
+    std::deque<std::unique_ptr<TEvPersQueue::TEvLockPartition>> Locks;
 };
 
 }

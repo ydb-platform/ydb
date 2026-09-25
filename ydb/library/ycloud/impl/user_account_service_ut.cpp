@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TUserAccountServiceTest) {
         std::unique_ptr<grpc::Server> userAccountServer(builder.BuildAndStart());
 
         // check for not found
-        auto request = MakeHolder<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>();
+        auto request = std::make_unique<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>();
         request->Request.set_user_account_id("bad1");
         runtime->Send(new IEventHandle(userAccountService->SelfId(), sender, request.Release()));
         auto result = runtime->GrabEdgeEvent<NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(handle);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TUserAccountServiceTest) {
         UNIT_ASSERT_EQUAL(result->Status.Msg, "Not Found");
 
         // check for found
-        request = MakeHolder<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>();
+        request = std::make_unique<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>();
         request->Request.set_user_account_id("user1");
         runtime->Send(new IEventHandle(userAccountService->SelfId(), sender, request.Release()));
         result = runtime->GrabEdgeEvent<NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(handle);

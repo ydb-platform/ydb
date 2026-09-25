@@ -741,7 +741,7 @@ public:
     {}
 
     void Bootstrap(const TActorId& parent) {
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->AddCommand()->MutableEnableSelfHeal()->SetEnable(false);
         Send(parent, ev.Release());
         Become(&TThis::StateFunc);
@@ -890,7 +890,7 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         return true;
     }
 
-    THolder<TTransactionBase<TBlobStorageController>> tx;
+    std::unique_ptr<TTransactionBase<TBlobStorageController>> tx;
     TStringStream str;
 
     if (!cgi.count("page")) {

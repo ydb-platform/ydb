@@ -86,7 +86,7 @@ struct TTestContext {
     ui64 BalancerTabletId;
     TInitialEventsFilter InitialEventsFilter;
     TVector<ui64> TabletIds;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     TActorId Edge;
     THashMap<ui32, ui32> MsgSeqNoMap;
     THashMap<ui32, TString> OwnerCookieMap;
@@ -745,7 +745,7 @@ void CmdRunCompaction(TTestActorRuntime& runtime,
 void CmdRunCompaction(const ui32 partition,
                       TTestContext& tc);
 
-THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
+std::unique_ptr<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 
 void CmdRenameKey(const TString& oldKey,
                   const TString& newKey,

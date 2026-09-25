@@ -23,7 +23,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, 
     };
 
     if (counters) {
-        THashMap<TString, THolder<THistogramCounter>> histogramAggregates;
+        THashMap<TString, std::unique_ptr<THistogramCounter>> histogramAggregates;
 
         // percentile counters
         FullSizePercentile = counters->Percentile().Size();

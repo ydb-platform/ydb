@@ -72,21 +72,21 @@ namespace NKikimr::NDataShard {
         }
     }
 
-    THolder<IEventHandle> TDataShard::TTxReadSet::MakeAck(const TActorContext& ctx) {
-        return THolder(new IEventHandle(Ev->Sender, ctx.SelfID,
+    std::unique_ptr<IEventHandle> TDataShard::TTxReadSet::MakeAck(const TActorContext& ctx) {
+        return std::unique_ptr<IEventHandle>(new IEventHandle(Ev->Sender, ctx.SelfID,
                                 new TEvTxProcessing::TEvReadSetAck(*Ev->Get(), Self->TabletID())));
     }
 
-    THolder<IEventHandle> TDataShard::TTxReadSet::MakeNoDataReply(const TActorContext& ctx) {
+    std::unique_ptr<IEventHandle> TDataShard::TTxReadSet::MakeNoDataReply(const TActorContext& ctx) {
         const auto& record = Ev->Get()->Record;
-        auto event = MakeHolder<TEvTxProcessing::TEvReadSet>(
+        auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(
             record.GetStep(),
             record.GetTxId(),
             record.GetTabletDest(),
             record.GetTabletSource(),
             Self->TabletID());
         event->Record.SetFlags(NKikimrTx::TEvReadSet::FLAG_NO_DATA | NKikimrTx::TEvReadSet::FLAG_NO_ACK);
-        return THolder(new IEventHandle(Ev->Sender, ctx.SelfID, event.Release()));
+        return std::unique_ptr<IEventHandle>(new IEventHandle(Ev->Sender, ctx.SelfID, event.Release()));
     }
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
@@ -103,12 +103,12 @@ namespace NKikimr::NDataShard {
 
             struct TSendState : public TThrRefBase {
                 TDataShard* Self;
-                THolder<IEventHandle> Ack;
-                THolder<IEventHandle> NoDataReply;
+                std::unique_ptr<IEventHandle> Ack;
+                std::unique_ptr<IEventHandle> NoDataReply;
 
                 TSendState(TDataShard* self,
-                        THolder<IEventHandle>&& ack,
-                        THolder<IEventHandle>&& noDataReply)
+                        std::unique_ptr<IEventHandle>&& ack,
+                        std::unique_ptr<IEventHandle>&& noDataReply)
                     : Self(self)
                     , Ack(std::move(ack))
                     , NoDataReply(std::move(noDataReply))

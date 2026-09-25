@@ -196,11 +196,11 @@ struct TTxTryKeepInMemory : public ITransaction {
     }
 };
 
-THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
-    return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+std::unique_ptr<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
+    return std::make_unique<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
 };
 
-void LogCounters(THolder<TSharedPageCacheCounters>& counters) {
+void LogCounters(std::unique_ptr<TSharedPageCacheCounters>& counters) {
     Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() 
         << ", Passive:" << counters->PassiveBytes->Val() 
         << ", MemLimit:" << counters->MemLimitBytes->Val()
@@ -223,7 +223,7 @@ void RestartAndClearCache(TMyEnvBase& env, ui64 memoryLimit = Max<ui64>()) {
 }
 
 void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit = false) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto config = request->Record.MutableConfig()->MutableSharedCacheConfig();
     config->SetMemoryLimit(limit);

@@ -371,7 +371,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     domainPtr->UpdateSecurityState(LoginProvider.GetSecurityState());
 
     TTabletId sysViewProcessorId = domainPtr->GetTenantSysViewProcessorID();
-    auto evInit = MakeHolder<NSysView::TEvSysView::TEvInitPartitionStatsCollector>(
+    auto evInit = std::make_unique<NSysView::TEvSysView::TEvInitPartitionStatsCollector>(
         GetDomainKey(subDomainPathId), sysViewProcessorId ? sysViewProcessorId.GetValue() : 0);
     Send(SysPartitionStatsCollector, evInit.Release());
 
@@ -414,7 +414,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     StartStopShred();
 
-    ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
+    ctx.Send(TxAllocatorClient, std::make_unique<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     // Start local index migration if feature flag is enabled
     // This ensures migration starts even if we don't receive a new TEvAllocateResult
@@ -584,29 +584,29 @@ struct TAttachOrder {
     }
 };
 
-THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal(
+std::unique_ptr<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal(
         const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const
 {
-    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
+    return std::make_unique<TEvDataShard::TEvProposeTransaction>(
         NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
     );
 }
 
-THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
+std::unique_ptr<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
         const TPathId& pathId, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx,
         NKikimrTxColumnShard::ETransactionKind kind) const
 {
-    return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+    return std::make_unique<TEvColumnShard::TEvProposeTransaction>(
         kind, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, seqNo,  SelectProcessingParams(pathId),
         0, 0
     );
 }
 
-THolder<::NActors::IEventBase> TSchemeShard::MakeShardProposal(
+std::unique_ptr<::NActors::IEventBase> TSchemeShard::MakeShardProposal(
         const TPath& path, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
 {
@@ -627,7 +627,7 @@ TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     }
 
     if (CachedTxIds.size() == InitiateCachedTxIdsCount / 3) {
-        ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
+        ctx.Send(TxAllocatorClient, std::make_unique<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
     }
 
     return txId;
@@ -4836,7 +4836,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     ColumnTables.Drop(pathId);
     ReleaseOwnDbRef(pathId);
 
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
     Send(SysPartitionStatsCollector, ev.Release());
 }
 
@@ -5198,7 +5198,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     Tables.erase(pathId);
 
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
     Send(SysPartitionStatsCollector, ev.Release());
 }
 
@@ -6776,7 +6776,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
             {"schemeshard", TabletID()},
         );
 
-        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(ui64(txId));
+        auto event = std::make_unique<TEvDataShard::TEvSchemaChangedResult>(ui64(txId));
         ctx.Send(ackTo, event.Release());
         return;
     }
@@ -6789,7 +6789,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActor
             {"schemeshard", TabletID()},
         );
 
-        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(ui64(txId));
+        auto event = std::make_unique<TEvDataShard::TEvSchemaChangedResult>(ui64(txId));
         ctx.Send(ackTo, event.Release());
         return;
     }
@@ -6882,7 +6882,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, 
     if (IsReadOnlyMode) {
         ui64 txId = ev->Get()->Record.GetTxId();
         ui64 selfId = TabletID();
-        auto result = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+        auto result = std::make_unique<TEvSchemeShard::TEvModifySchemeTransactionResult>(
             NKikimrScheme::StatusReadOnly, txId, selfId, "Schema is in ReadOnly mode");
 
         ctx.Send(ev->Sender, result.Release());
@@ -8638,7 +8638,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, const std::vector<TShardIdx>&
     }
 
     auto path = TPath::Init(pathId, this);
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 }
@@ -8661,7 +8661,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     }
 
     auto path = TPath::Init(pathId, this);
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 
@@ -8680,7 +8680,7 @@ void TSchemeShard::MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, 
         );
     }
     auto path = TPath::Init(pathId, this);
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 
@@ -8712,7 +8712,7 @@ void TSchemeShard::CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, 
         );
     }
     auto path = TPath::Init(pathId, this);
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 
@@ -8765,7 +8765,7 @@ void TSchemeShard::ApplySplitMerge(
         );
     }
     auto path = TPath::Init(pathId, this);
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 }
@@ -9278,7 +9278,7 @@ void TSchemeShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TP
 
     ApplyConsoleConfigs(rec.GetConfig(), ctx);
 
-    auto resp = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConfigNotificationResponse",
         {"message", resp->Record.ShortDebugString()},
@@ -9766,13 +9766,13 @@ void TSchemeShard::ConfigureShredManager(const NKikimrConfig::TDataErasureConfig
         if (RootShredManager) {
             RootShredManager->UpdateConfig(config);
         } else {
-            RootShredManager = MakeHolder<TRootShredManager>(this, config);
+            RootShredManager = std::make_unique<TRootShredManager>(this, config);
         }
     }
     if (TenantShredManager) {
         TenantShredManager->UpdateConfig(config);
     } else {
-        TenantShredManager = MakeHolder<TTenantShredManager>(this, config);
+        TenantShredManager = std::make_unique<TTenantShredManager>(this, config);
     }
 }
 

@@ -125,7 +125,7 @@ private:
 
     NYql::TIssues Issues;
 
-    THolder<TEvents::TEvWriteTaskResultResponse> Res = MakeHolder<TEvents::TEvWriteTaskResultResponse>();
+    std::unique_ptr<TEvents::TEvWriteTaskResultResponse> Res = std::make_unique<TEvents::TEvWriteTaskResultResponse>();
 };
 
 IActor* CreateWriteTaskResultRequestActor(

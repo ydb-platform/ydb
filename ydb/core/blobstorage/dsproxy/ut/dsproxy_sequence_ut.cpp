@@ -403,7 +403,7 @@ struct TGeneralDecorator : public TDecorator {
 
     TAction Action;
 
-    TGeneralDecorator(THolder<IActor> &&actor, TAction action)
+    TGeneralDecorator(std::unique_ptr<IActor> &&actor, TAction action)
         : TDecorator(std::move(actor))
         , Action(action)
     {
@@ -471,7 +471,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
         return true;
     };
 
-    runtime.Register(new TGeneralDecorator(THolder<IActor>(putActor.release()), action));
+    runtime.Register(new TGeneralDecorator(std::unique_ptr<IActor>(putActor.release()), action));
 
     for (ui64 idx = 0; idx < 8; ++idx) {
         TEvBlobStorage::TEvVPut::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
@@ -584,7 +584,7 @@ struct TEvGenerationRaceProbeResult : TEventLocal<TEvGenerationRaceProbeResult, 
 struct TDyingDecorator : public TTestDecorator {
     TActorId ParentId;
 
-    TDyingDecorator(THolder<IActor> &&actor, TActorId parentId)
+    TDyingDecorator(std::unique_ptr<IActor> &&actor, TActorId parentId)
         : TTestDecorator(std::move(actor))
         , ParentId(parentId)
     {
@@ -866,7 +866,7 @@ Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
 
     DSProxyEnv.SetGroupGeneration(2);
 
-    THolder<IActor> putActor(DSProxyEnv.CreatePutRequestActor(batched, tactic, handleClass).release());
+    std::unique_ptr<IActor> putActor(DSProxyEnv.CreatePutRequestActor(batched, tactic, handleClass).release());
     runtime.Register(new TDyingDecorator(
             std::move(putActor), testState.EdgeActor));
 

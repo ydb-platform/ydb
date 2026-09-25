@@ -282,7 +282,7 @@ public:
     void SetNetDataViaFile(const TString& netDataTsv) {
         UNIT_ASSERT(!Server_);
 
-        NetDataFile = MakeHolder<TTempFileHandle>();
+        NetDataFile = std::make_unique<TTempFileHandle>();
         NetDataFile->Write(netDataTsv.data(), netDataTsv.size());
         NetDataFile->FlushData();
 
@@ -290,7 +290,7 @@ public:
     }
 
     void Run(bool enableGrpc = true) {
-        Server_ = MakeHolder<TServer>(Settings_);
+        Server_ = std::make_unique<TServer>(Settings_);
         if (enableGrpc) {
             Server_->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_));
         }
@@ -300,7 +300,7 @@ public:
         UNIT_ASSERT(Server_);
 
         if (!PQClient_) {
-            PQClient_ = MakeHolder<NPersQueueTests::TFlatMsgBusPQClient>(Settings_, GrpcPort_);
+            PQClient_ = std::make_unique<NPersQueueTests::TFlatMsgBusPQClient>(Settings_, GrpcPort_);
         }
 
         return *PQClient_;
@@ -388,12 +388,12 @@ private:
     TServerSettings Settings_;
 
     std::shared_ptr<NMonitoring::TMetricRegistry> Sensors_;
-    THolder<TServer> Server_;
-    THolder<NPersQueueTests::TFlatMsgBusPQClient> PQClient_;
+    std::unique_ptr<TServer> Server_;
+    std::unique_ptr<NPersQueueTests::TFlatMsgBusPQClient> PQClient_;
 
     TActorId HttpProxyId_;
 
-    THolder<TTempFileHandle> NetDataFile;
+    std::unique_ptr<TTempFileHandle> NetDataFile;
 };
 
 Y_UNIT_TEST_SUITE(TPQCDTest) {
@@ -1063,7 +1063,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         auto& actorSystem = server.ActorSystem();
         const TActorId sender = actorSystem.AllocateEdgeActor();
-        auto resp = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+        auto resp = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
         resp->Record.SetYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
         actorSystem.Send(new IEventHandle(
             NPQ::NClusterTracker::MakeClusterTrackerID(),

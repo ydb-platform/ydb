@@ -45,7 +45,7 @@ public:
 //            auto& req = ev->Get()->Request;
 //            req->Description = description;
 //            req->Succeded = success;
-//            auto result = MakeHolder<NMsgBusProxy::TEvPqMetaCache::TEvGetNodeResult>(std::move(req));
+//            auto result = std::make_unique<NMsgBusProxy::TEvPqMetaCache::TEvGetNodeResult>(std::move(req));
 //
 //            ctx.Send(ev->Sender, std::move(result));
 //        };

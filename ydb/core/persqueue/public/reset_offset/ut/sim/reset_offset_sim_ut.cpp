@@ -34,8 +34,8 @@ namespace {
 using TCoreSettings = NKikimr::NPQ::NResetOffset::TResetOffsetSettings;
 
 struct TSimulatedSetup {
-    THolder<TThreadPool> Pool;
-    THolder<::NPersQueue::TTestServer> Server;
+    std::unique_ptr<TThreadPool> Pool;
+    std::unique_ptr<::NPersQueue::TTestServer> Server;
 
     ~TSimulatedSetup() {
         Server.Reset();
@@ -55,14 +55,14 @@ TSimulatedSetup& SimulatedCluster() {
         settings.SetUseRealThreads(false);
 
         auto s = std::make_shared<TSimulatedSetup>();
-        s->Server = MakeHolder<::NPersQueue::TTestServer>(settings, /*start=*/false);
+        s->Server = std::make_unique<::NPersQueue::TTestServer>(settings, /*start=*/false);
         s->Server->StartServer(/*doClientInit=*/false, TString("/Root"));
 
         auto& runtime = s->GetRuntime();
         runtime.SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
         s->Server->AnnoyingClient->SetNoConfigMode();
 
-        s->Pool = MakeHolder<TThreadPool>();
+        s->Pool = std::make_unique<TThreadPool>();
         s->Pool->Start(2);
         auto* server = s->Server.Get();
         auto future = NThreading::Async([server] {
@@ -131,14 +131,14 @@ void ExpectNoResetResult(NActors::TTestActorRuntime& runtime, const TActorId& ed
     }
 }
 
-THolder<TEvResetOffsetResult> WaitResult(
+std::unique_ptr<TEvResetOffsetResult> WaitResult(
     NActors::TTestActorRuntime& runtime,
     const TRegisteredActor& actor,
     TDuration timeout = TDuration::Seconds(30))
 {
     auto ev = runtime.GrabEdgeEvent<TEvResetOffsetResult>(actor.Edge, timeout);
     UNIT_ASSERT_C(ev, "TEvResetOffsetResult timed out");
-    return THolder<TEvResetOffsetResult>(ev->Release().Release());
+    return std::unique_ptr<TEvResetOffsetResult>(ev->Release().Release());
 }
 
 bool DispatchUntil(NActors::TTestActorRuntime& runtime, std::function<bool()> cond, TDuration timeout = TDuration::Seconds(10)) {
@@ -151,7 +151,7 @@ bool DispatchUntil(NActors::TTestActorRuntime& runtime, std::function<bool()> co
     return cond();
 }
 
-void AssertAllPartitionsSuccess(const THolder<TEvResetOffsetResult>& result) {
+void AssertAllPartitionsSuccess(const std::unique_ptr<TEvResetOffsetResult>& result) {
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Error);
     UNIT_ASSERT(!result->Partitions.empty());
     for (const auto& partition : result->Partitions) {

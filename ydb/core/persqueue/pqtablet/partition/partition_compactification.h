@@ -104,7 +104,7 @@ public:
         TKeysIter KeysIter;
         bool Failure = false;
 
-        THolder<TEvKeyValue::TEvRequest> Request;
+        std::unique_ptr<TEvKeyValue::TEvRequest> Request;
 
         TMaybe<NKikimrClient::TCmdReadResult::TResult> CurrentMessage;
         TMaybe<TBatch> LastBatch;

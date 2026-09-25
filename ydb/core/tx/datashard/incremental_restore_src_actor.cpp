@@ -95,7 +95,7 @@ public:
         limits.BatchMinRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMinRows();
         limits.BatchMaxRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMaxRows();
 
-        THolder<NTable::IScan> scan{CreateIncrementalRestoreScan(
+        std::unique_ptr<NTable::IScan> scan{CreateIncrementalRestoreScan(
                 SelfId(),
                 std::move(changeSenderFactory),
                 srcPathId,
@@ -155,7 +155,7 @@ private:
             return;
         }
 
-        auto progressEv = MakeHolder<TEvDataShard::TEvIncrementalRestoreShardProgress>();
+        auto progressEv = std::make_unique<TEvDataShard::TEvIncrementalRestoreShardProgress>();
         auto& rec = progressEv->Record;
         rec.SetOperationId(OperationId);
         rec.SetSubOpTxId(SubOpTxId);

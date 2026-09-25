@@ -38,8 +38,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateS3SourceCallableExecutionTransformer(TS3State::TPtr state) {
-    return MakeHolder<TS3DataSourceExecutionTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateS3SourceCallableExecutionTransformer(TS3State::TPtr state) {
+    return std::make_unique<TS3DataSourceExecutionTransformer>(state);
 }
 
 } // namespace NYql

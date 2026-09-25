@@ -99,7 +99,7 @@ namespace NTable {
 
         TPageId PageId = Max<TPageId>();
 
-        THolder<IPartGroupIndexIter> Index_;
+        std::unique_ptr<IPartGroupIndexIter> Index_;
         IPartGroupIndexIter& Index;
         NPage::TDataPage Page;
         NPage::TDataPage::TIter Data;
@@ -1788,7 +1788,7 @@ namespace NTable {
                 CurrentIt = std::move(it->second);
                 Cache.erase(it);
             } else {
-                CurrentIt = MakeHolder<TPartIter>(part, Tags, KeyCellDefaults, Env);
+                CurrentIt = std::make_unique<TPartIter>(part, Tags, KeyCellDefaults, Env);
             }
             CurrentIt->SetBounds(Current->Slice);
         }
@@ -1839,8 +1839,8 @@ namespace NTable {
 
     private:
         TRun::const_iterator Current;
-        THolder<TPartIter> CurrentIt;
-        THashMap<const TPart*, THolder<TPartIter>> Cache;
+        std::unique_ptr<TPartIter> CurrentIt;
+        THashMap<const TPart*, std::unique_ptr<TPartIter>> Cache;
     };
 
 }

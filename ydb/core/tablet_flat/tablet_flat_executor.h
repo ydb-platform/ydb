@@ -38,7 +38,7 @@ class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend struct TPageCollectionTxEnv;
 
     class TImpl;
-    THolder<TImpl> Impl;
+    std::unique_ptr<TImpl> Impl;
 public:
     TTableSnapshotContext();
     virtual ~TTableSnapshotContext();
@@ -108,7 +108,7 @@ struct IExecuting {
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
     // Attach a part built via IExecutor::BeginWritePart as a bottom layer of the
     // table, atomically within this transaction. Takes ownership of the result.
-    virtual void AttachPart(ui32 tableId, THolder<TDirectPartResult> result) = 0;
+    virtual void AttachPart(ui32 tableId, std::unique_ptr<TDirectPartResult> result) = 0;
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
     virtual void EnableReadMissingReferences() = 0;
@@ -567,7 +567,7 @@ namespace NFlatExecutorSetup {
         // tablet assigned as follower (or follower connection refreshed), must begin loading
         virtual void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) = 0;
         // next follower incremental update
-        virtual void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> upd) = 0;
+        virtual void FollowerUpdate(std::unique_ptr<TEvTablet::TFUpdateBody> upd) = 0;
         virtual void FollowerAuxUpdate(TString upd) = 0;
         virtual void FollowerAttached(ui32 totalFollowers) = 0;
         virtual void FollowerDetached(ui32 totalFollowers) = 0;
@@ -632,7 +632,7 @@ namespace NFlatExecutorSetup {
         // key order and writes blobs in the background. The built part is later
         // committed as a bottom layer via IExecuting::AttachPart. The barrier is
         // released either by that commit or by ReleaseWritePart (on abort).
-        virtual THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) = 0;
+        virtual std::unique_ptr<TDirectPartWriter> BeginWritePart(ui32 tableId) = 0;
         // Release the GC barrier of a direct part write identified by its reserved
         // step, for a writer that will not be committed (e.g. aborted).
         virtual void ReleaseWritePart(ui32 step) = 0;

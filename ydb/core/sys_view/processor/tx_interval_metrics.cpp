@@ -64,7 +64,7 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
                 TString serialized;
                 for (auto& query : minuteTop) {
                     if (query.Hash == queryHash) {
-                        query.Stats = MakeHolder<NKikimrSysView::TQueryStats>();
+                        query.Stats = std::make_unique<NKikimrSysView::TQueryStats>();
                         query.Stats->CopyFrom(stats);
                         Y_PROTOBUF_SUPPRESS_NODISCARD query.Stats->SerializeToString(&serialized);
                         db.Table<Schema::IntervalTops>().Key((ui32)minuteType, queryHash).Update(
@@ -74,7 +74,7 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
                 }
                 for (auto& query : hourTop) {
                     if (!query.Stats && query.Hash == queryHash) {
-                        query.Stats = MakeHolder<NKikimrSysView::TQueryStats>();
+                        query.Stats = std::make_unique<NKikimrSysView::TQueryStats>();
                         query.Stats->CopyFrom(stats);
                         // hash must be in a minute top as well
                         db.Table<Schema::IntervalTops>().Key((ui32)hourType, queryHash).Update(

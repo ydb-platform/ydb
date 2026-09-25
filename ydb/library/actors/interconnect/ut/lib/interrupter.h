@@ -125,7 +125,7 @@ private:
     std::atomic<bool> Running = true;
     TVector<char> Buf;
     TSocketPoller SocketPoller;
-    THolder<TSockAddrInet6> ForwardAddrress;
+    std::unique_ptr<TSockAddrInet6> ForwardAddrress;
     TVector<void*> Events;
     TDuration RejectingTrafficTimeout;
     TDuration CurrentRejectingTimeout;

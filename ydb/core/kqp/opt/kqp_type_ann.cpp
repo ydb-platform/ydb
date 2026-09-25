@@ -3929,8 +3929,8 @@ private:
 
 } // anonymous namespace
 
-THolder<TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config) {
-    return MakeHolder<TKiTypeAnnotationTransformer>(cluster, std::move(tablesData), std::move(config));
+std::unique_ptr<TVisitorTransformerBase> CreateKqpTypeAnnotationTransformer(const TString& cluster, TIntrusivePtr<TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config) {
+    return std::make_unique<TKiTypeAnnotationTransformer>(cluster, std::move(tablesData), std::move(config));
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpCheckQueryTransformer() {

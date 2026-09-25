@@ -195,7 +195,7 @@ public:
             {"ev", ToString(ev)},
             {"sender", sender.LocalId()},
             {"reqId", AtomicGet(LastReqId)});
-        auto req = MakeHolder<TReq>(ev, PCtx->PDiskId, AtomicIncrement(LastReqId));
+        auto req = std::make_unique<TReq>(ev, PCtx->PDiskId, AtomicIncrement(LastReqId));
         req->SetCookie(ev->Cookie);
         NewRequest(req.Get(), burstMs);
         return req.Release();
@@ -208,7 +208,7 @@ public:
             {"ev", ToString(ev)},
             {"sender", sender.LocalId()},
             {"reqId", AtomicGet(LastReqId)});
-        auto req = MakeHolder<TReq>(std::forward<TEv>(ev), sender, AtomicIncrement(LastReqId));
+        auto req = std::make_unique<TReq>(std::forward<TEv>(ev), sender, AtomicIncrement(LastReqId));
         req->SetCookie(cookie);
         NewRequest(req.Get(), burstMs);
         return req.Release();
@@ -220,7 +220,7 @@ public:
             {"marker", "BPD01"},
             {"req", TypeName<TReq>()},
             {"reqId", AtomicGet(LastReqId)});
-        auto req = MakeHolder<TReq>(std::forward<TArgs>(args)..., AtomicIncrement(LastReqId));
+        auto req = std::make_unique<TReq>(std::forward<TArgs>(args)..., AtomicIncrement(LastReqId));
         NewRequest(req.Get(), nullptr);
         return req.Release();
     }

@@ -60,7 +60,7 @@ protected:
     NJson::TJsonValue GetTablesJson() const;
     virtual ui32 GetDefaultPartitionsCount(const TString& tableName) const;
 
-    THolder<TGeneratorStateProcessor> StateProcessor;
+    std::unique_ptr<TGeneratorStateProcessor> StateProcessor;
 private:
     void GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const;
     const TWorkloadBaseParams& Params;
@@ -75,7 +75,7 @@ public:
 protected:
     class TDataGenerator;
     virtual TBulkDataGeneratorList DoGetBulkInitialData() = 0;
-    THolder<TGeneratorStateProcessor> StateProcessor;
+    std::unique_ptr<TGeneratorStateProcessor> StateProcessor;
     const TWorkloadBaseParams& Params;
     bool Clear = false;
     TFsPath StatePath;

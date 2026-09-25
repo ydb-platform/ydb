@@ -45,7 +45,7 @@ public:
     // Returns list of file names for namespace
     TVector<TString> GetNamespaceFiles(const TString& ns);
 
-    THolder<ISpillFile> CreateSpillFile(const TString& ns, const TString& fn, ui32 reserveStep);
+    std::unique_ptr<ISpillFile> CreateSpillFile(const TString& ns, const TString& fn, ui32 reserveStep);
 
     TOperationResults LastOperationResults();
     FileSpillStorage (const TFileStorageConfig& config);
@@ -142,13 +142,13 @@ TVector<TString> FileSpillStorage::GetNamespaceFiles(const TString& ns) {
         
 }
 
-THolder<ISpillFile> FileSpillStorage::CreateSpillFile(const TString& ns, const TString& fn, ui32 reserveStep) {
+std::unique_ptr<ISpillFile> FileSpillStorage::CreateSpillFile(const TString& ns, const TString& fn, ui32 reserveStep) {
     TFsPath nsdir = RootPath_.Child(ns);
     if (!nsdir.Exists()) {
         nsdir.MkDir();
     }
     TFsPath filePath = nsdir.Child(fn);
-    return MakeHolder<FsSpillFile>(filePath.GetPath(), 
+    return std::make_unique<FsSpillFile>(filePath.GetPath(), 
         EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr , reserveStep);
 }
 
@@ -199,10 +199,10 @@ FileSpillStorage::FileSpillStorage (const TFileStorageConfig& config) {
 }
 
 
-std::pair< THolder<ISpillStorage>, TOperationResults >  OpenFileStorageForSpilling(const TFileStorageConfig & config ) {
-    THolder<FileSpillStorage> sp = MakeHolder<FileSpillStorage>(config);
+std::pair< std::unique_ptr<ISpillStorage>, TOperationResults >  OpenFileStorageForSpilling(const TFileStorageConfig & config ) {
+    std::unique_ptr<FileSpillStorage> sp = std::make_unique<FileSpillStorage>(config);
     TOperationResults res = sp->LastOperationResults();
-    return std::make_pair< THolder<ISpillStorage>, TOperationResults >( std::move(sp), std::move(res) );
+    return std::make_pair< std::unique_ptr<ISpillStorage>, TOperationResults >( std::move(sp), std::move(res) );
 }
 
 

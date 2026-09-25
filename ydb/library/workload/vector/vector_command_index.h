@@ -8,8 +8,8 @@ namespace NYdbWorkload {
 
 class TWorkloadCommandIndexBase : public NYdb::NConsoleClient::TYdbCommand {
 private:
-    THolder<NYdb::NConsoleClient::TScopedDriver> Driver;
-    THolder<NYdb::NQuery::TQueryClient> QueryClient;
+    std::unique_ptr<NYdb::NConsoleClient::TScopedDriver> Driver;
+    std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
 
 protected:
     NYdbWorkload::TVectorWorkloadParams& Params;

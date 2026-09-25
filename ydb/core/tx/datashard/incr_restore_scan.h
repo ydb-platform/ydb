@@ -65,7 +65,7 @@ inline NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::EEndStatus MapSca
     }
 }
 
-THolder<NTable::IScan> CreateIncrementalRestoreScan(
+std::unique_ptr<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,
         std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
         const TPathId& sourcePathId,

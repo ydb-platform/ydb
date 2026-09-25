@@ -1032,7 +1032,7 @@ NClient::TKikimr GetKikimr(const TString& addr, const TCertAndKey& caCert, const
     return NClient::TKikimr(grpcConfig);
 }
 
-THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
+std::unique_ptr<NClient::TRegistrationResult> TryToRegisterDynamicNode(
         NClient::TKikimr& kikimr,
         const TString &domainName,
         const TString &nodeHost,
@@ -1055,7 +1055,7 @@ THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
     legacy.SetBodyNum(2);
     loc.InheritLegacyValue(TNodeLocation(legacy));
 
-    return MakeHolder<NClient::TRegistrationResult>
+    return std::make_unique<NClient::TRegistrationResult>
         (registrant.SyncRegisterNode(ToString(domainName),
                                      nodeHost,
                                      interconnectPort,

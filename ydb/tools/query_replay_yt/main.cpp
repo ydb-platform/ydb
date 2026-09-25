@@ -73,11 +73,11 @@ class TQueryReplayMapper
     : public NYT::IMapper<NYT::TTableReader<NYT::TNode>, NYT::TTableWriter<NYT::TNode>>
 {
 
-    THolder<NActors::TActorSystem> ActorSystem;
+    std::unique_ptr<NActors::TActorSystem> ActorSystem;
     TAutoPtr<TLogBackend> LogBackend;
     std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<NKikimr::TAppData> AppData;
+    std::unique_ptr<NKikimr::TAppData> AppData;
     TIntrusivePtr<NKikimr::NScheme::TKikimrTypeRegistry> TypeRegistry;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> ModuleResolverState;
@@ -170,7 +170,7 @@ public:
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
-    THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
+    std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
         TString queryType = json["query_type"].GetStringSafe();
         if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
             return nullptr;
@@ -182,14 +182,14 @@ public:
 
         NJson::TJsonValue replayJson = std::move(json);
 
-        THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
+        std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> replayResult;
         {
             NJson::TJsonValue firstCompileReplayJson = replayJson;
             auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, Antlr4ParserIsAmbiguityError));
 
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
                 compileActorId,
-                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(firstCompileReplayJson))),
+                std::unique_ptr<TQueryReplayEvents::TEvCompileRequest>(new TQueryReplayEvents::TEvCompileRequest(std::move(firstCompileReplayJson))),
                 TDuration::Seconds(600));
 
             replayResult.Reset(future.ExtractValueSync().Release());

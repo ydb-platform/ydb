@@ -23,13 +23,13 @@ class TAlterLogin: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
         const auto txId = OperationId.GetTxId();
-        auto result = MakeHolder<TProposeResponse>(txId, ssId);
+        auto result = std::make_unique<TProposeResponse>(txId, ssId);
         if (!AppData()->AuthConfig.GetEnableLoginAuthentication()) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled");
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {

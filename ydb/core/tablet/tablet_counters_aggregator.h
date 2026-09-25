@@ -165,7 +165,7 @@ bool IsHistogramAggregateSimpleName(TStringBuf name);
 TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
     ::NMonitoring::TDynamicCounterPtr externalGroup,
     ::NMonitoring::TDynamicCounterPtr internalGroup,
-    THolder<TTabletCountersBase> executorCounters);
+    std::unique_ptr<TTabletCountersBase> executorCounters);
 
 ////////////////////////////////////////////
 IActor* CreateTabletCountersAggregator(bool follower);

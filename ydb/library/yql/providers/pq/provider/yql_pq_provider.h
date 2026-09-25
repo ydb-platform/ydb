@@ -67,9 +67,9 @@ public:
     TIntrusivePtr<TPqConfiguration> Configuration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     IPqGateway::TPtr Gateway;
-    THolder<IDqIntegration> DqIntegration;
-    THolder<IYtflowIntegration> YtflowIntegration;
-    THolder<IYtflowOptimization> YtflowOptimization;
+    std::unique_ptr<IDqIntegration> DqIntegration;
+    std::unique_ptr<IYtflowIntegration> YtflowIntegration;
+    std::unique_ptr<IYtflowOptimization> YtflowOptimization;
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NPq::NProto::StreamingDisposition Disposition;

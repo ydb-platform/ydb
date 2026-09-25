@@ -401,7 +401,7 @@ void TBaseCloudAuthRequestProxy::FillSignatureProto(TSignatureProto& signature) 
 void TBaseCloudAuthRequestProxy::Authenticate() {
     AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
     if (EnableAccessServiceV2Interface_) {
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+        auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
         request->RequestId = RequestId_;
         if (AccessKeySignature_) {
             FillSignatureProto(*request->Request.mutable_signature());
@@ -410,7 +410,7 @@ void TBaseCloudAuthRequestProxy::Authenticate() {
         }
         Send(MakeSqsAccessServiceID(), std::move(request));
     } else {
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->RequestId = RequestId_;
         if (AccessKeySignature_) {
             FillSignatureProto(*request->Request.mutable_signature());
@@ -428,7 +428,7 @@ void TBaseCloudAuthRequestProxy::Authorize() {
 
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  entries{{{PermissionName_}, attributes}};
 
-    THolder<TEvTicketParser::TEvAuthorizeTicket> request;
+    std::unique_ptr<TEvTicketParser::TEvAuthorizeTicket> request;
     if (AccessKeySignature_) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature;
         signature.AccessKeyId = AccessKeySignature_->AccessKeyId;
@@ -437,13 +437,13 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         signature.Service = "sqs";
         signature.Region = AccessKeySignature_->Region;
         signature.SignedAt = AccessKeySignature_->SignedAt;
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{
+        request = std::make_unique<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{
             .Signature = std::move(signature),
             .TraceContext = {SourceAddress_, RequestId_},
             .Entries = entries,
         });
     } else {
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+        request = std::make_unique<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = IamToken_,
             .TraceContext = {SourceAddress_, RequestId_},
             .Entries = entries,
@@ -475,7 +475,7 @@ void TBaseCloudAuthRequestProxy::Authorize() {
 
 void TBaseCloudAuthRequestProxy::RequestFolderService() {
     FolderServiceRequestStartTimestamp_ = TActivationContext::Now();
-    auto request = MakeHolder<NFolderService::TEvFolderService::TEvGetCloudByFolderRequest>();
+    auto request = std::make_unique<NFolderService::TEvFolderService::TEvGetCloudByFolderRequest>();
     request.Get()->FolderId = FolderId_;
     request.Get()->RequestId = RequestId_;
     request.Get()->Token = InfraToken_;
@@ -569,8 +569,8 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 
 void THttpProxyAuthRequestProxy::DoReply() {
     auto response = Error_.Empty()
-        ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
-        : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
+        ? std::make_unique<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
+        : std::make_unique<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
 
     Send(Requester_, response.Release());
 }

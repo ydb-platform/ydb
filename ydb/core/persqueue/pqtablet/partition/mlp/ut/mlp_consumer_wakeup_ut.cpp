@@ -54,8 +54,8 @@ NKikimrPQ::TPQTabletConfig::TConsumer MakeConsumerConfig() {
     return consumer;
 }
 
-THolder<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
-    auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+std::unique_ptr<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
+    auto response = std::make_unique<TEvKeyValue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     response->Record.SetCookie(cookie);
     response->Record.AddReadResult()->SetStatus(NKikimrProto::NODATA);
@@ -63,16 +63,16 @@ THolder<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
     return response;
 }
 
-THolder<TEvKeyValue::TEvResponse> MakeKvWriteOk(ui64 cookie) {
-    auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+std::unique_ptr<TEvKeyValue::TEvResponse> MakeKvWriteOk(ui64 cookie) {
+    auto response = std::make_unique<TEvKeyValue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     response->Record.SetCookie(cookie);
     response->Record.AddWriteResult()->SetStatus(NKikimrProto::OK);
     return response;
 }
 
-THolder<TEvPersQueue::TEvResponse> MakeFetchResponse(ui64 firstOffset, ui64 count, TInstant writeTimestamp) {
-    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+std::unique_ptr<TEvPersQueue::TEvResponse> MakeFetchResponse(ui64 firstOffset, ui64 count, TInstant writeTimestamp) {
+    auto response = std::make_unique<TEvPersQueue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -177,7 +177,7 @@ struct TConsumerEnv {
         Runtime.DispatchEvents(options);
     }
 
-    THolder<TEvKeyValue::TEvRequest> GrabKvRequest(TDuration timeout = TDuration::Seconds(5)) {
+    std::unique_ptr<TEvKeyValue::TEvRequest> GrabKvRequest(TDuration timeout = TDuration::Seconds(5)) {
         auto kvReq = Runtime.GrabEdgeEvent<TEvKeyValue::TEvRequest>(timeout);
         UNIT_ASSERT(kvReq);
         return kvReq;
@@ -243,7 +243,7 @@ struct TConsumerEnv {
         Pump();
     }
 
-    THolder<TEvPQ::TEvGetMLPConsumerStateResponse> GetState() {
+    std::unique_ptr<TEvPQ::TEvGetMLPConsumerStateResponse> GetState() {
         Runtime.Send(new IEventHandle(Consumer, Reader, new TEvPQ::TEvGetMLPConsumerStateRequest(kTopic, kConsumer, 0)));
         auto state = Runtime.GrabEdgeEvent<TEvPQ::TEvGetMLPConsumerStateResponse>(TDuration::Seconds(5));
         UNIT_ASSERT(state);
@@ -266,7 +266,7 @@ struct TConsumerEnv {
         UNIT_FAIL("offset not found in consumer state");
     }
 
-    THolder<TEvKeyValue::TEvRequest> ExpectPersist(const char* message) {
+    std::unique_ptr<TEvKeyValue::TEvRequest> ExpectPersist(const char* message) {
         Runtime.SetDispatchTimeout(TDuration::Seconds(3));
         auto kv = Runtime.GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(2));
         UNIT_ASSERT_C(kv, message);

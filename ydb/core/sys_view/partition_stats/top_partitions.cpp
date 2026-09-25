@@ -116,7 +116,7 @@ struct TTopPartitionsByTliExtractorMap :
     }
 };
 
-THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
@@ -139,10 +139,10 @@ THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& o
     auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
+    return std::make_unique<TTopPartitionsByCpuScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
-THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
@@ -165,7 +165,7 @@ THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& o
     auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
+    return std::make_unique<TTopPartitionsByTliScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
 } // NKikimr::NSysView

@@ -761,8 +761,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IDqIntegration> CreateS3DqIntegration(TS3State::TPtr state) {
-    return MakeHolder<TS3DqIntegration>(state);
+std::unique_ptr<IDqIntegration> CreateS3DqIntegration(TS3State::TPtr state) {
+    return std::make_unique<TS3DqIntegration>(state);
 }
 
 } // namespace NYql

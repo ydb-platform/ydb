@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(HttpRouter) {
     Y_UNIT_TEST(Basic) {
         IActor* const a1 = reinterpret_cast<IActor*>(1);
         IActor* const a2 = reinterpret_cast<IActor*>(2);
-        THolder<TActorSystemSetup> setup(new TActorSystemSetup());
+        std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup());
         TActorSystem actorSystem(setup);
         THttpRequestContext ctx(&actorSystem, new NHttp::THttpIncomingRequest(), {}, {}, {});
 

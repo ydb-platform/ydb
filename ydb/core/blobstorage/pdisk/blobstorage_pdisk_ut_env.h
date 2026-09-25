@@ -48,7 +48,7 @@ public:
 private:
     std::optional<TActorId> PDiskActor;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     NPDisk::TPDisk *PDisk = nullptr;
 
 public:
@@ -127,7 +127,7 @@ public:
         , TestCtx(settings.UseSectorMap, settings.DiskMode, settings.DiskSize, settings.UsePath)
         , Settings(settings)
     {
-        auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        auto appData = std::make_unique<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         appData->IoContextFactory = IoContext.get();
 
@@ -254,16 +254,16 @@ public:
     }
 
     template<typename TRes>
-    THolder<TRes> Recv() {
+    std::unique_ptr<TRes> Recv() {
         return Runtime->GrabEdgeEvent<TRes>();
     }
 
     template<typename TRes>
-    THolder<TRes> TestResponse(IEventBase* ev, std::optional<NKikimrProto::EReplyStatus> status = std::nullopt) {
+    std::unique_ptr<TRes> TestResponse(IEventBase* ev, std::optional<NKikimrProto::EReplyStatus> status = std::nullopt) {
         if (ev) {
             Send(ev);
         }
-        THolder<TRes> evRes = Recv<TRes>();
+        std::unique_ptr<TRes> evRes = Recv<TRes>();
 
         if (status.has_value()) {
             UNIT_ASSERT_VALUES_EQUAL_C(evRes->Status, status.value(), evRes->ToString());
@@ -446,14 +446,14 @@ struct TVDiskMock {
 
     void RespondToCutLog() {
         Cerr << __FILE__ << ":" << __LINE__ << Endl;
-        THolder<NPDisk::TEvCutLog> evReq = TestCtx->Recv<NPDisk::TEvCutLog>();
+        std::unique_ptr<NPDisk::TEvCutLog> evReq = TestCtx->Recv<NPDisk::TEvCutLog>();
         if (evReq) {
             CutLogAllButOne();
         }
     }
 
     void RespondToPreShredCompact(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        THolder<NPDisk::TEvPreShredCompactVDisk> evReq = TestCtx->Recv<NPDisk::TEvPreShredCompactVDisk>();
+        std::unique_ptr<NPDisk::TEvPreShredCompactVDisk> evReq = TestCtx->Recv<NPDisk::TEvPreShredCompactVDisk>();
         if (evReq) {
             TestCtx->Send(new NPDisk::TEvPreShredCompactVDiskResult(PDiskParams->Owner, PDiskParams->OwnerRound,
                 shredGeneration, status, errorReason));
@@ -461,7 +461,7 @@ struct TVDiskMock {
     }
 
     void RespondToShred(ui64 shredGeneration, NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        THolder<NPDisk::TEvShredVDisk> evReq = TestCtx->Recv<NPDisk::TEvShredVDisk>();
+        std::unique_ptr<NPDisk::TEvShredVDisk> evReq = TestCtx->Recv<NPDisk::TEvShredVDisk>();
         if (evReq) {
             if (status == NKikimrProto::OK) {
                 auto& commited = Chunks[EChunkState::COMMITTED];
@@ -483,7 +483,7 @@ struct TVDiskMock {
 
 private:
     void SendEvLogImpl(const ui64 size, TMaybe<NPDisk::TCommitRecord> commitRec) {
-        auto evLog = MakeHolder<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(size)),
+        auto evLog = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(size)),
                 GetLsnSeg(), nullptr);
 
         if (commitRec) {

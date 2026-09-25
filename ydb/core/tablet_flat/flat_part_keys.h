@@ -157,7 +157,7 @@ namespace NTable {
         IPages* Env;
         TRowId RowId = Max<TRowId>();
         TPageId PageId = Max<TPageId>();
-        THolder<IPartGroupIndexIter> Index;
+        std::unique_ptr<IPartGroupIndexIter> Index;
         NPage::TDataPage Page;
         TSmallVec<TCell> Key;
     };

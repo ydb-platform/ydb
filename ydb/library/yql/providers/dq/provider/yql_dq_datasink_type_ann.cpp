@@ -77,8 +77,8 @@ private:
 
 } // unnamed
 
-THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) {
-    return THolder(new TDqsDataSinkTypeAnnotationTransformer(typeCtx));
+std::unique_ptr<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) {
+    return std::unique_ptr<TDqsDataSinkTypeAnnotationTransformer>(new TDqsDataSinkTypeAnnotationTransformer(typeCtx));
 }
 
 } // NYql

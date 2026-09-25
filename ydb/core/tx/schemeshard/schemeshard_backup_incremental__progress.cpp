@@ -297,7 +297,7 @@ private:
     TEvPrivate::TEvContinuousBackupCleanerResult::TPtr CleanerResult;
     TEvPersQueue::TEvOffloadStatus::TPtr OffloadStatus;
 
-    TVector<THolder<IActor>> NewCleaners;
+    TVector<std::unique_ptr<IActor>> NewCleaners;
 };
 
 ITransaction* TSchemeShard::CreateTxProgress(ui64 id) {

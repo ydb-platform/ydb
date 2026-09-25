@@ -315,7 +315,7 @@ TClientRequest* TOidcTestServer::CreateClient() {
     return new TRequest(*this);
 }
 
-THolder<THttpServerConn> TOidcTestServer::TRequest::CreateHttpConnection(const TSocket& socket, size_t outputBuffer) {
+std::unique_ptr<THttpServerConn> TOidcTestServer::TRequest::CreateHttpConnection(const TSocket& socket, size_t outputBuffer) {
     NThreading::TFuture<void> gate;
     with_lock (Server.Mutex) {
         gate = Server.TlsHandshakeGate;
@@ -325,5 +325,5 @@ THolder<THttpServerConn> TOidcTestServer::TRequest::CreateHttpConnection(const T
     if (gate.Initialized()) {
         gate.Wait();
     }
-    return MakeHolder<THttpServerConn>(MakeHolder<TTlsStreams>(socket), outputBuffer);
+    return std::make_unique<THttpServerConn>(std::make_unique<TTlsStreams>(socket), outputBuffer);
 }

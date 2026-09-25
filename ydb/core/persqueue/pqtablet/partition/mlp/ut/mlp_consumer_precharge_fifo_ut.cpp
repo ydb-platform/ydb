@@ -104,8 +104,8 @@ TString BuildSnapshotBytes(size_t messageCount, size_t groupCount, size_t locked
     return snapshot.SerializeAsString();
 }
 
-THolder<TEvKeyValue::TEvResponse> MakeSnapshotKvResponse(ui64 cookie, const TString& snapshotBytes) {
-    auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+std::unique_ptr<TEvKeyValue::TEvResponse> MakeSnapshotKvResponse(ui64 cookie, const TString& snapshotBytes) {
+    auto response = std::make_unique<TEvKeyValue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     response->Record.SetCookie(cookie);
     auto* readResult = response->Record.AddReadResult();

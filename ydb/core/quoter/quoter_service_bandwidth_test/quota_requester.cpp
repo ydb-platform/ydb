@@ -95,11 +95,11 @@ TKesusQuotaRequester::TKesusQuotaRequester(const NKikimr::TOptions& opts, NKikim
 {
 }
 
-THolder<TEvQuota::TEvRequest> TKesusQuotaRequester::MakeQuoterRequest() {
+std::unique_ptr<TEvQuota::TEvRequest> TKesusQuotaRequester::MakeQuoterRequest() {
     TVector<TEvQuota::TResourceLeaf> reqs = {
         TEvQuota::TResourceLeaf(TTestServer::GetDomainPath(), KesusPath, ResourcePath, 1.0)
     };
-    return MakeHolder<TEvQuota::TEvRequest>(TEvQuota::EResourceOperator::And, std::move(reqs), Opts.QuotaRequestDeadline);
+    return std::make_unique<TEvQuota::TEvRequest>(TEvQuota::EResourceOperator::And, std::move(reqs), Opts.QuotaRequestDeadline);
 }
 
 TLocalResourceQuotaRequester::TLocalResourceQuotaRequester(const NKikimr::TOptions& opts, NKikimr::TRequestStats& stats, TActorId parent, size_t resourceIndex)
@@ -108,11 +108,11 @@ TLocalResourceQuotaRequester::TLocalResourceQuotaRequester(const NKikimr::TOptio
 {
 }
 
-THolder<TEvQuota::TEvRequest> TLocalResourceQuotaRequester::MakeQuoterRequest() {
+std::unique_ptr<TEvQuota::TEvRequest> TLocalResourceQuotaRequester::MakeQuoterRequest() {
     TVector<TEvQuota::TResourceLeaf> reqs = {
         TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, ResourceId, 1.0)
     };
-    return MakeHolder<TEvQuota::TEvRequest>(TEvQuota::EResourceOperator::And, std::move(reqs), Opts.QuotaRequestDeadline);
+    return std::make_unique<TEvQuota::TEvRequest>(TEvQuota::EResourceOperator::And, std::move(reqs), Opts.QuotaRequestDeadline);
 }
 
 } // namespace NKikimr

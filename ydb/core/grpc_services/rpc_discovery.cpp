@@ -22,12 +22,12 @@ using namespace Ydb;
 using namespace NKqp;
 
 class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
-    THolder<TEvListEndpointsRequest> Request;
+    std::unique_ptr<TEvListEndpointsRequest> Request;
     const TActorId CacheId;
     TActorId Discoverer;
 
-    THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
-    THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
+    std::unique_ptr<TEvDiscovery::TEvDiscoveryData> LookupResponse;
+    std::unique_ptr<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
 
     NWilson::TSpan Span;
 

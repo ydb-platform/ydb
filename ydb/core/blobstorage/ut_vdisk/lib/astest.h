@@ -52,7 +52,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
     nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
-    auto setup1 = MakeHolder<TActorSystemSetup>();
+    auto setup1 = std::make_unique<TActorSystemSetup>();
     setup1->NodeId = 1;
     setup1->ExecutorsCount = 4;
     setup1->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);

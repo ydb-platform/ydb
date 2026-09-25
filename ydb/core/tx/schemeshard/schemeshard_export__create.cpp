@@ -128,7 +128,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             {"message", request.ShortDebugString()},
         );
 
-        auto response = MakeHolder<TEvExport::TEvCreateExportResponse>(request.GetTxId());
+        auto response = std::make_unique<TEvExport::TEvCreateExportResponse>(request.GetTxId());
 
         const ui64 id = request.GetTxId();
         if (Self->Exports.contains(id)) {
@@ -297,7 +297,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
 private:
     bool Reply(
-        THolder<TEvExport::TEvCreateExportResponse> response,
+        std::unique_ptr<TEvExport::TEvCreateExportResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString()
     ) {
@@ -1211,7 +1211,7 @@ private:
                     } else {
                         // We need to wait and retry the operation
                         txId = TTxId(record.GetTxId());
-                        THolder<IEventBase> ev;
+                        std::unique_ptr<IEventBase> ev;
 
                         if (itemIdx < exportInfo->Items.size()) {
                             ev.Reset(DropPropose(Self, txId, *exportInfo, itemIdx).Release());

@@ -58,8 +58,8 @@ private:
 
 }
 
-THolder<TVisitorTransformerBase> CreateYdbDataSinkTypeAnnotationTransformer(TYdbState::TPtr state) {
-    return MakeHolder<TYdbDataSinkTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreateYdbDataSinkTypeAnnotationTransformer(TYdbState::TPtr state) {
+    return std::make_unique<TYdbDataSinkTypeAnnotationTransformer>(state);
 }
 
 } // namespace NYql

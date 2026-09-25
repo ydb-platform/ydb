@@ -789,7 +789,7 @@ struct TTestHelper {
 
     struct THangedReturn {
         ui64 LastPlanStep = 0;
-        TVector<THolder<IEventHandle>> ReadSets;
+        TVector<std::unique_ptr<IEventHandle>> ReadSets;
     };
 
     THangedReturn HangWithTransactionWaitingRS(ui64 shardCount, bool finalUpserts = true) {

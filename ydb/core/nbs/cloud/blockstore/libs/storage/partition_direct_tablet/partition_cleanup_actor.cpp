@@ -471,7 +471,7 @@ private:
         BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
         ctx.Send(
             BscProxy,
-            new TBscProxy::TEvSend(THolder<IEventBase>(request.release())));
+            new TBscProxy::TEvSend(std::unique_ptr<IEventBase>(request.release())));
     }
 
     void HandleDeallocateResult(

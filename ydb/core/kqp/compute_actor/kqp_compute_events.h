@@ -62,7 +62,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     bool RequestedBytesLimitReached = false;
     bool Finished = false;
     bool PageFault = false; // page fault was the reason for sending this message
-    mutable THolder<TEvRemoteScanData> Remote;
+    mutable std::unique_ptr<TEvRemoteScanData> Remote;
     std::shared_ptr<IShardScanStats> StatsOnFinished;
     TLocksInfo LocksInfo;
 
@@ -113,8 +113,8 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
 
     static TEvScanData* Load(const TEventSerializedData* data) {
-        auto pbEv = THolder<TEvRemoteScanData>(TEvRemoteScanData::Load(data));
-        auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId(), pbEv->Record.GetGeneration());
+        auto pbEv = std::unique_ptr<TEvRemoteScanData>(TEvRemoteScanData::Load(data));
+        auto ev = std::make_unique<TEvScanData>(pbEv->Record.GetScanId(), pbEv->Record.GetGeneration());
 
         ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs());
         ev->WaitTime = TDuration::MilliSeconds(pbEv->Record.GetWaitTimeMs());
@@ -145,7 +145,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 private:
     void InitRemote() const {
         if (!Remote) {
-            Remote = MakeHolder<TEvRemoteScanData>();
+            Remote = std::make_unique<TEvRemoteScanData>();
 
             Remote->Record.SetScanId(ScanId);
             Remote->Record.SetGeneration(Generation);
@@ -206,7 +206,7 @@ struct TEvKqpCompute {
         const ui64 FreeSpace;
         const ui32 Generation;
         const ui32 MaxChunksCount;
-        mutable THolder<TEvRemoteScanDataAck> Remote;
+        mutable std::unique_ptr<TEvRemoteScanDataAck> Remote;
 
         bool IsSerializable() const override {
             return true;
@@ -223,7 +223,7 @@ struct TEvKqpCompute {
         }
 
         static TEvScanDataAck* Load(const TEventSerializedData* data) {
-            auto pbEv = THolder<TEvRemoteScanDataAck>(TEvRemoteScanDataAck::Load(data));
+            auto pbEv = std::unique_ptr<TEvRemoteScanDataAck>(TEvRemoteScanDataAck::Load(data));
             ui32 maxChunksCount = Max<ui32>();
             if (pbEv->Record.HasMaxChunksCount()) {
                 maxChunksCount = pbEv->Record.GetMaxChunksCount();

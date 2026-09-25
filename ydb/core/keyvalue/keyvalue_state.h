@@ -279,7 +279,7 @@ protected:
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
-    std::vector<THolder<TIntermediate>> CmdTrimLeakedBlobsPostponed;
+    std::vector<std::unique_ptr<TIntermediate>> CmdTrimLeakedBlobsPostponed;
     THashMap<ui64, TInstant> RequestInputTime;
     ui64 NextRequestUid = 1;
     TIntrusivePtr<TCollectOperation> CollectOperation;
@@ -287,7 +287,7 @@ protected:
     bool InitWithoutCollect;
     std::array<ui64, 256> ChannelDataUsage;
     std::bitset<256> UsedChannels;
-    THolder<TChannelBalancer::TWeightManager> WeightManager;
+    std::unique_ptr<TChannelBalancer::TWeightManager> WeightManager;
 
     ui64 TabletId;
     TActorId KeyValueActorId;
@@ -389,9 +389,9 @@ public:
     void SendCutHistory(const TActorContext &ctx, const TTabletStorageInfo *info);
     void OnInitQueueEmpty();
     void OnStateWork();
-    void RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
+    void RequestExecute(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
-    void RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
+    void RequestComplete(std::unique_ptr<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db);
     void DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>& refCountsIncr /*in-out*/, bool writesMade,
         const TActorContext& ctx);
@@ -436,7 +436,7 @@ public:
     void FinishMoveDataSuccess(const TActorContext& ctx);
     void FinishMoveDataNotEnoughSpace(const TActorContext& ctx);
 
-    void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
+    void Reply(std::unique_ptr<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
         NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
         NKikimrKeyValue::StorageChannel *response,
@@ -469,20 +469,20 @@ public:
         NKikimrClient::TKeyValueResponse::TConcatResult *resplegacyResponseonse,
         NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
-    void CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
-    void CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
-    void CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, ISimpleDb& db);
-    void CmdSetExecutorFastLogPolicy(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
-    void ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
+    void CmdRead(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdReadRange(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdRename(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdDelete(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdWrite(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdGetStatus(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdCopyRange(std::unique_ptr<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
+    void CmdConcat(std::unique_ptr<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx);
+    void CmdTrimLeakedBlobs(std::unique_ptr<TIntermediate>& intermediate, ISimpleDb& db);
+    void CmdSetExecutorFastLogPolicy(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void CmdCmds(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
+    void ProcessCmds(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
-    bool IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db);
+    bool IncrementGeneration(std::unique_ptr<TIntermediate> &intermediate, ISimpleDb &db);
 
     struct TCheckResult {
         NKikimrKeyValue::Statuses::ReplyStatus Status = NKikimrKeyValue::Statuses::RSTATUS_OK;
@@ -498,9 +498,9 @@ public:
     TCheckResult CheckCmd(const TIntermediate::TGetStatus &cmd, TKeySet& keys, ui32 index) const;
 
     template<class Cmd>
-    bool CheckCmds(THolder<TIntermediate>& intermediate, const TDeque<Cmd>& cmds, const TActorContext& ctx,
+    bool CheckCmds(std::unique_ptr<TIntermediate>& intermediate, const TDeque<Cmd>& cmds, const TActorContext& ctx,
         TKeySet& keys, const TTabletStorageInfo* info);
-    bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
+    bool CheckCmds(std::unique_ptr<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
             const TTabletStorageInfo* /*info*/);
 
     void Step();
@@ -542,17 +542,17 @@ public:
 
     void OnEvIntermediate(TIntermediate &intermediate);
     void OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx, const TTabletStorageInfo *info);
-    bool PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
+    bool PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, std::unique_ptr<TIntermediate> &intermediate,
         TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info);
     void RenderHTMLPage(IOutputStream &out) const;
     void MonChannelStat(NJson::TJsonValue& out) const;
 
     bool CheckDeadline(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
+        std::unique_ptr<TIntermediate> &intermediate);
 
     template <typename TRequest>
     bool CheckDeadline(const TActorContext &ctx, TRequest *request,
-            THolder<TIntermediate> &intermediate)
+            std::unique_ptr<TIntermediate> &intermediate)
     {
         ui64 deadlineInstantMs = request->Record.deadline_instant_ms();
         if (!deadlineInstantMs) {
@@ -576,11 +576,11 @@ public:
     }
 
     bool CheckGeneration(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
+        std::unique_ptr<TIntermediate> &intermediate);
 
     template <typename TGrpcRequestWithLockGeneration>
     bool CheckGeneration(const TActorContext &ctx, TGrpcRequestWithLockGeneration *kvRequest,
-            THolder<TIntermediate> &intermediate)
+            std::unique_ptr<TIntermediate> &intermediate)
     {
         auto &record = kvRequest->Record;
         if (record.has_lock_generation()) {
@@ -602,63 +602,63 @@ public:
         return false;
     }
 
-    void RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+    void RegisterReadRequestActor(const TActorContext &ctx, std::unique_ptr<TIntermediate> &&intermediate,
         const TTabletStorageInfo *info, ui32 tabletGeneration);
-    void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+    void RegisterRequestActor(const TActorContext &ctx, std::unique_ptr<TIntermediate> &&intermediate,
         const TTabletStorageInfo *info, ui32 tabletGeneration);
 
     void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx);
 
     bool PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, bool &outIsInlineOnly);
+        std::unique_ptr<TIntermediate> &intermediate, bool &outIsInlineOnly);
     bool PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, bool &inOutIsInlineOnly);
+        std::unique_ptr<TIntermediate> &intermediate, bool &inOutIsInlineOnly);
     bool PrepareCmdRename(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
+        std::unique_ptr<TIntermediate> &intermediate);
     bool PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate);
+        std::unique_ptr<TIntermediate> &intermediate);
     bool PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, TEvKeyValue::TEvRequest& ev,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest, TEvKeyValue::TEvRequest& ev,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdGetStatus(const TActorContext& ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
-        THolder<TIntermediate>& intermediate);
+        std::unique_ptr<TIntermediate>& intermediate);
     bool PrepareCmdConcat(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
-        THolder<TIntermediate>& intermediate);
+        std::unique_ptr<TIntermediate>& intermediate);
     bool PrepareCmdTrimLeakedBlobs(const TActorContext& ctx, NKikimrClient::TKeyValueRequest& kvRequest,
-        THolder<TIntermediate>& intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate>& intermediate, const TTabletStorageInfo *info);
     bool PrepareCmdSetExecutorFastLogPolicy(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info);
 
 
     struct TPrepareResult {
         bool WithError = false;
         TString ErrorMsg;
     };
-    TPrepareResult PrepareOneCmd(const TCommand::Rename &request, THolder<TIntermediate> &intermediate);
-    TPrepareResult PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate);
-    TPrepareResult PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate);
-    TPrepareResult PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
+    TPrepareResult PrepareOneCmd(const TCommand::Rename &request, std::unique_ptr<TIntermediate> &intermediate);
+    TPrepareResult PrepareOneCmd(const TCommand::Concat &request, std::unique_ptr<TIntermediate> &intermediate);
+    TPrepareResult PrepareOneCmd(const TCommand::CopyRange &request, std::unique_ptr<TIntermediate> &intermediate);
+    TPrepareResult PrepareOneCmd(const TCommand::Write &request, std::unique_ptr<TIntermediate> &intermediate,
         const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev);
-    TPrepareResult PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate,
+    TPrepareResult PrepareOneCmd(const TCommand::DeleteRange &request, std::unique_ptr<TIntermediate> &intermediate,
         const TActorContext &ctx);
-    TPrepareResult PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate,
+    TPrepareResult PrepareOneCmd(const TCommand &request, std::unique_ptr<TIntermediate> &intermediate,
         const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx,
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx,
         const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info,
         const TActorContext& ctx);
     void ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus oldStatus, NKikimrKeyValue::Statuses::ReplyStatus newStatus,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info = nullptr);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info = nullptr);
 
     template <typename TResponse>
     void ReplyError(const TActorContext &ctx, TString errorDescription,
-        NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
+        NKikimrKeyValue::Statuses::ReplyStatus status, std::unique_ptr<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr)
     {
         YDB_LOG_INFO_COMP(NKikimrServices::KEYVALUE, errorDescription);
@@ -700,30 +700,30 @@ public:
     }
 
     bool PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev,
-        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestTyp);
+        std::unique_ptr<TIntermediate> &intermediate, TRequestType::EType *outRequestTyp);
     bool PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyValue::TEvReadRange::TPtr &ev,
-        THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType);
+        std::unique_ptr<TIntermediate> &intermediate, TRequestType::EType *outRequestType);
     bool PrepareExecuteTransactionRequest(const TActorContext &ctx, TEvKeyValue::TEvExecuteTransaction::TPtr &ev,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     TPrepareResult PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, ui64 publicStorageChannel,
         const TTabletStorageInfo *info, const TActorContext& ctx);
     bool PrepareGetStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
+        std::unique_ptr<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
-        THolder<TIntermediate> &intermediate);
+        std::unique_ptr<TIntermediate> &intermediate);
 
     TVector<ui32> GetAcquiredChannels(const TIntermediate &intermediate) const;
-    bool TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx);
+    bool TryStartOrPostponeIntermediate(std::unique_ptr<TIntermediate> &intermediate, const TActorContext &ctx);
     void StartChannelLimitedIntermediate(const TIntermediate &intermediate);
     void ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels);
     void ProcessPostponedChannel(ui32 channel, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessPostponedChannels(const TVector<ui32> &channels, const TActorContext &ctx,
         const TTabletStorageInfo *info);
-    void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
+    void ProcessPostponedIntermediate(const TActorContext& ctx, std::unique_ptr<TIntermediate> &&intermediate,
              const TTabletStorageInfo *info);
 
     bool ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRange& from, TKeyRange *to,
-                      const TActorContext& ctx, THolder<TIntermediate>& intermediate, const char *cmd, ui32 index);
+                      const TActorContext& ctx, std::unique_ptr<TIntermediate>& intermediate, const char *cmd, ui32 index);
 
     struct TConvertRangeResult {
         TString ErrorMsg;

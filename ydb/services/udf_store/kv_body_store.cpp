@@ -27,7 +27,7 @@ void TKvBodyReadActor::Bootstrap() {
 }
 
 void TKvBodyReadActor::SendNavigateRequest() {
-    auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     auto& entry = req->ResultSet.emplace_back();
     entry.Path = SplitPath(VolumePath);
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
@@ -83,7 +83,7 @@ void TKvBodyReadActor::CreatePipeAndSendRead() {
     TmpFilePath = finalPath.GetPath() + UdfTmpFileSuffix;
 
     try {
-        TmpFile = MakeHolder<TFile>(TmpFilePath, CreateAlways | WrOnly | Seq);
+        TmpFile = std::make_unique<TFile>(TmpFilePath, CreateAlways | WrOnly | Seq);
     } catch (const yexception& e) {
         ReplyError(TStringBuilder() << "Failed to open tmp file '" << TmpFilePath << "': " << e.what());
         return;

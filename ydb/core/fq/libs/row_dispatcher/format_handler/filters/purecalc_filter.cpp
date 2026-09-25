@@ -216,7 +216,7 @@ public:
     TPushRelayImpl(
         const TOutputSpec& outputSpec,
         NYql::NPureCalc::IPushStreamWorker* worker,
-        THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> underlying
+        std::unique_ptr<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> underlying
     )
         : Underlying(std::move(underlying))
         , Worker(worker)
@@ -236,7 +236,7 @@ public:
     }
 
 private:
-    THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> Underlying;
+    std::unique_ptr<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> Underlying;
     NYql::NPureCalc::IWorker* Worker;
 };
 
@@ -249,10 +249,10 @@ struct NYql::NPureCalc::TInputSpecTraits<NFq::NRowDispatcher::TInputSpec> {
     [[maybe_unused]] static constexpr bool IsPartial = false;
     [[maybe_unused]] static constexpr bool SupportPushStreamMode = true;
 
-    using TConsumerType = THolder<NYql::NPureCalc::IConsumer<NFq::NRowDispatcher::TInputType>>;
+    using TConsumerType = std::unique_ptr<NYql::NPureCalc::IConsumer<NFq::NRowDispatcher::TInputType>>;
 
     static TConsumerType MakeConsumer(const NFq::NRowDispatcher::TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker) {
-        return MakeHolder<NFq::NRowDispatcher::TInputConsumer>(spec, std::move(worker));
+        return std::make_unique<NFq::NRowDispatcher::TInputConsumer>(spec, std::move(worker));
     }
 };
 
@@ -264,9 +264,9 @@ struct NYql::NPureCalc::TOutputSpecTraits<NFq::NRowDispatcher::TOutputSpec> {
     static void SetConsumerToWorker(
         const NFq::NRowDispatcher::TOutputSpec& outputSpec,
         NYql::NPureCalc::IPushStreamWorker* worker,
-        THolder<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> consumer
+        std::unique_ptr<NYql::NPureCalc::IConsumer<const NYql::NUdf::TUnboxedValue*>> consumer
     ) {
-        worker->SetConsumer(MakeHolder<NFq::NRowDispatcher::TPushRelayImpl>(outputSpec, worker, std::move(consumer)));
+        worker->SetConsumer(std::make_unique<NFq::NRowDispatcher::TPushRelayImpl>(outputSpec, worker, std::move(consumer)));
     }
 };
 
@@ -310,7 +310,7 @@ public:
             Query_,
             NYql::NPureCalc::ETranslationMode::SQL
         );
-        InputConsumer_ = Program_->Apply(MakeHolder<TOutputConsumer>(Consumer_));
+        InputConsumer_ = Program_->Apply(std::make_unique<TOutputConsumer>(Consumer_));
     }
 
     TStringBuf GetQuery() const override {
@@ -325,8 +325,8 @@ private:
     const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager_;
     const NMonitoring::TDynamicCounterPtr MemoryQuotaCounters_;
 
-    THolder<NYql::NPureCalc::TPushStreamProgram<TInputSpec, TOutputSpec>> Program_;
-    THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
+    std::unique_ptr<NYql::NPureCalc::TPushStreamProgram<TInputSpec, TOutputSpec>> Program_;
+    std::unique_ptr<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
 };
 
 class TProgramCompileHandler final : public IProgramCompileHandler, public TNonCopyable {

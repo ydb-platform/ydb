@@ -83,7 +83,7 @@ public:
             ScanManagerRef.Drop(Request.GetId());
         }
 
-        auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
 
@@ -194,7 +194,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     }
 
     auto sendResponse = [&](NKikimrSetColumnConstraint::EValidateStatus buildStatus, const TString& error = "") {
-        auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(id);
         response->Record.SetTabletId(TabletID());
         response->Record.SetStatus(buildStatus);

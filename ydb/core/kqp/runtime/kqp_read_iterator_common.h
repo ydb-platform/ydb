@@ -50,9 +50,9 @@ ui64 MaxBytesPerFetchStreamLookup();
 ui64 MaxInFlightLocksStreamLookup();
 
 void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes);
-THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings();
+std::unique_ptr<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings();
 void SetDefaultReadSettings(const NKikimrTxDataShard::TEvRead&);
-THolder<NKikimr::TEvDataShard::TEvReadAck> GetDefaultReadAckSettings();
+std::unique_ptr<NKikimr::TEvDataShard::TEvReadAck> GetDefaultReadAckSettings();
 void SetDefaultReadAckSettings(const NKikimrTxDataShard::TEvReadAck&);
 
 } // namespace NKqp

@@ -135,7 +135,7 @@ TRuntimeNode FromWideFlowWithNull(TProgramBuilder& pb, TRuntimeNode flow, ui32 n
 }
 
 template<typename Func>
-void ApplyTestPoint(THolder<IComputationGraph>& graph, Func func)
+void ApplyTestPoint(std::unique_ptr<IComputationGraph>& graph, Func func)
 {
     for (auto& node : graph->GetNodes()) {
         auto* testPoints = dynamic_cast<TDqHashCombineTestPoints*>(node.Get());
@@ -147,21 +147,21 @@ void ApplyTestPoint(THolder<IComputationGraph>& graph, Func func)
     UNIT_FAIL("Couldn't find a DqHashCombine node wrapper in the graph");
 }
 
-void DisableDehydration(THolder<IComputationGraph>& graph)
+void DisableDehydration(std::unique_ptr<IComputationGraph>& graph)
 {
     ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
         tp.DisableStateDehydration(true);
     });
 }
 
-void DisableKeyPassthrough(THolder<IComputationGraph>& graph)
+void DisableKeyPassthrough(std::unique_ptr<IComputationGraph>& graph)
 {
     ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
         tp.DisableKeyPassthrough(true);
     });
 }
 
-void SetTestStateCallback(THolder<IComputationGraph>& graph, const TTestStateCallback& callback)
+void SetTestStateCallback(std::unique_ptr<IComputationGraph>& graph, const TTestStateCallback& callback)
 {
     ApplyTestPoint(graph, [&callback](TDqHashCombineTestPoints& tp) {
         tp.SetTestStateCallback(callback);
@@ -173,7 +173,7 @@ struct TOperatorEndState
     bool WasBypassActive = false;
 };
 
-void SetTestEndStateUpdater(THolder<IComputationGraph>& graph, TOperatorEndState& endState) {
+void SetTestEndStateUpdater(std::unique_ptr<IComputationGraph>& graph, TOperatorEndState& endState) {
     SetTestStateCallback(graph, [&endState](const TDqHashCombineTestState& state) {
         endState.WasBypassActive = endState.WasBypassActive || state.BypassActivated;
     });
@@ -500,7 +500,7 @@ TRuntimeNode GetOperatorNode(TDqProgramBuilder& pb, const bool isAggregator, con
 }
 
 template<bool UseLLVM, bool Spilling = false>
-THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, bool useFlow, bool isAggregator, const size_t memLimit, std::vector<TType*>& columnTypes, const ui32 keyWidth) {
+std::unique_ptr<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, bool useFlow, bool isAggregator, const size_t memLimit, std::vector<TType*>& columnTypes, const ui32 keyWidth) {
     auto& pb = setup.GetDqProgramBuilder();
 
     auto keyBaseType = pb.NewDataType(NUdf::TDataType<char*>::Id);
@@ -589,7 +589,7 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
 }
 
 template<bool LLVM, bool Spilling = false>
-THolder<IComputationGraph> BuildWideGraph(
+std::unique_ptr<IComputationGraph> BuildWideGraph(
     TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator,
     const size_t memLimit, std::vector<TType*>& columnTypes, const ui32 keyWidth)
 {
@@ -663,7 +663,7 @@ THolder<IComputationGraph> BuildWideGraph(
 }
 
 template<bool LLVM, bool Spilling = false>
-THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator, const size_t memLimit, std::vector<TType*>& columnTypes) {
+std::unique_ptr<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator, const size_t memLimit, std::vector<TType*>& columnTypes) {
     auto& pb = setup.GetDqProgramBuilder();
 
     auto keyBaseType = pb.NewDataType(NUdf::TDataType<char*>::Id);

@@ -116,7 +116,7 @@ namespace NDnsResolver {
         }
 
         void Handle(TEvDns::TEvGetHostByName::TPtr& ev) {
-            auto req = MakeHolder<TIncomingRequest>();
+            auto req = std::make_unique<TIncomingRequest>();
             req->Type = EIncomingRequestType::GetHostByName;
             req->Sender = ev->Sender;
             req->Cookie = ev->Cookie;
@@ -126,7 +126,7 @@ namespace NDnsResolver {
         }
 
         void Handle(TEvDns::TEvGetAddr::TPtr& ev) {
-            auto req = MakeHolder<TIncomingRequest>();
+            auto req = std::make_unique<TIncomingRequest>();
             req->Type = EIncomingRequestType::GetAddr;
             req->Sender = ev->Sender;
             req->Cookie = ev->Cookie;
@@ -200,7 +200,7 @@ namespace NDnsResolver {
 
         using TIncomingRequestList = TIntrusiveListWithAutoDelete<TIncomingRequest, TDelete>;
 
-        void EnqueueRequest(THolder<TIncomingRequest> req) {
+        void EnqueueRequest(std::unique_ptr<TIncomingRequest> req) {
             if (MonCounters) {
                 ++*MonCounters->IncomingTotal;
             }
@@ -241,7 +241,7 @@ namespace NDnsResolver {
             ReplyWithError(std::move(req), ARES_EBADFAMILY);
         }
 
-        void EnqueueRequest(int family, THolder<TIncomingRequest> req) {
+        void EnqueueRequest(int family, std::unique_ptr<TIncomingRequest> req) {
             auto now = TActivationContext::Now();
 
             auto& fullState = NameToState[req->Name];
@@ -515,7 +515,7 @@ namespace NDnsResolver {
         void SendErrors(int family, TNameToState::iterator it) {
             auto& state = it->second.StateByFamily(family);
             while (state.WaitingRequests) {
-                THolder<TIncomingRequest> req(state.WaitingRequests.PopFront());
+                std::unique_ptr<TIncomingRequest> req(state.WaitingRequests.PopFront());
                 ReplyWithError(std::move(req), state.Status, state.ErrorText);
             }
         }
@@ -547,7 +547,7 @@ namespace NDnsResolver {
         void SendAddrs(int family, TNameToState::iterator it) {
             auto& state = it->second.StateByFamily(family);
             while (state.WaitingRequests) {
-                THolder<TIncomingRequest> req(state.WaitingRequests.PopFront());
+                std::unique_ptr<TIncomingRequest> req(state.WaitingRequests.PopFront());
                 ReplyWithAddrs(std::move(req), state.AddrsIPv6, state.AddrsIPv4);
             }
         }
@@ -600,13 +600,13 @@ namespace NDnsResolver {
 
         template<class TEvent>
         void SendError(TActorId replyTo, ui64 cookie, int status, const TString& errorText) {
-            auto reply = MakeHolder<TEvent>();
+            auto reply = std::make_unique<TEvent>();
             reply->Status = status;
             reply->ErrorText = errorText;
             this->Send(replyTo, reply.Release(), 0, cookie);
         }
 
-        void ReplyWithError(THolder<TIncomingRequest> req, int status, const TString& errorText) {
+        void ReplyWithError(std::unique_ptr<TIncomingRequest> req, int status, const TString& errorText) {
             if (MonCounters) {
                 ++*MonCounters->IncomingErrors;
             }
@@ -622,17 +622,17 @@ namespace NDnsResolver {
             }
         }
 
-        void ReplyWithAddrs(THolder<TIncomingRequest> req, const TVector<struct in6_addr>& addrs6, const TVector<struct in_addr>& addrs4) {
+        void ReplyWithAddrs(std::unique_ptr<TIncomingRequest> req, const TVector<struct in6_addr>& addrs6, const TVector<struct in_addr>& addrs4) {
             switch (req->Type) {
                 case EIncomingRequestType::GetHostByName: {
-                    auto reply = MakeHolder<TEvDns::TEvGetHostByNameResult>();
+                    auto reply = std::make_unique<TEvDns::TEvGetHostByNameResult>();
                     reply->AddrsV6 = addrs6;
                     reply->AddrsV4 = addrs4;
                     Send(req->Sender, reply.Release(), 0, req->Cookie);
                     break;
                 }
                 case EIncomingRequestType::GetAddr: {
-                    auto reply = MakeHolder<TEvDns::TEvGetAddrResult>();
+                    auto reply = std::make_unique<TEvDns::TEvGetAddrResult>();
                     if (!addrs6.empty()) {
                         reply->Addr = addrs6.front();
                     } else if (!addrs4.empty()) {
@@ -646,13 +646,13 @@ namespace NDnsResolver {
             }
         }
 
-        void ReplyWithError(THolder<TIncomingRequest> req, int status) {
+        void ReplyWithError(std::unique_ptr<TIncomingRequest> req, int status) {
             ReplyWithError(std::move(req), status, ares_strerror(status));
         }
 
         void DropPending(TIncomingRequestList& list, int status, const TString& errorText) {
             while (list) {
-                THolder<TIncomingRequest> req(list.PopFront());
+                std::unique_ptr<TIncomingRequest> req(list.PopFront());
                 ReplyWithError(std::move(req), status, errorText);
             }
         }
@@ -672,7 +672,7 @@ namespace NDnsResolver {
     private:
         const TActorId Upstream;
         const TCachingDnsResolverOptions Options;
-        const THolder<TMonCounters> MonCounters;
+        const std::unique_ptr<TMonCounters> MonCounters;
 
         TNameToState NameToState;
         TStateHeap<&TState::StateUnspec, &TFamilyState::SoftDeadline> SoftHeapUnspec;

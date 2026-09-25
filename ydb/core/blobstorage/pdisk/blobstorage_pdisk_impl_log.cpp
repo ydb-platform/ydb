@@ -44,10 +44,10 @@ void InitializeKeeperLogParams(TKeeperParams& params, const TIntrusivePtr<TPDisk
 class TLogFlushCompletionAction : public TCompletionAction {
     const ui32 EndChunkIdx;
     const ui32 EndSectorIdx;
-    THolder<TLogWriter> &CommonLogger;
+    std::unique_ptr<TLogWriter> &CommonLogger;
     TCompletionAction* CompletionLogWrite;
 public:
-    TLogFlushCompletionAction(ui32 endChunkIdx, ui32 endSectorIdx, THolder<TLogWriter> &commonLogger, TCompletionAction* completionLogWrite)
+    TLogFlushCompletionAction(ui32 endChunkIdx, ui32 endSectorIdx, std::unique_ptr<TLogWriter> &commonLogger, TCompletionAction* completionLogWrite)
         : EndChunkIdx(endChunkIdx)
         , EndSectorIdx(endSectorIdx)
         , CommonLogger(commonLogger)
@@ -222,7 +222,7 @@ bool TPDisk::LogNonceJump(ui64 previousNonce) {
     CommonLogger->Write(&nonceJump, sizeof(TNonceJumpLogPageHeader2), TReqId(TReqId::LogNonceJumpWriteHeader2, 0), {});
     CommonLogger->TerminateLog(TReqId(TReqId::LogNonceJumpTerminateLog, 0), {});
     OnNonceChange(NonceLog, TReqId(TReqId::NonceChangeForNonceJump, 0), {});
-    auto write = MakeHolder<TCompletionLogWrite>(this, TVector<TLogWrite*>(), TVector<TLogWrite*>(),
+    auto write = std::make_unique<TCompletionLogWrite>(this, TVector<TLogWrite*>(), TVector<TLogWrite*>(),
             std::move(logChunksToCommit));
 
     ui32 curChunkIdx = CommonLogger->ChunkIdx;
@@ -952,7 +952,7 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
     }
     LWTRACK(PDiskProcessLogWriteBatch, UpdateCycleOrbit, PCtx->PDiskId, logWrites.size(), commits.size());
     TReqId reqId = logWrites.back()->ReqId;
-    auto write = MakeHolder<TCompletionLogWrite>(
+    auto write = std::make_unique<TCompletionLogWrite>(
         this, std::move(logWrites), std::move(commits), std::move(logChunksToCommit));
     LogFlush(write.Get(), write->GetCommitedLogChunksPtr(), reqId, &traceId);
     Y_UNUSED(write.Release());
@@ -1547,7 +1547,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
         if (ShredIsWaitingForCutLog) {
             isContinueShredScheduled = true;
         }
-        THolder<TCompletionEventSender> completion(isContinueShredScheduled ?
+        std::unique_ptr<TCompletionEventSender> completion(isContinueShredScheduled ?
             new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred()) :
             new TCompletionEventSender(this));
         if (ReleaseUnusedLogChunks(completion.Get())) {
@@ -1586,7 +1586,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     if (req.IsChunksFromLogSplice) {
         auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease));
 
-        auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
+        auto flushAction = std::make_unique<TCompletionEventSender>(this, std::unique_ptr<TReleaseChunks>(releaseReq));
 
         ui64 nonce = req.GapStart->LastNonce;
         ui32 desiredSectorIdx = UsableSectorsPerLogChunk();
@@ -1622,7 +1622,7 @@ void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
     Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, PCtx->PDiskLogPrefix
             << "expect InitPhase to be Uninitialized, but InitPhase# " << InitPhase.load());
     ui32 formatSectorsSize = FormatSectorSize * ReplicationFactor;
-    THolder<TEvReadFormatResult> evReadFormatResult(new TEvReadFormatResult(formatSectorsSize, UseHugePages));
+    std::unique_ptr<TEvReadFormatResult> evReadFormatResult(new TEvReadFormatResult(formatSectorsSize, UseHugePages));
     ui8 *formatSectors = evReadFormatResult->FormatSectors.Get();
     BlockDevice->PreadAsync(formatSectors, formatSectorsSize, 0,
         new TCompletionEventSender(this, pDiskActor, evReadFormatResult.Release()), TReqId(TReqId::InitialFormatRead, 0), {});
@@ -1837,7 +1837,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             if (Cfg->ReadOnly) {
                 PCtx->ActorSystem->Send(pDiskActor, new TEvLogInitResult(true, "OK"));
             } else {
-                auto completion = MakeHolder<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
+                auto completion = std::make_unique<TCompletionEventSender>(this, pDiskActor, new TEvLogInitResult(true, "OK"));
                 ReleaseUnusedLogChunks(completion.Get());
                 WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::AfterInitCommonLoggerSysLog, 0), {});
             }

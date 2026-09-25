@@ -403,7 +403,7 @@ public:
                 {"datashard", datashardId},
             );
 
-            auto event = MakeHolder<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
+            auto event = std::make_unique<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 
@@ -556,17 +556,17 @@ class TBackupRestoreOperationBase: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigurePart<TKind>>(TxType, OperationId);
+            return std::make_unique<TConfigurePart<TKind>>(TxType, OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose<TKind>>(TxType, OperationId);
+            return std::make_unique<TPropose<TKind>>(TxType, OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<TProposedWaitParts<TKind>>(TxType, OperationId);
+            return std::make_unique<TProposedWaitParts<TKind>>(TxType, OperationId);
         case TTxState::Aborting:
-            return MakeHolder<TAborting<TKind, TEvCancel>>(TxType, OperationId);
+            return std::make_unique<TAborting<TKind, TEvCancel>>(TxType, OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -660,7 +660,7 @@ public:
         context.OnComplete.ActivateTx(OperationId);
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPath = Transaction.GetWorkingDir();
@@ -671,7 +671,7 @@ public:
             {"path", JoinPath({parentPath, name})},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasWorkingDir()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,

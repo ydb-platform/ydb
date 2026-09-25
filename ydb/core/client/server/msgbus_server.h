@@ -42,7 +42,7 @@ class TBusMessageContext;
 
 class TMessageBusSessionIdentHolder {
     class TImpl;
-    THolder<TImpl> Impl;
+    std::unique_ptr<TImpl> Impl;
 
     class TImplMessageBus;
     class TImplNoOpGrpc;
@@ -99,7 +99,7 @@ public:
 
 private:
     friend class TMessageBusSessionIdentHolder;
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder();
+    std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder();
 };
 
 template <typename TDerived>

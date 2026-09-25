@@ -141,7 +141,7 @@ struct TEvTabletResolver {
         };
 
         const ui64 TabletID;
-        THolder<IEventHandle> Ev;
+        std::unique_ptr<IEventHandle> Ev;
         TResolveFlags ResolveFlags;
         EActor Actor;
 

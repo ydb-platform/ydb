@@ -30,7 +30,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvSetColumnConstraint::TEvListResponse>();
+        Response = std::make_unique<TEvSetColumnConstraint::TEvListResponse>();
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {

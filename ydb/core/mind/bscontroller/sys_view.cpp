@@ -186,7 +186,7 @@ public:
     template <typename TResponse, typename TRequest, typename TIndex>
     void Reply(TRequest& request, TIndex& index) {
         const auto& record = request->Get()->Record;
-        auto response = MakeHolder<TResponse>();
+        auto response = std::make_unique<TResponse>();
 
         auto begin = index.begin();
         auto end = index.end();
@@ -320,7 +320,7 @@ void TBlobStorageController::Handle(TEvPrivate::TEvUpdateSystemViews::TPtr&) {
     UpdateSystemViews();
 }
 
-void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageController::TPDiskInfo>& pDiskInfo,
+void CopyInfo(NKikimrSysView::TPDiskInfo* info, const std::unique_ptr<TBlobStorageController::TPDiskInfo>& pDiskInfo,
         const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/, const TBridgeInfo* /*bridgeInfo*/) {
     TPDiskCategory category(pDiskInfo->Kind);
     info->SetType(category.TypeStrShort());
@@ -398,13 +398,13 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     pb->SetPhantomOnly(phantomOnly);
 }
 
-void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageController::TVSlotInfo>& vSlotInfo,
+void CopyInfo(NKikimrSysView::TVSlotInfo* info, const std::unique_ptr<TBlobStorageController::TVSlotInfo>& vSlotInfo,
         const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/, const TBridgeInfo* /*bridgeInfo*/) {
     SerializeVSlotInfo(info, vSlotInfo->GetVDiskId(), vSlotInfo->Metrics, vSlotInfo->VDiskStatus,
         vSlotInfo->Kind, vSlotInfo->IsBeingDeleted(), vSlotInfo->IsReplicatingWithPhantomsOnly());
 }
 
-void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo,
+void CopyInfo(NKikimrSysView::TGroupInfo* info, const std::unique_ptr<TBlobStorageController::TGroupInfo>& groupInfo,
         const TBlobStorageController::TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
     info->SetGeneration(groupInfo->Generation);
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(groupInfo->ErasureSpecies));
@@ -537,7 +537,7 @@ void TBlobStorageController::UpdateSystemViews() {
 
     if (!SysViewChangedPDisks.empty() || !SysViewChangedVSlots.empty() || !SysViewChangedGroups.empty() ||
             !SysViewChangedStoragePools.empty() || SysViewChangedSettings) {
-        auto update = MakeHolder<TEvControllerUpdateSystemViews>();
+        auto update = std::make_unique<TEvControllerUpdateSystemViews>();
         update->HostRecords = HostRecords;
         update->GroupReserveMin = GroupReserveMin;
         update->GroupReservePart = GroupReservePart;

@@ -633,8 +633,8 @@ void TGenericDescribeTableTransformer::Rewind() {
     AsyncFuture_ = {};
 }
 
-THolder<IGraphTransformer> CreateGenericDescribeTableTransformer(TGenericState::TPtr state) {
-    return MakeHolder<TGenericDescribeTableTransformer>(std::move(state));
+std::unique_ptr<IGraphTransformer> CreateGenericDescribeTableTransformer(TGenericState::TPtr state) {
+    return std::make_unique<TGenericDescribeTableTransformer>(std::move(state));
 }
 
 } // NYql

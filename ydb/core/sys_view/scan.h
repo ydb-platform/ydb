@@ -8,13 +8,13 @@
 namespace NKikimr {
 namespace NSysView {
 
-THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     const TTableId& tableId, const TString& tablePath,
     TVector<TSerializedTableRange> ranges, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse);
 
-THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     const TTableId& tableId, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,

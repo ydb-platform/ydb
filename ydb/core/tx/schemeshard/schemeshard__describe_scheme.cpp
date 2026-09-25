@@ -17,7 +17,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
     const ui64 Cookie;
     TPathDescriber PathDescriber;
 
-    THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
+    std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
 
     TTxDescribeScheme(TSelf *self, TEvSchemeShard::TEvDescribeScheme::TPtr &ev)
         : TRwTxBase(self)

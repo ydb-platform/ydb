@@ -10,8 +10,8 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvDescribeSemaphore Record;
 
-    THolder<TEvKesus::TEvDescribeSemaphoreChanged> Notification;
-    THolder<TEvKesus::TEvDescribeSemaphoreResult> Reply;
+    std::unique_ptr<TEvKesus::TEvDescribeSemaphoreChanged> Notification;
+    std::unique_ptr<TEvKesus::TEvDescribeSemaphoreResult> Reply;
     ui64 NotificationCookie = 0;
 
     TTxSemaphoreDescribe(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDescribeSemaphore& record)

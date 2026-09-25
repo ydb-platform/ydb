@@ -463,7 +463,7 @@ namespace NActors {
         struct TPendingSessionEvent {
             TMonotonic Deadline;
             ui32 Size;
-            THolder<IEventHandle> Event;
+            std::unique_ptr<IEventHandle> Event;
 
             TPendingSessionEvent(TMonotonic deadline, ui32 size, TAutoPtr<IEventHandle> event)
                 : Deadline(deadline)
@@ -493,7 +493,7 @@ namespace NActors {
         TInstant IncomingHandshakeActorFilledIn;
         TInstant IncomingHandshakeActorReset;
         TMaybe<ui64> LastSerialFromIncomingHandshake;
-        THolder<IEventBase> HeldHandshakeReply;
+        std::unique_ptr<IEventBase> HeldHandshakeReply;
 
         void DropIncomingHandshake(bool poison = true) {
             ICPROXY_PROFILED;
@@ -552,7 +552,7 @@ namespace NActors {
         }
 
         void IssueIncomingHandshakeReply(const TActorId& handshakeId, ui64 peerLocalId,
-                                         THolder<IEventBase> event);
+                                         std::unique_ptr<IEventBase> event);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -594,7 +594,7 @@ namespace NActors {
         TInstant LastErrorStateLogAt;
         ui64 ErrorStateLogSuppressed = 0;
 
-        THolder<TProgramInfo> RemoteProgramInfo;
+        std::unique_ptr<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
         TDuration DelayedRdmaHandshakeTimeout;
         bool RdmaRetryWatchdogPending = false;
@@ -608,7 +608,7 @@ namespace NActors {
             Send(ev->Sender, new TEvSecureSocket(std::move(socket)));
         }
 
-        TDeque<THolder<IEventHandle>> PendingIncomingHandshakeEvents;
+        TDeque<std::unique_ptr<IEventHandle>> PendingIncomingHandshakeEvents;
 
         TDeque<std::tuple<TInstant, TString, TString, ui32>> ErrorStateLog;
 

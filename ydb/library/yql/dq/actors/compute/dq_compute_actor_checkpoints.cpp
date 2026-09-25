@@ -389,7 +389,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
     switch (StateLoadPlan.GetStateType()) {
     case NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY:
         {
-            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}));
+            EventsQueue.Send(std::make_unique<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}));
             break;
         }
     case NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN:
@@ -421,7 +421,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvRestoreFromCheckpoint::
             LOG_CP_E(checkpoint, message);
             NYql::TIssues issues;
             issues.AddIssue(message);
-            EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues));
+            EventsQueue.Send(std::make_unique<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues));
             break;
         }
     }
@@ -442,7 +442,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
 
     if (!ev->Get()->Issues.Empty()) {
         LOG_CP_E(checkpoint, "TEvGetTaskStateResult error: " << ev->Get()->Issues.ToOneLineString());
-        EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::STORAGE_ERROR, ev->Get()->Issues), ev->Cookie);
+        EventsQueue.Send(std::make_unique<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::STORAGE_ERROR, ev->Get()->Issues), ev->Cookie);
         return;
     }
 
@@ -451,7 +451,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;
         issues.AddIssue(message);
-        EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::STORAGE_ERROR, issues), ev->Cookie);
+        EventsQueue.Send(std::make_unique<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::STORAGE_ERROR, issues), ev->Cookie);
         return;
     }
 
@@ -477,10 +477,10 @@ void TDqComputeActorCheckpoints::AfterStateLoading(const TMaybe<TString>& error)
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;
         issues.AddIssue(message);
-        EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues), RestoringTaskRunnerForEvent);
+        EventsQueue.Send(std::make_unique<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::INTERNAL_ERROR, issues), RestoringTaskRunnerForEvent);
         return;
     }
-    EventsQueue.Send(MakeHolder<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}), RestoringTaskRunnerForEvent);
+    EventsQueue.Send(std::make_unique<TEvDqCompute::TEvRestoreFromCheckpointResult>(checkpoint, Task.GetId(), NDqProto::TEvRestoreFromCheckpointResult::OK, NYql::TIssues{}), RestoringTaskRunnerForEvent);
     LOG_CP_D(checkpoint, "Checkpoint state restored");
 }
 
@@ -601,7 +601,7 @@ bool TDqComputeActorCheckpoints::SaveState() {
     } catch (const std::exception& e) {
         LOG_PCP_E("Failed to save state: " << e.what());
 
-        auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>();
+        auto resultEv = std::make_unique<TEvDqCompute::TEvSaveTaskStateResult>();
         *resultEv->Record.MutableCheckpoint() = *PendingSaveStateCheckpoint.Checkpoint;
         resultEv->Record.SetTaskId(Task.GetId());
         resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
@@ -702,7 +702,7 @@ void TDqComputeActorCheckpoints::OnTransformStateCommitted(ui64 outputIndex, con
 void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
     Y_ABORT_UNLESS(PendingSaveStateCheckpoint);
     if (PendingSaveStateCheckpoint.IsReady()) {
-        auto saveTaskStateRequest = MakeHolder<TEvDqCompute::TEvSaveTaskState>(GraphId, Task.GetId(), *PendingSaveStateCheckpoint.Checkpoint);
+        auto saveTaskStateRequest = std::make_unique<TEvDqCompute::TEvSaveTaskState>(GraphId, Task.GetId(), *PendingSaveStateCheckpoint.Checkpoint);
         saveTaskStateRequest->State = std::move(PendingSaveStateCheckpoint.ComputeActorState);
         Send(CheckpointStorage, std::move(saveTaskStateRequest));
 

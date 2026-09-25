@@ -187,7 +187,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
             {
                 const i64 newMessagesCount = val["newMessagesCount"];
                 Y_ABORT_UNLESS(newMessagesCount >= 0);
-                auto notification = MakeHolder<TSqsEvents::TEvQueuePurgedNotification>();
+                auto notification = std::make_unique<TSqsEvents::TEvQueuePurgedNotification>();
                 notification->Shard = shardId;
                 notification->NewMessagesCount = static_cast<ui64>(newMessagesCount);
                 notification->DeletedOffsets = std::move(offsets);
@@ -235,7 +235,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
     auto messagesParam = params["MESSAGES"];
     FillMessagesParam(messagesParam, messages, shard->CurrentLastMessage.Offset, shard->CurrentLastMessage.SentTimestamp);
     if (inflyMessages) {
-        THolder<TSqsEvents::TEvInflyIsPurgingNotification> notification(new TSqsEvents::TEvInflyIsPurgingNotification());
+        std::unique_ptr<TSqsEvents::TEvInflyIsPurgingNotification> notification(new TSqsEvents::TEvInflyIsPurgingNotification());
         notification->Shard = shardId;
         FillMessagesParam(messagesParam, *inflyMessages, shard->CurrentLastMessage.Offset, shard->CurrentLastMessage.SentTimestamp, notification.Get());
         if (!notification->Offsets.empty()) {

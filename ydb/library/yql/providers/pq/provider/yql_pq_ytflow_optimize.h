@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state);
+std::unique_ptr<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state);
 
 } // namespace NYql

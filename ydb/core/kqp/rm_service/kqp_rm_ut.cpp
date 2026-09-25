@@ -144,7 +144,7 @@ NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfi
 class KqpRm : public TTestBase {
 public:
     void SetUp() override {
-        Runtime = MakeHolder<TTenantTestRuntime>(MakeTenantTestConfig());
+        Runtime = std::make_unique<TTenantTestRuntime>(MakeTenantTestConfig());
         SetPoolsCountersFlag(true);
 
         NActors::NLog::EPriority priority = DETAILED_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
@@ -206,7 +206,7 @@ public:
         auto config = MakeKqpResourceManagerConfig();
         config.SetSpillingPercent(spillingPercent);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         request->Record.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager()->CopyFrom(config);
 
         auto edge = Runtime->AllocateEdgeActor();
@@ -419,7 +419,7 @@ public:
     void P16MonPageListsIdlePool();
 
 private:
-    THolder<TTestBasicRuntime> Runtime;
+    std::unique_ptr<TTestBasicRuntime> Runtime;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TVector<TActorId> ResourceBrokers;
     TVector<TActorId> ResourceManagers;
@@ -913,7 +913,7 @@ void KqpRm::SpillingPercentReconfigure() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
     auto reconfigure = [&](double spillingPercent) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         auto* config = request->Record.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
         config->CopyFrom(MakeKqpResourceManagerConfig());
         config->SetSpillingPercent(spillingPercent);
@@ -962,7 +962,7 @@ void KqpRm::TotalLimitReconfigure() {
     // the resource broker queue config as the resource manager receives it; the handler does not reply, so
     // dispatch in short slices until the node total shows the new limit
     auto setTotal = [&](ui64 memory, ui64 expectedFree) {
-        auto response = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+        auto response = std::make_unique<TEvResourceBroker::TEvConfigResponse>();
         response->QueueConfig.ConstructInPlace();
         response->QueueConfig->MutableLimit()->SetMemory(memory);
         Runtime->Send(new IEventHandle(ResourceManagers.front(), Runtime->AllocateEdgeActor(), response.Release()));

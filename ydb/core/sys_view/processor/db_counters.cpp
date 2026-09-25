@@ -194,7 +194,7 @@ void TSysViewProcessor::SendNavigate() {
     }
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     request->DatabaseName = Database;
     request->ResultSet.push_back({});
 
@@ -221,7 +221,7 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
     case NKikimrSysView::TABLETS: {
         auto group = InternalGroups["tablets_serverless"];
         Y_ABORT_UNLESS(group);
-        THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
+        std::unique_ptr<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
         result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters));
         break;
     }
@@ -347,7 +347,7 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
             DetailedRawGroup,
             DetailedGroup,
             Database,
-            THolder<TTabletCountersBase>(new NTabletFlatExecutor::TExecutorCounters));
+            std::unique_ptr<TTabletCountersBase>(new NTabletFlatExecutor::TExecutorCounters));
     }
     return DetailedAggregator.Get();
 }
@@ -369,7 +369,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
             {"nodeId", nodeId},
             {"generation", record.GetGeneration()});
 
-        auto response = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();
+        auto response = std::make_unique<TEvSysView::TEvSendDbCountersResponse>();
         response->Record.SetDatabase(Database);
         response->Record.SetGeneration(state.Generation);
         Send(ev->Sender, std::move(response));
@@ -440,7 +440,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         {"detailedRoleCount", record.DetailedCountersSize()},
         {"recordByteSize", record.ByteSize()});
 
-    auto response = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();
+    auto response = std::make_unique<TEvSysView::TEvSendDbCountersResponse>();
     response->Record.SetDatabase(Database);
     response->Record.SetGeneration(state.Generation);
     Send(ev->Sender, std::move(response));
@@ -463,7 +463,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr
             {"nodeId", nodeId},
             {"generation", record.GetGeneration()});
 
-        auto response = MakeHolder<TEvSysView::TEvSendDbLabeledCountersResponse>();
+        auto response = std::make_unique<TEvSysView::TEvSendDbLabeledCountersResponse>();
         response->Record.SetDatabase(Database);
         response->Record.SetGeneration(state.Generation);
         Send(ev->Sender, std::move(response));
@@ -497,7 +497,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbLabeledCountersRequest::TPtr
         {"generation", state.Generation},
         {"recordByteSize", record.ByteSize()});
 
-    auto response = MakeHolder<TEvSysView::TEvSendDbLabeledCountersResponse>();
+    auto response = std::make_unique<TEvSysView::TEvSendDbLabeledCountersResponse>();
     response->Record.SetDatabase(Database);
     response->Record.SetGeneration(state.Generation);
     Send(ev->Sender, std::move(response));
@@ -592,7 +592,7 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvSendNavigate::TPtr&) {
 void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-    THolder<TNavigate> request(ev->Get()->Request.Release());
+    std::unique_ptr<TNavigate> request(ev->Get()->Request.Release());
     if (request->ResultSet.size() != 1) {
         YDB_LOG_CRIT("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: unexpected result set size",
             {"tabletId", TabletID()},

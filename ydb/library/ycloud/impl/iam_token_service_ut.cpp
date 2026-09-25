@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TIamTokenServiceTest) {
 
     struct TFixture {
         TPortManager PortManager;
-        THolder<TServer> Server;
+        std::unique_ptr<TServer> Server;
         TTestActorRuntime* Runtime = nullptr;
         TActorId Sender;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TIamTokenServiceTest) {
             NKikimrProto::TAuthConfig authConfig;
             auto settings = TServerSettings(kikimrPort, authConfig);
             settings.SetDomainName("Root");
-            Server = MakeHolder<TServer>(settings);
+            Server = std::make_unique<TServer>(settings);
             Runtime = Server->GetRuntime();
             Sender = Runtime->AllocateEdgeActor();
         }
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TIamTokenServiceTest) {
         std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
 
         {
-            auto request = MakeHolder<NCloud::TEvIamTokenService::TEvCreateForServiceRequest>();
+            auto request = std::make_unique<NCloud::TEvIamTokenService::TEvCreateForServiceRequest>();
             request->Token = "ssa-token";
             request->Request.set_service_id("ydb");
             request->Request.set_microservice_id("data-plane");
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TIamTokenServiceTest) {
 
         {
             // no delegation set up for this pair
-            auto request = MakeHolder<NCloud::TEvIamTokenService::TEvCreateForServiceRequest>();
+            auto request = std::make_unique<NCloud::TEvIamTokenService::TEvCreateForServiceRequest>();
             request->Token = "ssa-token";
             request->Request.set_resource_id("cloud-1");
             request->Request.set_target_service_account_id("sa-2");

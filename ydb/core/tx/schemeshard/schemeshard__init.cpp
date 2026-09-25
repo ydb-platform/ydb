@@ -2943,7 +2943,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
-                auto pqInfo = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+                auto pqInfo = std::make_unique<TTopicTabletInfo::TTopicPartitionInfo>();
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueues::PathId>();
                 TPathId pathId(selfId, localPathId);
                 pqInfo->PqId = rowset.GetValue<Schema::PersQueues::PqId>();
@@ -3842,7 +3842,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(fs);
 
                     {
-                        fs->AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
+                        fs->AlterConfig = std::make_unique<NKikimrFileStore::TConfig>();
                         auto cfg = rowset.GetValue<Schema::FileStoreAlters::Config>();
                         bool parseOk = ParseFromStringNoSizeLimit(*fs->AlterConfig, cfg);
                         Y_ABORT_UNLESS(parseOk);

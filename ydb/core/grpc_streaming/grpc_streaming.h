@@ -354,7 +354,7 @@ private:
         if (Y_LIKELY(0 == ReadQueue++)) {
             // This is the first read, start reading from the stream
             Y_ABORT_UNLESS(!ReadInProgress);
-            ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
+            ReadInProgress = std::make_unique<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
             Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
@@ -402,7 +402,7 @@ private:
         } else {
             // We need to perform another read (likely unsafe)
             Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
-            ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
+            ReadInProgress = std::make_unique<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         }
     }
@@ -459,7 +459,7 @@ private:
             }
 
             if (flags & FlagWriteActive) {
-                auto queued = MakeHolder<TWriteItem>();
+                auto queued = std::make_unique<TWriteItem>();
                 queued->Message.Swap(&message);
                 queued->Options = options;
                 WriteQueue.push_back(std::move(queued));
@@ -487,11 +487,11 @@ private:
             {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
             {"peer", this->GetPeer()});
 
-        auto event = MakeHolder<typename IContext::TEvWriteFinished>();
+        auto event = std::make_unique<typename IContext::TEvWriteFinished>();
         event->Success = status == NYdbGrpc::EQueueEventStatus::OK;
         ActorSystem.Send(Actor, event.Release());
 
-        THolder<TWriteItem> next;
+        std::unique_ptr<TWriteItem> next;
         const grpc::Status* nextStatus = nullptr;
         bool wasWriteAndFinish;
 
@@ -835,10 +835,10 @@ private:
     TActorId Actor;
 
     std::atomic<size_t> ReadQueue{ 0 };
-    THolder<typename IContext::TEvReadFinished> ReadInProgress;
+    std::unique_ptr<typename IContext::TEvReadFinished> ReadInProgress;
 
     TMutex WriteLock;
-    TDeque<THolder<TWriteItem>> WriteQueue;
+    TDeque<std::unique_ptr<TWriteItem>> WriteQueue;
 
     TMaybe<grpc::Status> Status;
 

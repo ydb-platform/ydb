@@ -91,9 +91,9 @@ class TAlterLocalIndex: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -102,13 +102,13 @@ class TAlterLocalIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTabletId ssId = context.SS->SelfTabletId();
 
         if (!Transaction.HasAlterTableIndex()) {
-            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
+            auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
             result->SetError(NKikimrScheme::StatusInvalidParameter, "AlterTableIndex is not present");
             return result;
         }
@@ -117,7 +117,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
         if (!tableIndexAlter.HasName()) {
-            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
+            auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in AlterTableIndex");
             return result;
         }
@@ -128,7 +128,7 @@ public:
             {"path", TStringBuilder() << parentPathStr << "/" << name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath indexPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {

@@ -52,8 +52,8 @@ public:
         Send(SchemeShard, DropPropose());
     }
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose() const {
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose() const {
+        auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         propose->Record.SetTxId(ui64(TxId));
 
         auto& modifyScheme = *propose->Record.AddTransaction();

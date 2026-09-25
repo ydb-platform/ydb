@@ -599,7 +599,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
     // Create table with two shards.
     ui64 txId;
     {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
@@ -625,7 +625,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         txId = reply->Record.GetTxId();
     }
     {
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         runtime.SendToPipe(pipe, sender, request.Release());
         runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
@@ -644,7 +644,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         // Get shard IDs.
         ui64 shards[2];
         {
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->SetPath("/Root/table-1");
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
             auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);

@@ -171,8 +171,8 @@ private:
 
 }
 
-THolder<TVisitorTransformerBase> CreateYdbDataSourceTypeAnnotationTransformer(TYdbState::TPtr state) {
-    return MakeHolder<TYdbDataSourceTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreateYdbDataSourceTypeAnnotationTransformer(TYdbState::TPtr state) {
+    return std::make_unique<TYdbDataSourceTypeAnnotationTransformer>(state);
 }
 
 } // namespace NYql

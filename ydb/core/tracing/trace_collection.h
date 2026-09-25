@@ -7,7 +7,7 @@ namespace NTracing {
 
 class TTabletTraces {
 public:
-    using ListType = TList<THolder<ITrace>>;
+    using ListType = TList<std::unique_ptr<ITrace>>;
     using IndexType = THashMap<TTraceID, ListType::iterator>;
 
     bool AddTrace(ITrace* trace);

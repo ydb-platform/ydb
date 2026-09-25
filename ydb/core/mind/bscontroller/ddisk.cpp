@@ -703,7 +703,7 @@ namespace NKikimr::NBsController {
                     Self->CmsPipe = Self->Register(NTabletPipe::CreateClient(Self->SelfId(), MakeCmsID(),
                         NTabletPipe::TClientRetryPolicy::WithRetries()));
                 }
-                auto notification = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged>();
+                auto notification = std::make_unique<TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged>();
                 notification->Record.SetTabletId(ChangedTabletId);
                 notification->Record.SetRevision(ChangedTabletRevision);
                 NTabletPipe::SendData(ctx, Self->CmsPipe, notification.Release());

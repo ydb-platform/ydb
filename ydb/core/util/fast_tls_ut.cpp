@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TFastTlsTest) {
             UNIT_ASSERT_VALUES_EQUAL(TMyValue::Dtors, expectedDtors);
 
             TFastThreadLocal<TMyValue> value;
-            TVector<THolder<TWorkerThread>> workers(4);
+            TVector<std::unique_ptr<TWorkerThread>> workers(4);
 
             size_t base = i * 1000000u;
             size_t next = base + 1;
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TFastTlsTest) {
         static constexpr size_t Concurrency = 8;
         static constexpr size_t Iterations = 100000;
 
-        TVector<THolder<TWorkerThread>> workers(Concurrency);
+        TVector<std::unique_ptr<TWorkerThread>> workers(Concurrency);
         for (auto& worker : workers) {
             worker = TWorkerThread::Spawn([]() {
                 for (size_t i = 0; i < Iterations; ++i) {

@@ -57,7 +57,7 @@ namespace NActors {
         TActorId RegisterActor(IActor* actor, TMailbox* mailbox, TActorId parentId = TActorId());
         void UnregisterActor(TMailbox* mailbox, TActorId actorId);
         void DropUnregistered();
-        const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
+        const std::vector<std::unique_ptr<IActor>>& GetUnregistered() const { return DyingActors; }
 
         TActorId RegisterAlias(TMailbox* mailbox, IActor* actor);
         void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId);
@@ -107,7 +107,7 @@ namespace NActors {
         std::atomic<TExecutorThreadStats*> CurrentStats = nullptr;
 
         // Event-specific (currently executing)
-        TVector<THolder<IActor>> DyingActors;
+        TVector<std::unique_ptr<IActor>> DyingActors;
         TActorId CurrentRecipient;
         ui64 CurrentActorScheduledEventsCounter = 0;
 

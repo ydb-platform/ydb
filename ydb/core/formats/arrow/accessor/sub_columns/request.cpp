@@ -36,14 +36,14 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
         }
         Settings.SetDenseEncodingVersion(version);
     }
-    THolder<IDataAdapter> extractor;
+    std::unique_ptr<IDataAdapter> extractor;
     if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {
         extractor = IDataAdapter::TFactory::MakeHolder(*dataExtractorClassName);
         if (!extractor) {
             return TConclusionStatus::Fail("incorrect data extractor class name");
         }
     } else {
-        extractor = MakeHolder<TJsonScanExtractor>(false);
+        extractor = std::make_unique<TJsonScanExtractor>(false);
     }
     auto parseConclusion = extractor->DeserializeFromRequest(features);
     if (parseConclusion.IsFail()) {

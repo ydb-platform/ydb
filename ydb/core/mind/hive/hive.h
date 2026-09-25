@@ -135,7 +135,7 @@ struct ISubActor {
 
 struct TCompleteNotifications {
     struct TNotification {
-        THolder<IEventHandle> Event;
+        std::unique_ptr<IEventHandle> Event;
         TDuration Delay;
 
         TNotification(IEventHandle* event, TDuration delay = {})

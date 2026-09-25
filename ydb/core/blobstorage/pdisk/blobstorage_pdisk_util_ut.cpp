@@ -591,9 +591,9 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
     Y_UNIT_TEST(SectorMap) {
         TIntrusivePtr<TSectorMap> sectorMap(new TSectorMap(1024*1024));
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults("SectorMap:123", *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults("SectorMap:123", *mon,
                     NPDisk::TDeviceMode::LockFile, sectorMap, creator.GetActorSystem()));
         ui32 size = 4096;
         TAlignedData data(size);
@@ -606,7 +606,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     Y_UNIT_TEST(TPDiskMonWriteOpCounters) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
         mon->CountLogWriteOpRequest(TWriteSource::WriteLogEntry, 100);
         mon->CountLogWriteOpRequest(TWriteSource::SyncLogCommitterCommit, 200);

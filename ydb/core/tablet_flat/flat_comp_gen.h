@@ -47,8 +47,8 @@ namespace NCompGen {
         TInstant GetLastFinishedForcedCompactionTs() const override { return FinishedForcedGenCompactionTs; }
         TCompactionChanges CompactionFinished(
             ui64 compactionId,
-            THolder<TCompactionParams> params,
-            THolder<TCompactionResult> result) override;
+            std::unique_ptr<TCompactionParams> params,
+            std::unique_ptr<TCompactionResult> result) override;
         void PartMerged(TPartView part, ui32 level) override;
         void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;

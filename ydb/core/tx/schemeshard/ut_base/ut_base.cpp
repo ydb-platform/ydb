@@ -3267,7 +3267,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvSchemaChanged::EventType);
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table", NKikimrScheme::StatusAccepted);
@@ -3593,7 +3593,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Suppress TEvCreateTablet: dst shards are in ShardInfos but Hive has
         // never seen them (TabletID == InvalidTabletId).
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
@@ -3650,7 +3650,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Suppress TEvCreateTabletReply: TEvCreateTablet was sent, Hive has a
         // pending creation, but TabletID has not been assigned yet.
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::EvCreateTabletReply);
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
@@ -3706,7 +3706,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Suppress TEvInitSplitMergeDestination: dst tablets exist (TabletID
         // valid) but ConfigureParts has not completed yet.
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
 
         AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
@@ -4467,7 +4467,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
@@ -11760,7 +11760,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
         WaitForSuppressed(runtime, suppressed, 1, defObserver);
@@ -11791,7 +11791,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
         ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -11994,7 +11994,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
 
             ++txId;
@@ -12015,7 +12015,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         {
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto defObserver = SetSuppressObserver(runtime, suppressed, TEvTxProcessing::EvPlanStep);
 
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -12210,7 +12210,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         while (true) {
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 10, prevObserver);

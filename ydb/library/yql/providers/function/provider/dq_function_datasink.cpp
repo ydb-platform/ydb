@@ -78,11 +78,11 @@ public:
 
 private:
     const TDqFunctionState::TPtr State;
-    const THolder<IGraphTransformer> PhysicalOptTransformer;
-    const THolder<IGraphTransformer> LoadMetaDataTransformer;
-    const THolder<TVisitorTransformerBase> IntentDeterminationTransformer;
-    const THolder<IDqIntegration> DqIntegration;
-    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer;
+    const std::unique_ptr<IGraphTransformer> PhysicalOptTransformer;
+    const std::unique_ptr<IGraphTransformer> LoadMetaDataTransformer;
+    const std::unique_ptr<TVisitorTransformerBase> IntentDeterminationTransformer;
+    const std::unique_ptr<IDqIntegration> DqIntegration;
+    const std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer;
 };
 } // namespace
 

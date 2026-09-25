@@ -92,7 +92,7 @@ public:
     };
 
 private:
-    THolder<Aws::S3::S3Client> Client;
+    std::unique_ptr<Aws::S3::S3Client> Client;
     const Aws::Client::ClientConfiguration Config;
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;

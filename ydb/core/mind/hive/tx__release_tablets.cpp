@@ -7,14 +7,14 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxReleaseTablets : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvReleaseTablets::THandle> Request;
-    THolder<TEvHive::TEvReleaseTabletsReply> Response = MakeHolder<TEvHive::TEvReleaseTabletsReply>();
+    std::unique_ptr<TEvHive::TEvReleaseTablets::THandle> Request;
+    std::unique_ptr<TEvHive::TEvReleaseTabletsReply> Response = std::make_unique<TEvHive::TEvReleaseTabletsReply>();
     TVector<std::pair<TTabletId, TActorId>> UnlockedFromActor;
     bool NeedToProcessPendingOperations = false;
     TSideEffects SideEffects;
 
 public:
-    TTxReleaseTablets(THolder<TEvHive::TEvReleaseTablets::THandle> event, THive *hive)
+    TTxReleaseTablets(std::unique_ptr<TEvHive::TEvReleaseTablets::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -101,7 +101,7 @@ public:
 };
 
 ITransaction* THive::CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event) {
-    return new TTxReleaseTablets(THolder(std::move(event.Release())), this);
+    return new TTxReleaseTablets(std::unique_ptr<TEvHive::TEvReleaseTablets::THandle>(event.Release()), this);
 }
 
 } // NHive

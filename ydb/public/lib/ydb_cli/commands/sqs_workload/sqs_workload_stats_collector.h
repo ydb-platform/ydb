@@ -49,7 +49,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         template <typename T>
-        using TEventQueues = std::vector<THolder<TAutoLockFreeQueue<T>>>;
+        using TEventQueues = std::vector<std::unique_ptr<TAutoLockFreeQueue<T>>>;
 
         void CollectEvents();
 
@@ -57,7 +57,7 @@ namespace NYdb::NConsoleClient {
         void CollectEvents();
 
         template <typename T>
-        void AddEvent(THolder<TAutoLockFreeQueue<T>>& queue, const T& event);
+        void AddEvent(std::unique_ptr<TAutoLockFreeQueue<T>>& queue, const T& event);
 
         void PrintWindowStats(ui32 windowIt);
         void PrintStats(TMaybe<ui32> windowIt) const;
@@ -65,30 +65,30 @@ namespace NYdb::NConsoleClient {
         size_t WriterCount;
         size_t ReaderCount;
 
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestDoneEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestDoneEvent>>
             SendRequestDoneEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestDoneEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestDoneEvent>>
             ReceiveRequestDoneEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestDoneEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestDoneEvent>>
             DeleteRequestDoneEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>>
             GotMessageEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestErrorEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestErrorEvent>>
             SendRequestErrorEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestErrorEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestErrorEvent>>
             ReceiveRequestErrorEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestErrorEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestErrorEvent>>
             DeleteRequestErrorEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::SentMessagesEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::SentMessagesEvent>>
             SentMessagesEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::DeletedMessagesEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::DeletedMessagesEvent>>
             DeletedMessagesEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::FinishProcessMessagesEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::FinishProcessMessagesEvent>>
             FinishProcessMessagesEventQueue;
-        THolder<
+        std::unique_ptr<
             TAutoLockFreeQueue<TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>>
             PushAsyncRequestTaskToQueueEventQueue;
-        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>
+        std::unique_ptr<TAutoLockFreeQueue<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>
             ErrorWhileProcessingMessagesEventQueue;
 
         bool Quiet;
@@ -101,7 +101,7 @@ namespace NYdb::NConsoleClient {
 
         std::shared_ptr<std::atomic_bool> ErrorFlag;
 
-        THolder<TSqsWorkloadStats> WindowStats;
+        std::unique_ptr<TSqsWorkloadStats> WindowStats;
         TSqsWorkloadStats TotalStats;
 
         TInstant WarmupTime;

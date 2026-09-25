@@ -20,7 +20,7 @@ using TMonSrvc = NMonitoring::TMonService2;
 using namespace NActors;
 using namespace NActors::NQueueBench;
 
-void InitMonService(THolder<TMonSrvc>& monSrvc, int monPort)
+void InitMonService(std::unique_ptr<TMonSrvc>& monSrvc, int monPort)
 {
     monSrvc.Reset(new TMonSrvc(monPort));
     NLwTraceMonPage::RegisterPages(monSrvc->GetRoot());
@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
         .StoreResult(&queueType);
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
-    THolder<TMonSrvc> monSrvc;
+    std::unique_ptr<TMonSrvc> monSrvc;
     InitMonService(monSrvc, monPort);
     monSrvc->Start();
     NLWTrace::TManager* traceMngr = &NLwTraceMonPage::TraceManager();

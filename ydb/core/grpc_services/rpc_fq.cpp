@@ -113,7 +113,7 @@ public:
         }
 
         const auto* req = GetProtoRequest();
-        auto ev         = MakeHolder<EvRequestType>(
+        auto ev         = std::make_unique<EvRequestType>(
             NYdb::NFq::TScope{NYdb::NFq::TScope::YandexCloudScopeSchema + "://" + FolderId}.ToString(),
             *req,
             User,

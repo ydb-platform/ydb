@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         };
 
         TKikimrSettings settings;
-        auto secretUpdateListener = MakeHolder<TTestSecretUpdateListener>();
+        auto secretUpdateListener = std::make_unique<TTestSecretUpdateListener>();
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             secretUpdateListener.Get(),
             /* schemeCacheStatusGetter */ nullptr,
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
     Y_UNIT_TEST(SchemeCacheRetryErrors) {
         TKikimrSettings settings;
-        auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
+        auto schemeCacheStatusGetter = std::make_unique<TTestSchemeCacheStatusGetter>(
             TTestSchemeCacheStatusGetter::EFailProbability::OneTenth);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
@@ -403,7 +403,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
     Y_UNIT_TEST(SchemeShardRetrySingleSecret) {
         TKikimrSettings settings;
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 2,
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
@@ -427,9 +427,9 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
     Y_UNIT_TEST(SchemeCacheAndSchemeShardRetryErrors) {
         TKikimrSettings settings;
-        auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
+        auto schemeCacheStatusGetter = std::make_unique<TTestSchemeCacheStatusGetter>(
             TTestSchemeCacheStatusGetter::EFailProbability::OneTenth);
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 1,
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         TKikimrSettings settings;
         static const auto SECRETS_CNT = 20;
         static const auto FAILS_BUDGET_PER_SECRET = 2;
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ SECRETS_CNT * FAILS_BUDGET_PER_SECRET,
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
     Y_UNIT_TEST(SchemeShardRetryManySecretsPartialFailures) {
         TKikimrSettings settings;
         static const auto SECRETS_CNT = 20;
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ SECRETS_CNT / 2,
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         // We expect that RetryPolicy will not be applied,
         // since the SchemeShard error is not retryable
         TKikimrSettings settings;
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 100,
             NKikimrScheme::EStatus::StatusPathDoesNotExist);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
     Y_UNIT_TEST(SchemeShardNotAvailableWithoutRetryPolicy) {
         TKikimrSettings settings;
-        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+        auto schemeShardStatusGetter = std::make_unique<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 1,
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(

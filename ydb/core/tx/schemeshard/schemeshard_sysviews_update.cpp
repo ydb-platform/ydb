@@ -29,9 +29,9 @@ TString TModifySysViewRequestInfo::DebugString() const {
 
 namespace {
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> BuildMakeSysViewDirTransaction(TTxId txId, const TString& workingDir,
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> BuildMakeSysViewDirTransaction(TTxId txId, const TString& workingDir,
                                                                                        const TString& name) {
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
         record.SetTxId(static_cast<ui64>(txId));
         record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
@@ -48,10 +48,10 @@ namespace {
         return request;
     }
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> BuildCreateSysViewTransaction(TTxId txId, const TString& workingDir,
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> BuildCreateSysViewTransaction(TTxId txId, const TString& workingDir,
                                                                                       const TString& name,
                                                                                       NKikimrSysView::ESysViewType type) {
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
         record.SetTxId(static_cast<ui64>(txId));
         record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
@@ -70,9 +70,9 @@ namespace {
         return request;
     }
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> BuildDropSysViewTransaction(TTxId txId, const TString& workingDir,
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> BuildDropSysViewTransaction(TTxId txId, const TString& workingDir,
                                                                                     const TString& name) {
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
         record.SetTxId(static_cast<ui64>(txId));
         record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
@@ -108,7 +108,7 @@ public:
         const auto& ctx = TlsActivationContext->AsActorContext();
 
         for (auto& [txId, requestInfo] : SysViewUpdates) {
-            THolder<TEvSchemeShard::TEvModifySchemeTransaction> request;
+            std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> request;
             switch (requestInfo.OperationType) {
             case NKikimrSchemeOp::ESchemeOpMkDir:
                 request = BuildMakeSysViewDirTransaction(txId, requestInfo.WorkingDir, requestInfo.TargetName);
@@ -235,9 +235,9 @@ private:
     THashMap<TTxId, TModifySysViewRequestInfo> AwaitingModifySchemeRequests;
 };
 
-THolder<IActor> CreateSysViewsRosterUpdate(TTabletId selfTabletId, TActorId selfActorId,
+std::unique_ptr<IActor> CreateSysViewsRosterUpdate(TTabletId selfTabletId, TActorId selfActorId,
                                            TVector<std::pair<TTxId, TModifySysViewRequestInfo>>&& sysViewUpdates) {
-    return MakeHolder<TSysViewsRosterUpdate>(selfTabletId, selfActorId, std::move(sysViewUpdates));
+    return std::make_unique<TSysViewsRosterUpdate>(selfTabletId, selfActorId, std::move(sysViewUpdates));
 }
 
 } // namespace NKikimr::NSchemeShard

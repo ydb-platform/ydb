@@ -6,7 +6,7 @@
 // Platform-specific class to set or get thread affinity
 class TAffinity: public TThrRefBase, TNonCopyable {
     class TImpl;
-    THolder<TImpl> Impl;
+    std::unique_ptr<TImpl> Impl;
 
 public:
     TAffinity();

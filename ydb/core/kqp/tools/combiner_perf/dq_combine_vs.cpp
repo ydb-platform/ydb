@@ -238,10 +238,10 @@ public:
 
 
 template<bool LLVM, bool Spilling>
-THolder<IComputationGraph> BuildGraph(
+std::unique_ptr<IComputationGraph> BuildGraph(
     TKqpSetup<LLVM, Spilling>& setup,
     std::shared_ptr<ISpillerFactory> spillerFactory,
-    THolder<NUdf::TBoxedValue> inputStream,
+    std::unique_ptr<NUdf::TBoxedValue> inputStream,
     bool useDqImpl,
     std::vector<TType*> keyTypes,
     std::vector<TType*> valueTypes,
@@ -376,9 +376,9 @@ TRunResult RunTestOverGraph(
     TStreamValues inputData = GenerateSample(params.NumKeys, params.RowsPerRun, keyFields, valueFields,
         doVerification ? &referenceData : nullptr);
 
-    auto makeStream = [&]() -> THolder<NUdf::TBoxedValue> {
+    auto makeStream = [&]() -> std::unique_ptr<NUdf::TBoxedValue> {
         size_t yellowZoneTrigger = Spilling ? 1000000 : std::numeric_limits<size_t>::max();
-        return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns, yellowZoneTrigger, [&](){
+        return std::make_unique<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns, yellowZoneTrigger, [&](){
             Cerr << "Enabling yellow zone" << Endl;
             setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
         });

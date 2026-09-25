@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
+                auto evLog = std::make_unique<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             for (ui32 c = 0, i = 0; i < 300; c = (c + 1) % mocks.size(), ++i) {
                 testCtx.Send(new NPDisk::TEvChunkReserve(mocks[c].PDiskParams->Owner, mocks[c].PDiskParams->OwnerRound, 1));
-                THolder<NPDisk::TEvChunkReserveResult> evRes = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
+                std::unique_ptr<NPDisk::TEvChunkReserveResult> evRes = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
                 if (!evRes || evRes->Status != NKikimrProto::OK) {
                     break;
                 }
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
+                auto evLog = std::make_unique<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
+                auto evLog = std::make_unique<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             for (ui32 c = 0, i = 0; i < 300; c = (c + 1) % mocks.size(), ++i) {
                 testCtx.Send(new NPDisk::TEvChunkReserve(mocks[c].PDiskParams->Owner, mocks[c].PDiskParams->OwnerRound, 1));
-                THolder<NPDisk::TEvChunkReserveResult> evRes = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
+                std::unique_ptr<NPDisk::TEvChunkReserveResult> evRes = testCtx.Recv<NPDisk::TEvChunkReserveResult>();
                 if (!evRes || evRes->Status != NKikimrProto::OK) {
                     break;
                 }
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             ui32 i = RandomNumber(vdisksNum);
             ui32 action = RandomNumber<ui32>(10);
             if (action != 0 && mocks[i].PDiskParams) {
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mocks[i].PDiskParams->Owner, mocks[i].PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
+                auto evLog = std::make_unique<NPDisk::TEvLog>(mocks[i].PDiskParams->Owner, mocks[i].PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
                         mocks[i].GetLsnSeg(), nullptr);
                 evLog->Signature = TLogSignature::SignatureLogoBlobOpt;
                 testCtx.Send(evLog.Release());
@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                     break;
                 case EMockState::InitFinished:
                     {
-                        auto evSlay = MakeHolder<NPDisk::TEvSlay>(mocks[i].VDiskID, mocks[i].OwnerRound++, 0, 0);
+                        auto evSlay = std::make_unique<NPDisk::TEvSlay>(mocks[i].VDiskID, mocks[i].OwnerRound++, 0, 0);
                         testCtx.Send(evSlay.Release());
                         mockState[i] = EMockState::KillStarted;
                     }
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                     break;
                 case EMockState::Empty: case EMockState::KillFinished:
                     {
-                        auto evInit = MakeHolder<NPDisk::TEvYardInit>(mocks[i].OwnerRound++, mocks[i].VDiskID, testCtx.TestCtx.PDiskGuid);
+                        auto evInit = std::make_unique<NPDisk::TEvYardInit>(mocks[i].OwnerRound++, mocks[i].VDiskID, testCtx.TestCtx.PDiskGuid);
                         testCtx.Send(evInit.Release());
                         mockState[i] = EMockState::InitStarted;
                     }
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
                 TString dataCopy = data;
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(dataCopy),
+                auto evLog = std::make_unique<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(dataCopy),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);
@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
                 TString dataCopy = data;
-                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(dataCopy),
+                auto evLog = std::make_unique<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, TRcBuf(dataCopy),
                         mock.GetLsnSeg(), nullptr);
                 evLog->Signature.SetCommitRecord();
                 evLog->CommitRecord = std::move(rec);

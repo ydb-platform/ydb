@@ -153,7 +153,7 @@ namespace NWriter {
         const NUtil::TChannelsShares& ChannelsShares;
         TBanks Banks;
         TVector<NPageCollection::TGlob> Blobs;
-        TVector<THolder<TBlocks>> Blocks;
+        TVector<std::unique_ptr<TBlocks>> Blocks;
         TAutoPtr<NTable::TScreen::TCook> Growth;
         TVector<TResult> Results_;
     };

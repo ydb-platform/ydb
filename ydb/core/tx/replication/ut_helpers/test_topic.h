@@ -15,6 +15,6 @@ struct TTestTopicDescription {
     void SerializeTo(NKikimrSchemeOp::TPersQueueGroupDescription& proto) const;
 };
 
-THolder<NKikimrSchemeOp::TPersQueueGroupDescription> MakeTopicDescription(const TTestTopicDescription& desc);
+std::unique_ptr<NKikimrSchemeOp::TPersQueueGroupDescription> MakeTopicDescription(const TTestTopicDescription& desc);
 
 }

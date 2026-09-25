@@ -207,7 +207,7 @@ void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig:
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr &ev, const TActorContext &ctx) {
-    THolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse> response = MakeHolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
+    std::unique_ptr<TEvPersQueue::TEvGetPartitionIdForWriteResponse> response = std::make_unique<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
     if (TotalGroups == 0) {
         response->Record.SetPartitionId(0);
         ctx.Send(ev->Sender, response.Release());
@@ -225,7 +225,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPt
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if ((int)record.GetVersion() < Version && Inited) {
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        std::unique_ptr<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR_BAD_VERSION);
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -240,7 +240,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             LOG_D("BALANCER Topic Tablet Config already applied version actor txId", {"version", record.GetVersion()},
                 {"sender", ev->Sender},
                 {"txId", record.GetTxId()});
-            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+            std::unique_ptr<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);
             res->Record.SetTxId(record.GetTxId());
             res->Record.SetOrigin(TabletID());
@@ -250,7 +250,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
 
     if ((int)record.GetVersion() > Version && !WaitingResponse.empty()) { //old transaction is not done yet
-        THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+        std::unique_ptr<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
         res->Record.SetStatus(NKikimrPQ::ERROR_UPDATE_IN_PROGRESS);
         res->Record.SetTxId(ev->Get()->Record.GetTxId());
         res->Record.SetOrigin(TabletID());
@@ -942,7 +942,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, 
 void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, const NKikimrServices::EServiceKikimr service, const TActorContext& ctx) {
     const TInstant now = TAppData::TimeProvider->Now();
     for (const auto& [_, pipeLocation] : TabletPipes) {
-        THolder<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
+        std::unique_ptr<TEvPQ::TBroadcastPartitionError> ev{new TEvPQ::TBroadcastPartitionError(message, service, now)};
         NTabletPipe::SendData(ctx, pipeLocation.PipeActor, ev.Release());
     }
 }

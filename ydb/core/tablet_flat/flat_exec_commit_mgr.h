@@ -99,7 +99,7 @@ namespace NTabletFlatExecutor {
                     return;
                 }
 
-                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs, TActivationContext::Monotonic());
+                auto ev = std::make_unique<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs, TActivationContext::Monotonic());
                 Manager->Ops->Send(Writer, ev.Release());
             }
 

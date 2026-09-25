@@ -337,7 +337,7 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
     }
 
     template <typename TClient, typename TSettings>
-    TClient* EnsureClient(THolder<TClient>& client) {
+    TClient* EnsureClient(std::unique_ptr<TClient>& client) {
         if (!client) {
             Y_ABORT_UNLESS(AppData()->YdbDriver);
             client.Reset(new TClient(*AppData()->YdbDriver, ClientSettings<TSettings>(CommonSettings)));
@@ -548,9 +548,9 @@ public:
 
 private:
     const TCommonClientSettings CommonSettings;
-    THolder<TSchemeClient> SchemeClient;
-    THolder<TTableClient> TableClient;
-    THolder<TTopicClient> TopicClient;
+    std::unique_ptr<TSchemeClient> SchemeClient;
+    std::unique_ptr<TTableClient> TableClient;
+    std::unique_ptr<TTopicClient> TopicClient;
 
 }; // TYdbProxy
 

@@ -953,7 +953,7 @@ TIntrusiveConstPtr<TKikimrConfiguration> TKikimrSessionContext::ConfigConstPtr()
     return Configuration;
 }
 
-void TKikimrSessionContext::SetInternalTypeAnnTransformer(THolder<TVisitorTransformerBase>&& transformer) {
+void TKikimrSessionContext::SetInternalTypeAnnTransformer(std::unique_ptr<TVisitorTransformerBase>&& transformer) {
     InternalTypeAnnTransformer = std::move(transformer);
 }
 

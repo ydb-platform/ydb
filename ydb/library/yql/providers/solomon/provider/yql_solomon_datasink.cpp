@@ -186,10 +186,10 @@ public:
 private:
     TSolomonState::TPtr State_;
 
-    THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    THolder<TExecTransformerBase> ExecutionTransformer_;
-    THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
-    THolder<IGraphTransformer> LogicalOptProposalTransformer_;
+    std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    std::unique_ptr<TExecTransformerBase> ExecutionTransformer_;
+    std::unique_ptr<IGraphTransformer> PhysicalOptProposalTransformer_;
+    std::unique_ptr<IGraphTransformer> LogicalOptProposalTransformer_;
 };
 
 

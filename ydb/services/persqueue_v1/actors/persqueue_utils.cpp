@@ -13,7 +13,7 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
+TAclWrapper::TAclWrapper(std::unique_ptr<NACLib::TSecurityObject> acl)
     : AclOldSchemeCache(std::move(acl))
 {
     AFL_ENSURE(AclOldSchemeCache);

@@ -79,7 +79,7 @@ NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TStri
     auto sender = runtime.AllocateEdgeActor();
     TAutoPtr<IEventHandle> handle;
 
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
@@ -198,9 +198,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
         runtime->GetAppData(i).UsePartitionStatsCollectorForTests = true;
     }
 
-    Client = MakeHolder<Tests::TClient>(*Settings);
+    Client = std::make_unique<Tests::TClient>(*Settings);
 
-    Tenants = MakeHolder<Tests::TTenants>(Server);
+    Tenants = std::make_unique<Tests::TTenants>(Server);
 
     Client->InitRootScheme("Root");
 
@@ -211,7 +211,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
-    Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+    Driver = std::make_unique<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 

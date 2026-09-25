@@ -36,7 +36,7 @@ protected:
     using TBase = TViewerPipeClient;
     using TResponseType = typename TResponseEventType::ProtoRecordType;
     TRequestSettings RequestSettings;
-    THolder<TRequestEventType> Request;
+    std::unique_ptr<TRequestEventType> Request;
     std::unordered_map<TNodeId, TRequestResponse<TResponseEventType>> NodeResponses;
     TInstant NodesRequestedTime;
     std::unordered_map<TNodeId, ui32> NodeRetries;
@@ -55,8 +55,8 @@ public:
         : TBase(viewer, ev)
     {}
 
-    virtual THolder<TRequestEventType> BuildRequest() {
-        THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
+    virtual std::unique_ptr<TRequestEventType> BuildRequest() {
+        std::unique_ptr<TRequestEventType> request = std::make_unique<TRequestEventType>();
         constexpr bool hasFormat = requires(const TRequestEventType* r) {r->Record.GetFormat();};
         if constexpr (hasFormat) {
             if (!RequestSettings.Format.empty()) {
@@ -77,8 +77,8 @@ public:
         return request;
     }
 
-    THolder<TRequestEventType> CloneRequest() {
-        THolder<TRequestEventType> request = MakeHolder<TRequestEventType>();
+    std::unique_ptr<TRequestEventType> CloneRequest() {
+        std::unique_ptr<TRequestEventType> request = std::make_unique<TRequestEventType>();
         request->Record.MergeFrom(Request->Record);
         return request;
     }

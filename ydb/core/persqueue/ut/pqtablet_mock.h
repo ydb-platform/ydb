@@ -88,7 +88,7 @@ private:
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
-    THolder<NTabletPipe::IClientCache> PipeClientCache;
+    std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
 };
 
 TPQTabletMock* CreatePQTabletMock(const TActorId& tablet, TTabletStorageInfo *info);

@@ -222,7 +222,7 @@ private:
 
     void Handle(TEvSysView::TEvGetPartitionStats::TPtr& ev) {
         if (PendingRequests.size() >= PendingRequestsLimit) {
-            auto result = MakeHolder<TEvSysView::TEvGetPartitionStatsResult>();
+            auto result = std::make_unique<TEvSysView::TEvGetPartitionStatsResult>();
             result->Record.SetOverloaded(true);
             Send(ev->Sender, std::move(result), 0, ev->Cookie);
             return;
@@ -253,7 +253,7 @@ private:
 
         auto& record = request->Get()->Record;
 
-        auto result = MakeHolder<TEvSysView::TEvGetPartitionStatsResult>();
+        auto result = std::make_unique<TEvSysView::TEvGetPartitionStatsResult>();
         result->Record.SetLastBatch(true);
 
         if (!record.HasDomainKeyOwnerId() || !record.HasDomainKeyPathId()) {
@@ -464,7 +464,7 @@ private:
         auto nowUs = now.MicroSeconds();
 
         size_t count = 0;
-        auto sendEvent = MakeHolder<TEvSysView::TEvSendTopPartitions>();
+        auto sendEvent = std::make_unique<TEvSysView::TEvSendTopPartitions>();
         for (const auto& entry : sortedByCpu) {
             const auto& table = domainTables.Stats[entry.PathId];
             const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
@@ -589,9 +589,9 @@ private:
     bool ProcessInFly = false;
 };
 
-THolder<NActors::IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
+std::unique_ptr<NActors::IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
 {
-    return MakeHolder<TPartitionStatsCollector>(batchSize, pendingRequestsLimit);
+    return std::make_unique<TPartitionStatsCollector>(batchSize, pendingRequestsLimit);
 }
 
 
@@ -665,7 +665,7 @@ private:
             return;
         }
 
-        auto request = MakeHolder<TEvSysView::TEvGetPartitionStats>();
+        auto request = std::make_unique<TEvSysView::TEvGetPartitionStats>();
 
         request->Record.SetDomainKeyOwnerId(DomainKey.OwnerId);
         request->Record.SetDomainKeyPathId(DomainKey.LocalPathId);
@@ -804,7 +804,7 @@ private:
         };
         static TExtractorsMap extractors;
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         TVector<TCell> cells;
 
         auto addCellsToBatch = [&] (const TPartitionStatsResult& shardStats, const TPartitionStats& leaderStats, const TPartitionStats& stats) {
@@ -872,11 +872,11 @@ private:
     bool IncludePathColumn = false;
 };
 
-THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TPartitionStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NSysView

@@ -50,7 +50,7 @@ public:
             NMiniKQL::TEngineHostCounters engineHostCounters;
             TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
-            THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
+            std::unique_ptr<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
             if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), mvccVersion, op->GetGlobalTxId(),
@@ -234,8 +234,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TExecuteDistributedEraseTxUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TExecuteDistributedEraseTxUnit>(new TExecuteDistributedEraseTxUnit(self, pipeline));
 }
 
 } // namespace NDataShard

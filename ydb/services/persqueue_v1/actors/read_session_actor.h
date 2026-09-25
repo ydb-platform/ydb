@@ -440,8 +440,8 @@ private:
 
     TMap<TPartitionId, TControlMessages> PartitionToControlMessages;
 
-    std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
-    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
+    std::deque<std::unique_ptr<TEvPQProxy::TEvRead>> Reads;
+    std::deque<std::unique_ptr<TEvPersQueue::TEvLockPartition>> Locks;
 
     ui64 Cookie;
 

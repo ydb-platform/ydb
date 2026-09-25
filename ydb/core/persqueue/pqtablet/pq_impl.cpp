@@ -220,7 +220,7 @@ public:
     ui32 CounterId;
     ui32 Waiting;
     const TString ReqId;
-    THolder<TEvPersQueue::TEvResponse> Response;
+    std::unique_ptr<TEvPersQueue::TEvResponse> Response;
     TInstant Timestamp;
     bool WasSplit;
     TMaybe<ui64> Cookie;
@@ -282,7 +282,7 @@ private:
         std::sort(Result.begin(), Result.end(), [](const typename T2::TPartResult& a, const typename T2::TPartResult& b){
                                                     return a.GetPartition() < b.GetPartition();
                                                 });
-        THolder<T3> res = MakeHolder<T3>();
+        std::unique_ptr<T3> res = std::make_unique<T3>();
         auto& resp = res->Record;
         resp.SetTabletId(TBase::TabletId);
         for (const auto& p : Result) {
@@ -414,7 +414,7 @@ void TPersQueue::HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const
 void TPersQueue::SendTransactionsReadRequest(const TString& fromKey, bool includeFrom,
                                              const TActorContext& ctx)
 {
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(READ_TXS_COOKIE);
 
     AddCmdReadTransactionRange(*request, fromKey, includeFrom);
@@ -922,7 +922,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
 
 void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status)
 {
-    THolder<TEvPersQueue::TEvDropTabletReply> event = MakeHolder<TEvPersQueue::TEvDropTabletReply>();
+    std::unique_ptr<TEvPersQueue::TEvDropTabletReply> event = std::make_unique<TEvPersQueue::TEvDropTabletReply>();
     event->Record.SetStatus(status);
     event->Record.SetTabletId(TabletID());
     event->Record.SetTxId(req.TxId);
@@ -1303,7 +1303,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorConte
 void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx)
 {
     if (!ConfigInited) {
-        THolder<TEvPersQueue::TEvOffsetsResponse> res = MakeHolder<TEvPersQueue::TEvOffsetsResponse>();
+        std::unique_ptr<TEvPersQueue::TEvOffsetsResponse> res = std::make_unique<TEvPersQueue::TEvOffsetsResponse>();
         auto& resp = res->Record;
         resp.SetTabletId(TabletID());
 
@@ -1325,7 +1325,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
             continue;
         }
 
-        THolder<TEvPQ::TEvPartitionOffsets> event = MakeHolder<TEvPQ::TEvPartitionOffsets>(ans, ev->Get()->Record.HasClientId() ?
+        std::unique_ptr<TEvPQ::TEvPartitionOffsets> event = std::make_unique<TEvPQ::TEvPartitionOffsets>(ans, ev->Get()->Record.HasClientId() ?
                                                                                         ev->Get()->Record.GetClientId() : "");
         ctx.Send(p.second.Actor, event.Release());
     }
@@ -1383,7 +1383,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TA
         if (it != Partitions.end()) {
             ctx.Send(it->second.Actor, new TEvPQ::TEvGetPartitionClientInfo(ev->Sender), 0, ev->Cookie);
         } else {
-            THolder<TEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
+            std::unique_ptr<TEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = std::make_unique<TEvPersQueue::TEvPartitionClientInfoResponse>();
             clientInfo->Record.SetPartition(partition);
             ctx.Send(ev->Sender, clientInfo.Release(), 0, ev->Cookie);
         }
@@ -1425,16 +1425,16 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
             continue;
         }
 
-        THolder<TEvPQ::TEvPartitionStatus> event;
+        std::unique_ptr<TEvPQ::TEvPartitionStatus> event;
         if (ev->Get()->Record.GetConsumers().empty()) {
-            event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
+            event = std::make_unique<TEvPQ::TEvPartitionStatus>(ans, ev->Get()->Record.HasClientId() ? ev->Get()->Record.GetClientId() : "",
                 ev->Get()->Record.HasGetStatForAllConsumers() ? ev->Get()->Record.GetGetStatForAllConsumers() : false);
         } else {
             TVector<TString> consumers;
             for (auto consumer : ev->Get()->Record.GetConsumers()) {
                 consumers.emplace_back(consumer);
             }
-            event = MakeHolder<TEvPQ::TEvPartitionStatus>(ans, consumers);
+            event = std::make_unique<TEvPQ::TEvPartitionStatus>(ans, consumers);
         }
         ctx.Send(p.second.Actor, event.Release());
     }
@@ -1459,7 +1459,7 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, NWilson::TT
     ids.reserve(cmd.SourceIdSize());
     for (ui32 i = 0; i < cmd.SourceIdSize(); ++i)
         ids.push_back(cmd.GetSourceId(i));
-    THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids);
+    std::unique_ptr<TEvPQ::TEvGetMaxSeqNoRequest> event = std::make_unique<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids);
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -1483,7 +1483,7 @@ void TPersQueue::HandleDeleteSessionRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "not sessionId in DeleteSession request: " << ToString(req).data());
     } else {
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        std::unique_ptr<TEvPQ::TEvSetClientInfo> event = std::make_unique<TEvPQ::TEvSetClientInfo>(
                 responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), 0, 0, 0, pipeClient,
                 TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION
         );
@@ -1517,7 +1517,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
     } else {
         bool isDirectRead = cmd.GetPartitionSessionId() > 0;
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_CREATE_SESSION);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        std::unique_ptr<TEvPQ::TEvSetClientInfo> event = std::make_unique<TEvPQ::TEvSetClientInfo>(
                 responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), cmd.GetPartitionSessionId(), cmd.GetGeneration(), cmd.GetStep(),
                 pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
         );
@@ -1545,7 +1545,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
         }
         if (cmd.GetRestoreSession()) {
             PQ_ENSURE(isDirectRead);
-            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
+            auto fakeResponse = std::make_unique<TEvPQ::TEvProxyResponse>(responseCookie, false);
             auto& record = *fakeResponse->Response;
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto& partResponse = *record.MutablePartitionResponse();
@@ -1575,7 +1575,7 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, NWilson
             TStringBuilder() << "negative offset in SetClientOffset request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        std::unique_ptr<TEvPQ::TEvSetClientInfo> event = std::make_unique<TEvPQ::TEvSetClientInfo>(
             responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
             TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict(),
             cmd.HasCommittedMetadata() ? static_cast<std::optional<TString>>(cmd.GetCommittedMetadata()) : std::nullopt
@@ -1594,7 +1594,7 @@ void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, NWilson
             TStringBuilder() << "no clientId in GetClientOffset request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
-        THolder<TEvPQ::TEvGetClientOffset> event = MakeHolder<TEvPQ::TEvGetClientOffset>(responseCookie, cmd.GetClientId());
+        std::unique_ptr<TEvPQ::TEvGetClientOffset> event = std::make_unique<TEvPQ::TEvGetClientOffset>(responseCookie, cmd.GetClientId());
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
 }
@@ -1605,7 +1605,7 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
     PQ_ENSURE(req.HasCmdUpdateWriteTimestamp());
     const auto& cmd = req.GetCmdUpdateWriteTimestamp();
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
-    THolder<TEvPQ::TEvUpdateWriteTimestamp> event = MakeHolder<TEvPQ::TEvUpdateWriteTimestamp>(responseCookie, cmd.GetWriteTimeMS());
+    std::unique_ptr<TEvPQ::TEvUpdateWriteTimestamp> event = std::make_unique<TEvPQ::TEvUpdateWriteTimestamp>(responseCookie, cmd.GetWriteTimeMS());
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -1922,8 +1922,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
     if (req.HasInitialSeqNo()) {
         initialSeqNo = req.GetInitialSeqNo();
     }
-    THolder<TEvPQ::TEvWrite> event =
-        MakeHolder<TEvPQ::TEvWrite>(
+    std::unique_ptr<TEvPQ::TEvWrite> event =
+        std::make_unique<TEvPQ::TEvWrite>(
             responseCookie,
             req.GetMessageNo(),
             req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
@@ -1967,7 +1967,7 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, NWilson::T
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_RESERVE_BYTES);
-    THolder<TEvPQ::TEvReserveBytes> event = MakeHolder<TEvPQ::TEvReserveBytes>(responseCookie, req.GetCmdReserveBytes().GetSize(),
+    std::unique_ptr<TEvPQ::TEvReserveBytes> event = std::make_unique<TEvPQ::TEvReserveBytes>(responseCookie, req.GetCmdReserveBytes().GetSize(),
                                                                         req.GetOwnerCookie(), req.GetMessageNo(), req.GetCmdReserveBytes().GetLastRequest());
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
@@ -1996,7 +1996,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
     it->second = TPipeInfo::ForOwner(partActor, owner, it->second.ServerActors);
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
-    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
+    std::unique_ptr<TEvPQ::TEvChangeOwner> event = std::make_unique<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
@@ -2064,8 +2064,8 @@ void TPersQueue::HandleReadRequest(
             }
         }
 
-        THolder<TEvPQ::TEvRead> event =
-            MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
+        std::unique_ptr<TEvPQ::TEvRead> event =
+            std::make_unique<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
                                        cmd.HasPartNo() ? cmd.GetPartNo() : 0,
                                        count,
                                        cmd.HasSessionId() ? cmd.GetSessionId() : "",
@@ -2123,7 +2123,7 @@ void TPersQueue::HandlePublishReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_PUBLISH_READ);
-    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
+    std::unique_ptr<TEvPQ::TEvProxyResponse> publishDoneEvent = std::make_unique<TEvPQ::TEvProxyResponse>(responseCookie, false);
     publishDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     publishDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -2155,7 +2155,7 @@ void TPersQueue::HandleForgetReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_FORGET_READ);
-    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
+    std::unique_ptr<TEvPQ::TEvProxyResponse> forgetDoneEvent = std::make_unique<TEvPQ::TEvProxyResponse>(responseCookie, false);
     forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
     forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult()->SetDirectReadId(key.ReadId);
@@ -2403,7 +2403,7 @@ void TPersQueue::HandleAbortDeferredStagingRequest(const ui64 responseCookie,
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
-    auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
+    auto fakeResponse = std::make_unique<TEvPQ::TEvProxyResponse>(responseCookie, false);
     auto& record = *fakeResponse->Response;
     record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     record.MutablePartitionResponse()->MutableCmdAbortDeferredStagingResult();
@@ -2841,7 +2841,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         }
     }
     for (const auto& p : ResponseProxy) {
-        THolder<TEvPQ::TEvError> ev = MakeHolder<TEvPQ::TEvError>(NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now", p.first);
+        std::unique_ptr<TEvPQ::TEvError> ev = std::make_unique<TEvPQ::TEvError>(NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now", p.first);
         bool res = p.second->HandleError(ev.Get(), ctx);
         PQ_ENSURE(res);
     }
@@ -2958,7 +2958,7 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     DCId = ev->Get()->Node->Location.GetDataCenterId();
     ResourceMetrics = Executor()->GetResourceMetrics();
 
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    std::unique_ptr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(READ_CONFIG_COOKIE);
 
     request->Record.AddCmdRead()->SetKey(KeyConfig());
@@ -3763,7 +3763,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         return;
     }
 
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(WRITE_TX_COOKIE);
 
     ProcessProposeTransactionQueue(ctx, request->Record);
@@ -5468,7 +5468,7 @@ void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
         LOG_I("Unknown partition",
             {"partition", record.GetPartition()});
 
-        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        auto response = std::make_unique<TEvPQ::TEvCheckPartitionStatusResponse>();
         response->Record.SetStatus(NKikimrPQ::ETopicPartitionStatus::Deleted);
         Send(ev->Sender, response.Release());
 
@@ -5577,7 +5577,7 @@ void TPersQueue::Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorC
         if (partitionId.IsSupportivePartition()) {
             continue;
         }
-        THolder error = MakeHolder<TEvPQ::TBroadcastPartitionError>();
+        std::unique_ptr error = std::make_unique<TEvPQ::TBroadcastPartitionError>();
         error->Record.CopyFrom(event.Record);
         ctx.Send(partitionInfo.Actor, std::move(error));
     }
@@ -5806,7 +5806,7 @@ void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationReque
     if (p == nullptr) [[unlikely]] {
         LOG_I("TEvCheckMessageDeduplicationRequest: unknown partition",
             {"partitionId", partitionId});
-        auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+        auto response = std::make_unique<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
         response->Record.SetPartitionId(partitionId);
         response->Record.SetGeneration(record.GetGeneration());
         response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);

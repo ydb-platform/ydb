@@ -32,8 +32,8 @@ namespace NYql {
         TGenericState::TPtr State_;
     };
 
-    THolder<TVisitorTransformerBase> CreateGenericDataSinkTypeAnnotationTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericDataSinkTypeAnnotationTransformer>(state);
+    std::unique_ptr<TVisitorTransformerBase> CreateGenericDataSinkTypeAnnotationTransformer(TGenericState::TPtr state) {
+        return std::make_unique<TGenericDataSinkTypeAnnotationTransformer>(state);
     }
 
 } // namespace NYql

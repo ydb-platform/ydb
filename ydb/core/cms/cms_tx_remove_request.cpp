@@ -9,7 +9,7 @@ namespace NKikimr::NCms {
 
 class TCms::TTxRemoveRequest : public TTransactionBase<TCms> {
 public:
-    TTxRemoveRequest(TCms *self, const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp)
+    TTxRemoveRequest(TCms *self, const TString &id, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp)
         : TBase(self)
         , Request(std::move(req))
         , Response(resp)
@@ -56,13 +56,13 @@ public:
     }
 
 private:
-    THolder<IEventBase> Request;
+    std::unique_ptr<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
     TString Id;
     TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
 };
 
-ITransaction *TCms::CreateTxRemoveRequest(const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp) {
+ITransaction *TCms::CreateTxRemoveRequest(const TString &id, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp) {
     return new TTxRemoveRequest(this, id, std::move(req), std::move(resp));
 }
 

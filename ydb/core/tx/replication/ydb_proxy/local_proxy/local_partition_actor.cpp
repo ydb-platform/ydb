@@ -40,7 +40,7 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     YDB_LOG_DEBUG("Describe topic",
         {"path", path});
 
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     request->DatabaseName = Database;
 
     request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpPath));

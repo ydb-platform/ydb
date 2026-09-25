@@ -33,7 +33,7 @@ public:
 
 } /* namespace */
 
-THolder<NActors::IActor> MakeTaskController(
+std::unique_ptr<NActors::IActor> MakeTaskController(
     const TString& traceId,
     const NActors::TActorId& executerId,
     const NActors::TActorId& resultId,
@@ -43,7 +43,7 @@ THolder<NActors::IActor> MakeTaskController(
     const TDuration& pingPeriod,
     const TDuration& aggrPeriod
 ) {
-    return MakeHolder<NDq::TLogWrapReceive>(new TTaskController(traceId, executerId, resultId, checkpointCoordinatorId, settings, serviceCounters, pingPeriod, aggrPeriod), traceId);
+    return std::make_unique<NDq::TLogWrapReceive>(new TTaskController(traceId, executerId, resultId, checkpointCoordinatorId, settings, serviceCounters, pingPeriod, aggrPeriod), traceId);
 }
 
 } /* namespace NYql */

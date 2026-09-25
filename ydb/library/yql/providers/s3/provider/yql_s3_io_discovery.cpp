@@ -882,8 +882,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreateS3IODiscoveryTransformer(TS3State::TPtr state) {
-    return THolder(new TS3IODiscoveryTransformer(std::move(state)));
+std::unique_ptr<IGraphTransformer> CreateS3IODiscoveryTransformer(TS3State::TPtr state) {
+    return std::unique_ptr<TS3IODiscoveryTransformer>(new TS3IODiscoveryTransformer(std::move(state)));
 }
 
 } // namespace NYql

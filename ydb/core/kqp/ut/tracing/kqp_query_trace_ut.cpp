@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     }
 
     NKikimrKqp::TEvQueryResponse ExecRequest(TTestActorRuntime& runtime, TActorId sender,
-            THolder<NKqp::TEvKqp::TEvQueryRequest> request, ui8 level = 15,
+            std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request, ui8 level = 15,
             Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, ui32 proxyNode = 0) {
         ActorIdToProto(sender, request->Record.MutableRequestActorId());
         NWilson::TTraceId traceId;
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 return result;
             }
             const auto& data = std::get<NKqp::TEvKqpExecuter::TEvStreamData*>(replies)->Record;
-            auto ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(data.GetSeqNo(), data.GetChannelId());
+            auto ack = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(data.GetSeqNo(), data.GetChannelId());
             ack->Record.SetFreeSpace(1 << 20);
             runtime.Send(new IEventHandle(handle->Sender, sender, ack.Release()));
         }
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(created->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         const auto sessionId = created->Get()->Record.GetResponse().GetSessionId();
         if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
-            auto attach = MakeHolder<NKqp::TEvKqp::TEvPingSessionRequest>();
+            auto attach = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
             auto& request = *attach->Record.MutableRequest();
             request.SetSessionId(sessionId);
             ActorIdToProto(sender, request.MutableExtSessionCtrlActorId());
@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                         continue;
                     }
                     const auto& data = std::get<NKqp::TEvKqpExecuter::TEvStreamData*>(replies)->Record;
-                    auto ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(data.GetSeqNo(), data.GetChannelId());
+                    auto ack = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(data.GetSeqNo(), data.GetChannelId());
                     ack->Record.SetFreeSpace(1 << 20);
                     runtime.Send(new IEventHandle(handle->Sender, handle->Recipient, ack.Release()));
                 }
@@ -1415,7 +1415,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT(uploader->Spans.empty());
         }
 
-        auto list = MakeHolder<NKqp::TEvKqp::TEvListSessionsRequest>();
+        auto list = std::make_unique<NKqp::TEvKqp::TEvListSessionsRequest>();
         list->Record.SetFreeSpace(1000000);
         list->Record.AddColumns(1);
         list->Record.AddColumns(3);
@@ -1444,7 +1444,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 const TString sessionId = CheckClientLost(runtime, sender, uploader, tracing, requestNode);
                 runtime.SimulateSleep(TDuration::Seconds(10));
 
-                auto list = MakeHolder<NKqp::TEvKqp::TEvListSessionsRequest>();
+                auto list = std::make_unique<NKqp::TEvKqp::TEvListSessionsRequest>();
                 list->Record.SetFreeSpace(1000000);
                 list->Record.AddColumns(1);
                 runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)),

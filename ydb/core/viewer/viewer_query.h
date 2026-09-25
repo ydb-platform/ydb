@@ -579,7 +579,7 @@ public:
 
     template<typename TRequestType, typename TResponseType>
     TRequestResponse<TResponseType> MakeQueryRequest() {
-        auto event = MakeHolder<TRequestType>();
+        auto event = std::make_unique<TRequestType>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
         request.SetSessionId(SessionId);
@@ -1056,7 +1056,7 @@ private:
             }
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        std::unique_ptr<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             if (QueryResponse.Span) {
                 QueryResponse.Span.Event("LimitReached", {

@@ -34,7 +34,7 @@ struct TProducerState {
     ui64 ChannelId = 0;
 
     void SendAck(const NActors::TActorIdentity& actor) const {
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
+        auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
         resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
 
         actor.Send(ActorId, resp.Release());
@@ -311,7 +311,7 @@ private:
             .SetSchemaInclusionMode(schemaInclusionMode)
             .SetResultSetFormat(resultSetFormat);
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
             queryType,
             SelfId(),

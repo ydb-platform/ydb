@@ -136,7 +136,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     NKikimrProto::TAuthConfig authConfig;
     authConfig.SetUseBuiltinDomain(true);
-    ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, authConfig, settings.PQConfig));
+    ServerSettings.Reset(std::make_unique<Tests::TServerSettings>(mbusPort, authConfig, settings.PQConfig));
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
     ServerSettings->SetVerbose(settings.Verbose);
@@ -232,7 +232,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         return true;
     });
 
-    Client.Reset(MakeHolder<Tests::TClient>(*ServerSettings));
+    Client.Reset(std::make_unique<Tests::TClient>(*ServerSettings));
 
     Endpoint = "localhost:" + ToString(grpcPort);
 
@@ -241,7 +241,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         .SetDatabase("/" + settings.DomainRoot)
         .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
         .SetAuthToken(settings.AuthToken);
-    Driver.Reset(MakeHolder<NYdb::TDriver>(DriverConfig));
+    Driver.Reset(std::make_unique<NYdb::TDriver>(DriverConfig));
 
     CountersRoot = settings.CountersRoot;
 
@@ -263,7 +263,7 @@ TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storag
     storage.set_count(1);
 
     if (!Tenants) {
-        Tenants = MakeHolder<Tests::TTenants>(Server);
+        Tenants = std::make_unique<Tests::TTenants>(Server);
     }
     Tenants->CreateTenant(std::move(request), nodesCount, timeout, acceptIfExists);
 
@@ -1587,14 +1587,14 @@ void Revoke(NYdb::NTable::TSession& adminSession, const char* permissions, const
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 };
 
-THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
     using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
 
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     auto& entry = request->ResultSet.emplace_back();
     entry.Path = SplitPath(path);
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
@@ -1610,7 +1610,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
     UNIT_ASSERT(response);
     UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
 
-    return THolder(response);
+    return std::unique_ptr<NSchemeCache::TSchemeCacheNavigate>(response);
 }
 
  NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server,
@@ -1620,7 +1620,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
     auto &runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
 
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
@@ -1776,7 +1776,7 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
 {
     TTestActorRuntime* runtime = server->GetRuntime();
     auto sender = runtime->AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    auto request = std::make_unique<TEvDataShard::TEvCompactTable>(tableId.PathId);
     request->Record.SetCompactBorrowed(compactBorrowed);
     runtime->SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -1981,13 +1981,13 @@ TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
     auto sender = Server->GetRuntime()->AllocateEdgeActor();
     Server->SetupRootStoragePools(sender);
 
-    Client = MakeHolder<Tests::TClient>(*Settings);
+    Client = std::make_unique<Tests::TClient>(*Settings);
 
-    Tenants = MakeHolder<Tests::TTenants>(Server);
+    Tenants = std::make_unique<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
-    Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+    Driver = std::make_unique<NYdb::TDriver>(DriverConfig);
 }
 
 TTestExtEnv::~TTestExtEnv() {

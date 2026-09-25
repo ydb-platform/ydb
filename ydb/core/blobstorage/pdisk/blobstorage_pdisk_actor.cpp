@@ -74,7 +74,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
 
-    THolder<TPDiskFunctionThread> FormattingThread;
+    std::unique_ptr<TPDiskFunctionThread> FormattingThread;
     bool IsFormattingNow = false;
     std::function<void(bool, TString&)> PendingRestartResponse;
 
@@ -83,7 +83,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
 
     ui32 NextRestartRequestCookie = 0;
 
-    THolder<IEventHandle> ControledStartResult;
+    std::unique_ptr<IEventHandle> ControledStartResult;
 
     std::shared_ptr<TPDiskCtx> PCtx;
 
@@ -343,7 +343,7 @@ public:
         TStringStream realtimeFlagStr;
         RealtimeFlag.Render(realtimeFlagStr);
         TStringStream fairSchedulerStr;
-        THolder<THttpInfo> req(PDisk->ReqCreator.CreateFromArgs<THttpInfo>(SelfId(), ev->Sender, outStr,
+        std::unique_ptr<THttpInfo> req(PDisk->ReqCreator.CreateFromArgs<THttpInfo>(SelfId(), ev->Sender, outStr,
                     deviceFlagStr.Str(), realtimeFlagStr.Str(), fairSchedulerStr.Str(), PDisk->ErrorStr, false));
         if (!IsFormattingNow) {
             PDisk->InputRequest(req.Release());
@@ -525,7 +525,7 @@ public:
                     return nullptr;
                 }
 
-                THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
+                std::unique_ptr<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(pCtx, cfg, counters));
 
                 pDisk->Initialize();
 
@@ -702,7 +702,7 @@ public:
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
         case TEvYardControl::PDiskStart:
-            ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
+            ControledStartResult = std::make_unique<IEventHandle>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
         break;
         case TEvYardControl::PDiskStop:
@@ -784,7 +784,7 @@ public:
             str << "Unknown, something went very wrong in PDisk. Marker# BSY06";
         }
         str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
+        std::unique_ptr<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         PDisk->Mon.WriteLog.CountRequest(0);
         PDisk->Mon.CountLogWriteOpRequest(evLog.WriteSource, evLog.Data.size());
@@ -809,7 +809,7 @@ public:
             str << "Unknown, something went very wrong in PDisk. Marker# BSY12";
         }
         str << " StateErrorReason# " << StateErrorReason;
-        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
+        std::unique_ptr<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str(), 0));
         for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
             PDisk->Mon.CountLogWriteOpRequest(log->WriteSource, log->Data.size());
@@ -831,7 +831,7 @@ public:
         } else {
             str << "Unknown, something went very wrong in PDisk. Marker# BSY03";
         }
-        THolder<NPDisk::TEvReadLogResult> result(new NPDisk::TEvReadLogResult(
+        std::unique_ptr<NPDisk::TEvReadLogResult> result(new NPDisk::TEvReadLogResult(
             NKikimrProto::CORRUPTED, evReadLog.Position, evReadLog.Position, true, 0, str.Str(), evReadLog.Owner));
         PDisk->Mon.LogRead.CountRequest();
         Send(ev->Sender, result.Release());
@@ -861,7 +861,7 @@ public:
     void ErrorHandle(NPDisk::TEvChunkRead::TPtr &ev) {
         const NPDisk::TEvChunkRead &evChunkRead = *ev->Get();
         PDisk->Mon.GetReadCounter(evChunkRead.PriorityClass)->CountRequest(0);
-        THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
+        std::unique_ptr<NPDisk::TEvChunkReadResult> result = std::make_unique<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             evChunkRead.ChunkIdx, evChunkRead.Offset, evChunkRead.Cookie, 0, "PDisk is in error state");
         result->Data.SetDebugInfoGenerator(PDisk->DebugInfoGenerator);
 
@@ -933,7 +933,7 @@ public:
             Y_VERIFY_S(mainKey, PCtx->PDiskLogPrefix);
             MainKey = *mainKey;
             StartPDiskThread();
-            ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
+            ControledStartResult = std::make_unique<IEventHandle>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         }
@@ -1264,9 +1264,9 @@ public:
         }
 
         TEvWhiteboardReportResult *response = new TEvWhiteboardReportResult();
-        response->PDiskState = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+        response->PDiskState = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
         response->VDiskStateVect.reserve(16); // Pessimistic upper estimate of a number of owners
-        THolder<TWhiteboardReport> request(PDisk->ReqCreator.CreateFromArgs<TWhiteboardReport>(SelfId(), response));
+        std::unique_ptr<TWhiteboardReport> request(PDisk->ReqCreator.CreateFromArgs<TWhiteboardReport>(SelfId(), response));
         ui64 whiteboardReportCycles = 0;
         ui64 updateSchedulerCycles = 0;
         if (!IsFormattingNow && AtomicGet(PDisk->IsStarted)) {
@@ -1528,7 +1528,7 @@ public:
         TStringStream outStr;
         outStr.Reserve(512 << 10);
 
-        THolder<THttpInfo> req(PDisk->ReqCreator.CreateFromArgs<THttpInfo>(SelfId(), ev->Sender, outStr,
+        std::unique_ptr<THttpInfo> req(PDisk->ReqCreator.CreateFromArgs<THttpInfo>(SelfId(), ev->Sender, outStr,
                     deviceFlagStr.Str(), realtimeFlagStr.Str(), fairSchedulerStr.Str(), PDisk->ErrorStr, doGetSchedule));
         if (AtomicGet(PDisk->IsStarted)) {
             PDisk->InputRequest(req.Release());

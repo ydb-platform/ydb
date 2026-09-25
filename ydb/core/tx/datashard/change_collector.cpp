@@ -34,7 +34,7 @@ public:
     {
     }
 
-    void AddUnderlying(THolder<IBaseChangeCollector> collector) {
+    void AddUnderlying(std::unique_ptr<IBaseChangeCollector> collector) {
         Underlying.emplace_back(std::move(collector));
     }
 
@@ -175,7 +175,7 @@ private:
     NTable::TDatabase& Db;
     IDataShardChangeGroupProvider& GroupProvider;
 
-    TVector<THolder<IBaseChangeCollector>> Underlying;
+    TVector<std::unique_ptr<IBaseChangeCollector>> Underlying;
     TVector<TChange> Collected;
 
     TRowVersion WriteVersion;
@@ -197,14 +197,14 @@ IDataShardChangeCollector* CreateChangeCollector(
         return nullptr;
     }
 
-    auto proxy = MakeHolder<TChangeCollectorProxy>(&dataShard, db, groupProvider);
+    auto proxy = std::make_unique<TChangeCollectorProxy>(&dataShard, db, groupProvider);
 
     if (hasAsyncIndexes) {
-        proxy->AddUnderlying(MakeHolder<TAsyncIndexChangeCollector>(&dataShard, userDb, *proxy));
+        proxy->AddUnderlying(std::make_unique<TAsyncIndexChangeCollector>(&dataShard, userDb, *proxy));
     }
 
     if (hasCdcStreams) {
-        proxy->AddUnderlying(MakeHolder<TCdcStreamChangeCollector>(&dataShard, userDb, *proxy));
+        proxy->AddUnderlying(std::make_unique<TCdcStreamChangeCollector>(&dataShard, userDb, *proxy));
     }
 
     return proxy.Release();

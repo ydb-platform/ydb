@@ -63,11 +63,11 @@ namespace NActors {
 
         // register subactor inside this tracker on a separate mailbox; should be called instead of ExecutorThread's
         // method
-        TActorId RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
+        TActorId RegisterSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx,
                 TMailboxType::EType mailboxType = TMailboxType::Simple, ui32 poolId = Max<ui32>());
 
         // register subactor inside the same mailbox as of the caller
-        TActorId RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx);
+        TActorId RegisterLocalSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx);
 
     private:
         bool PreRegister();
@@ -94,9 +94,9 @@ namespace NActors {
         {}
 
         // subactor registration helpers
-        TActorId RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
+        TActorId RegisterSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx,
                 TMailboxType::EType mailboxType = TMailboxType::Simple, ui32 poolId = Max<ui32>());
-        TActorId RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx);
+        TActorId RegisterLocalSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx);
 
         // an override for tracked actors that also informs tracker about the death of tracked actor
         void Die(const TActorContext& ctx) override;

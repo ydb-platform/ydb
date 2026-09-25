@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         static const bool VALUE_FALSE = false;
         static const bool VALUE_TRUE = true;
 
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TBool::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TBool::TypeId));
 
         TVector<TDataRef> values(1000, TDataRef((const char*)&VALUE_FALSE, sizeof(VALUE_FALSE)));
         for (int i = 0; i < 100; ++i) {
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestFixedLenCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
         TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestVarLenCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestVarIntCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestZigZagCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     void TestDeltaVarIntCodecImpl(TCodecType type, bool rev) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestDeltaZigZagCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
     Y_UNIT_TEST(TestDeltaVarIntUi64Codec) {
         // Mirrors batch WTime/CTime/SeqNo packing (ui64 delta varint).
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
 
         TReallyFastRng32 rand(100500);
         TVector<TDataRef> values;
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestVarLenEmptyAndNulls) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
 
         TVector<TDataRef> values;
         values.push_back(TDataRef("", 0, true));
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestBidirIterator) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
         TVector<ui32> raw = {1, 2, 3, 4, 5};
         TVector<TDataRef> values;
         for (ui32 v : raw) {
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestDefaultCodecResolves) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
         UNIT_ASSERT(codecs->GetDefaultCodec<false>() != nullptr);
         UNIT_ASSERT(codecs->GetDefaultCodec<true>() != nullptr);
         UNIT_ASSERT(codecs->Has(TCodecSig(TCodecType::DeltaVarInt, false)));
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestEstimatedSizeAtLeastActual) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        std::unique_ptr<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
         auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, false));
 
         TBuffer output;

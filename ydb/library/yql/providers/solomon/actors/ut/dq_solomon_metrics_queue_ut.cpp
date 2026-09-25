@@ -52,9 +52,9 @@ struct TFixture : public NUnitTest::TBaseFixture {
     TTestActorRuntimeBase Runtime{2};
     TActorId QueueId;
     TActorId Consumer;
-    std::deque<THolder<IEventHandle>> Responses;
+    std::deque<std::unique_ptr<IEventHandle>> Responses;
     ui32 Unsubscribes = 0;
-    std::deque<THolder<IEventHandle>> DisconnectDeadlines;
+    std::deque<std::unique_ptr<IEventHandle>> DisconnectDeadlines;
     std::shared_ptr<TClient> Client = std::make_shared<TClient>();
 
     TFixture() {
@@ -150,7 +150,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
     }
 
     template <class T = TBatch>
-    THolder<T> Pop(ui64 seqNo, ui64 confirmed, TActorId consumer = {}) {
+    std::unique_ptr<T> Pop(ui64 seqNo, ui64 confirmed, TActorId consumer = {}) {
         UNIT_ASSERT_C(!Responses.empty(), "Expected queue response");
         auto event = std::move(Responses.front());
         Responses.pop_front();
@@ -159,7 +159,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
         auto response = event->Release<T>();
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTransportMeta().GetSeqNo(), seqNo);
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTransportMeta().GetConfirmedSeqNo(), confirmed);
-        return THolder<T>(response.Release());
+        return std::unique_ptr<T>(response.Release());
     }
 
     void AssertStopped() {

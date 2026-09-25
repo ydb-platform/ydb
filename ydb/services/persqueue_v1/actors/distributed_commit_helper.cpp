@@ -39,7 +39,7 @@ void TDistributedCommitHelper::SendCreateSessionRequest(const TActorContext& ctx
 }
 
 void TDistributedCommitHelper::BeginTransaction(const NActors::TActorContext& ctx) {
-    auto begin = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto begin = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
 
     begin->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
     begin->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -70,14 +70,14 @@ void TDistributedCommitHelper::CloseKqpSession(const TActorContext& ctx) {
     }
 }
 
-THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TDistributedCommitHelper::MakeCreateSessionRequest() {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+std::unique_ptr<NKqp::TEvKqp::TEvCreateSessionRequest> TDistributedCommitHelper::MakeCreateSessionRequest() {
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
     ev->Record.MutableRequest()->SetDatabase(DataBase);
     return ev;
 }
 
-THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeCloseSessionRequest() {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+std::unique_ptr<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeCloseSessionRequest() {
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     return ev;
 }
@@ -87,7 +87,7 @@ void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr&
     TxId = record.GetResponse().GetTxMeta().id();
     AFL_ENSURE(!TxId.empty());
 
-    auto offsets = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto offsets = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
     offsets->Record.MutableRequest()->SetDatabase(DataBase);
     offsets->Record.MutableRequest()->SetSessionId(KqpSessionId);
     offsets->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
@@ -113,7 +113,7 @@ void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr&
 }
 
 void TDistributedCommitHelper::CommitTx(const NActors::TActorContext& ctx) {
-    auto commit = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto commit = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
 
     commit->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
     commit->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);

@@ -17,13 +17,13 @@ class IExtension;
 
 struct TProxiedResponseParams {
     NHttp::THttpIncomingRequestPtr Request;
-    THolder<TCrackedPage> ProtectedPage;
+    std::unique_ptr<TCrackedPage> ProtectedPage;
     TString ResponseError;
 
     TString StatusOverride;
     TString MessageOverride;
     TString BodyOverride;
-    THolder<NHttp::THeadersBuilder> HeadersOverride;
+    std::unique_ptr<NHttp::THeadersBuilder> HeadersOverride;
 };
 
 struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {

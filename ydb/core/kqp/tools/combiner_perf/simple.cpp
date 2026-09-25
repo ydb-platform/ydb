@@ -23,7 +23,7 @@ namespace NMiniKQL {
 namespace {
 
 template<bool LLVM>
-THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, IDataSampler& sampler, size_t memLimit)
+std::unique_ptr<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, IDataSampler& sampler, size_t memLimit)
 {
     TKqpProgramBuilder& pb = setup.GetKqpBuilder();
 
@@ -57,7 +57,7 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
 
     NYql::NLog::InitLogger("cerr", false);
 
-    THolder<IDataSampler> sampler = CreateWideSamplerFromParams(params);
+    std::unique_ptr<IDataSampler> sampler = CreateWideSamplerFromParams(params);
     Cerr << "Sampler type: " << sampler->Describe() << Endl;
 
     auto measureGraphTime = [&](auto& computeGraphPtr) {

@@ -27,11 +27,11 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId, Transaction);
+            return std::make_unique<TConfigureParts>(OperationId, Transaction);
         case TTxState::Propose:
-            return MakeHolder<TFinalizationPropose>(OperationId, Transaction);
+            return std::make_unique<TFinalizationPropose>(OperationId, Transaction);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -482,7 +482,7 @@ public:
 
     virtual const char* Name() const override final { return "TIncrementalRestoreFinalizeOp"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
 
@@ -494,7 +494,7 @@ public:
         // Validate that we have the restore state
         auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
         if (stateIt == context.SS->IncrementalRestoreStates.end()) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed,
+            return std::make_unique<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed,
                 ui64(OperationId.GetTxId()), ui64(schemeshardTabletId),
                 "Incremental restore state not found for operation: " + ToString(originalOpId));
         }
@@ -509,7 +509,7 @@ public:
 
         txState.TargetPathId = backupCollectionPathId;
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
         txState.State = TTxState::Waiting;
         context.DbChanges.PersistTxState(OperationId);

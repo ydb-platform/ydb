@@ -185,13 +185,13 @@ protected:
         return CmsState;
     }
 
-    void Reply(THolder<TEvResponse>&& ev) {
+    void Reply(std::unique_ptr<TEvResponse>&& ev) {
         this->Send(Request->Sender, std::move(ev));
         this->PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode code, const TString& error = {}) {
-        auto ev = MakeHolder<TEvResponse>();
+        auto ev = std::make_unique<TEvResponse>();
         ev->Record.SetStatus(code);
 
         if (error) {
@@ -328,7 +328,7 @@ public:
             return Reply(Ydb::StatusIds::UNAVAILABLE, "Cannot collect cluster info");
         }
 
-        auto response = MakeHolder<TEvCms::TEvListClusterNodesResponse>();
+        auto response = std::make_unique<TEvCms::TEvListClusterNodesResponse>();
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         for (const auto& [_, node] : clusterInfo->AllNodes()) {
@@ -417,7 +417,7 @@ public:
 
         const auto& taskUid = static_cast<const TDerived*>(this)->GetTaskUid();
 
-        auto response = MakeHolder<TEvCms::TEvMaintenanceTaskResponse>();
+        auto response = std::make_unique<TEvCms::TEvMaintenanceTaskResponse>();
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         auto& result = *response->Record.MutableResult();
@@ -744,7 +744,7 @@ class TCreateMaintenanceTask
     }
 
 private:
-    THolder<TEvCms::TEvPermissionRequest> CmsRequest = MakeHolder<TEvCms::TEvPermissionRequest>();
+    std::unique_ptr<TEvCms::TEvPermissionRequest> CmsRequest = std::make_unique<TEvCms::TEvPermissionRequest>();
     std::unordered_set<int> PendingHiveActions;
 
 public:
@@ -813,7 +813,7 @@ public:
 
         auto rit = cmsState->ScheduledRequests.find(task.RequestId);
         if (rit == cmsState->ScheduledRequests.end()) {
-            auto response = MakeHolder<TEvCms::TEvMaintenanceTaskResponse>();
+            auto response = std::make_unique<TEvCms::TEvMaintenanceTaskResponse>();
             response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
             auto& result = *response->Record.MutableResult();
@@ -840,7 +840,7 @@ public:
 
         const auto& request = rit->second;
 
-        auto cmsRequest = MakeHolder<TEvCms::TEvCheckRequest>();
+        auto cmsRequest = std::make_unique<TEvCms::TEvCheckRequest>();
         cmsRequest->Record.SetUser(task.Owner);
         cmsRequest->Record.SetRequestId(task.RequestId);
         cmsRequest->Record.SetAvailabilityMode(request.Request.GetAvailabilityMode());
@@ -893,7 +893,7 @@ public:
 
 
         if (cmsState->ScheduledRequests.contains(task.RequestId)) {
-            auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
+            auto cmsRequest = std::make_unique<TEvCms::TEvManageRequestRequest>();
             cmsRequest->Record.SetUser(task.Owner);
             cmsRequest->Record.SetRequestId(task.RequestId);
             cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::GET);
@@ -961,7 +961,7 @@ public:
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetStatus().GetReason());
         }
 
-        auto response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
+        auto response = std::make_unique<TEvCms::TEvGetMaintenanceTaskResponse>();
 
         auto& result = *Response->Record.MutableResult();
         for (const auto& request : record.GetRequests()) {
@@ -1039,7 +1039,7 @@ public:
     }
 
 private:
-    THolder<TEvCms::TEvGetMaintenanceTaskResponse> Response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
+    std::unique_ptr<TEvCms::TEvGetMaintenanceTaskResponse> Response = std::make_unique<TEvCms::TEvGetMaintenanceTaskResponse>();
     std::unordered_map<ui64, TActionIdx> PendingDrainActions;
     bool WaitingForCms = false;
 
@@ -1056,7 +1056,7 @@ public:
     void Bootstrap() {
         const auto& user = Request->Get()->Record.GetRequest().user();
 
-        auto response = MakeHolder<TEvCms::TEvListMaintenanceTasksResponse>();
+        auto response = std::make_unique<TEvCms::TEvListMaintenanceTasksResponse>();
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         auto cmsState = GetCmsState();
@@ -1079,7 +1079,7 @@ class TDropMaintenanceTask
     , THiveInteractor
 {
     void DropRequest(const TTaskInfo& task) {
-        auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
+        auto cmsRequest = std::make_unique<TEvCms::TEvManageRequestRequest>();
         cmsRequest->Record.SetUser(task.Owner);
         cmsRequest->Record.SetRequestId(task.RequestId);
         cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::REJECT);
@@ -1093,7 +1093,7 @@ class TDropMaintenanceTask
             return;
         }
 
-        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
+        auto cmsRequest = std::make_unique<TEvCms::TEvManagePermissionRequest>();
         cmsRequest->Record.SetUser(User);
         cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
         cmsRequest->Record.MutablePermissions()->Assign(Permissions.begin(), Permissions.end());
@@ -1232,7 +1232,7 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
+        auto cmsRequest = std::make_unique<TEvCms::TEvManagePermissionRequest>();
         cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::DONE);
 
         auto cmsState = GetCmsState();
@@ -1280,7 +1280,7 @@ public:
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetStatus().GetReason());
         }
 
-        auto response = MakeHolder<TEvCms::TEvManageActionResponse>();
+        auto response = std::make_unique<TEvCms::TEvManageActionResponse>();
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         for (const auto& actionUid : Request->Get()->Record.GetRequest().action_uids()) {

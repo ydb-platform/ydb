@@ -121,7 +121,7 @@ public:
         const ui64 domainOwnerId = 0,
         const NKikimrSchemeBoard::TEvSubscribe::TCapabilities& capabilities = NKikimrSchemeBoard::TEvSubscribe::TCapabilities()
     ) {
-        auto subscribe = MakeHolder<NInternalEvents::TEvSubscribe>(path, domainOwnerId);
+        auto subscribe = std::make_unique<NInternalEvents::TEvSubscribe>(path, domainOwnerId);
         subscribe->Record.MutableCapabilities()->CopyFrom(capabilities);
 
         Send(replica, sender, subscribe.Release());
@@ -265,7 +265,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
 
 public:
     void PrepareContext() {
-        Context = MakeHolder<TTestContext>();
+        Context = std::make_unique<TTestContext>();
         Context->SetObserverFunc(ObserverFunc());
 
         SetupRuntime(*Context);
@@ -325,7 +325,7 @@ public:
     ui64 RootSchemeshardTabletId = TTestTxConfig::SchemeShard;
 
 protected:
-    THolder<TTestContext> Context;
+    std::unique_ptr<TTestContext> Context;
 
     TTestContext::TEventObserverHolder SysViewsRosterUpdateObserver;
     bool SysViewsRosterUpdateFinished;
@@ -333,7 +333,7 @@ protected:
 private:
     TFakeCoordinator::TState::TPtr CoordinatorState;
     TFakeHiveState::TPtr HiveState;
-    THolder<ITabletScheduledEventsGuard> SchedulingGuard;
+    std::unique_ptr<ITabletScheduledEventsGuard> SchedulingGuard;
 
 }; // TTestWithSchemeshard
 

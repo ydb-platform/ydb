@@ -773,7 +773,7 @@ void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase
 
 void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const
 {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(subscriber.Id, ctx.SelfID, event, 0, cookie);
+    std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(subscriber.Id, ctx.SelfID, event, 0, cookie);
     if (subscriber.PipeServerInfo->IcSession) {
         ev->Rewrite(TEvInterconnect::EvForward, subscriber.PipeServerInfo->IcSession);
     }
@@ -788,7 +788,7 @@ void TNodeBroker::SendUpdateNodes(TSubscriberInfo &subscriber, const TActorConte
     NKikimrNodeBroker::TUpdateNodes record;
     record.SetSeqNo(subscriber.SeqNo);
     Committed.Epoch.Serialize(*record.MutableEpoch());
-    auto response = MakeHolder<TEvNodeBroker::TEvUpdateNodes>(record);
+    auto response = std::make_unique<TEvNodeBroker::TEvUpdateNodes>(record);
 
     auto it = std::lower_bound(UpdateNodesLogVersions.begin(), UpdateNodesLogVersions.end(), subscriber.SentVersion + 1);
     if (it != UpdateNodesLogVersions.begin()) {
@@ -1564,7 +1564,7 @@ void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
         Execute(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        auto response = std::make_unique<TEvConsole::TEvConfigNotificationResponse>();
         response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
@@ -1672,7 +1672,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             }
 
             if (record.HasPath()) {
-                auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+                auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
                 req->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
 
                 auto& rset = req->ResultSet;
@@ -1760,7 +1760,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    auto resp = MakeHolder<TEvNodeBroker::TEvGetConfigResponse>();
+    auto resp = std::make_unique<TEvNodeBroker::TEvGetConfigResponse>();
     resp->Record.MutableConfig()->CopyFrom(Committed.Config);
 
     YDB_LOG_TRACE_CTX(ctx, "TNodeBroker::Handle TEvNodeBroker::TEvGetConfigRequest: send TEvGetConfigResponse",
@@ -1811,7 +1811,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
         SendUpdateNodes(it->second, ctx);
     }
 
-    auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
+    auto response = std::make_unique<TEvNodeBroker::TEvSyncNodesResponse>();
     response->Record.SetSeqNo(it->second.SeqNo);
     SendToSubscriber(it->second, response.Release(), ev->Cookie, ctx);
 }

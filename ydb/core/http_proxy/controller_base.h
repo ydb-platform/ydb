@@ -8,7 +8,7 @@ namespace NKikimr::NHttpProxy {
     public:
         bool Execute(
             THttpRequestContext&& context,
-            THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
+            std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature
         ) const override;
 
         virtual bool IsEnabled(const NKikimrConfig::THttpProxyConfig&) const = 0;

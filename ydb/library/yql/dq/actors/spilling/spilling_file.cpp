@@ -187,7 +187,7 @@ private:
             TDuration WaitTime;
             TDuration WorkTime;
             ui64 BlobId = 0;
-            THolder<TFileHandle> NewFileHandle;
+            std::unique_ptr<TFileHandle> NewFileHandle;
             TMaybe<TString> Error;
         };
 
@@ -283,7 +283,7 @@ private:
             Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
         }
 
-        Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(
+        Send(SelfId(), std::make_unique<TEvPrivate::TEvRemoveOldTmp>(
             SpillingRoot_, SelfId().NodeId(), Username_, Config_.SpillingSessionId));
 
         Become(&TDqLocalFileSpillingService::WorkState);
@@ -363,7 +363,7 @@ private:
         fd.Error.Swap(error);
 
         if (!fd.PartsList.empty()) {
-            auto closeOp = MakeHolder<TCloseFileOp>();
+            auto closeOp = std::make_unique<TCloseFileOp>();
             closeOp->Client = it->first;
             closeOp->Service = SelfId();
             closeOp->ActorSystem = TlsActivationContext->ActorSystem();
@@ -483,7 +483,7 @@ private:
 
         fp->Size += blobDesc.Size;
 
-        auto writeOp = MakeHolder<TWriteFileOp>();
+        auto writeOp = std::make_unique<TWriteFileOp>();
         writeOp->Client = ev->Sender;
         writeOp->Service = SelfId();
         writeOp->ActorSystem = TlsActivationContext->ActorSystem();
@@ -633,7 +633,7 @@ private:
             }
         }
 
-        auto readOp = MakeHolder<TReadFileOp>();
+        auto readOp = std::make_unique<TReadFileOp>();
         readOp->Client = ev->Sender;
         readOp->Service = SelfId();
         readOp->ActorSystem = TlsActivationContext->ActorSystem();
@@ -893,7 +893,7 @@ private:
 
 private:
 
-    bool RunOp(TStringBuf opName, THolder<IObjectInQueue> op, TFileDesc& fd) {
+    bool RunOp(TStringBuf opName, std::unique_ptr<IObjectInQueue> op, TFileDesc& fd) {
         if (fd.HasActiveOp) {
             fd.Ops.emplace_back(opName, std::move(op));
             return true;
@@ -935,14 +935,14 @@ private:
         TActorId Client;
         TActorId Service;
         TActorSystem* ActorSystem;
-        TVector<THolder<TFileHandle>> FileHandles;
+        TVector<std::unique_ptr<TFileHandle>> FileHandles;
         TVector<TString> FileNames;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
             auto now = TInstant::Now();
 
-            auto resp = MakeHolder<TEvPrivate::TEvCloseFileResponse>();
+            auto resp = std::make_unique<TEvPrivate::TEvCloseFileResponse>();
             resp->Client = Client;
             resp->WaitTime = now - Ts;
 
@@ -979,7 +979,7 @@ private:
             A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.Size()
                 << ", offset: " << (CreateFile ? 0 : GetFileLength(FileName)));
 
-            auto resp = MakeHolder<TEvPrivate::TEvWriteFileResponse>();
+            auto resp = std::make_unique<TEvPrivate::TEvWriteFileResponse>();
             resp->Client = Client;
             resp->WaitTime = now - Ts;
             resp->BlobId = BlobId;
@@ -988,7 +988,7 @@ private:
                 TFile file;
                 if (CreateFile) {
                     file = TFile(FileName, CreateAlways | WrOnly);
-                    resp->NewFileHandle = MakeHolder<TFileHandle>(FileName, OpenExisting | RdWr);
+                    resp->NewFileHandle = std::make_unique<TFileHandle>(FileName, OpenExisting | RdWr);
                 } else {
                     file = TFile::ForAppend(FileName);
                 }
@@ -1012,7 +1012,7 @@ private:
         ui64 BlobId;
         ui64 Offset;
         ui64 Size;
-        THolder<TFileHandle> RemoveFile;
+        std::unique_ptr<TFileHandle> RemoveFile;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -1020,7 +1020,7 @@ private:
             A_LOG_D("[Read async] file: " << FileName << ", blobId: " << BlobId << ", offset: " << Offset
                 << ", size: " << Size << ", remove: " << (bool) RemoveFile);
 
-            auto resp = MakeHolder<TEvPrivate::TEvReadFileResponse>();
+            auto resp = std::make_unique<TEvPrivate::TEvReadFileResponse>();
             resp->Client = Client;
             resp->WaitTime = now - Ts;
             resp->BlobId = BlobId;
@@ -1073,7 +1073,7 @@ private:
 
         struct TFilePart {
             TString FileName;
-            THolder<TFileHandle> FileHandle;
+            std::unique_ptr<TFileHandle> FileHandle;
 
             THashMap<ui64, TBlobDesc> Blobs;
 
@@ -1096,7 +1096,7 @@ private:
         TList<TFilePart> PartsList;
         ui32 NextPartListIndex = 0;
 
-        TList<std::pair<TString, THolder<IObjectInQueue>>> Ops;
+        TList<std::pair<TString, std::unique_ptr<IObjectInQueue>>> Ops;
         bool HasActiveOp = false;
     };
 
@@ -1138,7 +1138,7 @@ private:
     TFsPath SessionRoot_;
     TIntrusivePtr<TSpillingCounters> Counters_;
 
-    THolder<IThreadPool> IoThreadPool_;
+    std::unique_ptr<IThreadPool> IoThreadPool_;
     THashMap<TActorId, TFileDesc> Files_;
     TList<const TClosedFileDesc> ClosedFiles_;
     ui64 TotalSize_ = 0;

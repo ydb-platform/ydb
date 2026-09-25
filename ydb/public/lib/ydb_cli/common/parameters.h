@@ -32,7 +32,7 @@ protected:
     void AddLegacyBatchParametersOptions(TClientCommand::TConfig& config);
     void AddDefaultParamFormats(TClientCommand::TConfig& config);
     void AddLegacyStdinFormats(TClientCommand::TConfig& config);
-    bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder, bool verbose);
+    bool GetNextParams(const TDriver& driver, const TString& queryText, std::unique_ptr<TParamsBuilder>& paramBuilder, bool verbose);
     
     THashMap<EDataFormat, TString>& GetInputFormatDescriptions() override;
 
@@ -50,7 +50,7 @@ private:
     std::map<std::string, TType> ParamTypes;
     TVector<TString> Header;
     TString Columns;
-    THolder<TFileInput> InputFileHolder;
+    std::unique_ptr<TFileInput> InputFileHolder;
     bool IsFirstEncounter = true;
     size_t SkipRows;
     char Delimiter;
@@ -64,11 +64,11 @@ protected:
     TVector<TString> InputParamNames;
     std::map<TString, TString> Parameters;
     std::map<TString, TString> ParameterSources;
-    THolder<IParamStream> InputParamStream;
+    std::unique_ptr<IParamStream> InputParamStream;
     EBatchMode BatchMode = EBatchMode::Default;
     size_t BatchLimit;
     TDuration BatchMaxDelay;
-    THolder<NScripting::TExplainYqlResult> ValidateResult;
+    std::unique_ptr<NScripting::TExplainYqlResult> ValidateResult;
     bool ReadingSomethingFromStdin = false;
     NQuery::ESyntax SyntaxType = NQuery::ESyntax::YqlV1;
 };

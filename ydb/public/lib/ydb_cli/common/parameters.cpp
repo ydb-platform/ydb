@@ -374,9 +374,9 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
 
 void TCommandWithParameters::SetParamsInput(IInputStream* input) {
     if (InputFormat == EDataFormat::Csv || InputFormat == EDataFormat::Tsv) {
-        InputParamStream = MakeHolder<TCsvParamStream>(input);
+        InputParamStream = std::make_unique<TCsvParamStream>(input);
     } else {
-        InputParamStream = MakeHolder<TSimpleParamStream>(input);
+        InputParamStream = std::make_unique<TSimpleParamStream>(input);
     }
 }
 
@@ -393,7 +393,7 @@ void TCommandWithParameters::SetParamsInputFromStdin(bool verbose) {
 
 void TCommandWithParameters::SetParamsInputFromFile(TString& file, bool verbose) {
     TFsPath fsPath = GetExistingFsPath(file, "input file");
-    InputFileHolder = MakeHolder<TFileInput>(fsPath);
+    InputFileHolder = std::make_unique<TFileInput>(fsPath);
     SetParamsInput(InputFileHolder.Get());
     if (verbose) {
         Cerr << "Reading parameters from file \"" << file << '\"' << Endl;
@@ -433,8 +433,8 @@ void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString
 }
 
 bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText,
-        THolder<TParamsBuilder>& paramBuilder, bool verbose) {
-    paramBuilder = MakeHolder<TParamsBuilder>();
+        std::unique_ptr<TParamsBuilder>& paramBuilder, bool verbose) {
+    paramBuilder = std::make_unique<TParamsBuilder>();
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
         InitParamTypes(driver, queryText, verbose);

@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TServiceControlServiceTest) {
 
     struct TFixture {
         TPortManager PortManager;
-        THolder<TServer> Server;
+        std::unique_ptr<TServer> Server;
         TTestActorRuntime* Runtime = nullptr;
         TActorId Sender;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TServiceControlServiceTest) {
             NKikimrProto::TAuthConfig authConfig;
             auto settings = TServerSettings(kikimrPort, authConfig);
             settings.SetDomainName("Root");
-            Server = MakeHolder<TServer>(settings);
+            Server = std::make_unique<TServer>(settings);
             Runtime = Server->GetRuntime();
             Sender = Runtime->AllocateEdgeActor();
         }
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TServiceControlServiceTest) {
         std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
 
         {
-            auto request = MakeHolder<NCloud::TEvServiceControlService::TEvSetupDelegationRequest>();
+            auto request = std::make_unique<NCloud::TEvServiceControlService::TEvSetupDelegationRequest>();
             request->Token = "ssa-token";
             request->Request.set_service_id("ydb");
             request->Request.set_microservice_id("data-plane");
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TServiceControlServiceTest) {
 
         {
             // authorization header is checked by the mock
-            auto request = MakeHolder<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
+            auto request = std::make_unique<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
             request->Token = "wrong-token";
             request->Request.set_service_id("ydb");
             f.Runtime->Send(new IEventHandle(serviceControlId, f.Sender, request.Release()));
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TServiceControlServiceTest) {
 
         {
             mock.NotDoneCount = 1;
-            auto request = MakeHolder<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
+            auto request = std::make_unique<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
             request->Token = "ssa-token";
             request->Request.set_service_id("ydb");
             request->Request.set_target_service_account_id("sa-1");

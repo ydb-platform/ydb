@@ -89,13 +89,13 @@ struct TRuntimeContext : NActors::IDestructable {
 };
 
 TTestActorRuntime::TEgg MakeRuntimeEgg() {
-    auto app = MakeHolder<TAppData>(0, 1, 2, 3, TMap<TString, ui32>{}, nullptr, nullptr, nullptr, nullptr);
+    auto app = std::make_unique<TAppData>(0, 1, 2, 3, TMap<TString, ui32>{}, nullptr, nullptr, nullptr, nullptr);
     auto domains = MakeIntrusive<TDomainsInfo>();
     domains->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1", DomainId).Release());
     domains->AddHive(MakeDefaultHiveID());
     app->DomainsInfo = domains;
 
-    auto context = MakeHolder<TRuntimeContext>();
+    auto context = std::make_unique<TRuntimeContext>();
     app->IoContextFactory = context->IoContextFactory.get();
 
     return {
@@ -499,7 +499,7 @@ public:
             [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
                 return EventFilter(ev);
             });
-        CallbackGuard = MakeHolder<TTestRuntimeCallbackGuard>(Runtime,
+        CallbackGuard = std::make_unique<TTestRuntimeCallbackGuard>(Runtime,
             &TTestActorRuntimeBase::DefaultObserverFunc, std::move(previousEventFilter),
             std::move(previousRegistrationObserver));
     }
@@ -626,7 +626,7 @@ public:
 
 private:
     TVector<std::pair<TActorId, TActorId>> Registrations;
-    THolder<TTestRuntimeCallbackGuard> CallbackGuard;
+    std::unique_ptr<TTestRuntimeCallbackGuard> CallbackGuard;
 
     void SetDetails(TString value) {
         if (Details.empty()) {

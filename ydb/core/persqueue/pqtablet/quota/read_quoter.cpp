@@ -24,7 +24,7 @@ void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
     CheckConsumerPerPartitionQuota(std::move(context));
 }
 
-TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
+TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const std::unique_ptr<TEvPQ::TEvRequestQuota>& request) {
     if (!TopicConverter)
         return nullptr;
     auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
@@ -243,7 +243,7 @@ ui64 TReadQuoter::GetTotalPartitionMessageSpeedBurst(const NKikimrPQ::TPQTabletC
     return GetConsumerReadMessageBurst(pqTabletConfig, {}, ctx) * consumersPerPartition;
 }
 
-THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
+std::unique_ptr<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
@@ -264,7 +264,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
         }
     }
     if (actorId) {
-        return MakeHolder<TAccountQuoterHolder>(actorId, Counters);
+        return std::make_unique<TAccountQuoterHolder>(actorId, Counters);
     } else {
         return nullptr;
     }

@@ -172,8 +172,8 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
         TActorSystemStatsSubSystem* Stats = nullptr;
     };
 
-    THolder<TActorSystemSetup> MakeActorSystemSetup() {
-        auto setup = MakeHolder<TActorSystemSetup>();
+    std::unique_ptr<TActorSystemSetup> MakeActorSystemSetup() {
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);

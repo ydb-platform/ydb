@@ -46,7 +46,7 @@ namespace {
         auto &runtime = *server->GetRuntime();
 
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+        auto request = std::make_unique<TEvDataShard::TEvGetInfoRequest>();
         runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TTableInfoMap result;
@@ -807,20 +807,20 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     }
 
     // prepare immediate
-    TDeque<std::pair<ui64, THolder<TEvDataShard::TEvProposeTransaction>>> immEvents;
+    TDeque<std::pair<ui64, std::unique_ptr<TEvDataShard::TEvProposeTransaction>>> immEvents;
     for (ui64 txId : immediateTxs) {
         TFakeProxyTx::TPtr tx = txs.find(txId)->second;
         UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1);
         TString txBody;
         ui32 shard = tx->GetShardProgram(0, txBody);
-        THolder<TEvDataShard::TEvProposeTransaction> event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+        std::unique_ptr<TEvDataShard::TEvProposeTransaction> event = std::make_unique<TEvDataShard::TEvProposeTransaction>(
             NKikimrTxDataShard::TX_KIND_DATA, Tester.Sender, txId, txBody, tx->TxFlags());
         immEvents.emplace_back(std::make_pair(shard, std::move(event)));
         results.insert(std::make_pair(shard, txId));
     }
     immediateTxs.clear();
 
-    THolder<IEventHandle> delayedEvent;
+    std::unique_ptr<IEventHandle> delayedEvent;
     UNIT_ASSERT(DelayedReadSets.size() <= 1);
     UNIT_ASSERT(DelayedData.size() <= 1);
 
@@ -841,7 +841,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                     break;
                 //Cerr << ">>> imm to " << shard << Endl;
                 UNIT_ASSERT(ShardActors.contains(shard));
-                THolder<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release()));
+                std::unique_ptr<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release()));
                 Tester.Runtime.Send(handle.Release());
                 immEvents.pop_front();
                 ++prevTxId;
@@ -1109,11 +1109,11 @@ bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, T
     return !RemainTablets.empty();
 }
 
-THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
+std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml,
                                                       TIntrusivePtr<NACLib::TUserContext> userCtx /*= nullptr*/)
 {
-    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userCtx);
+    auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>(userCtx);
     if (dml) {
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -1132,11 +1132,11 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
     return request;
 }
 
-static THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
+static std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
         NKikimrSchemeOp::EOperationType type,
         const TString& workingDir = {})
 {
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
     auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1151,7 +1151,7 @@ static THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
 
 static ui64 RunSchemeTx(
         TTestActorRuntimeBase& runtime,
-        THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& request,
         TActorId sender = {},
         bool viaActorSystem = false,
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus expectedStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress)
@@ -1341,7 +1341,7 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed, ui64 cookie)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    auto request = std::make_unique<TEvDataShard::TEvCompactTable>(tableId.PathId);
     request->Record.SetCompactBorrowed(compactBorrowed);
     runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
 
@@ -1352,7 +1352,7 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
 }
 
 NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-    auto request = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
+    auto request = std::make_unique<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -1407,7 +1407,7 @@ NTable::TRowVersionRanges GetRemovedRowVersions(
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
-        auto request = MakeHolder<TEvDataShard::TEvGetRemovedRowVersions>(TPathId{});
+        auto request = std::make_unique<TEvDataShard::TEvGetRemovedRowVersions>(TPathId{});
         ForwardToTablet(runtime, shardId, sender, request.Release());
     }
 
@@ -1421,7 +1421,7 @@ void SendCreateVolatileSnapshot(
         const TVector<TString>& tables,
         TDuration timeout)
 {
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
     for (const auto& path : tables) {
         tx->AddTables()->SetTablePath(path);
@@ -1472,7 +1472,7 @@ bool RefreshVolatileSnapshot(
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto* tx = request->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
         for (const auto& path : tables) {
             tx->AddTables()->SetTablePath(path);
@@ -1498,7 +1498,7 @@ bool DiscardVolatileSnapshot(
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto* tx = request->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
         for (const auto& path : tables) {
             tx->AddTables()->SetTablePath(path);
@@ -1524,7 +1524,7 @@ void ApplyChanges(
 {
     auto &runtime = *server->GetRuntime();
 
-    auto evReq = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+    auto evReq = std::make_unique<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
     evReq->Record.SetSource(sourceId);
     for (const auto& change : changes) {
         auto* p = evReq->Record.AddChanges();
@@ -1556,7 +1556,7 @@ TRowVersion CommitWrites(
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto* tx = request->Record.MutableTransaction()->MutableCommitWrites();
         for (const auto& path : tables) {
             tx->AddTables()->SetTablePath(path);
@@ -1811,7 +1811,7 @@ ui64 AsyncAlterAddIndex(
         UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(indexDesc.Type));
     }
 
-    auto req = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(txId, dbName, std::move(buildSettings));
+    auto req = std::make_unique<TEvIndexBuilder::TEvCreateRequest>(txId, dbName, std::move(buildSettings));
     auto tabletId = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tabletId, sender, req.Release(), 0, GetPipeConfigWithRetries());
 
@@ -1829,7 +1829,7 @@ void CancelAddIndex(Tests::TServer::TPtr server, const TString& dbName, ui64 bui
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender);
     const auto txId = ev->Get()->TxId;
 
-    auto req = MakeHolder<TEvIndexBuilder::TEvCancelRequest>(txId, dbName, buildIndexId);
+    auto req = std::make_unique<TEvIndexBuilder::TEvCancelRequest>(txId, dbName, buildIndexId);
     auto tabletId = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tabletId, sender, req.Release(), 0, GetPipeConfigWithRetries());
 
@@ -2009,7 +2009,7 @@ void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId)
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
 
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
@@ -2105,14 +2105,14 @@ void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
 }
 
-THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
         const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
     using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
 
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     auto& entry = request->ResultSet.emplace_back();
     entry.Path = SplitPath(path);
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
@@ -2129,10 +2129,10 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
     UNIT_ASSERT(response->ErrorCount == 0);
     UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
 
-    return THolder(response);
+    return std::unique_ptr<NSchemeCache::TSchemeCacheNavigate>(response);
 }
 
-THolder<NSchemeCache::TSchemeCacheNavigate> Ls(
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Ls(
         TTestActorRuntime& runtime,
         const TActorId& sender,
         const TString& path)
@@ -2536,7 +2536,7 @@ namespace {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             request->Record.SetStreamResponse(true);
             auto &tx = *request->Record.MutableTransaction()->MutableReadTableTransaction();
             tx.SetPath(Path);
@@ -2633,7 +2633,7 @@ namespace {
             while (QuotaRequests) {
                 auto& req = QuotaRequests.front();
 
-                auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>();
+                auto response = std::make_unique<TEvTxProcessing::TEvStreamQuotaResponse>();
                 response->Record.SetTxId(req.TxId);
                 response->Record.SetMessageSizeLimit(16 * 1024 * 1024);
                 response->Record.SetReservedMessages(1);

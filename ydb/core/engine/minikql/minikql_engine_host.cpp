@@ -138,7 +138,7 @@ ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
     }
 }
 
-void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) {
+void TEngineHost::PinPages(const TVector<std::unique_ptr<TKeyDesc>>& keys, ui64 pageFaultCount) {
     ui64 limitMultiplier = 1;
     if (pageFaultCount >= 2) {
         if (pageFaultCount <= 63) {
@@ -342,7 +342,7 @@ public:
         }
     }
 
-    void OwnDb(THolder<TTableIter>&& iter) {
+    void OwnDb(std::unique_ptr<TTableIter>&& iter) {
         Iter = std::move(iter);
     }
 
@@ -420,7 +420,7 @@ private:
     }
 
 private:
-    THolder<TTableIter> Iter;
+    std::unique_ptr<TTableIter> Iter;
     TDbTupleRef DbData;
     ui32 MaskSize;
     TSmallVec<NTable::TTag> SystemColumnTags;
@@ -581,7 +581,7 @@ public:
 
     private:
         const TSelectRangeLazyRowsList& List;
-        THolder<TTableIter> Iter;
+        std::unique_ptr<TTableIter> Iter;
         bool HasCurrent;
         ui64 Iterations;
         ui64 Items;

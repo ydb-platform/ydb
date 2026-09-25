@@ -172,7 +172,7 @@ namespace {
             Y_ABORT_UNLESS(msg->Reason == TEvents::TEvUndelivered::Disconnected && !msg->Unsure);
             // Initial handshake failure is definite nondelivery. Back off while the proxy
             // leaves its error state, then retry the same request through the actor system.
-            auto request = MakeHolder<TEvTest>(ev->Cookie);
+            auto request = std::make_unique<TEvTest>(ev->Cookie);
             if (!RetryPayload.empty()) {
                 request->Record.SetPayload(RetryPayload);
             }
@@ -358,7 +358,7 @@ namespace {
         )
 
         void SendOne(ui64 seq) {
-            auto ev = MakeHolder<TEvTest>(seq);
+            auto ev = std::make_unique<TEvTest>(seq);
             if (UseInlinePayload) {
                 ev->Record.SetPayload(MakeLoadInlinePayload(seq));
             }
@@ -1336,7 +1336,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         const TActorId collectorId = cluster->RegisterActor(collector, 2);
 
         TString payload = MakeLoadPayload(1, 200000);
-        auto ev = MakeHolder<TEvTest>(1);
+        auto ev = std::make_unique<TEvTest>(1);
         ev->AddPayload(TRope(payload));
         const TActorId sender(1, 0, 0xBEEF, 0);
         cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(collectorId, sender, ev.Release()));
@@ -1384,7 +1384,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         const TActorId collectorId = cluster->RegisterActor(collector, 2);
 
         TString payload = MakeLoadPayload(1, 200000);
-        auto ev = MakeHolder<TEvTest>(1);
+        auto ev = std::make_unique<TEvTest>(1);
         ev->AddPayload(TRope(payload));
         const TActorId sender(1, 0, 0xBEEF, 0);
         cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(collectorId, sender, ev.Release()));

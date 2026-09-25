@@ -323,8 +323,8 @@ private:
     TTypeAnnotationContext* TypeCtx;
 };
 
-THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
-    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx, config));
+std::unique_ptr<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
+    return std::unique_ptr<TDqsPhysicalOptProposalTransformer>(new TDqsPhysicalOptProposalTransformer(typeCtx, config));
 }
 
 } // NYql::NDqs

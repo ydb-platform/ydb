@@ -40,7 +40,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
     TStack<TSequenceState> Sequences;
 
-    using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
+    using TShardState = std::pair<TShardIdx, std::unique_ptr<TShardInfo>>;
     TStack<TShardState> Shards;
 
     // Actually, any single subdomain should not be grabbed at more than one version
@@ -50,7 +50,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     // subdomains to be grabbed.
     THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
 
-    using TTxState = std::pair<TOperationId, THolder<TTxState>>;
+    using TTxState = std::pair<TOperationId, std::unique_ptr<TTxState>>;
     TStack<TTxState> TxStates;
 
     using TExternalTableState = std::pair<TPathId, TExternalTableInfo::TPtr>;

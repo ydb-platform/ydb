@@ -26,12 +26,12 @@ class TChangePathStateOp: public TSubOperationWithContext {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TEmptyPropose>(OperationId);
+            return std::make_unique<TEmptyPropose>(OperationId);
         case TTxState::Done: {
             const auto* txState = context.SS->FindTx(OperationId);
             if (txState && txState->TargetPathTargetState.Defined()) {
                 auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
-                return MakeHolder<TDone>(OperationId, targetState);
+                return std::make_unique<TDone>(OperationId, targetState);
             }
             Y_ABORT("Unreachable code: TDone state should always have a target state defined for TChangePathStateOp");
         }
@@ -44,7 +44,7 @@ public:
     using TSubOperationWithContext::TSubOperationWithContext;
     using TSubOperationWithContext::SelectStateFunc;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
 
@@ -65,7 +65,7 @@ public:
                 .NotUnderDeleting();
 
             if (!checks) {
-                return MakeHolder<TProposeResponse>(checks.GetStatus(), ui64(OperationId.GetTxId()), ui64(schemeshardTabletId), checks.GetError());
+                return std::make_unique<TProposeResponse>(checks.GetStatus(), ui64(OperationId.GetTxId()), ui64(schemeshardTabletId), checks.GetError());
             }
         }
 
@@ -83,7 +83,7 @@ public:
         path.Base()->PathState = *txState.TargetPathTargetState;
         context.DbChanges.PersistPath(path.Base()->PathId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
         txState.State = TTxState::Waiting;
         context.DbChanges.PersistTxState(OperationId);

@@ -1679,7 +1679,7 @@ bool TKqpStatisticsTransformer::AfterLambdas(const TExprNode::TPtr& input, TExpr
 
 TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const NOpt::TKqpProviderContext& pctx) {
-    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
+    return std::unique_ptr<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
 }
 
 } // namespace NKikimr::NKqp

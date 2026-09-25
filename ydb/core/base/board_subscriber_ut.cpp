@@ -74,7 +74,7 @@ class TBoardSubscriberTestBase : public NUnitTest::TTestBase {
 
 public:
     void SetUp() override {
-        Context = MakeHolder<TTestBasicRuntime>(3);
+        Context = std::make_unique<TTestBasicRuntime>(3);
 
         SetupCustomStateStorage(*Context, 3, 3, 1);
 
@@ -92,7 +92,7 @@ public:
     void DropByDisconnect();
 
 protected:
-    THolder<TTestBasicRuntime> Context;
+    std::unique_ptr<TTestBasicRuntime> Context;
 };
 
 class TBoardSubscriberTest : public TBoardSubscriberTestBase {
@@ -108,7 +108,7 @@ class TBoardSubscriberTest : public TBoardSubscriberTestBase {
 class TBoardSubscriber2DCTest : public TBoardSubscriberTest {
 public:
     void SetUp() override {
-        Context = MakeHolder<TTestBasicRuntime>(6);
+        Context = std::make_unique<TTestBasicRuntime>(6);
 
         SetupCustomStateStorage(*Context, 3, 3, 1, 2);
 

@@ -44,7 +44,7 @@ public:
         TBase::Bootstrap();
     }
 
-    THolder<TRequestEventType> BuildRequest() override;
+    std::unique_ptr<TRequestEventType> BuildRequest() override;
 
     template<typename ResponseType>
     void MergeWhiteboardResponses(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, ResponseType>& perNodeStateInfo, const TString& fields);
@@ -82,7 +82,7 @@ public:
     static void Merge(NKikimrViewer::TEvViewerResponse& viewerResponse, TNodeId nodeId, TResponseType& nodeResponse);
 
     void ReplyAndPassAway() override {
-        auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
+        auto response = std::make_unique<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
 
         if (TBase::RequestSettings.MergeFields) {
@@ -126,7 +126,7 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
 }
 
 template<>
-THolder<TEvWhiteboard::TEvTabletStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>::BuildRequest() {
+std::unique_ptr<TEvWhiteboard::TEvTabletStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>::BuildRequest() {
     auto request = TBase::BuildRequest();
     request->Record.MergeFrom(Event->Get()->Record.GetTabletRequest());
     return request;
@@ -144,7 +144,7 @@ void TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboar
 }
 
 template<>
-THolder<TEvWhiteboard::TEvSystemStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>::BuildRequest() {
+std::unique_ptr<TEvWhiteboard::TEvSystemStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>::BuildRequest() {
     auto request = TBase::BuildRequest();
     request->Record.MergeFrom(Event->Get()->Record.GetSystemRequest());
     return request;
@@ -162,7 +162,7 @@ void TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboar
 }
 
 template<>
-THolder<TEvWhiteboard::TEvVDiskStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvVDiskStateRequest, TEvWhiteboard::TEvVDiskStateResponse>::BuildRequest() {
+std::unique_ptr<TEvWhiteboard::TEvVDiskStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvVDiskStateRequest, TEvWhiteboard::TEvVDiskStateResponse>::BuildRequest() {
     auto request = TBase::BuildRequest();
     request->Record.MergeFrom(Event->Get()->Record.GetVDiskRequest());
     return request;
@@ -180,7 +180,7 @@ void TViewerWhiteboardRequest<TEvWhiteboard::TEvVDiskStateRequest, TEvWhiteboard
 }
 
 template<>
-THolder<TEvWhiteboard::TEvPDiskStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>::BuildRequest() {
+std::unique_ptr<TEvWhiteboard::TEvPDiskStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>::BuildRequest() {
     auto request = TBase::BuildRequest();
     request->Record.MergeFrom(Event->Get()->Record.GetPDiskRequest());
     return request;
@@ -198,7 +198,7 @@ void TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard
 }
 
 template<>
-THolder<TEvWhiteboard::TEvBSGroupStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>::BuildRequest() {
+std::unique_ptr<TEvWhiteboard::TEvBSGroupStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>::BuildRequest() {
     auto request = TBase::BuildRequest();
     request->Record.MergeFrom(Event->Get()->Record.GetBSGroupRequest());
     return request;
@@ -216,7 +216,7 @@ void TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboa
 }
 
 template<>
-THolder<TEvWhiteboard::TEvNodeStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>::BuildRequest() {
+std::unique_ptr<TEvWhiteboard::TEvNodeStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>::BuildRequest() {
     auto request = TBase::BuildRequest();
     request->Record.MergeFrom(Event->Get()->Record.GetNodeRequest());
     return request;

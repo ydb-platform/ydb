@@ -14,10 +14,10 @@ class TReject: public ISubOperation {
     const char* CurrentStateName() const override final { return "none"; }
 
     const TOperationId OperationId;
-    THolder<TProposeResponse> Response;
+    std::unique_ptr<TProposeResponse> Response;
 
 public:
-    TReject(TOperationId id, THolder<TProposeResponse> response)
+    TReject(TOperationId id, std::unique_ptr<TProposeResponse> response)
         : OperationId(id)
         , Response(std::move(response))
     {}
@@ -38,7 +38,7 @@ public:
         return fake;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         Y_ABORT_UNLESS(Response);
 
         Response->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -68,7 +68,7 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response) {
+ISubOperation::TPtr CreateReject(TOperationId id, std::unique_ptr<TProposeResponse> response) {
     return new TReject(id, std::move(response));
 }
 

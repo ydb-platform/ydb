@@ -79,7 +79,7 @@ public:
         return DB.GetRemovedRowVersions(table);
     }
 
-    ui64 BeginCompaction(THolder<TCompactionParams> params) override {
+    ui64 BeginCompaction(std::unique_ptr<TCompactionParams> params) override {
         Y_ENSURE(params);
         ui64 compactionId = NextCompactionId_++;
         StartedCompactions[compactionId] = std::move(params);
@@ -101,8 +101,8 @@ public:
 
     struct TRunCompactionResult {
         ui64 CompactionId;
-        THolder<TCompactionParams> Params;
-        THolder<TCompactionResult> Result;
+        std::unique_ptr<TCompactionParams> Params;
+        std::unique_ptr<TCompactionResult> Result;
     };
 
     TRunCompactionResult RunCompaction() {
@@ -120,7 +120,7 @@ public:
         return { compactionId, std::move(params), std::move(result) };
     }
 
-    THolder<TCompactionResult> RunCompaction(const TCompactionParams* params) {
+    std::unique_ptr<TCompactionResult> RunCompaction(const TCompactionParams* params) {
         if (params->Edge.Head == TEpoch::Max()) {
             SnapshotTable(params->Table);
         }
@@ -170,7 +170,7 @@ public:
 
         DB.Replace(params->Table, *subset, parts, { });
 
-        return MakeHolder<TCompactionResult>(subset->Epoch(), std::move(parts));
+        return std::make_unique<TCompactionResult>(subset->Epoch(), std::move(parts));
     }
 
     void ApplyChanges(ui32 table, TCompactionChanges changes) {
@@ -294,12 +294,12 @@ private:
 public:
     TDatabase DB;
     std::optional<TTestEnv> Env;
-    THashMap<ui64, THolder<TCompactionParams>> StartedCompactions;
+    THashMap<ui64, std::unique_ptr<TCompactionParams>> StartedCompactions;
     THashMap<ui32, THashMap<ui64, TString>> TableState;
     ui64 TabletId = 123;
 
 private:
-    THolder<NPageCollection::TSteppedCookieAllocator> Annex;
+    std::unique_ptr<NPageCollection::TSteppedCookieAllocator> Annex;
     ui32 Gen = 0;
     ui32 Step = 0;
 

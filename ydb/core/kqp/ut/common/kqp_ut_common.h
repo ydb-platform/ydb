@@ -260,16 +260,16 @@ private:
     void CreateSampleTables();
 
 private:
-    THolder<Tests::TServerSettings> ServerSettings;
+    std::unique_ptr<Tests::TServerSettings> ServerSettings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TClient> Client;
-    THolder<Tests::TTenants> Tenants;
+    std::unique_ptr<Tests::TClient> Client;
+    std::unique_ptr<Tests::TTenants> Tenants;
     TAdaptiveThreadPool ThreadPool;
     bool ThreadPoolStarted_ = false;
     TPortManager PortManager;
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
     NMonitoring::TDynamicCounterPtr CountersRoot;
 };
 
@@ -422,7 +422,7 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
 
 void Revoke(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
 
-THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
+std::unique_ptr<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 
 NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TActorId sender, const TString &path);
@@ -484,12 +484,12 @@ private:
 
     Tests::TServerSettings::TPtr Settings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TClient> Client;
-    THolder<Tests::TTenants> Tenants;
+    std::unique_ptr<Tests::TClient> Client;
+    std::unique_ptr<Tests::TTenants> Tenants;
 
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
 
     TEnvSettings EnvSettings;
 };

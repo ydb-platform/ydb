@@ -46,8 +46,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TProtectSchemeEchoesUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) {
+    return std::unique_ptr<TProtectSchemeEchoesUnit>(new TProtectSchemeEchoesUnit(dataShard, pipeline));
 }
 
 } // namespace NlatterDataShard

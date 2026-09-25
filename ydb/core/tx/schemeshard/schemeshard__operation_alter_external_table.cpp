@@ -124,15 +124,15 @@ private:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, IsSameDataSource, OldDataSourcePathId);
+            return std::make_unique<TPropose>(OperationId, IsSameDataSource, OldDataSourcePathId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
+    static bool IsDestinationPathValid(const std::unique_ptr<TProposeResponse>& result,
                                        const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
@@ -153,7 +153,7 @@ private:
         return static_cast<bool>(checks);
     }
 
-    static bool IsDataSourcePathValid(const THolder<TProposeResponse>& result, const TPath& dataSourcePath) {
+    static bool IsDataSourcePathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& dataSourcePath) {
         const auto checks = dataSourcePath.Check();
         checks
             .NotUnderDomainUpgrade()
@@ -172,7 +172,7 @@ private:
         return static_cast<bool>(checks);
     }
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result,
+    bool IsApplyIfChecksPassed(const std::unique_ptr<TProposeResponse>& result,
                                const TOperationContext& context) const {
         TString errorMessage;
         if (!context.SS->CheckApplyIf(Transaction, errorMessage)) {
@@ -183,7 +183,7 @@ private:
         return true;
     }
 
-    static bool IsDataSourceValid(const THolder<TProposeResponse>& result,
+    static bool IsDataSourceValid(const std::unique_ptr<TProposeResponse>& result,
                                   const TExternalDataSourceInfo::TPtr& externalDataSource) {
         if (!externalDataSource) {
             result->SetError(NKikimrScheme::StatusSchemeError, "Data source doesn't exist");
@@ -193,7 +193,7 @@ private:
     }
 
     static bool IsExternalTableDescriptionValid(
-        const THolder<TProposeResponse>& result,
+        const std::unique_ptr<TProposeResponse>& result,
         const TString& sourceType,
         const NKikimrSchemeOp::TExternalTableDescription& desc) {
         if (TString errorMessage; !NExternalTable::Validate(sourceType, desc, errorMessage)) {
@@ -204,7 +204,7 @@ private:
         return true;
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result,
+    static void AddPathInSchemeShard(const std::unique_ptr<TProposeResponse>& result,
                                      TPath& dstPath) {
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
@@ -240,7 +240,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
         const auto ssId = context.SS->SelfTabletId();
 
@@ -253,7 +253,7 @@ public:
             {"replaceIfExists", Transaction.GetReplaceIfExists()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
 

@@ -14,7 +14,7 @@ namespace NKikimr::NSQS {
 class TModifyPermissionsActor
    : public TActionActor<TModifyPermissionsActor> {
 public:
-    TModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ModifyPermissions, std::move(cb))
     {
     }
@@ -103,7 +103,7 @@ private:
         TStringBuf workingDir, resource;
         TStringBuf(Resource_).RSplit('/', workingDir, resource);
 
-        auto proposeRequest = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto proposeRequest = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -167,7 +167,7 @@ private:
     TString Resource_;
 };
 
-IActor* CreateModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateModifyPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TModifyPermissionsActor(sourceSqsRequest, std::move(cb));
 }
 

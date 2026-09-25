@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         //           so we can inject TEvCloseSessionRequest while in CleanupState.
         bool abortSent = false;
         int txResponseCount = 0;
-        THolder<IEventHandle> heldRollbackResponse;
+        std::unique_ptr<IEventHandle> heldRollbackResponse;
         TActorId sessionActorId;
 
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         TVector<TString> sessions;
         TVector<TActorId> rpcActors;
         for (ui32 i = 0; i < 2; ++i) {
-            auto create = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
+            auto create = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
             create->Record.MutableRequest()->SetDatabase("/Root");
             runtime->Send(new IEventHandle(proxy, sender, create.Release()));
             auto created = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
@@ -364,7 +364,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
             const auto rpc = runtime->AllocateEdgeActor(1);
             rpcActors.push_back(rpc);
-            auto ping = MakeHolder<TEvKqp::TEvPingSessionRequest>();
+            auto ping = std::make_unique<TEvKqp::TEvPingSessionRequest>();
             ping->Record.MutableRequest()->SetSessionId(sessions.back());
             ActorIdToProto(rpc, ping->Record.MutableRequest()->MutableExtSessionCtrlActorId());
             runtime->Send(new IEventHandle(proxy, rpc, ping.Release()), 1);
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         for (ui32 i = 0; i < sessions.size(); ++i) {
             worker = {};
-            auto close = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+            auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             close->Record.MutableRequest()->SetSessionId(sessions[i]);
             runtime->Send(new IEventHandle(proxy, sender, close.Release()));
             TDispatchOptions opts;
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         auto session = created.GetSession();
 
         const ui32 finalizeType = commit ? TEvKqpBuffer::TEvCommit::EventType : TEvKqpBuffer::TEvFlush::EventType;
-        THolder<IEventHandle> heldFinalize;
+        std::unique_ptr<IEventHandle> heldFinalize;
         TActorId executer;
         TActorId buffer;
         bool cancelled = false;
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         TActorId bufferActorId;
         TActorId commitExecuterId;
-        THolder<IEventHandle> heldCommitResult;
+        std::unique_ptr<IEventHandle> heldCommitResult;
         bool rollbackUndelivered = false;
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvCommit::EventType) {
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         TActorId bufferActorId;
         TActorId commitExecuterId;
         TActorId rollbackExecuterId;
-        TVector<THolder<IEventHandle>> heldShardResults;
+        TVector<std::unique_ptr<IEventHandle>> heldShardResults;
         bool holdShardResults = true;
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvCommit::EventType) {

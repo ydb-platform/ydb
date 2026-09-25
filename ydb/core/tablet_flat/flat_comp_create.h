@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NTable {
 
-    THolder<ICompactionStrategy> CreateGenCompactionStrategy(
+    std::unique_ptr<ICompactionStrategy> CreateGenCompactionStrategy(
             ui32 table,
             ICompactionBackend* backend,
             IResourceBroker* broker,

@@ -21,7 +21,7 @@ public:
         , Heap(TIterKeyGreater{ this })
     {}
 
-    void Add(THolder<TStatsScreenedPartIterator> iterator) {
+    void Add(std::unique_ptr<TStatsScreenedPartIterator> iterator) {
         Y_ENSURE(iterator->IsValid());
         Iterators.PushBack(std::move(iterator));
         TStatsScreenedPartIterator* iteratorPtr = Iterators.back();

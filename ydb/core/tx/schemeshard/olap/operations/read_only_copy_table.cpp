@@ -328,15 +328,15 @@ class TReadOnlyCopyColumnTable: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<TProposedWaitParts>(OperationId);
+            return std::make_unique<TProposedWaitParts>(OperationId);
         case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitCopiedPathPublication>(OperationId);
+            return std::make_unique<TWaitCopiedPathPublication>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -345,7 +345,7 @@ class TReadOnlyCopyColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -360,7 +360,7 @@ public:
             {"targetPath", dstPathStr},
         );
 
-        THolder<TProposeResponse> result;
+        std::unique_ptr<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 

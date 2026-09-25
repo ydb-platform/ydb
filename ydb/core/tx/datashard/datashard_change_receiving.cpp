@@ -45,7 +45,7 @@ public:
             }
 
             const auto& [sender, req] = Self->PendingChangeExchangeHandshakes.front();
-            auto& [_, resp] = Statuses.emplace_back(sender, MakeHolder<TEvChangeExchange::TEvStatus>());
+            auto& [_, resp] = Statuses.emplace_back(sender, std::make_unique<TEvChangeExchange::TEvStatus>());
             Y_ENSURE(ExecuteHandshake(db, req, resp->Record));
             Self->PendingChangeExchangeHandshakes.pop_front();
         }
@@ -114,7 +114,7 @@ public:
     }
 
 private:
-    TVector<std::pair<TActorId, THolder<TEvChangeExchange::TEvStatus>>> Statuses;
+    TVector<std::pair<TActorId, std::unique_ptr<TEvChangeExchange::TEvStatus>>> Statuses;
 
 }; // TTxChangeExchangeHandshake
 
@@ -425,7 +425,7 @@ public:
 private:
     TPipeline& Pipeline;
     TEvChangeExchange::TEvApplyRecords::TPtr Ev;
-    THolder<TEvChangeExchange::TEvStatus> Status;
+    std::unique_ptr<TEvChangeExchange::TEvStatus> Status;
     std::optional<TRowVersion> MvccVersion;
 
     TSerializedCellVec KeyCells;

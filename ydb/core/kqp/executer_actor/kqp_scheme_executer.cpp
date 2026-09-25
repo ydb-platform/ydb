@@ -145,7 +145,7 @@ public:
     }
 
     void CreateTmpDirectory() {
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
@@ -173,7 +173,7 @@ public:
         auto actorSystem = TActivationContext::ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvMakeTempDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
@@ -181,7 +181,7 @@ public:
     }
 
     void CreateSessionDirectory() {
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
@@ -221,7 +221,7 @@ public:
         auto actorSystem = TlsActivationContext->ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeSessionDirResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvMakeSessionDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
@@ -237,7 +237,7 @@ public:
         const auto dirPath = SplitPath(alterTableModifyScheme.GetMoveTable().GetDstPath());
         AFL_ENSURE(dirPath.size() >= 2);
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
         TVector<TString> path;
 
@@ -310,7 +310,7 @@ public:
         AFL_ENSURE(!dirPath.empty());
         AFL_ENSURE(!workingDir.empty());
 
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 
         auto actorSystem = TActivationContext::ActorSystem();
@@ -329,7 +329,7 @@ public:
         AFL_ENSURE(alterTableModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
 
         if (dirPath.size() == 1) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeCTASDirResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvMakeCTASDirResult>();
             ev->Result.SetSuccess();
             actorSystem->Send(selfId, ev.Release());
             Become(&TKqpSchemeExecuter::ExecuteState);
@@ -348,7 +348,7 @@ public:
         RegisterWithSameMailbox(requestHandler);
 
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeCTASDirResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvMakeCTASDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
@@ -358,7 +358,7 @@ public:
     void MakeSchemeOperationRequest() {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
-        auto ev = MakeHolder<TRequest>();
+        auto ev = std::make_unique<TRequest>();
         ev->Record.SetDatabaseName(Database);
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
@@ -623,7 +623,7 @@ public:
 
                 auto selfId = SelfId();
                 analyzePromise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-                    auto ev = MakeHolder<TEvPrivate::TEvResult>();
+                    auto ev = std::make_unique<TEvPrivate::TEvResult>();
                     ev->Result = future.GetValue();
 
                     actorSystem->Send(selfId, ev.Release());
@@ -756,7 +756,7 @@ public:
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId, operationType](const TFuture<IKqpGateway::TGenericResult>& future) {
             const auto& value = future.GetValue();
-            auto ev = MakeHolder<TEvPrivate::TEvResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvResult>();
             ev->Result.SetStatus(value.Status());
             ev->Result.OperationId = value.OperationId;
 
@@ -803,7 +803,7 @@ public:
         using TResultFuture = NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus>;
         resultFuture.Subscribe([actorSystem, selfId, objectType = schemeOp.GetObjectType()](const TResultFuture& f) {
             const auto& status = f.GetValue();
-            auto ev = MakeHolder<TEvPrivate::TEvResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvResult>();
             if (status.Ok()) {
                 ev->Result.SetSuccess();
             } else {
@@ -1361,7 +1361,7 @@ public:
             {"issues", issues.ToOneLineString()});
 
         if (AnalyzeActorId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
+            auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
             Send(AnalyzeActorId, abortEv.Release());
         }
 

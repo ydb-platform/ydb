@@ -58,7 +58,7 @@ private:
     ui64 FetchRequestCurrentReadTablet;
     ui32 FetchRequestBytesLeft;
     bool ProcessingFinished = false;
-    THolder<TEvPQ::TEvFetchResponse> Response;
+    std::unique_ptr<TEvPQ::TEvFetchResponse> Response;
     const TActorId SchemeCache;
 
     // TopicPath -> TopicInfo
@@ -580,7 +580,7 @@ public:
         return readBytesSize;
     }
 
-    void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
+    void SendReplyAndDie(std::unique_ptr<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
         LOG_D("Reply",
             {"requesterId", RequesterId},
             {"response", event->Response.ShortDebugString()});
@@ -588,8 +588,8 @@ public:
         Die(ctx);
     }
 
-    THolder<TEvPQ::TEvFetchResponse> CreateErrorReply(Ydb::StatusIds::StatusCode status, const TString& message) {
-        auto response = MakeHolder<TEvPQ::TEvFetchResponse>();
+    std::unique_ptr<TEvPQ::TEvFetchResponse> CreateErrorReply(Ydb::StatusIds::StatusCode status, const TString& message) {
+        auto response = std::make_unique<TEvPQ::TEvFetchResponse>();
         response->Status = status;
         response->Message = message;
         return response;
@@ -597,7 +597,7 @@ public:
 
     void EnsureResponse() {
         if (!Response) {
-            Response = MakeHolder<TEvPQ::TEvFetchResponse>();
+            Response = std::make_unique<TEvPQ::TEvFetchResponse>();
 
             for (size_t i = 0; i < PartitionStatus.size(); ++i) {
                 Response->Response.AddPartResult();

@@ -236,7 +236,7 @@ public:
                     << "; path# " << Cfg.Path.Quote());
         }
 
-        THolder<TFileHandle> file(new TFileHandle(Cfg.Path.c_str(), OpenExisting | RdWr | DirectAligned | Sync));
+        std::unique_ptr<TFileHandle> file(new TFileHandle(Cfg.Path.c_str(), OpenExisting | RdWr | DirectAligned | Sync));
 
         if (NumberOfRandomRefills > 0) {
             THPTimer start;

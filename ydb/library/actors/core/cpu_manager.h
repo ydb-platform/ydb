@@ -20,7 +20,7 @@ namespace NActors {
         TCpuManagerConfig Config;
 
     public:
-        explicit TCpuManager(THolder<TActorSystemSetup>& setup);
+        explicit TCpuManager(std::unique_ptr<TActorSystemSetup>& setup);
         ~TCpuManager();
 
         void Setup();

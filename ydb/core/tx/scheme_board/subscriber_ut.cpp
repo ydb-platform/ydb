@@ -25,7 +25,7 @@ class TSubscriberTest: public NUnitTest::TTestBase {
 
 public:
     void SetUp() override {
-        Context = MakeHolder<TTestContext>(2);
+        Context = std::make_unique<TTestContext>(2);
 
         for (ui32 i : xrange(Context->GetNodeCount())) {
             SetupStateStorage(*Context, i, 0);
@@ -62,7 +62,7 @@ public:
     void SyncWithOutdatedReplica();
 
 private:
-    THolder<TTestContext> Context;
+    std::unique_ptr<TTestContext> Context;
 
 }; // TSubscriberTest
 
@@ -255,8 +255,8 @@ class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 
-    THolder<TTestContext> CreateContext() {
-        auto context = MakeHolder<TTestContext>(2);
+    std::unique_ptr<TTestContext> CreateContext() {
+        auto context = std::make_unique<TTestContext>(2);
 
         for (ui32 i : xrange(context->GetNodeCount())) {
             SetupStateStorage(*context, i, 0);

@@ -153,7 +153,7 @@ private:
 
 TAutoPtr<IGraphTransformer> CreateKqpConstantFoldingTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typeCtx, const TIntrusivePtr<TKikimrConfiguration>& config) {
-    return THolder<IGraphTransformer>(new TKqpConstantFoldingTransformer(kqpCtx, typeCtx, config));
+    return std::unique_ptr<IGraphTransformer>(new TKqpConstantFoldingTransformer(kqpCtx, typeCtx, config));
 }
 
 } // namespace NKikimr::NKqp

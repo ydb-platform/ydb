@@ -41,7 +41,7 @@ public:
         EnableSampling = FromStringWithDefault(Params.Get("enable_sampling"), EnableSampling);
         SamplingPeriod = FromStringWithDefault(Params.Get("sampling_period"), SamplingPeriod);
         ReturnActualData = FromStringWithDefault(Params.Get("actual_data"), ReturnActualData);
-        THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        std::unique_ptr<TEvTxUserProxy::TEvNavigate> request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         if (Params.Has("path")) {
             request->Record.MutableDescribePath()->SetPath(Params.Get("path"));
         } else {
@@ -89,7 +89,7 @@ public:
                         ShardsAsked = std::clamp<int>(std::min<int>(LimitShards, std::ceil(PollingFactor * tabletsOrder.size())), 1, tabletsOrder.size());
 
                         for (int i = 0; i < ShardsAsked; ++i) {
-                            THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
+                            std::unique_ptr<TEvDataShard::TEvGetDataHistogramRequest> request = std::make_unique<TEvDataShard::TEvGetDataHistogramRequest>();
                             if (EnableSampling) {
                                 request->Record.SetCollectKeySampleMs(SamplingPeriod);
                             }

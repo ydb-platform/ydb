@@ -265,7 +265,7 @@ namespace NKikimr {
             ~TSnapshotGCList() {
                 auto* head = Head.exchange(nullptr, std::memory_order_acquire);
                 while (head) {
-                    THolder<TSnapshotContext> current(head);
+                    std::unique_ptr<TSnapshotContext> current(head);
                     head = std::exchange(current->NextDroppedSnapshot, nullptr);
                 }
             }
@@ -876,7 +876,7 @@ namespace NKikimr {
             if (auto* garbage = GCList->CollectDroppedSnapshots()) {
                 do {
                     Y_DEBUG_ABORT_UNLESS(garbage->RefCount() == 0);
-                    THolder<TSnapshotContext> context(garbage);
+                    std::unique_ptr<TSnapshotContext> context(garbage);
                     garbage = std::exchange(context->NextDroppedSnapshot, nullptr);
                     DropSnapshot(context.Get());
                 } while (garbage);

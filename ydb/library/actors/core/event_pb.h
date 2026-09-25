@@ -264,7 +264,7 @@ namespace NActors {
         }
 
         static TEv* Load(const TEventSerializedData *input) {
-            THolder<TEv> holder(new TEv());
+            std::unique_ptr<TEv> holder(new TEv());
             TEventPBBase* ev = holder.Get();
             if (!input->GetSize()) {
                 Y_ENSURE(ev->Record.ParseFromString(TString()),

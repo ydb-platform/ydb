@@ -504,23 +504,23 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
         const NKikimrScheme::TEvModifySchemeTransaction& record,
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
-        THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
         TOperationContext& context);
     void AbortOperationPropose(const TTxId txId, TOperationContext& context);
 
-    THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
+    std::unique_ptr<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
-    THolder<TEvColumnShard::TEvProposeTransaction> MakeColumnShardProposal(const TPathId& pathId, const TOperationId& opId,
+    std::unique_ptr<TEvColumnShard::TEvProposeTransaction> MakeColumnShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx, NKikimrTxColumnShard::ETransactionKind kind = NKikimrTxColumnShard::TX_KIND_SCHEMA) const;
 
-    THolder<::NActors::IEventBase> MakeShardProposal(const TPath& path, const TOperationId& opId,
+    std::unique_ptr<::NActors::IEventBase> MakeShardProposal(const TPath& path, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const;
 
 
@@ -1409,7 +1409,7 @@ public:
         TIncrementalRestoreState& state,
         TIncrementalRestoreState::TItem::EKind kind,
         TPathId tablePathId,
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> request,
         NIceDb::TNiceDb& db,
         const TActorContext& ctx,
         TPathId srcTablePathId = TPathId{});
@@ -2240,8 +2240,8 @@ public:
 
     NLogin::TLoginProvider LoginProvider;
 
-    THolder<TRootShredManager> RootShredManager = nullptr;
-    THolder<TTenantShredManager> TenantShredManager = nullptr;
+    std::unique_ptr<TRootShredManager> RootShredManager = nullptr;
+    std::unique_ptr<TTenantShredManager> TenantShredManager = nullptr;
 
     THashSet<TActorId> RunningContinuousBackupCleaners;
 

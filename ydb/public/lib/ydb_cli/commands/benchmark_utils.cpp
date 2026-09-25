@@ -301,7 +301,7 @@ public:
     }
 };
 
-TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THolder<TQueryResultScanner>& scaner, TStringBuf expected, const TQueryBenchmarkSettings& becnhmarkSettings) {
+TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const std::unique_ptr<TQueryResultScanner>& scaner, TStringBuf expected, const TQueryBenchmarkSettings& becnhmarkSettings) {
     if (status.IsSuccess()) {
         Y_ENSURE(scaner);
         return TQueryBenchmarkResult::Result(
@@ -355,7 +355,7 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQu
     if (auto error = SetTimeoutSettings(settings, benchmarkSettings.Deadline)) {
         return *error;
     }
-    THolder<TQueryResultScanner> composite;
+    std::unique_ptr<TQueryResultScanner> composite;
     const auto txMode = benchmarkSettings.TxMode;
     const auto resStatus = client.RetryQuerySync([&composite, &benchmarkSettings, &query, &settings, txMode](NQuery::TQueryClient& qc) -> TStatus {
         auto txControl = GetTxControl(txMode);
@@ -366,7 +366,7 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQu
         if (!it.IsSuccess()) {
             return it;
         }
-        composite = MakeHolder<TQueryResultScanner>();
+        composite = std::make_unique<TQueryResultScanner>();
         composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
         composite->SetMaxRowsPerResultIndex(benchmarkSettings.MaxRowsPerResultIndex);
         return composite->Scan(it, benchmarkSettings.PlanFileName);
@@ -667,7 +667,7 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
         errStream << "Result " << resultSetIndex << ": incorrect scheme, " << resultSets.front().ColumnsCount() << " columns in result, but " << columns.size() << " expected." << Endl;
         schemeOk = false;
     }
-    auto parser = MakeHolder<TResultSetParser>(resultSets.front());
+    auto parser = std::make_unique<TResultSetParser>(resultSets.front());
     for (size_t c = 0; c < columns.size(); ++c) {
         if (parser->ColumnIndex(columns[c]) < 0) {
             if (c < parser->ColumnsCount()) {
@@ -707,7 +707,7 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     size_t resNum = 1;
     for (auto expectedLine = expectedLines.begin() + 1; expectedLine != expectedLines.end(); ++expectedLine) {
         while (!parser->TryNextRow() && resNum < resultSets.size()) {
-            parser = MakeHolder<TResultSetParser>(resultSets[resNum++]);
+            parser = std::make_unique<TResultSetParser>(resultSets[resNum++]);
         }
         NCsvFormat::CsvSplitter splitter(*expectedLine);
         TVector<TString> lineDiff(columns.size() + 1, "NoExp!");

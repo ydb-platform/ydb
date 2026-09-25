@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
         // Intercept the first real UpdateConfigResponse from the fake filestore tablet
         // so we can deliver it twice and emulate a late duplicate reply.
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(
             runtime,
             suppressed,
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
         // Prepare an explicit duplicate with the same payload. The handler routes
         // replies by tx id and origin tablet, both of which are stored in Record.
-        auto duplicate = MakeHolder<TEvFileStore::TEvUpdateConfigResponse>();
+        auto duplicate = std::make_unique<TEvFileStore::TEvUpdateConfigResponse>();
         duplicate->Record.CopyFrom(suppressed.front()->Get<TEvFileStore::TEvUpdateConfigResponse>()->Record);
 
         // First delivery advances alter-fs from ConfigureParts to Propose.

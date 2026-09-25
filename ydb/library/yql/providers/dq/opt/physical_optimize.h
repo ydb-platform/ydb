@@ -8,6 +8,6 @@
 
 namespace NYql::NDqs {
 
-THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config);
+std::unique_ptr<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config);
 
 } // namespace NYql::NDqs

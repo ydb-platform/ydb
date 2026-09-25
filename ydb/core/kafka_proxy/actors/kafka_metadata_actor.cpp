@@ -40,7 +40,7 @@ public:
         , Path(std::move(path))
         , Database(std::move(database))
         , Token(std::move(token))
-        , Response(MakeHolder<TEvPQProxy::TEvPartitionLocationResponse>())
+        , Response(std::make_unique<TEvPQProxy::TEvPartitionLocationResponse>())
     {
     }
 
@@ -260,7 +260,7 @@ private:
     TString Path;
     TString Database;
     TString Token;
-    THolder<TEvPQProxy::TEvPartitionLocationResponse> Response;
+    std::unique_ptr<TEvPQProxy::TEvPartitionLocationResponse> Response;
     TActorId DescriberId;
     ui64 BalancerTabletId = 0;
     TVector<ui64> SchemePartitionIds;

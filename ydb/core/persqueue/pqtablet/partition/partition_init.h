@@ -52,8 +52,8 @@ private:
 
     bool InProgress;
 
-    TVector<THolder<TInitializerStep>> Steps;
-    std::vector<THolder<TInitializerStep>>::iterator CurrentStep;
+    TVector<std::unique_ptr<TInitializerStep>> Steps;
+    std::vector<std::unique_ptr<TInitializerStep>>::iterator CurrentStep;
     TInitializionContext Ctx;
 };
 

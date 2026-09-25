@@ -131,13 +131,13 @@ class TAlterPQ: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<NPQState::TConfigureParts>(OperationId);
+            return std::make_unique<NPQState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<NPQState::TPropose>(OperationId);
+            return std::make_unique<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -603,7 +603,7 @@ public:
         auto it = pqGroup->Shards.begin();
 
         for (const auto& p : pqGroup->AlterData->PartitionsToAdd) {
-            auto partition = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+            auto partition = std::make_unique<TTopicTabletInfo::TTopicPartitionInfo>();
             partition->PqId = p.PartitionId;
             partition->GroupId = p.GroupId;
             partition->KeyRange = p.KeyRange;
@@ -629,7 +629,7 @@ public:
         pqGroup->InitSplitMergeGraph();
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterPersQueueGroup();
@@ -644,7 +644,7 @@ public:
         );
 
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TString errStr;
 

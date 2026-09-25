@@ -561,12 +561,12 @@ namespace NActors {
         return Send(IEventHandle::Forward(ev, recipient));
     }
 
-    template bool TActivationContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient);
-    template bool TActivationContext::Forward<ESendingType::Lazy>(THolder<IEventHandle>& ev, const TActorId& recipient);
-    template bool TActivationContext::Forward<ESendingType::Tail>(THolder<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Common>(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Lazy>(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient);
+    template bool TActivationContext::Forward<ESendingType::Tail>(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient);
 
     template <ESendingType SendingType>
-    bool TActivationContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
+    bool TActivationContext::Forward(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) {
         return Send(IEventHandle::Forward(ev, recipient));
     }
 
@@ -597,12 +597,12 @@ namespace NActors {
         return ExecutorThread.Send<SendingType>(IEventHandle::Forward(ev, recipient));
     }
 
-    template bool TActorContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
-    template bool TActorContext::Forward<ESendingType::Lazy>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
-    template bool TActorContext::Forward<ESendingType::Tail>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Common>(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Lazy>(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) const;
+    template bool TActorContext::Forward<ESendingType::Tail>(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) const;
 
     template <ESendingType SendingType>
-    bool TActorContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) const {
+    bool TActorContext::Forward(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) const {
         return ExecutorThread.Send<SendingType>(IEventHandle::Forward(ev, recipient));
     }
 

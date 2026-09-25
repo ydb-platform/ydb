@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
         const TPathId pathId(owner, 100);
         const TString path = "/Root/TestPath";
-        auto describeResult = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        auto describeResult = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
         describeResult->Record = CreateSamplePathDescription(owner, pathId, path);
         constexpr ui64 cookie = 12345;
 
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         if (reconfiguration == EReconfiguration::DuplicateAck) {
             const auto& first = requiredAcks.front();
             for (size_t i = 0; i < ReplicasInRingGroup; ++i) {
-                auto ack = MakeHolder<TUpdateAck>(owner, generation, pathId, first->Get()->Record.GetVersion());
+                auto ack = std::make_unique<TUpdateAck>(owner, generation, pathId, first->Get()->Record.GetVersion());
                 runtime.Send(new IEventHandle(populator, first->Sender, ack.Release(), 0, cookie));
             }
             UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);

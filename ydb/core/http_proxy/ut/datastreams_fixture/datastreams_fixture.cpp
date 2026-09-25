@@ -582,7 +582,7 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
             }, 0, 1);
 
     server->ServerSettings->SetUseRealThreads(false);
-    KikimrServer = THolder<NYdb::TKikimrWithGrpcAndRootSchema>(server);
+    KikimrServer = std::unique_ptr<NYdb::TKikimrWithGrpcAndRootSchema>(server);
     KikimrGrpcPort = KikimrServer->ServerSettings->GrpcPort;
 
     ActorRuntime = KikimrServer->GetRuntime();
@@ -1081,7 +1081,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     actorId = as->Register(NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig));
     as->RegisterLocalService(MakeHttpProxyID(), actorId);
 
-    GRpcServer = MakeHolder<NYdbGrpc::TGRpcServer>(opts);
+    GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts);
     GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, Counters));
 
     GRpcServer->Start();

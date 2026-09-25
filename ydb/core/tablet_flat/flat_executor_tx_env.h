@@ -265,7 +265,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void AttachPart(ui32 tableId, THolder<TDirectPartResult> result) override
+        void AttachPart(ui32 tableId, std::unique_ptr<TDirectPartResult> result) override
         {
             Y_ENSURE(result, "AttachPart called with an empty result");
             AttachedParts.emplace_back(TAttachedPart{ tableId, std::move(result) });
@@ -306,17 +306,17 @@ namespace NTabletFlatExecutor {
 
         /*_ In tx tables borrow proto API   */
 
-        THolder<TBorrowSnap> DropSnap;
+        std::unique_ptr<TBorrowSnap> DropSnap;
         THashMap<TLogoId, TBorrowUpdate> BorrowUpdates;
-        TVector<THolder<TLoanBundle>> LoanBundle;
-        TVector<THolder<TLoanTxStatus>> LoanTxStatus;
+        TVector<std::unique_ptr<TLoanBundle>> LoanBundle;
+        TVector<std::unique_ptr<TLoanTxStatus>> LoanTxStatus;
         THashMap<TLogoId, TLoanConfirmation> LoanConfirmation;
 
         /*_ Directly written parts to attach as bottom layers */
 
         struct TAttachedPart {
             ui32 TableId;
-            THolder<TDirectPartResult> Result;
+            std::unique_ptr<TDirectPartResult> Result;
         };
         TVector<TAttachedPart> AttachedParts;
     };

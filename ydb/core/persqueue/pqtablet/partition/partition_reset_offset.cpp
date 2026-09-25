@@ -90,7 +90,7 @@ bool TPartition::TryScheduleResetOffsetReply(const TEvPQ::TEvSetClientInfo& act,
         return false;
     }
     const auto& pending = *act.ResetOffsetReply;
-    Replies.emplace_back(pending.Sender, MakeHolder<TEvPQ::TEvResetOffsetResponse>(
+    Replies.emplace_back(pending.Sender, std::make_unique<TEvPQ::TEvResetOffsetResponse>(
         pending.PartitionId, status, TString(error), pending.Cookie).Release());
     return true;
 }
@@ -112,7 +112,7 @@ void TPartition::FinishResetOffset(
     const TString& consumer,
     ui64 offset)
 {
-    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+    auto event = std::make_unique<TEvPQ::TEvSetClientInfo>(
         /*cookie=*/0,
         consumer,
         offset,
@@ -294,7 +294,7 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
         {"timestampMs", timestamp.MilliSeconds()},
         {"blobCount", blobs.size()});
 
-    auto request = MakeHolder<TEvPQ::TEvBlobRequest>(
+    auto request = std::make_unique<TEvPQ::TEvBlobRequest>(
         ERequestCookie::ReadBlobForResetOffset, Partition, std::move(blobs));
     Send(BlobCache, request.Release());
 }

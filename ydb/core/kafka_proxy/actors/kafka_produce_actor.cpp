@@ -526,7 +526,7 @@ std::pair<EKafkaErrors, TParsedProduceRecords> ParseProduceRecords(
     return {EKafkaErrors::NONE_ERROR, std::move(result)};
 }
 
-std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
+std::pair<EKafkaErrors, std::unique_ptr<TEvPartitionWriter::TEvWriteRequest>> Convert(
     const TString& transactionalId,
     const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
     const TParsedProduceRecords& parsedRecords,
@@ -539,7 +539,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         return {EKafkaErrors::INVALID_RECORD, nullptr};
     }
 
-    auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
+    auto ev = std::make_unique<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
     const TStringBuf records = parsedRecords.Records;
@@ -1000,7 +1000,7 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
 
     request->DatabaseName = Context->DatabasePath;
 
-    ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
+    ctx.Send(MakeSchemeCacheID(), std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }
 
 void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TActorContext& ctx) {

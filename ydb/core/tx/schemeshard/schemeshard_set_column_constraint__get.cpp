@@ -25,7 +25,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvSetColumnConstraint::TEvGetResponse>();
+        Response = std::make_unique<TEvSetColumnConstraint::TEvGetResponse>();
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {

@@ -14,7 +14,7 @@ public:
         return false;
     }
 
-    TCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CreateUser, std::move(cb))
     {
     }
@@ -84,7 +84,7 @@ private:
     TActorId SchemaActor;
 };
 
-IActor* CreateCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TCreateUserActor(sourceSqsRequest, std::move(cb));
 }
 

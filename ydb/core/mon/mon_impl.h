@@ -9,7 +9,7 @@
 namespace NActors {
 
 using namespace NMonitoring;
-using THttpResponsePtr = THolder<NMon::IEvHttpInfoRes>;
+using THttpResponsePtr = std::unique_ptr<NMon::IEvHttpInfoRes>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // HTML results page

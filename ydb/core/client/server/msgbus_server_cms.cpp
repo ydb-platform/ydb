@@ -237,7 +237,7 @@ public:
     {
         Y_ABORT_UNLESS(Response.HasStatus());
 
-        auto response = MakeHolder<TBusCmsResponse>();
+        auto response = std::make_unique<TBusCmsResponse>();
         response->Record = std::move(Response);
         SendReplyMove(response.Release());
         Die(ctx);

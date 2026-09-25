@@ -12,7 +12,7 @@ template<bool LLVM, bool Spilling = false>
 struct TDqSetup: public TSetup<LLVM, Spilling> {
     explicit TDqSetup(TComputationNodeFactory nodeFactory = GetDqNodeFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : TSetup<LLVM, Spilling>(nodeFactory, std::move(modules)) {
-        this->PgmBuilder = MakeHolder<TDqProgramBuilder>(*this->Env, *this->FunctionRegistry);
+        this->PgmBuilder = std::make_unique<TDqProgramBuilder>(*this->Env, *this->FunctionRegistry);
     }
 
     TDqProgramBuilder& GetDqProgramBuilder() {

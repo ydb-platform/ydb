@@ -252,7 +252,7 @@ private:
             if constexpr (HasHandleUnauthorized) {
                 HandleUnauthorized(ev, ctx);
             }
-            auto req = MakeHolder<TEvConsole::TEvUnauthorized>();
+            auto req = std::make_unique<TEvConsole::TEvUnauthorized>();
             ctx.Send(ev->Sender, req.Release());
         }
     }

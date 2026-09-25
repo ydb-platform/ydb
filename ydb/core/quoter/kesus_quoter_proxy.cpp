@@ -55,7 +55,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
         TKesusResourceAllocationStatistics AllocStats;
 
-        THolder<TTimeSeriesVec<double>> History;
+        std::unique_ptr<TTimeSeriesVec<double>> History;
         bool PendingAccountingReport = false; // History contains data to send
         TInstant HistoryAccepted; // Do not report history before this instant
         TInstant LastAccountingReportEnd; // Do not write history before this instant
@@ -245,7 +245,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             if (Props.GetAccountingConfig().GetEnabled()) {
                 AccountingReportPeriod = TDuration::MilliSeconds(Props.GetAccountingConfig().GetReportPeriodMs());
                 const ui64 intervalsInSec = 100; // as far as default resolution in TTimeSerisVec is 10'000
-                THolder<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec() * intervalsInSec));
+                std::unique_ptr<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec() * intervalsInSec));
                 if (History) {
                     history->Add(*History.Get());
                 }
@@ -318,7 +318,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     const TVector<TString> Path;
     const TString LogPrefix;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TKesusInfo> KesusInfo;
-    THolder<ITabletPipeFactory> TabletPipeFactory;
+    std::unique_ptr<ITabletPipeFactory> TabletPipeFactory;
     TActorId KesusPipeClient;
     ui32 ServerVersion = 0;
 
@@ -328,7 +328,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     ui64 KesusReconnectCount = 0;
     TControlWrapper QuoterProxyProtocolVersion{1, 0, 10};
 
-    TMap<TString, THolder<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
+    TMap<TString, std::unique_ptr<TResourceState>> Resources; // Map because iterators are needed to remain valid during insertions.
     THashMap<ui64, decltype(Resources)::iterator> ResIndex;
 
     THashMap<ui64, std::vector<TString>> CookieToResourcePath;
@@ -336,11 +336,11 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
     TInstant NextReplicationReport = TInstant::Max();
 
-    THolder<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
-    THolder<NKesus::TEvKesus::TEvAccountResources> AccountEv;
-    THolder<NKesus::TEvKesus::TEvReportResources> ReplicationEv;
-    THolder<TEvQuota::TEvProxyUpdate> ProxyUpdateEv;
-    THashMap<TDuration, THolder<TEvPrivate::TEvOfflineResourceAllocation>> OfflineAllocationEvSchedule;
+    std::unique_ptr<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
+    std::unique_ptr<NKesus::TEvKesus::TEvAccountResources> AccountEv;
+    std::unique_ptr<NKesus::TEvKesus::TEvReportResources> ReplicationEv;
+    std::unique_ptr<TEvQuota::TEvProxyUpdate> ProxyUpdateEv;
+    THashMap<TDuration, std::unique_ptr<TEvPrivate::TEvOfflineResourceAllocation>> OfflineAllocationEvSchedule;
 
     struct TCounters {
         ::NMonitoring::TDynamicCounterPtr QuoterCounters;
@@ -593,7 +593,7 @@ private:
                 return;
             }
 
-            auto [iter, inserted] = Resources.emplace(msg->Resource, MakeHolder<TResourceState>(msg->Resource, Counters.QuoterCounters));
+            auto [iter, inserted] = Resources.emplace(msg->Resource, std::make_unique<TResourceState>(msg->Resource, Counters.QuoterCounters));
             Y_ASSERT(inserted);
             resourceIt = iter;
         }
@@ -661,21 +661,21 @@ private:
 
     void InitUpdateEv() {
         if (!UpdateEv) {
-            UpdateEv = MakeHolder<NKesus::TEvKesus::TEvUpdateConsumptionState>();
+            UpdateEv = std::make_unique<NKesus::TEvKesus::TEvUpdateConsumptionState>();
             ActorIdToProto(SelfId(), UpdateEv->Record.MutableActorID());
         }
     }
 
     void InitAccountEv() {
         if (!AccountEv) {
-            AccountEv = MakeHolder<NKesus::TEvKesus::TEvAccountResources>();
+            AccountEv = std::make_unique<NKesus::TEvKesus::TEvAccountResources>();
             ActorIdToProto(SelfId(), AccountEv->Record.MutableActorID());
         }
     }
 
     void InitReplicationEv() {
         if (!ReplicationEv) {
-            ReplicationEv = MakeHolder<NKesus::TEvKesus::TEvReportResources>();
+            ReplicationEv = std::make_unique<NKesus::TEvKesus::TEvReportResources>();
             ActorIdToProto(SelfId(), ReplicationEv->Record.MutableActorID());
         }
     }
@@ -770,7 +770,7 @@ private:
                 res.LastAllocated + averageDuration - now;
             auto& event = OfflineAllocationEvSchedule[when];
             if (!event) {
-                event = MakeHolder<TEvPrivate::TEvOfflineResourceAllocation>();
+                event = std::make_unique<TEvPrivate::TEvOfflineResourceAllocation>();
             }
             double amount = averageAmount;
             if (when) {
@@ -1150,8 +1150,8 @@ private:
         }
     }
 
-    THolder<TEvQuota::TEvProxyUpdate> CreateUpdateEvent(TEvQuota::EUpdateState state = TEvQuota::EUpdateState::Normal) const {
-        return MakeHolder<TEvQuota::TEvProxyUpdate>(QuoterId, state);
+    std::unique_ptr<TEvQuota::TEvProxyUpdate> CreateUpdateEvent(TEvQuota::EUpdateState state = TEvQuota::EUpdateState::Normal) const {
+        return std::make_unique<TEvQuota::TEvProxyUpdate>(QuoterId, state);
     }
 
     TString PrintResources(const TEvQuota::TEvProxyUpdate& ev) const {
@@ -1213,7 +1213,7 @@ private:
         return std::move(ret);
     }
 
-    void SendToService(THolder<TEvQuota::TEvProxyUpdate>&& ev) {
+    void SendToService(std::unique_ptr<TEvQuota::TEvProxyUpdate>&& ev) {
         YDB_LOG_TRACE("ProxyUpdate",
             {"logPrefix", LogPrefix},
             {"quoterState", ev->QuoterState},
@@ -1261,7 +1261,7 @@ public:
         return NKikimrServices::TActivity::QUOTER_PROXY_ACTOR;
     }
 
-    TKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory)
+    TKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, std::unique_ptr<ITabletPipeFactory> tabletPipeFactory)
         : QuoterServiceId(quoterServiceId)
         , QuoterId(quoterId)
         , Path(navEntry.Path)
@@ -1376,11 +1376,11 @@ struct TDefaultTabletPipeFactory : public ITabletPipeFactory {
     }
 };
 
-THolder<ITabletPipeFactory> ITabletPipeFactory::GetDefaultFactory() {
-    return MakeHolder<TDefaultTabletPipeFactory>();
+std::unique_ptr<ITabletPipeFactory> ITabletPipeFactory::GetDefaultFactory() {
+    return std::make_unique<TDefaultTabletPipeFactory>();
 }
 
-IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory) {
+IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const TActorId& quoterServiceId, std::unique_ptr<ITabletPipeFactory> tabletPipeFactory) {
     return new TKesusQuoterProxy(quoterId, navEntry, quoterServiceId, std::move(tabletPipeFactory));
 }
 

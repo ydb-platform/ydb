@@ -1438,7 +1438,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     }
 
     void SetCompactFulltextFlag(TTestBasicRuntime& runtime, bool enabled) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         auto& flags = *request->Record.MutableConfig()->MutableFeatureFlags();
         // A console feature-flags item is a complete snapshot, not a field-level patch. Keep the
         // dependencies enabled while changing only the compact-layout selection under test.

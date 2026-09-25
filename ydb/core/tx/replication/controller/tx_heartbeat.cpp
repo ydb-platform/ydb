@@ -8,8 +8,8 @@
 
 namespace NKikimr::NReplication::NController {
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId, const TVector<TString>& tables) {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId, const TVector<TString>& tables) {
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     auto& tx = *ev->Record.MutableTransaction()->MutableCommitWrites();
 
     tx.SetWriteTxId(writeTxId);
@@ -71,7 +71,7 @@ class TController::TTxHeartbeat: public TTxBase {
     // TODO(ilnaz): configurable
     static constexpr ui32 MaxBatchSize = 1000;
 
-    THolder<TEvTxUserProxy::TEvProposeTransaction> CommitProposal;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> CommitProposal;
 
 public:
     explicit TTxHeartbeat(TController* self)
@@ -210,7 +210,7 @@ void TController::RunTxHeartbeat(const TActorContext& ctx) {
 
 class TController::TTxCommitChanges: public TTxBase {
     TEvTxUserProxy::TEvProposeTransactionStatus::TPtr Status;
-    THolder<TEvTxUserProxy::TEvProposeTransaction> CommitProposal;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> CommitProposal;
 
 public:
     explicit TTxCommitChanges(TController* self, TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev)

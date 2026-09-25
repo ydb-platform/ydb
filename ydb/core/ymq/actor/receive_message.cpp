@@ -32,7 +32,7 @@ public:
         return true;
     }
 
-    TReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ReceiveMessage, std::move(cb))
     {
     }
@@ -132,7 +132,7 @@ private:
         InitParams();
 
         if (!FeatureFlags_.EnableSQSMigrationFinished_ || !IsTopicCreated()) {
-            auto receiveRequest = MakeHolder<TSqsEvents::TEvReceiveMessageBatch>();
+            auto receiveRequest = std::make_unique<TSqsEvents::TEvReceiveMessageBatch>();
             receiveRequest->RequestId = RequestId_;
             receiveRequest->MaxMessagesCount = MaxMessagesCount_;
             receiveRequest->ReceiveAttemptId = ReceiveAttemptId_;
@@ -434,7 +434,7 @@ private:
     std::vector<TString> LockedMessageGroups_;
 };
 
-IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TReceiveMessageActor(sourceSqsRequest, std::move(cb));
 }
 

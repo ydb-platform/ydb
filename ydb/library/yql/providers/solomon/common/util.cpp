@@ -11,8 +11,8 @@
 
 namespace {
 
-THolder<re2::RE2> CompileRE2WithCheck(const std::string& pattern) {
-    THolder<re2::RE2> re(new re2::RE2(pattern));
+std::unique_ptr<re2::RE2> CompileRE2WithCheck(const std::string& pattern) {
+    std::unique_ptr<re2::RE2> re(new re2::RE2(pattern));
     YQL_ENSURE(re->ok(), "Unable to compile regex " << pattern << ": " << re->error());
     return re;
 }
@@ -22,16 +22,16 @@ const TString LABEL_VALUE_PATTERN       = R"( *["'][ -!#-&(-)+->@-_a-{}-~*|-]{1,
 const TString OPERATOR_PATTERN          = R"(=|!=|==|!==|=~|!~)";
 
 const TString SENSOR_NAME_PATTERN       = "(" + LABEL_VALUE_PATTERN + ")?({.*})";
-THolder<re2::RE2> SENSOR_NAME_RE        = CompileRE2WithCheck(SENSOR_NAME_PATTERN);
+std::unique_ptr<re2::RE2> SENSOR_NAME_RE        = CompileRE2WithCheck(SENSOR_NAME_PATTERN);
 
 const TString SELECTOR_PATTERN          = "(?:(" + LABEL_NAME_PATTERN + ")(" + OPERATOR_PATTERN + ")(" + LABEL_VALUE_PATTERN + "))";
-THolder<re2::RE2> SELECTOR_RE           = CompileRE2WithCheck(SELECTOR_PATTERN);
+std::unique_ptr<re2::RE2> SELECTOR_RE           = CompileRE2WithCheck(SELECTOR_PATTERN);
 
 const TString SELECTORS_FULL_PATTERN    = "{((" + SELECTOR_PATTERN + ",)*" + SELECTOR_PATTERN + ")?}";
-THolder<re2::RE2> SELECTORS_FULL_RE     = CompileRE2WithCheck(SELECTORS_FULL_PATTERN);
+std::unique_ptr<re2::RE2> SELECTORS_FULL_RE     = CompileRE2WithCheck(SELECTORS_FULL_PATTERN);
 
 const TString USER_LABELS_PATTERN       = "(" + LABEL_NAME_PATTERN + ")(?: (?i:as) (" + LABEL_NAME_PATTERN + "))?";
-THolder<re2::RE2> USER_LABELS_RE        = CompileRE2WithCheck(USER_LABELS_PATTERN);
+std::unique_ptr<re2::RE2> USER_LABELS_RE        = CompileRE2WithCheck(USER_LABELS_PATTERN);
 
 TMaybe<TString> InsertOrCheck(NYql::NSo::TSelectors& selectors, const TString& name, const TString& value) {
     auto [it, inserted] = selectors.emplace(name, NYql::NSo::TSelector{"=", value});

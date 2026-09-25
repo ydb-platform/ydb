@@ -12,7 +12,7 @@ class TDeleteQueueActor
     : public TActionActor<TDeleteQueueActor>
 {
 public:
-    TDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::DeleteQueue, std::move(cb))
     {
     }
@@ -97,7 +97,7 @@ class TDeleteQueueBatchActor
     : public TCommonBatchActor<TDeleteQueueBatchActor>
 {
 public:
-    TDeleteQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TDeleteQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TCommonBatchActor(sourceSqsRequest, EAction::DeleteQueueBatch, std::move(cb))
     {
     }
@@ -156,11 +156,11 @@ private:
     }
 };
 
-IActor* CreateDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TDeleteQueueActor(sourceSqsRequest, std::move(cb));
 }
 
-IActor* CreateDeleteQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateDeleteQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TDeleteQueueBatchActor(sourceSqsRequest, std::move(cb));
 }
 

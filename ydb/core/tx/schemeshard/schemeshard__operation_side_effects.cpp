@@ -449,7 +449,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         auto& tenantLink = ss->SubDomainsLinks.GetLink(pathId);
         Y_ABORT_UNLESS(tenantLink.DomainKey == pathId);
 
-        auto message = MakeHolder<TEvSchemeShard::TEvUpdateTenantSchemeShard>(ss->TabletID(), ss->Generation());
+        auto message = std::make_unique<TEvSchemeShard::TEvUpdateTenantSchemeShard>(ss->TabletID(), ss->Generation());
 
         bool hasChanges = false;
 
@@ -657,7 +657,7 @@ void TSideEffects::DoPublishToSchemeBoard(TSchemeShard* ss, const TActorContext&
 void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto& rec: Messages) {
         TActorId actor;
-        THolder<::NActors::IEventBase> message;
+        std::unique_ptr<::NActors::IEventBase> message;
         ui64 cookie;
         ui32 flags;
         std::tie(actor, message, cookie, flags) = rec;
@@ -678,7 +678,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         TOperationId opId;
         TTabletId tablet;
         TPipeMessageId cookie;
-        THolder<::NActors::IEventBase> message;
+        std::unique_ptr<::NActors::IEventBase> message;
         std::tie(opId, tablet, cookie, message) = rec;
 
         const ui32 msgType = message->Type();
@@ -1198,7 +1198,7 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
         TStorageChanges dbChanges;
         TOperationContext context{ss, txc, ctx, *this, memChanges, dbChanges};
 
-        THolder<TEvPrivate::TEvCompleteBarrier> msg = MakeHolder<TEvPrivate::TEvCompleteBarrier>(txId, name);
+        std::unique_ptr<TEvPrivate::TEvCompleteBarrier> msg = std::make_unique<TEvPrivate::TEvCompleteBarrier>(txId, name);
         TEvPrivate::TEvCompleteBarrier::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompleteBarrier>*) new IEventHandle(
                     context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 

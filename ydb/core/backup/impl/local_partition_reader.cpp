@@ -35,8 +35,8 @@ private:
     ui64 Offset = 0;
     ui64 SentOffset = 0;
 
-    THolder<TEvPersQueue::TEvRequest> CreateGetOffsetRequest() const {
-        THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+    std::unique_ptr<TEvPersQueue::TEvRequest> CreateGetOffsetRequest() const {
+        std::unique_ptr<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
 
         auto& req = *request->Record.MutablePartitionRequest();
         req.SetPartition(Partition);
@@ -85,8 +85,8 @@ private:
         Become(&TLocalPartitionReader::StateWork);
     }
 
-    THolder<TEvPersQueue::TEvRequest> CreateReadRequest() const {
-        THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+    std::unique_ptr<TEvPersQueue::TEvRequest> CreateReadRequest() const {
+        std::unique_ptr<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
 
         auto& req = *request->Record.MutablePartitionRequest();
         req.SetPartition(Partition);

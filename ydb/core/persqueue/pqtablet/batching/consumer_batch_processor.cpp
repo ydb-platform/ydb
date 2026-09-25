@@ -93,7 +93,7 @@ TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::T
     , LogPrefix_(YDB_LOG_CREATE_MESSAGE(
         {"consumer", User}))
 {
-    BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());
+    BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, std::make_unique<TKafkaBatchCutter>());
 }
 
 const TStructuredMessage& TConsumerBatchProcessor::GetLogPrefix() const {

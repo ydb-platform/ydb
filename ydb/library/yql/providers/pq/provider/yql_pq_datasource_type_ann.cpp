@@ -854,8 +854,8 @@ private:
 
 } // anonymous namespace
 
-THolder<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state) {
-    return MakeHolder<TPqDataSourceTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state) {
+    return std::make_unique<TPqDataSourceTypeAnnotationTransformer>(state);
 }
 
 } // namespace NYql

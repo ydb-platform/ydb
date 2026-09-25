@@ -1615,13 +1615,13 @@ public:
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,
                                    const TMap<std::pair<ui64, ui64>, TString>& outReadSets,
-                                   TVector<THolder<TEvTxProcessing::TEvReadSet>> &preparedRS,
+                                   TVector<std::unique_ptr<TEvTxProcessing::TEvReadSet>> &preparedRS,
                                    TTransactionContext& txc,
                                    const TActorContext& ctx);
-    THolder<TEvTxProcessing::TEvReadSet> PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target,
+    std::unique_ptr<TEvTxProcessing::TEvReadSet> PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target,
                                                         const TString& body, ui64 seqno);
-    THolder<TEvTxProcessing::TEvReadSet> PrepareReadSetExpectation(ui64 step, ui64 txId, ui64 source, ui64 target);
-    void SendReadSet(const TActorContext& ctx, THolder<TEvTxProcessing::TEvReadSet>&& rs);
+    std::unique_ptr<TEvTxProcessing::TEvReadSet> PrepareReadSetExpectation(ui64 step, ui64 txId, ui64 source, ui64 target);
+    void SendReadSet(const TActorContext& ctx, std::unique_ptr<TEvTxProcessing::TEvReadSet>&& rs);
     void SendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     bool AddExpectation(ui64 target, ui64 step, ui64 txId);
     bool RemoveExpectation(ui64 target, ui64 txId);
@@ -1630,9 +1630,9 @@ public:
     void SendReadSetNoData(const TActorContext& ctx, const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target);
     bool ProcessReadSetExpectation(TEvTxProcessing::TEvReadSet::TPtr& ev);
     void SendReadSets(const TActorContext& ctx,
-                      TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
+                      TVector<std::unique_ptr<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
-    void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+    void SendDelayedAcks(const TActorContext& ctx, TVector<std::unique_ptr<IEventHandle>>& delayedAcks) const;
     void GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
     void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
@@ -2168,7 +2168,7 @@ public:
     // Sends the incremental-restore shard progress event via the SchemeShard pipe.
     void SendIncrementalRestoreShardProgress(
         const TActorContext& ctx, ui64 tabletId,
-        THolder<TEvDataShard::TEvIncrementalRestoreShardProgress> event)
+        std::unique_ptr<TEvDataShard::TEvIncrementalRestoreShardProgress> event)
     {
         SendViaSchemeshardPipe(ctx, tabletId, SchemeShardPipe, std::move(event));
     }
@@ -2426,7 +2426,7 @@ private:
                 info.PipeToOwner = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, ownerTabletId, clientConfig));
             }
 
-            THolder<TEvDataShard::TEvReturnBorrowedPart> ev = MakeHolder<TEvDataShard::TEvReturnBorrowedPart>(MyTabletID, partMetaVec);
+            std::unique_ptr<TEvDataShard::TEvReturnBorrowedPart> ev = std::make_unique<TEvDataShard::TEvReturnBorrowedPart>(MyTabletID, partMetaVec);
             NTabletPipe::SendData(ctx, info.PipeToOwner, ev.Release());
         }
 
@@ -2507,7 +2507,7 @@ private:
             NTabletPipe::TClientConfig clientConfig;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
-            THolder<TEvDataShard::TEvSplitTransferSnapshot> ev = MakeHolder<TEvDataShard::TEvSplitTransferSnapshot>(0);
+            std::unique_ptr<TEvDataShard::TEvSplitTransferSnapshot> ev = std::make_unique<TEvDataShard::TEvSplitTransferSnapshot>(0);
             ev->Record.CopyFrom(*DataToSend[dstTabletId]);
             ev->Record.SetSrcTabletGeneration(Self->Generation());
 
@@ -2591,7 +2591,7 @@ private:
             clientConfig.RetryPolicy = PipeRetryPolicy;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
-            auto ev = MakeHolder<TEvChangeExchange::TEvActivateSender>();
+            auto ev = std::make_unique<TEvChangeExchange::TEvActivateSender>();
             ev->Record.SetOrigin(Origin);
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Activate change sender",
@@ -2618,7 +2618,7 @@ private:
                 return;
             }
 
-            auto ev = MakeHolder<TEvChangeExchange::TEvActivateSenderAck>();
+            auto ev = std::make_unique<TEvChangeExchange::TEvActivateSenderAck>();
             ev->Record.SetOrigin(dstTabletId);
             ctx.Send(ctx.SelfID, ev.Release());
         }
@@ -2797,7 +2797,7 @@ private:
         }
 
         // Removes the front item from the queue and transfers ownership to the caller.
-        THolder<TItem> Dequeue() {
+        std::unique_ptr<TItem> Dequeue() {
             Y_ENSURE(!Items.Empty());
             TItem* first = Items.Front();
             const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
@@ -2816,7 +2816,7 @@ private:
 
             first->Unlink();
             --Count;
-            return THolder<TItem>(first);
+            return std::unique_ptr<TItem>(first);
         }
 
         // Physically removes all items with the given txId from the queue and calls
@@ -2835,7 +2835,7 @@ private:
                     TItem* next = item->NextForTxId;
                     item->Unlink();
                     --Count;
-                    THolder<TItem> holder(item);
+                    std::unique_ptr<TItem> holder(item);
                     onCancelled(*holder);  // now Size() is accurate
                     item = next;
                 }
@@ -2865,7 +2865,7 @@ private:
     };
 
     TProposeQueue ProposeQueue;
-    TVector<THolder<IEventHandle>> DelayedProposeQueue;
+    TVector<std::unique_ptr<IEventHandle>> DelayedProposeQueue;
     TAsyncEvent DelayedProposeCoroutines;
 
     void SendCancelledProposeReply(const TProposeQueue::TItem& item, const TActorContext& ctx);
@@ -2959,7 +2959,7 @@ private:
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
     TMultiTxIdManager MultiTxIdManager;
     TBuildIndexScanManager BuildIndexScanManager;
-    THashMap<ui64, THolder<TEvDataShard::TEvBuildIndexProgressResponse>> PendingBuildIndexFinalResponses;
+    THashMap<ui64, std::unique_ptr<TEvDataShard::TEvBuildIndexProgressResponse>> PendingBuildIndexFinalResponses;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -2994,12 +2994,12 @@ private:
 
     struct TMediatorDelayedReply {
         TActorId Target;
-        THolder<IEventBase> Event;
+        std::unique_ptr<IEventBase> Event;
         ui64 Cookie;
         TActorId SessionId;
         NWilson::TSpan Span;
 
-        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie,
+        TMediatorDelayedReply(const TActorId& target, std::unique_ptr<IEventBase> event, ui64 cookie,
                 const TActorId& sessionId, NWilson::TSpan&& span)
             : Target(target)
             , Event(std::move(event))
@@ -3023,7 +3023,7 @@ private:
     ui64 CoordinatorPrevReadStepMin = 0;
     ui64 CoordinatorPrevReadStepMax = Max<ui64>();
 
-    TVector<THolder<IEventHandle>> MediatorStateWaitingMsgs;
+    TVector<std::unique_ptr<IEventHandle>> MediatorStateWaitingMsgs;
     TAsyncEvent MediatorStateWaitingCoroutines;
     bool MediatorStateWaiting = false;
     bool MediatorStateRestoreTxPending = false;
@@ -3192,7 +3192,7 @@ private:
     ui32 ChangeQueueReservedCapacity = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
-    THolder<IChangeRecordSerializer> ChangeRecordDebugSerializer;
+    std::unique_ptr<IChangeRecordSerializer> ChangeRecordDebugSerializer;
 
     struct TUncommittedLockChangeRecords {
         TVector<IDataShardChangeCollector::TChange> Changes;
@@ -3286,7 +3286,7 @@ private:
 
     bool ScheduledPlanPredictedTxs = false;
 
-    TVector<THolder<IEventHandle>> DelayedS3UploadRows;
+    TVector<std::unique_ptr<IEventHandle>> DelayedS3UploadRows;
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 
@@ -3608,7 +3608,7 @@ protected:
     void Die(const TActorContext &ctx) override;
 
     template <class TEvent>
-    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, TActorId& pipe, THolder<TEvent> event) {
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, TActorId& pipe, std::unique_ptr<TEvent> event) {
         Y_ENSURE(tabletId);
         Y_ENSURE(CurrentSchemeShardId == tabletId);
 
@@ -3619,7 +3619,7 @@ protected:
         NTabletPipe::SendData(ctx, pipe, event.Release());
     }
 
-    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, std::unique_ptr<TEvDataShard::TEvSchemaChanged> event) {
         SendViaSchemeshardPipe(ctx, tabletId, SchemeShardPipe, std::move(event));
     }
 
@@ -3635,7 +3635,7 @@ protected:
             clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
             StateReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
         }
-        THolder<TEvDataShard::TEvStateChanged> ev(new TEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
+        std::unique_ptr<TEvDataShard::TEvStateChanged> ev(new TEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
     }
 
@@ -3676,7 +3676,7 @@ protected:
                 DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
             }
 
-            THolder<TEvDataShard::TEvPeriodicTableStats> ev(new TEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId));
+            std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> ev(new TEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId));
             ev->Record.SetFollowerId(FollowerId());
             ev->Record.SetShardState(State);
             ev->Record.SetGeneration(Executor()->Generation());

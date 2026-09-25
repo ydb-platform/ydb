@@ -39,7 +39,7 @@ namespace NKikimr {
         ui64 SendingIdx = 0;
         bool IsCheckingEvents = false;
 
-        TVPatchDecorator(THolder<IActor> &&actor, TVPatchDecoratorArgs &args)
+        TVPatchDecorator(std::unique_ptr<IActor> &&actor, TVPatchDecoratorArgs &args)
             : TTestDecorator(std::move(actor))
             , EdgeActor(args.EdgeActor)
             , SequenceOfReceivingEvents(std::move(args.SequenceOfReceivingEvents))
@@ -187,13 +187,13 @@ namespace NKikimr {
                 patchCtx->AsyncBlobQueues.emplace(id, EdgeActors[idx]);
             }
 
-            THolder<IActor> actor{CreateSkeletonVPatchActor(EdgeActors[nodeId], GType,
+            std::unique_ptr<IActor> actor{CreateSkeletonVPatchActor(EdgeActors[nodeId], GType,
                     ev, TInstant(), nullptr, nullptr, nullptr, nullptr, nullptr, patchCtx, VDiskIds[nodeId].ToString(), 0, nullptr)};
 
             if constexpr (!std::is_void_v<DecoratorType>) {
                 TVPatchDecoratorArgs args{EdgeActors[nodeId], IsCheckingEventsByDecorator,
                         SequenceOfReceivingEvents, SequenceOfSendingEvents};
-                actor = MakeHolder<DecoratorType>(std::move(actor), args);
+                actor = std::make_unique<DecoratorType>(std::move(actor), args);
             }
 
             VPatchActorIds.emplace_back(Runtime.Register(actor.Release(), nodeId));

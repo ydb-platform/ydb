@@ -93,7 +93,7 @@ public:
 
 private:
     void TraverseNext() {
-        auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
 
         schemeCacheRequest->DatabaseName = Database;
         schemeCacheRequest->UserToken = UserToken;
@@ -151,7 +151,7 @@ private:
         }
 
         for (const auto& path : TablesToDrop) {
-            auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             auto& record = ev->Record;
 
             record.SetDatabaseName(Database);
@@ -172,7 +172,7 @@ private:
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-                auto ev = MakeHolder<TEvPrivate::TEvDropTableResult>();
+                auto ev = std::make_unique<TEvPrivate::TEvDropTableResult>();
                 ev->Result = future.GetValue();
                 actorSystem->Send(selfId, ev.Release());
             });
@@ -201,7 +201,7 @@ private:
         auto dirToDrop = DirsToDrop.back();
         DirsToDrop.pop_back();
 
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
@@ -222,7 +222,7 @@ private:
         auto actorSystem = TActivationContext::ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvRemoveDirResult>();
+            auto ev = std::make_unique<TEvPrivate::TEvRemoveDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });

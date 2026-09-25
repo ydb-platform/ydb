@@ -28,7 +28,7 @@ class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCm
     using TBase = TRpcRequestActor<TThis, TEvRequest, true>;
 
     void SendRequest() {
-        auto ev = MakeHolder<TEvCmsRequest>();
+        auto ev = std::make_unique<TEvCmsRequest>();
         ev->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
 
         if constexpr (std::is_same_v<TEvCmsRequest, NCms::TEvCms::TEvCreateMaintenanceTaskRequest>) {

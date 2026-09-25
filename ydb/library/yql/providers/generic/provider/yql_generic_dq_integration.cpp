@@ -391,8 +391,8 @@ namespace NYql {
 
     } // namespace
 
-    THolder<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state) {
-        return MakeHolder<TGenericDqIntegration>(state);
+    std::unique_ptr<IDqIntegration> CreateGenericDqIntegration(TGenericState::TPtr state) {
+        return std::make_unique<TGenericDqIntegration>(state);
     }
 
 } // namespace NYql

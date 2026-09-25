@@ -147,8 +147,8 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     template <typename... Args>
-    static THolder<TEvPersQueue::TEvRequest> MakeRequest(Args&&... args) {
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+    static std::unique_ptr<TEvPersQueue::TEvRequest> MakeRequest(Args&&... args) {
+        auto ev = std::make_unique<TEvPersQueue::TEvRequest>();
         FillHeader(*ev->Record.MutablePartitionRequest(), std::forward<Args>(args)...);
 
         return ev;
@@ -320,8 +320,8 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         GetOwnership();
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest() {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest() {
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
 
         if (Opts.Token) {
             ev->Record.SetUserToken(Opts.Token);
@@ -885,7 +885,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void Write(ui64 cookie, TRequestHolder&& holder) {
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto ev = std::make_unique<TEvPersQueue::TEvRequest>();
         ev->Record = std::move(holder.Write.Request);
 
         auto& request = *ev->Record.MutablePartitionRequest();

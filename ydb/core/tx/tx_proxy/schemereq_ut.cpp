@@ -42,12 +42,12 @@ public:
 
     Tests::TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TClient> Client;
-    THolder<Tests::TTenants> Tenants;
+    std::unique_ptr<Tests::TClient> Client;
+    std::unique_ptr<Tests::TTenants> Tenants;
 
     TString Endpoint;
     TDriverConfig DriverConfig;
-    THolder<TDriver> Driver;
+    std::unique_ptr<TDriver> Driver;
 
     Tests::TServer& GetTestServer() const {
         return *Server;
@@ -129,14 +129,14 @@ public:
         }
 
         // test tenant control
-        Tenants = MakeHolder<Tests::TTenants>(Server);
+        Tenants = std::make_unique<Tests::TTenants>(Server);
 
         // root database path
         // it's imperative that RootPath has leading '/' -- is a path
         RootPath = CanonizePath(ServerSettings->DomainName);
 
         // test client
-        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+        Client = std::make_unique<Tests::TClient>(*ServerSettings);
         Client->SetSecurityToken(RootToken);
         Client->InitRootScheme();
         Client->TestGrant("/", ServerSettings->DomainName, RootToken, NACLib::EAccessRights::GenericFull);
@@ -149,7 +149,7 @@ public:
             .SetDiscoveryMode(EDiscoveryMode::Async)
             .SetAuthToken(RootToken)
         ;
-        Driver = MakeHolder<TDriver>(DriverConfig);
+        Driver = std::make_unique<TDriver>(DriverConfig);
     }
 
     ~TTestEnv() {

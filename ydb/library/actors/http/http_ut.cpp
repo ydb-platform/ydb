@@ -1070,7 +1070,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         ///////// https configuration
         add->Secure = true;
         add->CertificateFile = certificateFile.Name();
@@ -1100,7 +1100,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
     }
 
     /*Y_UNIT_TEST(AdvancedRunning) {
-        THolder<NActors::TActorSystemSetup> setup = MakeHolder<NActors::TActorSystemSetup>();
+        std::unique_ptr<NActors::TActorSystemSetup> setup = std::make_unique<NActors::TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors = new TAutoPtr<NActors::IExecutorPool>[1];
@@ -1115,7 +1115,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         NHttp::THttpProxy* outgoingProxy = new NHttp::THttpProxy();
         NActors::TActorId outgoingProxyId = actorSystem.Register(outgoingProxy);
 
-        THolder<NHttp::THttpStaticStringRequest> httpRequest = MakeHolder<NHttp::THttpStaticStringRequest>("GET /test HTTP/1.1\r\n\r\n");
+        std::unique_ptr<NHttp::THttpStaticStringRequest> httpRequest = std::make_unique<NHttp::THttpStaticStringRequest>("GET /test HTTP/1.1\r\n\r\n");
         actorSystem.Send(outgoingProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest("[::]:13337", std::move(httpRequest)));
 
         Sleep(TDuration::Minutes(60));
@@ -2037,7 +2037,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             ProxyId = ActorSystem.Register(proxy);
 
             Port = PortManager.GetTcpPort();
-            THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(Port);
+            std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(Port);
             if (secureConnection) {
                 add->Secure = true;
                 add->CertificateFile = ServerCertFile.Name();

@@ -23,7 +23,7 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
     , WarmupSec(warmupSec)
     , Percentile(percentile)
     , ErrorFlag(errorFlag)
-    , WindowStats(MakeHolder<TTopicWorkloadStats>())
+    , WindowStats(std::make_unique<TTopicWorkloadStats>())
 {
     for (size_t writerIdx = 0; writerIdx < writerCount; writerIdx++) {
         AddQueue(WriterEventQueues);
@@ -119,7 +119,7 @@ void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
 void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt) {
     PrintStats(windowIt);
 
-    WindowStats = MakeHolder<TTopicWorkloadStats>();
+    WindowStats = std::make_unique<TTopicWorkloadStats>();
 }
 void TTopicWorkloadStatsCollector::PrintTotalStats() const {
     PrintHeader(true);
@@ -178,7 +178,7 @@ template<class T>
 void TTopicWorkloadStatsCollector::CollectThreadEvents(TEventQueues<T>& queues)
 {
     for (auto& queue : queues) {
-        THolder<T> event;
+        std::unique_ptr<T> event;
         while (queue->Dequeue(&event)) {
             WindowStats->AddEvent(*event);
             TotalStats.AddEvent(*event);
@@ -189,7 +189,7 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents(TEventQueues<T>& queues)
 template<class T>
 void TTopicWorkloadStatsCollector::AddQueue(TEventQueues<T>& queues)
 {
-    auto queue = MakeHolder<TAutoLockFreeQueue<T>>();
+    auto queue = std::make_unique<TAutoLockFreeQueue<T>>();
     queues.emplace_back(std::move(queue));
 }
 
@@ -250,6 +250,6 @@ template<class T>
 void TTopicWorkloadStatsCollector::AddEvent(size_t index, TEventQueues<T>& queues, const T& event)
 {
     if ((WarmupTime != TInstant()) && (Now() >= WarmupTime)) {
-        queues[index]->Enqueue(MakeHolder<T>(event));
+        queues[index]->Enqueue(std::make_unique<T>(event));
     }
 }

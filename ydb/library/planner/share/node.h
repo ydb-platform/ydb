@@ -46,8 +46,8 @@ public:
         }
     };
 protected:
-    THolder<IContext> Context;
-    THolder<TConfig> Config;
+    std::unique_ptr<IContext> Context;
+    std::unique_ptr<TConfig> Config;
     TSharePlanner* Planner = nullptr;
     TShareGroup* Parent = nullptr;
     TForce Share = 0; // s0[i] = w0[i] / sum(w0[i] for i in parent group) -- default share in parent group

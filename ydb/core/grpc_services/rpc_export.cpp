@@ -208,7 +208,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     IEventBase* MakeRequest() override {
         const auto& request = *this->GetProtoRequest();
 
-        auto ev = MakeHolder<TEvExport::TEvCreateExportRequest>();
+        auto ev = std::make_unique<TEvExport::TEvCreateExportRequest>();
         ev->Record.SetTxId(this->TxId);
         ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {
@@ -286,7 +286,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void ResolvePaths(const TVector<TString>& paths, NSchemeCache::TSchemeCacheNavigate::EOp op = NSchemeCache::TSchemeCacheNavigate::OpPath) {
         Y_ABORT_UNLESS(!paths.empty());
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->GetDatabaseName();
 
         for (const auto& path : paths) {

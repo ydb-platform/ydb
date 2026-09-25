@@ -87,7 +87,7 @@ public:
     }
 
     NExportScan::IBuffer* Buffer(EDataFormat dataFormat) {
-        THolder<NExportScan::IBuffer>* exportBuffer = nullptr;
+        std::unique_ptr<NExportScan::IBuffer>* exportBuffer = nullptr;
         switch (dataFormat) {
             case EDataFormat::YdbDump:
                 exportBuffer = &S3ExportBuffer;
@@ -136,7 +136,7 @@ public:
             NExportScan::IBuffer::TStats stats;
             auto buffer = Buffer(dataFormat);
             if (buffer->IsFilled()) {
-                THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+                std::unique_ptr<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
                 UNIT_ASSERT(event);
                 auto* evBuffer = dynamic_cast<NKikimr::NDataShard::TEvExportScan::TEvBuffer<TBuffer>*>(event.get());
                 UNIT_ASSERT(evBuffer);
@@ -149,8 +149,8 @@ public:
     TVector<ui32> Tags;
     IExport::TTableColumns Columns;
     TS3ExportBufferSettings S3ExportBufferSettings;
-    THolder<NExportScan::IBuffer> S3ExportBuffer;
-    THolder<NExportScan::IBuffer> ParquetBuffer;
+    std::unique_ptr<NExportScan::IBuffer> S3ExportBuffer;
+    std::unique_ptr<NExportScan::IBuffer> ParquetBuffer;
 };
 
 Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             }
 
             NExportScan::IBuffer::TStats stats;
-            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            std::unique_ptr<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
             UNIT_ASSERT(event);
             ++flushes;
             // zstd accumulates more rows before compressing the data and sending it to output. Multiplier ~ *6x
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             }
 
             NExportScan::IBuffer::TStats stats;
-            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            std::unique_ptr<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
             UNIT_ASSERT(event);
             auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
             UNIT_ASSERT(evBuffer);

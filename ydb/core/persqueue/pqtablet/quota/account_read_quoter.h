@@ -98,7 +98,7 @@ public:
 
 protected:
     virtual void InitCountersImpl(const TActorContext& ctx) = 0;
-    virtual THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() = 0;
+    virtual std::unique_ptr<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() = 0;
 
     STFUNC(StateWork)
     {
@@ -117,7 +117,7 @@ protected:
     TString KesusPath;
     TString ResourcePath;
     const NPersQueue::TTopicConverterPtr TopicConverter;
-    THolder<TPercentileCounter> QuotaWaitCounter;
+    std::unique_ptr<TPercentileCounter> QuotaWaitCounter;
     TTabletCountersBase Counters;
     const TPartitionId Partition;
 
@@ -161,7 +161,7 @@ public:
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
     TStructuredMessage BuildLogPrefix() const override;
-    THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
+    std::unique_ptr<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 
 private:
     static TQuoterParams GetQuoterParams(const TString& user);
@@ -188,7 +188,7 @@ public:
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
     TStructuredMessage BuildLogPrefix() const override;
-    THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
+    std::unique_ptr<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 };
 
 }// NPQ

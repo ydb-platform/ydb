@@ -33,7 +33,7 @@ private:
     const TScheme::TPtr TableScheme;
     const TString Sql;
 
-    THolder<NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> Program;
+    std::unique_ptr<NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> Program;
 };
 
 }

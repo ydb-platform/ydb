@@ -46,11 +46,11 @@ protected:
     TEnergy dW_ = 0;
     TEnergy pdD_ = 0;
     TEnergy pdW_ = 0;
-    //THolder<TUtilizationMeter> UtilMeter;
-    THolder<INodeVisitor> Billing;
-    THolder<IModel> Model;
-    THolder<INodeVisitor> Puller;
-    THolder<INodeVisitor> Stepper;
+    //std::unique_ptr<TUtilizationMeter> UtilMeter;
+    std::unique_ptr<INodeVisitor> Billing;
+    std::unique_ptr<IModel> Model;
+    std::unique_ptr<INodeVisitor> Puller;
+    std::unique_ptr<INodeVisitor> Stepper;
 
     // Statistics and monitoring
     TSharePlannerStats Stats;

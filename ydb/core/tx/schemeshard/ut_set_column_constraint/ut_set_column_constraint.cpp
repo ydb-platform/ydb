@@ -556,7 +556,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> delayedValidateRequest;
+        std::unique_ptr<IEventHandle> delayedValidateRequest;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
                 delayedValidateRequest.Reset(ev.Release());
@@ -905,7 +905,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> delayedValidateRequest;
+        std::unique_ptr<IEventHandle> delayedValidateRequest;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
                 delayedValidateRequest.Reset(ev.Release());
@@ -1697,7 +1697,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> delayedValidateRequest;
+        std::unique_ptr<IEventHandle> delayedValidateRequest;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
                 delayedValidateRequest.Reset(ev.Release());
@@ -2263,14 +2263,14 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         struct TStageTest {
             TString StageName;
-            std::function<THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(TTestActorRuntime&)> CreateBlocker;
+            std::function<std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(TTestActorRuntime&)> CreateBlocker;
         };
 
         TVector<TStageTest> stages = {
             {
                 "Finishing",
                 [](TTestActorRuntime& runtime) {
-                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                    return std::make_unique<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
                         if (ev->Get()->Record.TransactionSize() > 0) {
                             const auto& tx = ev->Get()->Record.GetTransaction(0);
                             if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable &&
@@ -2289,7 +2289,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             {
                 "Unlocking",
                 [](TTestActorRuntime& runtime) {
-                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                    return std::make_unique<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
                         if (ev->Get()->Record.TransactionSize() > 0) {
                             const auto& tx = ev->Get()->Record.GetTransaction(0);
                             return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropLock;
@@ -2320,7 +2320,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             )");
             env.TestWaitNotification(runtime, txId);
 
-            THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> blocker;
+            std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> blocker;
             if (stage.CreateBlocker) {
                 blocker = stage.CreateBlocker(runtime);
             }
@@ -2397,7 +2397,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> delayedValidateRequest;
+        std::unique_ptr<IEventHandle> delayedValidateRequest;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
                 delayedValidateRequest.Reset(ev.Release());
@@ -2483,15 +2483,15 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         struct TStageTest {
             TString StageName;
-            std::function<THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(TTestActorRuntime&)> CreateModifySchemeBlocker;
-            std::function<THolder<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>>(TTestActorRuntime&)> CreateDataShardBlocker;
+            std::function<std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(TTestActorRuntime&)> CreateModifySchemeBlocker;
+            std::function<std::unique_ptr<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>>(TTestActorRuntime&)> CreateDataShardBlocker;
         };
 
         TVector<TStageTest> stages = {
             {
                 "Locking",
                 [](TTestActorRuntime& runtime) {
-                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                    return std::make_unique<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
                         if (ev->Get()->Record.TransactionSize() > 0) {
                             const auto& tx = ev->Get()->Record.GetTransaction(0);
                             return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateLock;
@@ -2504,7 +2504,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             {
                 "LockingNullWrites",
                 [](TTestActorRuntime& runtime) {
-                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                    return std::make_unique<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
                         if (ev->Get()->Record.TransactionSize() > 0) {
                             const auto& tx = ev->Get()->Record.GetTransaction(0);
                             if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable &&
@@ -2525,7 +2525,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 "Validating",
                 nullptr,
                 [](TTestActorRuntime& runtime) {
-                    return MakeHolder<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>>(runtime);
+                    return std::make_unique<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>>(runtime);
                 }
             }
         };
@@ -2533,8 +2533,8 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         for (const auto& stage : stages) {
             Cerr << "=== Testing cancel at stage: " << stage.StageName << " ===" << Endl;
 
-            THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> modifySchemeBlocker;
-            THolder<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>> dataShardBlocker;
+            std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> modifySchemeBlocker;
+            std::unique_ptr<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>> dataShardBlocker;
 
             if (stage.CreateModifySchemeBlocker) {
                 modifySchemeBlocker = stage.CreateModifySchemeBlocker(runtime);

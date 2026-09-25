@@ -84,7 +84,7 @@ class TExampleReplicaActor : public TActor<TExampleReplicaActor> {
             return;
         }
 
-        auto reply = MakeHolder<TEvExample::TEvReplicaInfo>(key);
+        auto reply = std::make_unique<TEvExample::TEvReplicaInfo>(key);
         reply->Record.MutablePayload()->Reserve(keyIt->second.size());
         for (ui32 entryIndex : keyIt->second) {
             const TEntry &entry = Entries[entryIndex];

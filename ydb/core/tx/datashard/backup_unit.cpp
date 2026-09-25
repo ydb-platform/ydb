@@ -103,8 +103,8 @@ protected:
             return exp->CreateUploader(self, txId);
         };
 
-        THolder<IBuffer> buffer{exp->CreateBuffer()};
-        THolder<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
+        std::unique_ptr<IBuffer> buffer{exp->CreateBuffer()};
+        std::unique_ptr<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
 
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();
         const auto taskPrio = appData->DataShardConfig.GetBackupTaskPriority();
@@ -185,8 +185,8 @@ public:
 
 }; // TBackupUnit
 
-THolder<TExecutionUnit> CreateBackupUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TBackupUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateBackupUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TBackupUnit>(new TBackupUnit(self, pipeline));
 }
 
 } // NDataShard

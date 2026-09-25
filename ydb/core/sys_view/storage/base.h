@@ -134,7 +134,7 @@ namespace NKikimr::NSysView {
 
         void Handle(typename TEvResponse::TPtr& ev) {
             const auto& record = ev->Get()->Record;
-            auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
+            auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
             const auto& fieldMap = TDerived::GetFieldMap();
             TVector<TCell> cells;

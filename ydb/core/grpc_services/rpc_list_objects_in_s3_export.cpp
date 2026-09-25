@@ -52,7 +52,7 @@ public:
             {"selfId", SelfId()},
             {"name", Request_->GetDatabaseName()});
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = *Request_->GetDatabaseName();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -139,7 +139,7 @@ public:
             PipeClient = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), SchemeShardId, config));
         }
 
-        auto request = MakeHolder<NSchemeShard::TEvImport::TEvListObjectsInS3ExportRequest>();
+        auto request = std::make_unique<NSchemeShard::TEvImport::TEvListObjectsInS3ExportRequest>();
 
         *request->Record.MutableOperationParams() = GetProtoRequest()->operation_params();
         *request->Record.MutableSettings() = GetProtoRequest()->settings();
@@ -184,9 +184,9 @@ public:
         TBase::PassAway();
     }
 
-    static THolder<const NACLib::TUserToken> CreateUserToken(IRequestOpCtx* request) {
+    static std::unique_ptr<const NACLib::TUserToken> CreateUserToken(IRequestOpCtx* request) {
         if (const auto& userToken = request->GetSerializedToken()) {
-            return MakeHolder<NACLib::TUserToken>(userToken);
+            return std::make_unique<NACLib::TUserToken>(userToken);
         } else {
             return {};
         }
@@ -195,7 +195,7 @@ public:
 private:
     ui64 SchemeShardId = 0;
     TActorId PipeClient;
-    const THolder<const NACLib::TUserToken> UserToken;
+    const std::unique_ptr<const NACLib::TUserToken> UserToken;
 };
 
 void DoListObjectsInS3ExportRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

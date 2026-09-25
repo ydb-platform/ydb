@@ -62,7 +62,7 @@ struct TEvTabletBase {
         TIntrusivePtr<TEvTablet::TDependencyGraph> DependencyGraph;
         NMetrics::TTabletThroughputRawValue GroupReadBytes;
         NMetrics::TTabletIopsRawValue GroupReadOps;
-        THolder<NTracing::ITrace> Trace;
+        std::unique_ptr<NTracing::ITrace> Trace;
 
         TEvRebuildGraphResult(
             NKikimrProto::EReplyStatus status,

@@ -91,16 +91,16 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     ui64 step = Ev->Get()->Record.GetStep();
 
     for (auto& kv : TxByAck) {
-        THolder<TEvTxProcessing::TEvPlanStepAck> ack =
-            MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
+        std::unique_ptr<TEvTxProcessing::TEvPlanStepAck> ack =
+            std::make_unique<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
         YDB_LOG_DEBUG_CTX(ctx, "Sending Ack",
             {"ack", ack->ToString()});
 
         ctx.Send(kv.first, ack.Release()); // Ack to Tx coordinator
     }
 
-    THolder<TEvTxProcessing::TEvPlanStepAccepted> accepted =
-        MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
+    std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> accepted =
+        std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
     YDB_LOG_DEBUG_CTX(ctx, "Sending accepted",
         {"accepted", accepted->ToString()});
 

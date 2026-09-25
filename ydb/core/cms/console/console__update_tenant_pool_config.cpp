@@ -89,7 +89,7 @@ public:
 
 private:
     TEvConsole::TEvUpdateTenantPoolConfig::TPtr Request;
-    THolder<TEvConsole::TEvGetTenantStatusResponse> Response;
+    std::unique_ptr<TEvConsole::TEvGetTenantStatusResponse> Response;
 };
 
 ITransaction *TTenantsManager::CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev)

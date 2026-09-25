@@ -119,7 +119,7 @@ private:
         std::optional<TYamlVersion> YamlVersion;
 
         // Config update which is currently delivered to subscribers.
-        THolder<TEvConsole::TEvConfigNotificationRequest> UpdateInProcess = nullptr;
+        std::unique_ptr<TEvConsole::TEvConfigNotificationRequest> UpdateInProcess = nullptr;
         NKikimrConfig::TConfigVersion UpdateInProcessConfigVersion;
         ui64 UpdateInProcessCookie;
         std::optional<TYamlVersion> UpdateInProcessYamlVersion;
@@ -447,7 +447,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
 
     subscription->SubscribersToUpdate.insert(subscriber);
 
-    auto notification = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+    auto notification = std::make_unique<TEvConsole::TEvConfigNotificationRequest>();
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
     // Parsed once when UpdateInProcess was built; share the (read-only) result.
     notification->OpaqueConfigs = subscription->UpdateInProcess->OpaqueConfigs;
@@ -593,7 +593,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
 {
     const auto &rec = ev->Get()->Record;
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE("Send",
         {"ev", resp->Record.ShortDebugString()});
@@ -1389,7 +1389,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
 
         if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit) {
-            subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+            subscription->UpdateInProcess = std::make_unique<TEvConsole::TEvConfigNotificationRequest>();
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
@@ -1480,7 +1480,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev
 
 void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev)
 {
-    auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
+    auto resp = std::make_unique<TEvConfigsDispatcher::TEvGetConfigResponse>();
 
     auto [yamlKinds, _] = CheckKinds(
         ev->Get()->ConfigItemKinds,
@@ -1566,7 +1566,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     if (CurrentStateFunc() != &TThis::StateInit) {
         // first time we send even empty config
         if (!subscription->UpdateInProcess) {
-            subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+            subscription->UpdateInProcess = std::make_unique<TEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
             if (YamlConfigEnabled) {
                 ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(kinds), BaseConfig);
@@ -1670,7 +1670,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
 
 
 void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
-    auto Response = MakeHolder<TEvConsole::TEvGetNodeLabelsResponse>();
+    auto Response = std::make_unique<TEvConsole::TEvGetNodeLabelsResponse>();
 
     for (const auto& [label, value] : Labels) {
         auto *labelSer = Response->Record.MutableResponse()->add_labels();
@@ -1682,7 +1682,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
 }
 
 void TConfigsDispatcher::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev) {
-    auto Response = MakeHolder<TEvConsole::TEvFetchStartupConfigResponse>();
+    auto Response = std::make_unique<TEvConsole::TEvFetchStartupConfigResponse>();
 
     auto* resp = Response->Record.MutableResponse();
     resp->set_config(StartupConfigYaml);

@@ -52,7 +52,7 @@ public:
             {"owner", OwnerId},
             {"host", Host},
             {"tenant", Tenant});
-        auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
+        auto response = std::make_unique<TEvents::TEvGetTaskResponse>();
         response->Status = Ydb::StatusIds::GENERIC_ERROR;
         response->Issues.AddIssue("UNDELIVERED");
         Send(ev->Sender, response.Release());
@@ -73,7 +73,7 @@ public:
             {"tenant", Tenant},
             {"code", codeStr},
             {"details", Issues});
-        auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
+        auto response = std::make_unique<TEvents::TEvGetTaskResponse>();
         response->Status = reqStatus;
         response->Issues.AddIssues(Issues);
         Send(Sender, response.Release());
@@ -109,7 +109,7 @@ private:
             return;
         }
 
-        auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
+        auto response = std::make_unique<TEvents::TEvGetTaskResponse>();
         response->Status = Ydb::StatusIds::SUCCESS;
         response->Record.ConstructInPlace();
         auto& record = *response->Record;

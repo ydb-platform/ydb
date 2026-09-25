@@ -24,7 +24,7 @@ namespace NMsgBusProxy {
 template <typename ResponseType>
 class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>>;
-    THolder<TBusSchemeDescribe> Request;
+    std::unique_ptr<TBusSchemeDescribe> Request;
     NYql::TIssueManager IssueManager;
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {

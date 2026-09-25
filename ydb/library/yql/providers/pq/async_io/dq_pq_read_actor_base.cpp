@@ -103,7 +103,7 @@ public:
         Become(&TThis::StateFunc);
         Y_VALIDATE(ControlPlaneActorId, "Missing PQ control-plane actor");
 
-        auto request = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
+        auto request = std::make_unique<TPqControlPlaneEvents::TEvDescribeConsumer>();
         *request->Record.MutableConnection() = Connection;
         for (const auto partitionId : PartitionsToRead) {
             request->Record.AddPartitionIds(partitionId);

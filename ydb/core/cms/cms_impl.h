@@ -71,7 +71,7 @@ public:
 
         struct TEvLogAndSend : public TEventLocal<TEvLogAndSend, EvLogAndSend> {
             NKikimrCms::TLogRecordData LogData;
-            THolder<IEventHandle> Event;
+            std::unique_ptr<IEventHandle> Event;
         };
 
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
@@ -150,15 +150,15 @@ private:
     ITransaction *CreateTxProcessNotification(TEvCms::TEvNotification::TPtr &ev);
     ITransaction *CreateTxRejectNotification(TEvCms::TEvManageNotificationRequest::TPtr &ev);
     ITransaction *CreateTxRemoveExpiredNotifications();
-    ITransaction *CreateTxRemoveRequest(const TString &id, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
-    ITransaction *CreateTxRemovePermissions(TVector<TString> ids, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired = false);
+    ITransaction *CreateTxRemoveRequest(const TString &id, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp);
+    ITransaction *CreateTxRemovePermissions(TVector<TString> ids, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp, bool expired = false);
     ITransaction *CreateTxRemoveWalleTask(const TString &id);
     ITransaction *CreateTxRemoveMaintenanceTask(const TString &id);
-    ITransaction *CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
+    ITransaction *CreateTxStorePermissions(std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp,
                                            const TString &owner, const TString &requestId, i32 priority,
                                            TAutoPtr<TRequestInfo> scheduled,
                                            const TMaybe<TString> &maintenanceTaskId = {});
-    ITransaction *CreateTxStoreWalleTask(const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
+    ITransaction *CreateTxStoreWalleTask(const TTaskInfo &task, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp);
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
@@ -181,14 +181,14 @@ private:
     }
 
     template <typename TEvRequestPtr>
-    static void Reply(TEvRequestPtr &request, THolder<IEventBase> response, const TActorContext &ctx) {
+    static void Reply(TEvRequestPtr &request, std::unique_ptr<IEventBase> response, const TActorContext &ctx) {
         AuditLog(request->Get(), response.Get(), ctx);
         ctx.Send(request->Sender, response.Release(), 0, request->Cookie);
     }
 
     template <typename TEvResponse, typename TEvRequestPtr>
     static void ReplyWithError(TEvRequestPtr &ev, EStatusCode code, const TString &reason, const TActorContext &ctx) {
-        auto response = MakeHolder<TEvResponse>();
+        auto response = std::make_unique<TEvResponse>();
         response->Record.MutableStatus()->SetCode(code);
         response->Record.MutableStatus()->SetReason(reason);
 
@@ -509,7 +509,7 @@ private:
 
     static constexpr ui32 MaxDDiskInfoRequestsInFlight = 16;
     ui32 DDiskInfoRequestsInFlight = 0;
-    TQueue<THolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>> DDiskInfoRequestQueue;
+    TQueue<std::unique_ptr<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>> DDiskInfoRequestQueue;
 
     TCmsStatePtr State;
     TLogger Logger;
@@ -525,7 +525,7 @@ private:
     THashSet<ui32> StateStorageNodes;
 
     // Monitoring
-    THolder<class NKikimr::TTabletCountersBase> TabletCountersPtr;
+    std::unique_ptr<class NKikimr::TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase *TabletCounters;
 
     TInstant InfoCollectorStartTime;

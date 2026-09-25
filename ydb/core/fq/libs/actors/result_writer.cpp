@@ -41,7 +41,7 @@ public:
         const TInstant& deadline,
         ui64 resultBytesLimit)
         : ExecuterId(executerId)
-        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
+        , ResultBuilder(std::make_unique<TProtoBuilder>(resultType, columns))
         , ResultId({resultId})
         , TraceId(traceId)
         , Deadline(deadline)
@@ -89,7 +89,7 @@ private:
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
+        auto req = std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
         Send(ExecuterId, req.Release());
         HasError = true;
     }
@@ -100,7 +100,7 @@ private:
             {"issues", issues});
         Issues.AddIssues(issues);
         HasError = true;
-        auto req = MakeHolder<TEvDqFailure>(statusCode, Issues);
+        auto req = std::make_unique<TEvDqFailure>(statusCode, Issues);
         Send(ExecuterId, req.Release());
     }
 
@@ -146,7 +146,7 @@ private:
         auto it = Requests.find(ev->Get()->Result.request_id());
         if (it == Requests.end()) {
             HasError = true;
-            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
+            auto req = std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
             Send(ExecuterId, req.Release());
             return;
         }
@@ -160,7 +160,7 @@ private:
             FreeSpace += request.Size;
 
             if (FreeSpace > 0) {
-                auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
+                auto res = std::make_unique<NDq::TEvDqCompute::TEvChannelDataAck>();
                 res->Record.SetChannelId(request.ChannelId);
                 res->Record.SetFreeSpace(FreeSpace);
                 res->Record.SetSeqNo(request.SeqNo);
@@ -187,7 +187,7 @@ private:
     }
 
     void StopChannel(NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
-        auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
+        auto res = std::make_unique<NDq::TEvDqCompute::TEvChannelDataAck>();
         res->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
         res->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         res->Record.SetFreeSpace(0);
@@ -217,7 +217,7 @@ private:
                 break;
             }
             const auto& request = Requests[chunk.request_id()];
-            auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
+            auto res = std::make_unique<NDq::TEvDqCompute::TEvChannelDataAck>();
             res->Record.SetChannelId(request.ChannelId);
             res->Record.SetFreeSpace(FreeSpace);
             res->Record.SetSeqNo(request.SeqNo);
@@ -338,7 +338,7 @@ private:
             YDB_LOG_ERROR("Exception",
                 {"traceId", TraceId},
                 {"currentExceptionMessage", CurrentExceptionMessage()});
-            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
+            auto req = std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
             Send(ExecuterId, req.Release());
             HasError = true;
         }
@@ -361,7 +361,7 @@ private:
     ui64 Rows = 0;
 
     const TActorId ExecuterId;
-    THolder<TProtoBuilder> ResultBuilder;
+    std::unique_ptr<TProtoBuilder> ResultBuilder;
     const TResultId ResultId;
     const TString TraceId;
     TInstant Deadline;

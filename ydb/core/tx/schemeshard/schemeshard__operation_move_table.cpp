@@ -611,7 +611,7 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply repeated message, ack it anyway");
 
-        THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
+        std::unique_ptr<TEvDataShard::TEvSchemaChangedResult> event = std::make_unique<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(OperationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event));
@@ -684,17 +684,17 @@ private:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
+            return std::make_unique<TPropose>(OperationId, AfterPropose);
         case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            return std::make_unique<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeleteTableBarrier>(OperationId);
+            return std::make_unique<TDeleteTableBarrier>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<TMoveTableProposedWaitParts>(OperationId);
+            return std::make_unique<TMoveTableProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -703,7 +703,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -717,7 +717,7 @@ public:
             {"to", dstPathStr},
         );
 
-        THolder<TProposeResponse> result;
+        std::unique_ptr<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 

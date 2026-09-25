@@ -21,7 +21,7 @@ public:
         ui32 streamLookupJoinCookieVersion = 0)
         : Cluster_(cluster)
         , TablesData_(tablesData)
-        , PgmBuilder_(MakeHolder<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry))
+        , PgmBuilder_(std::make_unique<NMiniKQL::TKqpProgramBuilder>(typeEnv, funcRegistry))
         , StreamLookupJoinCookieVersion_(streamLookupJoinCookieVersion) {}
 
     NMiniKQL::TKqpProgramBuilder& PgmBuilder() const { return *PgmBuilder_; }
@@ -33,7 +33,7 @@ public:
 private:
     TString Cluster_;
     TIntrusivePtr<NYql::TKikimrTablesData> TablesData_;
-    THolder<NMiniKQL::TKqpProgramBuilder> PgmBuilder_;
+    std::unique_ptr<NMiniKQL::TKqpProgramBuilder> PgmBuilder_;
     ui32 StreamLookupJoinCookieVersion_;
 };
 

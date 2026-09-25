@@ -240,13 +240,13 @@ public:
             auto counters = MakeIntrusive<TGRpcProxyDbCounters>();
 
             if (ActorSystem) {
-                auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
+                auto evRegister = std::make_unique<NSysView::TEvSysView::TEvRegisterDbCounters>(
                     NKikimrSysView::GRPC_PROXY, database, counters);
 
                 ActorSystem->Send(NSysView::MakeSysViewServiceID(ActorSystem->NodeId), evRegister.Release());
 
                 if (DbWatcherActorId) {
-                    auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                    auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(database);
                     ActorSystem->Send(DbWatcherActorId, evWatch.Release());
                 }
             }

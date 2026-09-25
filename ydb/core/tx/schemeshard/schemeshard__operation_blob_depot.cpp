@@ -145,7 +145,7 @@ namespace NKikimr::NSchemeShard {
                 SetState(state);
             }
 
-            THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+            std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
                 YDB_LOG_DEBUG_CTX(context.Ctx, "");
 
                 switch (Action) {
@@ -227,14 +227,14 @@ namespace NKikimr::NSchemeShard {
             }
 
         private:
-            THolder<TProposeResponse> ProposeCreate(const TString& owner, TOperationContext& context) {
+            std::unique_ptr<TProposeResponse> ProposeCreate(const TString& owner, TOperationContext& context) {
                 const auto ssId = static_cast<ui64>(context.SS->SelfTabletId());
                 const auto txId = static_cast<ui64>(OperationId.GetTxId());
                 const TString& parentPathStr = Transaction.GetWorkingDir();
                 const auto& description = Transaction.GetBlobDepot();
 
                 if (const auto& error = ValidateConfig(description)) {
-                    return MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, txId, ssId, *error);
+                    return std::make_unique<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, txId, ssId, *error);
                 }
 
                 TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
@@ -250,7 +250,7 @@ namespace NKikimr::NSchemeShard {
                         .IsLikeDirectory();
 
                     if (!checks) {
-                        return MakeHolder<TProposeResponse>(checks.GetStatus(), txId, ssId, checks.GetError());
+                        return std::make_unique<TProposeResponse>(checks.GetStatus(), txId, ssId, checks.GetError());
                     }
                 }
 
@@ -283,7 +283,7 @@ namespace NKikimr::NSchemeShard {
                     }
 
                     if (!checks) {
-                        auto resp = MakeHolder<TProposeResponse>(checks.GetStatus(), txId, ssId, checks.GetError());
+                        auto resp = std::make_unique<TProposeResponse>(checks.GetStatus(), txId, ssId, checks.GetError());
                         if (dstPath.IsResolved()) {
                             resp->SetPathCreateTxId(ui64(dstPath->CreateTxId));
                             resp->SetPathId(dstPath->PathId.LocalPathId);
@@ -304,13 +304,13 @@ namespace NKikimr::NSchemeShard {
                 // bind channels to storage pools
                 TChannelsBindings channelBindings;
                 if (!context.SS->ResolveChannelsByPoolKinds(storagePoolKinds, dstPath.GetPathIdForDomain(), channelBindings)) {
-                    return MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, txId, ssId,
+                    return std::make_unique<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, txId, ssId,
                         "Unable to construct channel binding with the storage pool");
                 }
 
                 TString reason;
                 if (!context.SS->CheckApplyIf(Transaction, reason)) {
-                    return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed, txId, ssId, reason);
+                    return std::make_unique<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed, txId, ssId, reason);
                 }
 
                 dstPath.MaterializeLeaf(owner);
@@ -372,18 +372,18 @@ namespace NKikimr::NSchemeShard {
 
                 SetState(TTxState::CreateParts);
 
-                auto resp = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, txId, ssId);
+                auto resp = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, txId, ssId);
                 resp->SetPathId(pathId.LocalPathId);
                 return resp;
             }
 
-            THolder<TProposeResponse> ProposeAlter(const TString& owner, TOperationContext& context) {
+            std::unique_ptr<TProposeResponse> ProposeAlter(const TString& owner, TOperationContext& context) {
                 (void)owner, (void)context;
                 SetState(TTxState::ConfigureParts);
                 return nullptr;
             }
 
-            THolder<TProposeResponse> ProposeDrop(const TString& owner, TOperationContext& context) {
+            std::unique_ptr<TProposeResponse> ProposeDrop(const TString& owner, TOperationContext& context) {
                 (void)owner, (void)context;
                 SetState(TTxState::DeleteParts);
                 return nullptr;
@@ -393,7 +393,7 @@ namespace NKikimr::NSchemeShard {
             template<typename T>
             struct TFactoryImpl {
                 TSubOperationState::TPtr operator ()(TOperationId id) const {
-                    return MakeHolder<T>(id);
+                    return std::make_unique<T>(id);
                 }
             };
 

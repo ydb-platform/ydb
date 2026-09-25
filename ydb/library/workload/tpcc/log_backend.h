@@ -45,7 +45,7 @@ private:
     void ProcessNewLines(bool logTaken);
 
 private:
-    THolder<TLogBackend> RealBackend;
+    std::unique_ptr<TLogBackend> RealBackend;
     const size_t MaxLines;
 
     std::deque<std::pair<ELogPriority, std::string>> LogLines;

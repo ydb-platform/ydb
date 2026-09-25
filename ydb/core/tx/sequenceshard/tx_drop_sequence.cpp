@@ -59,7 +59,7 @@ namespace NSequenceShard {
         }
 
         TEvSequenceShard::TEvDropSequence::TPtr Ev;
-        THolder<TEvSequenceShard::TEvDropSequenceResult> Result;
+        std::unique_ptr<TEvSequenceShard::TEvDropSequenceResult> Result;
     };
 
     void TSequenceShard::Handle(TEvSequenceShard::TEvDropSequence::TPtr& ev, const TActorContext& ctx) {

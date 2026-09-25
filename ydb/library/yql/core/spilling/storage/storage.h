@@ -10,7 +10,7 @@ namespace NSpilling {
 class ISpillStorage;  // Unified interface to implement spilling based on any supported storage type
 
 // Factory method to create ISpillStorage based on file system for usage.  Error reasons are returned in TOperatonResults 
-std::pair< THolder<ISpillStorage>, TOperationResults > OpenFileStorageForSpilling(const TFileStorageConfig& config);
+std::pair< std::unique_ptr<ISpillStorage>, TOperationResults > OpenFileStorageForSpilling(const TFileStorageConfig& config);
 
 const ui32 MagicForFileRecord32 =   0xD0F5F39F; // Magic header number to restore records in case of broken file
 
@@ -106,7 +106,7 @@ public:
 
     // Creates file in namespace ns with name fn. File interface ISpillFile is ready for writing and locked in case of success.  
     // Caller should check success with LastOperationResults.  reserveStep is a step to increase allocated file storage.
-    virtual THolder<ISpillFile> CreateSpillFile(const TString& ns, const TString& fn, ui32 reserveStep) = 0;
+    virtual std::unique_ptr<ISpillFile> CreateSpillFile(const TString& ns, const TString& fn, ui32 reserveStep) = 0;
 
     // Returns last operation results
     virtual TOperationResults LastOperationResults() = 0;

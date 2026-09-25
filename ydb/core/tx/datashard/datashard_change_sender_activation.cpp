@@ -47,7 +47,7 @@ public:
             {"origin", Origin},
             {"tabletId", Self->TabletID()});
 
-        auto ev = MakeHolder<TEvChangeExchange::TEvActivateSenderAck>();
+        auto ev = std::make_unique<TEvChangeExchange::TEvActivateSenderAck>();
         ev->Record.SetOrigin(Self->TabletID());
         ctx.Send(AckTo, ev.Release());
 

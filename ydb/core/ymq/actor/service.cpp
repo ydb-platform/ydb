@@ -407,7 +407,7 @@ void TSqsService::Bootstrap() {
     InitSchemeCache();
     NodeTrackerActor_ = Register(new TNodeTrackerActor(SchemeCache_));
 
-    LocalLeaderManager = MakeHolder<TLocalLeaderManager>(MonitoringCounters_);
+    LocalLeaderManager = std::make_unique<TLocalLeaderManager>(MonitoringCounters_);
 
     Register(new TCleanupQueueDataActor(MonitoringCounters_));
     Register(new TMonitoringActor(MonitoringCounters_));
@@ -510,7 +510,7 @@ void TSqsService::RequestSqsUsersList() {
     }
     RequestingUsersList_ = true;
     LOG_SQS_INFO("Request SQS users list");
-    THolder<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
+    std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
     NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
     record->SetPath(Cfg().GetRoot());
     Send(MakeTxProxyID(), navigateRequest.Release());
@@ -643,7 +643,7 @@ void TSqsService::AnswerNotExists(TSqsEvents::TEvGetConfiguration::TPtr& ev, con
     if (ev->Get()->UserName && ev->Get()->QueueName) {
         RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "No queue [" << ev->Get()->QueueName << "] found in user [" << ev->Get()->UserName << "] record");
     }
-    auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+    auto answer = std::make_unique<TSqsEvents::TEvConfiguration>();
     answer->UserExists = userInfo != nullptr;
     answer->QueueExists = false;
     if (userInfo) {
@@ -700,7 +700,7 @@ void TSqsService::AnswerFailed(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr
 }
 
 void TSqsService::AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo) {
-    auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+    auto answer = std::make_unique<TSqsEvents::TEvConfiguration>();
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = SqsCoreCounters_;
     answer->UserCounters = userInfo ? userInfo->Counters_ : nullptr;
@@ -732,7 +732,7 @@ void TSqsService::AnswerThrottled(TSqsEvents::TEvGetLeaderNodeForQueueRequest::T
 
 void TSqsService::AnswerThrottled(TSqsEvents::TEvGetConfiguration::TPtr& ev) {
     RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Throttled because of too many requests for nonexistent queue [" << ev->Get()->QueueName << "] for user [" << ev->Get()->UserName << "] while getting configuration");
-    auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+    auto answer = std::make_unique<TSqsEvents::TEvConfiguration>();
     answer->Throttled = true;
     answer->SchemeCache = SchemeCache_;
     Send(ev->Sender, answer.Release());
@@ -753,7 +753,7 @@ void TSqsService::Answer(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev,
 }
 
 void TSqsService::AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo, const TQueueInfoPtr& queueInfo) {
-    auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+    auto answer = std::make_unique<TSqsEvents::TEvConfiguration>();
     answer->UserExists = true;
     answer->QueueExists = true;
     answer->Settings = userInfo->Settings_;
@@ -1553,7 +1553,7 @@ void TSqsService::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
 
 void TSqsService::HandleSqsRequest(TSqsEvents::TEvSqsRequest::TPtr& ev) {
     LOG_SQS_TRACE("HandleSqsRequest " << SecureShortUtf8DebugString(ev->Get()->Record));
-    auto replier = MakeHolder<TReplierToSenderActorCallback>(ev);
+    auto replier = std::make_unique<TReplierToSenderActorCallback>(ev);
     const auto& request = replier->Request->Get()->Record;
     Register(CreateActionActor(request, std::move(replier)));
 }

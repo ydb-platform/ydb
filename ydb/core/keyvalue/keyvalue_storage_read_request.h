@@ -13,7 +13,7 @@ class TKeyValueState;
 struct TKeyValueStateLifetimeToken;
 
 IActor* CreateKeyValueStorageReadRequest(
-    THolder<TIntermediate>&& intermediate,
+    std::unique_ptr<TIntermediate>&& intermediate,
     const TTabletStorageInfo *tabletInfo,
     ui32 tabletGeneration,
     TKeyValueState *state,

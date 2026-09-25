@@ -108,7 +108,7 @@ void TConfigurationInfoCollector::ReplyAndDie() {
         {"V2", V2Nodes},
         {"unknown", UnknownNodes},
         {"total", TotalNodes});
-    auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>();
+    auto response = std::make_unique<TEvConsole::TEvGetConfigurationVersionResponse>();
     auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);
     result->set_v2_nodes(V2Nodes);

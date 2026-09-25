@@ -415,7 +415,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         YDB_LOG_ERROR("Not enough resources to execute query locally and no information about other nodes",
             {"txId", TxId},
             {"ctx", *UserRequestContext});
-        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+        auto ev = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query locally and no information about other nodes (estimation: "
             + ToString(LocalRunMemoryEst) + ";" + GetEstimationsInfo() + ")");
 
@@ -510,7 +510,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
                                                                                                           {"ctx", *UserRequestContext},
                                                                                                           {"msg", msg}); });
 
-        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+        auto ev = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
@@ -912,7 +912,7 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
         auto computeActorId = pair.first;
         auto& channelIds = pair.second;
 
-        auto channelsInfoEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelsInfo>();
+        auto channelsInfoEv = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelsInfo>();
         auto& record = channelsInfoEv->Record;
 
         for (auto& channelId : channelIds) {

@@ -44,7 +44,7 @@ void TRetentionActor::SetRetentionBoundary() {
             const TValue list(val["result"]);
 
             for (size_t i = 0; i < list.Size(); ++i) {
-                auto req = MakeHolder<TSqsEvents::TEvPurgeQueue>();
+                auto req = std::make_unique<TSqsEvents::TEvPurgeQueue>();
                 req->QueuePath = QueuePath_;
                 req->Boundary = TInstant::MilliSeconds(ui64(list[i]["RetentionBoundary"]));
                 if (TablesFormat_ == 0) {

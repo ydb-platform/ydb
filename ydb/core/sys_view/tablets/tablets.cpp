@@ -173,7 +173,7 @@ private:
 
         TabletIdsRequested = true;
 
-        auto request = MakeHolder<TEvSysView::TEvGetTabletIdsRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetTabletIdsRequest>();
 
         if (!CalculateRangeFrom() || !CalculateRangeTo()) {
             ReplyEmptyAndDie();
@@ -198,7 +198,7 @@ private:
         }
         BatchRequested = true;
 
-        auto request = MakeHolder<TEvSysView::TEvGetTabletsRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetTabletsRequest>();
         auto& record = request->Record;
 
         auto it = FromIterator;
@@ -304,7 +304,7 @@ private:
             }
         }
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         TVector<TCell> cells;
         ui32 toFollowerId = ToFollowerId.value_or(Max<ui32>());
 
@@ -362,11 +362,11 @@ private:
     bool BatchRequested = false;
 };
 
-THolder<NActors::IActor> CreateTabletsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateTabletsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TTabletsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TTabletsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

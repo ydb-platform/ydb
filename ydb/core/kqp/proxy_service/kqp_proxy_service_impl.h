@@ -658,7 +658,7 @@ private:
 class TDatabasesCache {
 public:
     struct TDelayedEvent {
-        THolder<IEventHandle> Event;
+        std::unique_ptr<IEventHandle> Event;
         i32 RequestType;
     };
 

@@ -13,7 +13,7 @@ namespace NMiniKQL {
 namespace NPackedTuple {
 
 // -----------------------------------------------------------------------
-THolder<TAccumulator> TAccumulator::Create(
+std::unique_ptr<TAccumulator> TAccumulator::Create(
     const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets)
@@ -21,33 +21,33 @@ THolder<TAccumulator> TAccumulator::Create(
     // according to https://www.cidrdb.org/cidr2019/papers/p133-zhang-cidr19.pdf
     if (log2Buckets <= 6)
     {
-        return MakeHolder<TAccumulatorImpl>(
+        return std::make_unique<TAccumulatorImpl>(
             layout, bitShift, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
     }
 
     if (log2Buckets <= 13 && layout->TotalRowSize <= 128 && layout->VariableColumns.empty()) // tuple is too wide SMB will not help us, because the number of tuples that fit into the buffer will be small
     {
-        return MakeHolder<TSMBAccumulatorImpl>(
+        return std::make_unique<TSMBAccumulatorImpl>(
            layout, bitShift, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
     }
 
-    return MakeHolder<TAccumulatorImpl>(
+    return std::make_unique<TAccumulatorImpl>(
         layout, bitShift, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
 }
 
-THolder<TAccumulator> TAccumulator::Create(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets) {
+std::unique_ptr<TAccumulator> TAccumulator::Create(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets) {
     // according to https://www.cidrdb.org/cidr2019/papers/p133-zhang-cidr19.pdf
     if (log2Buckets <= 6)
     {
-        return MakeHolder<TAccumulatorImpl>(layout, bitShift, log2Buckets);
+        return std::make_unique<TAccumulatorImpl>(layout, bitShift, log2Buckets);
     }
 
     if (log2Buckets <= 13 && layout->TotalRowSize <= 128 && layout->VariableColumns.empty()) // tuple is too wide SMB will not help us, because the number of tuples that fit into the buffer will be small
     {
-        return MakeHolder<TSMBAccumulatorImpl>(layout, bitShift, log2Buckets);
+        return std::make_unique<TSMBAccumulatorImpl>(layout, bitShift, log2Buckets);
     }
 
-    return MakeHolder<TAccumulatorImpl>(layout, bitShift, log2Buckets);
+    return std::make_unique<TAccumulatorImpl>(layout, bitShift, log2Buckets);
 }
 
 // -----------------------------------------------------------------------

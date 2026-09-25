@@ -20,7 +20,7 @@ namespace NKikimr::NMediatorTimeCastTest {
         }
 
         void SendSubscribeRequest(TTestActorRuntime& runtime, const TActorId& sender, ui64 coordinatorId, ui64 cookie = 0) {
-            auto request = MakeHolder<TEvMediatorTimecast::TEvSubscribeReadStep>(coordinatorId);
+            auto request = std::make_unique<TEvMediatorTimecast::TEvSubscribeReadStep>(coordinatorId);
             runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), sender, request.Release(), 0, cookie), 0, true);
         }
 
@@ -29,7 +29,7 @@ namespace NKikimr::NMediatorTimeCastTest {
         }
 
         void SendWaitRequest(TTestActorRuntime& runtime, const TActorId& sender, ui64 coordinatorId, ui64 readStep, ui64 cookie = 0) {
-            auto request = MakeHolder<TEvMediatorTimecast::TEvWaitReadStep>(coordinatorId, readStep);
+            auto request = std::make_unique<TEvMediatorTimecast::TEvWaitReadStep>(coordinatorId, readStep);
             runtime.Send(new IEventHandle(MakeMediatorTimecastProxyID(), sender, request.Release(), 0, cookie), 0, true);
         }
 

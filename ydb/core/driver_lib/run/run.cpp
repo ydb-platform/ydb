@@ -608,7 +608,7 @@ public:
     virtual void Initialize(NKikimr::TAppData* appData) override
     {
         if (Config.HasCmsConfig())
-            appData->DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(Config.GetCmsConfig());
+            appData->DefaultCmsConfig = std::make_unique<NKikimrCms::TCmsConfig>(Config.GetCmsConfig());
     }
 };
 
@@ -1874,7 +1874,7 @@ void TKikimrRunner::InitializeActorSystem(
     TIntrusivePtr<TServiceInitializersList> serviceInitializers,
     const TBasicKikimrServicesMask& servicesMask)
 {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup());
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup());
 
     serviceInitializers->InitializeServices(setup.Get(), AppData.Get());
 
@@ -2396,7 +2396,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
             auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
             TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
-            THolder<TEvent> event = MakeHolder<TEvent>();
+            std::unique_ptr<TEvent> event = std::make_unique<TEvent>();
             event->Record.SetNodeId(nodeId);
 
             auto pipeEv = new IEventHandle(nodeBrokerPipe, TActorId(), event.Release());

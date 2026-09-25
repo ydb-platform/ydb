@@ -36,7 +36,7 @@ class TRdmaLow : public TSkipFixture {};
 class TCqMode : public TSkipFixtureWithParams<NInterconnect::NRdma::ECqMode> {};
 
 struct TRegistrationTestCq {
-    THolder<TTestActorRuntimeBase> ActorSystem;
+    std::unique_ptr<TTestActorRuntimeBase> ActorSystem;
     TRdmaCtx* Ctx = nullptr;
     ICq::TPtr Cq;
 };
@@ -703,7 +703,7 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
 
     auto rdma = InitLocalRdmaStuff(addr, GetParam());
 
-    THolder<IThreadPool> pool = CreateThreadPool(2, 2);
+    std::unique_ptr<IThreadPool> pool = CreateThreadPool(2, 2);
     const int initialAttempts = 50000;
 
     // Use attempt as timeout to delay the memory corruptor.

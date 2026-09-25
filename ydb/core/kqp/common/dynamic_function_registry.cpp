@@ -581,7 +581,7 @@ TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> CreateDynamicFunctionRegistry(
     const TVector<TString>& udfsPaths,
     ui32 flags)
 {
-    auto registry = MakeHolder<TDynamicFunctionRegistry>(std::move(builtins));
+    auto registry = std::make_unique<TDynamicFunctionRegistry>(std::move(builtins));
     if (allowUdfPatch) {
         registry->AllowUdfPatch();
     }

@@ -260,10 +260,10 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
 
 
 
-THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TFinishProposeUnit(dataShard, pipeline));
+    return std::unique_ptr<TFinishProposeUnit>(new TFinishProposeUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

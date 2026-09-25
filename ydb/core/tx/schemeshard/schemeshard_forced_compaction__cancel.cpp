@@ -26,7 +26,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
             {"request", request.ShortDebugString()},
         );
 
-        auto response = MakeHolder<TEvForcedCompaction::TEvCancelResponse>(request.GetTxId());
+        auto response = std::make_unique<TEvForcedCompaction::TEvCancelResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -114,7 +114,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
 
 private:
     void Reply(
-        THolder<TEvForcedCompaction::TEvCancelResponse> response,
+        std::unique_ptr<TEvForcedCompaction::TEvCancelResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString())
     {

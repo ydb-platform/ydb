@@ -61,8 +61,8 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
 
 void TPrepareWriteTxInRSUnit::Complete(TOperation::TPtr, const TActorContext &) {}
 
-THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TPrepareWriteTxInRSUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) {
+    return std::unique_ptr<TPrepareWriteTxInRSUnit>(new TPrepareWriteTxInRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

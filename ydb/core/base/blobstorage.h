@@ -2185,8 +2185,8 @@ struct TEvBlobStorage {
         ui32 PerGenerationCounter; // monotone increasing cmd counter for RecordGeneration
         ui32 Channel;
 
-        THolder<TVector<TLogoBlobID> > Keep;
-        THolder<TVector<TLogoBlobID> > DoNotKeep;
+        std::unique_ptr<TVector<TLogoBlobID> > Keep;
+        std::unique_ptr<TVector<TLogoBlobID> > DoNotKeep;
         TInstant Deadline;
 
         ui32 CollectGeneration;
@@ -2213,8 +2213,8 @@ struct TEvBlobStorage {
             , RecordGeneration(origin.RecordGeneration)
             , PerGenerationCounter(origin.PerGenerationCounter)
             , Channel(origin.Channel)
-            , Keep(origin.Keep ? MakeHolder<TVector<TLogoBlobID>>(*origin.Keep) : nullptr)
-            , DoNotKeep(origin.DoNotKeep ? MakeHolder<TVector<TLogoBlobID>>(*origin.DoNotKeep) : nullptr)
+            , Keep(origin.Keep ? std::make_unique<TVector<TLogoBlobID>>(*origin.Keep) : nullptr)
+            , DoNotKeep(origin.DoNotKeep ? std::make_unique<TVector<TLogoBlobID>>(*origin.DoNotKeep) : nullptr)
             , Deadline(origin.Deadline)
             , CollectGeneration(origin.CollectGeneration)
             , CollectStep(origin.CollectStep)
@@ -2275,10 +2275,10 @@ struct TEvBlobStorage {
             , WriteSource(writeSource)
         {}
 
-        static THolder<TEvCollectGarbage> CreateHardBarrier(ui64 tabletId, ui32 recordGeneration,
+        static std::unique_ptr<TEvCollectGarbage> CreateHardBarrier(ui64 tabletId, ui32 recordGeneration,
                 ui32 perGenerationCounter, ui32 channel, ui32 collectGeneration, ui32 collectStep, TInstant deadline,
                 TWriteSource writeSource = UnknownWriteSource()) {
-            return MakeHolder<TEvCollectGarbage>(tabletId, recordGeneration, perGenerationCounter, channel,
+            return std::make_unique<TEvCollectGarbage>(tabletId, recordGeneration, perGenerationCounter, channel,
                     true /*collect*/, collectGeneration, collectStep, nullptr /*keep*/, nullptr /*doNotKeep*/,
                     deadline, false /*isMultiCollectAllowed*/, writeSource, true /*hard*/, false /*ignoreBlock*/);
         }
@@ -2796,7 +2796,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
 
 
 inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
-        THolder<TEvBlobStorage::TEvPut> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        std::unique_ptr<TEvBlobStorage::TEvPut> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     auto checkGroupId = [&] {
         const TLogoBlobID &id = event->Id;
         const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());
@@ -2809,7 +2809,7 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
 }
 
 inline bool SendPatchToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
-        THolder<TEvBlobStorage::TEvPatch> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        std::unique_ptr<TEvBlobStorage::TEvPatch> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     auto checkGroupId = [&] {
         const TLogoBlobID &id = event->PatchedId;
         const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());

@@ -46,7 +46,7 @@ void TTestServer::SetupSettings() {
 
 void TTestServer::RunServer() {
     Server = MakeIntrusive<Tests::TServer>(ServerSettings, true);
-    Client = MakeHolder<Tests::TClient>(*ServerSettings);
+    Client = std::make_unique<Tests::TClient>(*ServerSettings);
 
     Server->GetRuntime()->SetDispatchTimeout(TDuration::Minutes(10));
 

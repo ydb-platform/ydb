@@ -37,7 +37,7 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     ui64 NextInFlightBatchCookie = 1;
     ui32 TabletGeneration;
 
-    THolder<TIntermediate> IntermediateResults;
+    std::unique_ptr<TIntermediate> IntermediateResults;
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     TKeyValueState *State;
@@ -78,7 +78,7 @@ public:
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
-    TKeyValueStorageRequest(THolder<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo,
+    TKeyValueStorageRequest(std::unique_ptr<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo,
             ui32 tabletGeneration, TKeyValueState *state,
             std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
         : InFlightLimitSeq(intermediate->SequentialReadLimit)
@@ -710,7 +710,7 @@ public:
                 const ui64 tabletId = TabletInfo->TabletID;
                 TLogoBlobID from(tabletId, 0, 0, channel, 0, 0);
                 TLogoBlobID to(tabletId, Max<ui32>(), Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
-                auto request = MakeHolder<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
+                auto request = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
                 SendToBSProxy(ctx, groupId, request.Release(), 0, Span.GetTraceId());
                 ++RangeRequestsSent;
             }
@@ -730,7 +730,7 @@ public:
                     for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
                         const auto begin = iter;
                         iter += logoBlobId.BlobSize();
-                        THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                        std::unique_ptr<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = logoBlobId,
                             .Buffer = TRope(begin, iter),
                             .Deadline = IntermediateResults->Deadline,
@@ -783,7 +783,7 @@ public:
                     diffs[diffIdx].Offset = diff.Offset;
                 }
 
-                THolder<TEvBlobStorage::TEvPatch> patch(
+                std::unique_ptr<TEvBlobStorage::TEvPatch> patch(
                     new TEvBlobStorage::TEvPatch(
                         originalGroupId, request.OriginalBlobId, request.PatchedBlobId, TLogoBlobID::MaxCookie,
                         std::move(diffs), request.Diffs.size(), IntermediateResults->Deadline));
@@ -831,7 +831,7 @@ public:
 };
 
 IActor* CreateKeyValueStorageRequest(
-        THolder<TIntermediate>&& intermediate,
+        std::unique_ptr<TIntermediate>&& intermediate,
         const TTabletStorageInfo *tabletInfo,
         ui32 tabletGeneration,
         TKeyValueState *state,

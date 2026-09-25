@@ -18,7 +18,7 @@ class TListDeadLetterSourceQueuesActor
     : public TActionActor<TListDeadLetterSourceQueuesActor>
 {
 public:
-    TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListDeadLetterSourceQueues, std::move(cb))
     {
     }
@@ -103,7 +103,7 @@ private:
     }
 };
 
-IActor* CreateListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateListDeadLetterSourceQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TListDeadLetterSourceQueuesActor(sourceSqsRequest, std::move(cb));
 }
 

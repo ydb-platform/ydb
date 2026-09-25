@@ -9,7 +9,7 @@
 namespace NYdbWorkload {
     TMarkovModelEvaluator TMarkovModelEvaluator::LoadFromFile(const TString& path) {
         TMarkovModelEvaluator mc;
-        auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path));
+        auto input = OpenOwnedMaybeCompressedInput(std::make_unique<TFileInput>(path));
         TString line;
         while (input->ReadLine(line)) {
             if (line.StartsWith("#")) {

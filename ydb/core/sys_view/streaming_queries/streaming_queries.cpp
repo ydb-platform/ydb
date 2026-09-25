@@ -1055,7 +1055,7 @@ private:
             {"logPrefix", LogPrefix()},
             {"readyQueryCount", ReadyQueries.size()});
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = ListStreamingQueriesFinished && PendingScriptExecutionInfo.empty();
         for (const auto& path : ReadyQueries) {
             const auto it = QueriesBatch.find(path);
@@ -1180,11 +1180,11 @@ private:
 
 } // anonymous namespace
 
-THolder<IActor> CreateStreamingQueriesScan(const TActorId& ownerId, ui32 scanId, const TString& database,
+std::unique_ptr<IActor> CreateStreamingQueriesScan(const TActorId& ownerId, ui32 scanId, const TString& database,
     const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse) {
-    return MakeHolder<TStreamingQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), reverse);
+    return std::make_unique<TStreamingQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), reverse);
 }
 
 } // namespace NKikimr::NSysView

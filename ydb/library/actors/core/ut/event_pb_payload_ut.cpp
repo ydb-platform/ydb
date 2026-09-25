@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(size2))));
         msg.Record.AddSomeData(MakeString((size1 + size2) % 50 + 11));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         msg.SerializeToArcadiaStream(serializer.Get());
         auto buffers = serializer->Release(msg.CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers->GetSize(), msg.CalculateSerializedSize());
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         }
         UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
 
-        THolder<TEventTo> ev2 = THolder(TEventTo::Load(buffers.Get()));
+        std::unique_ptr<TEventTo> ev2 = std::unique_ptr<TEventTo>(TEventTo::Load(buffers.Get()));
         TEventTo& msg2 = static_cast<TEventTo&>(*ev2);
         UNIT_ASSERT_VALUES_EQUAL(msg2.Record.GetMeta(), msg.Record.GetMeta());
         UNIT_ASSERT_EQUAL(msg2.GetPayload(msg2.Record.GetPayloadId(0)), msg.GetPayload(msg.Record.GetPayloadId(0)));
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(256))));
         msg.Record.AddSomeData(MakeString(128));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
         const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
         UNIT_ASSERT_VALUES_EQUAL(expected.size(), msg.CalculateSerializedSize());
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.Record.SetMeta("hello, world!");
         msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(TString(1024, 'x'))));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
         const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
 
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.Record.SetMeta("hello, world!");
         msg.Record.AddPayloadId(msg.AddPayload(TRope(std::move(rdmaBuffer))));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
         const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
 
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(TString(payloadSize, 't'))));
         msg.Record.AddPayloadId(msg.AddPayload(TRope(std::move(rdmaBuffer))));
 
-        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        auto serializer = std::make_unique<TAllocChunkSerializer>();
         UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
         const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
 
@@ -278,14 +278,14 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         TEvMessageWithPayloadPreSerialized e1;
         Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&e1.PreSerializedData);
 
-        auto serializer1 = MakeHolder<TAllocChunkSerializer>();
+        auto serializer1 = std::make_unique<TAllocChunkSerializer>();
         e1.SerializeToArcadiaStream(serializer1.Get());
         auto buffers1 = serializer1->Release(e1.CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers1->GetSize(), e1.CalculateSerializedSize());
         TString ser1 = buffers1->GetString();
 
         TEvMessageWithPayload e2(msg);
-        auto serializer2 = MakeHolder<TAllocChunkSerializer>();
+        auto serializer2 = std::make_unique<TAllocChunkSerializer>();
         e2.SerializeToArcadiaStream(serializer2.Get());
         auto buffers2 = serializer2->Release(e2.CreateSerializationInfo(false));
         UNIT_ASSERT_VALUES_EQUAL(buffers2->GetSize(), e2.CalculateSerializedSize());
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         // deserialize
         auto data = MakeIntrusive<TEventSerializedData>(ser1, TEventSerializationInfo{});
-        THolder<TEvMessageWithPayloadPreSerialized> parsedEvent(TEvMessageWithPayloadPreSerialized::Load(data.Get()));
+        std::unique_ptr<TEvMessageWithPayloadPreSerialized> parsedEvent(TEvMessageWithPayloadPreSerialized::Load(data.Get()));
         UNIT_ASSERT_VALUES_EQUAL(parsedEvent->PreSerializedData, ""); // this field is empty after deserialization
         auto& record = parsedEvent->GetRecord();
         UNIT_ASSERT_VALUES_EQUAL(record.GetMeta(), msg.GetMeta());
@@ -307,14 +307,14 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
     Y_UNIT_TEST(MalformedEventType) {
         // First, verify the happy path
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvMessageWithPayload, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(), 0);
             UNIT_ASSERT(ev->Get<TEvMessageWithPayload>() != nullptr);
         }
         // Next, verify the type mismatch
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvArenaMessage, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
     }
 
     Y_UNIT_TEST(MalformedEventData) {
-        auto ev = MakeHolder<IEventHandle>(
+        auto ev = std::make_unique<IEventHandle>(
             EvMessageWithPayload, 0, TActorId(), TActorId(),
             MakeIntrusive<TEventSerializedData>(TString("\xff", 1), TEventSerializationInfo{}), 0);
         UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
@@ -331,35 +331,35 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
     Y_UNIT_TEST(MalformedEventPayload) {
         // Invalid marker
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvMessageWithPayload, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(TString("\xff", 1), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
         }
         // Valid marker, missing payload count
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvMessageWithPayload, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(TString("\x07", 1), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
         }
         // Valid marker, one payload, missing payload length
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvMessageWithPayload, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(TString("\x07\x01", 2), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
         }
         // Valid marker, one payload, valid length, not enough data
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvMessageWithPayload, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(TString("\x07\x01\x02\x00", 4), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
         }
         // Valid marker, one payload, valid length, enough data, message malformed
         {
-            auto ev = MakeHolder<IEventHandle>(
+            auto ev = std::make_unique<IEventHandle>(
                 EvMessageWithPayload, 0, TActorId(), TActorId(),
                 MakeIntrusive<TEventSerializedData>(TString("\x07\x01\x02\x00\x00\xff", 6), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
             UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);

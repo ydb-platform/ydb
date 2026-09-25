@@ -15,7 +15,7 @@ struct TKqpSetup: public TSetup<LLVM, Spilling>
     explicit TKqpSetup(TComputationNodeFactory nodeFactory = GetPerfTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : TSetup<LLVM, Spilling>(nodeFactory, std::move(modules))
     {
-        this->PgmBuilder = MakeHolder<TKqpProgramBuilder>(*this->Env, *this->FunctionRegistry);
+        this->PgmBuilder = std::make_unique<TKqpProgramBuilder>(*this->Env, *this->FunctionRegistry);
     }
 
     TKqpProgramBuilder& GetKqpBuilder()

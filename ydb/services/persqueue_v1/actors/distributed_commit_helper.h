@@ -35,8 +35,8 @@ public:
 
 private:
     void CloseKqpSession(const TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
-    THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
+    std::unique_ptr<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
+    std::unique_ptr<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
     void SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void CommitTx(const NActors::TActorContext& ctx);
 

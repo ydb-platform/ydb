@@ -92,13 +92,13 @@ void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TStr
 }
 
 /*
-THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TString& topicPath, bool compress) {
+std::unique_ptr<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TString& topicPath, bool compress) {
     Ydb::PersQueue::TProducerSettings producerSettings;
     producerSettings.Server = Ydb::PersQueue::TServerSetting("localhost", Server->GrpcPort);
     producerSettings.Topic = topicPath;
     producerSettings.SourceId = "TRateLimiterTestSetupSourceId";
     producerSettings.Codec = compress ? "gzip" : "raw";
-    THolder<Ydb::PersQueue::IProducer> producer = PQLib->CreateProducer(producerSettings);
+    std::unique_ptr<Ydb::PersQueue::IProducer> producer = PQLib->CreateProducer(producerSettings);
     auto startResult = producer->Start();
     UNIT_ASSERT_EQUAL_C(Ydb::StatusIds::SUCCESS, startResult.GetValueSync().Response.status(), "Response: " << startResult.GetValueSync().Response);
     return producer;
@@ -140,7 +140,7 @@ void TRateLimiterTestSetup::InitQuoting() {
 }
 
 void TRateLimiterTestSetup::WaitWritePQServiceInitialization() {
-    PQDataWriter = MakeHolder<TPQDataWriter>("writer_source_id", *Server);
+    PQDataWriter = std::make_unique<TPQDataWriter>("writer_source_id", *Server);
 }
 
 }

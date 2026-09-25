@@ -21,10 +21,10 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
     };
 
     class TTxQueue : public TTransactionBase<TBlobStorageController> {
-        TDeque<THolder<TTxBase>> Queue;
+        TDeque<std::unique_ptr<TTxBase>> Queue;
 
     public:
-        TTxQueue(TBlobStorageController *controller, TDeque<THolder<TTxBase>> queue)
+        TTxQueue(TBlobStorageController *controller, TDeque<std::unique_ptr<TTxBase>> queue)
             : TTransactionBase(controller)
             , Queue(std::move(queue))
         {
@@ -193,7 +193,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
         }
     };
 
-    TDeque<THolder<TTxBase>> Queue;
+    TDeque<std::unique_ptr<TTxBase>> Queue;
 
 public:
     using TTransactionBase::TTransactionBase;

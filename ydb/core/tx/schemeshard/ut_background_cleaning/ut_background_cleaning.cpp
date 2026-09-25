@@ -14,8 +14,8 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
-THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestBackgroundCleaningConfig(bool withRetries = false) {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+std::unique_ptr<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestBackgroundCleaningConfig(bool withRetries = false) {
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto* backgroundCleaningConfig = request->Record.MutableConfig()->MutableBackgroundCleaningConfig();
     backgroundCleaningConfig->SetMaxRate(10);
@@ -101,7 +101,7 @@ THashSet<TString> GetTables(
     ui64 tabletId)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    auto request = std::make_unique<TEvDataShard::TEvGetInfoRequest>();
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     THashSet<TString> result;

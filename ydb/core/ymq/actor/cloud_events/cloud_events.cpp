@@ -250,7 +250,7 @@ namespace NCloudEvents {
     void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params) {
         bool isDeleteQuery = static_cast<bool>(params);
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
         request->SetKeepSession(!isDeleteQuery);
@@ -310,7 +310,7 @@ namespace NCloudEvents {
 
     void TProcessor::StopSession() {
         if (!SessionId.empty()) {
-            auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
             SessionId = TString();

@@ -90,8 +90,8 @@ public:
 
 }; // TDirectOpUnit
 
-THolder<TExecutionUnit> CreateDirectOpUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TDirectOpUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateDirectOpUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TDirectOpUnit>(new TDirectOpUnit(self, pipeline));
 }
 
 } // NDataShard

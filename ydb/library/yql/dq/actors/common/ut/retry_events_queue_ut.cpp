@@ -166,8 +166,8 @@ struct TRemoteQueueFixture : public NUnitTest::TBaseFixture {
     TActorId SenderId;
     TActorId RecipientId;
     TRetryEventsQueue Queue;
-    std::deque<THolder<IEventHandle>> SentEvents;
-    std::deque<std::pair<THolder<IEventHandle>, TDuration>> ScheduledEvents;
+    std::deque<std::unique_ptr<IEventHandle>> SentEvents;
+    std::deque<std::pair<std::unique_ptr<IEventHandle>, TDuration>> ScheduledEvents;
 
     TRemoteQueueFixture() {
         Runtime.Initialize();
@@ -183,7 +183,7 @@ struct TRemoteQueueFixture : public NUnitTest::TBaseFixture {
         });
         Runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant&) {
             if (event->Sender == SenderId) {
-                ScheduledEvents.emplace_back(THolder<IEventHandle>(event.Release()), delay);
+                ScheduledEvents.emplace_back(std::unique_ptr<IEventHandle>(event.Release()), delay);
             }
             return true;
         });
@@ -252,7 +252,7 @@ struct TUnorderedRemoteQueueFixture : public TRemoteQueueFixture {
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     Y_UNIT_TEST_F(SendAndReplayPreserveRecordPayloadsAndCookie, TRemoteQueueFixture) {
         Act([&] {
-            auto event = MakeHolder<TEvDqCompute::TEvInjectCheckpoint>();
+            auto event = std::make_unique<TEvDqCompute::TEvInjectCheckpoint>();
             event->Record.MutableCheckpoint()->SetId(42);
             event->Record.SetGeneration(7);
             event->AddPayload(TRope("first payload"));

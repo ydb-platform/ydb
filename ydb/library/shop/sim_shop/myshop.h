@@ -146,7 +146,7 @@ private:
 
     TRWSpinLock ConfigureLock;
     TFlowCtl MyFlowCtl;
-    THolder<IScheduler> Scheduler;
+    std::unique_ptr<IScheduler> Scheduler;
     TList<TWorkerThreadPtr> WorkerThread;
 
     TMutex WaitMutex;
@@ -234,7 +234,7 @@ private:
 
     // Machines
     struct TMachineItem {
-        THolder<TMyMachine> Machine;
+        std::unique_ptr<TMyMachine> Machine;
     };
     THashMap<ui64, TMachineItem> Machines; // machineId -> machine/flowctl
     ui64 LastMachineId = 0;

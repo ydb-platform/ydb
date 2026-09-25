@@ -98,12 +98,12 @@ private:
     const bool Effective;
 };
 
-THolder<NActors::IActor> CreatePermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreatePermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TPermissionsScan>(effective, ownerId, scanId, database, sysViewInfo, tableRange, columns,
+    return std::make_unique<TPermissionsScan>(effective, ownerId, scanId, database, sysViewInfo, tableRange, columns,
         std::move(userToken));
 }
 

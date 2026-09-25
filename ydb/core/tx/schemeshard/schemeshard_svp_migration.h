@@ -15,7 +15,7 @@ struct TMigrationInfo {
     bool CreateWCC = false;
 };
 
-THolder<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,
+std::unique_ptr<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,
     std::queue<TMigrationInfo>&& migrations);
 
 } // namespace NKikimr::NSchemeShard

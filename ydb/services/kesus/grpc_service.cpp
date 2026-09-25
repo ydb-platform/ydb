@@ -45,7 +45,7 @@ public:
         TKesusGRpcService,
         NKikimrServices::GRPC_SERVER>;
 
-    TGRpcSessionActor(THolder<NGRpcService::TEvCoordinationSessionRequest> requestEvent)
+    TGRpcSessionActor(std::unique_ptr<NGRpcService::TEvCoordinationSessionRequest> requestEvent)
         : RequestEvent(std::move(requestEvent))
     { }
 
@@ -154,7 +154,7 @@ private:
         const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
         KesusPath = RequestEvent->NormalizePath(StartRequest->Record.session_start().path());
 
-        auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
+        auto resolve = std::make_unique<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {
             RequestEvent->Finish(Ydb::StatusIds::UNSUPPORTED, grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
                 "Coordination service not implemented on this server"));
@@ -324,7 +324,7 @@ private:
                     result->add_issues()->set_message("Write permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvAcquireSemaphore>();
+                auto event = std::make_unique<TEvKesus::TEvAcquireSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetTimeoutMillis(source.timeout_millis());
@@ -344,7 +344,7 @@ private:
                     result->add_issues()->set_message("Write permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvReleaseSemaphore>();
+                auto event = std::make_unique<TEvKesus::TEvReleaseSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 Send(ProxyActor, event.Release(), 0, source.req_id());
@@ -360,7 +360,7 @@ private:
                     result->add_issues()->set_message("Read permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvDescribeSemaphore>();
+                auto event = std::make_unique<TEvKesus::TEvDescribeSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetIncludeOwners(source.include_owners());
@@ -381,7 +381,7 @@ private:
                     result->add_issues()->set_message("Create permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvCreateSemaphore>();
+                auto event = std::make_unique<TEvKesus::TEvCreateSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetLimit(source.limit());
@@ -400,7 +400,7 @@ private:
                     result->add_issues()->set_message("Update permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvUpdateSemaphore>();
+                auto event = std::make_unique<TEvKesus::TEvUpdateSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetData(source.data());
@@ -418,7 +418,7 @@ private:
                     result->add_issues()->set_message("Delete permission denied");
                     return Reply(std::move(response));
                 }
-                auto event = MakeHolder<TEvKesus::TEvDeleteSemaphore>();
+                auto event = std::make_unique<TEvKesus::TEvDeleteSemaphore>();
                 event->Record.SetKesusPath(KesusPath);
                 event->Record.SetName(source.name());
                 event->Record.SetForce(source.force());
@@ -594,11 +594,11 @@ private:
     using TUserToken = NACLib::TUserToken;
 
 private:
-    THolder<NGRpcService::TEvCoordinationSessionRequest> RequestEvent;
+    std::unique_ptr<NGRpcService::TEvCoordinationSessionRequest> RequestEvent;
     TIntrusivePtr<TUserToken> UserToken;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
-    THolder<IContext::TEvReadFinished> StartRequest;
+    std::unique_ptr<IContext::TEvReadFinished> StartRequest;
     TString KesusPath;
 
     TActorId ProxyActor;

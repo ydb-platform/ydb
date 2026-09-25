@@ -194,7 +194,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         if (CurrentStateFunc() != &TThis::StateSubscribe) {
             if ((!Subscriber && AnyGroupStatsHasInfo()) ||
                     (Subscriber && AllStatsHasAndHasNoInfo())) {
-                auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(
+                auto reply = std::make_unique<TEvStateStorage::TEvBoardInfo>(
                     TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->InfoEntries = std::move(Info);
                 Send(Owner, std::move(reply), 0, Cookie);
@@ -319,7 +319,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 }
             }
             if (update.has_value()) {
-                auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+                auto reply = std::make_unique<TEvStateStorage::TEvBoardInfoUpdate>(
                     TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->Updates = { { oid, std::move(update.value()) } };
                 Send(Owner, std::move(reply), 0, Cookie);
@@ -393,7 +393,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             }
 
             if (isStateSubscribe && !updates.empty()) {
-                auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+                auto reply = std::make_unique<TEvStateStorage::TEvBoardInfoUpdate>(
                     TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->Updates = std::move(updates);
                 Send(Owner, std::move(reply), 0, Cookie);
@@ -576,7 +576,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             }
         }
         if (isStateSubscribe && !updates.empty()) {
-            auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+            auto reply = std::make_unique<TEvStateStorage::TEvBoardInfoUpdate>(
                 TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
             reply->Updates = std::move(updates);
             Send(Owner, std::move(reply), 0, Cookie);

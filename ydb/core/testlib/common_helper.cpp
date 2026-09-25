@@ -45,7 +45,7 @@ void TLoggerInit::Initialize() {
 void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     auto& runtime = *Server.GetRuntime();
     auto& settings = Server.GetSettings();
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(Tests::SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());

@@ -1061,7 +1061,7 @@ struct Schema {
             template <typename IteratorType, typename DeriveType>
             class KeyIterator {
             public:
-                KeyIterator(THolder<IteratorType>&& it)
+                KeyIterator(std::unique_ptr<IteratorType>&& it)
                     : Iterator(std::move(it))
                 {}
 
@@ -1115,7 +1115,7 @@ struct Schema {
                 }
 
             private:
-                THolder<IteratorType> Iterator;
+                std::unique_ptr<IteratorType> Iterator;
             };
 
             template <typename IteratorType, typename TableType>
@@ -1135,13 +1135,13 @@ struct Schema {
                 AnyKeyIterator(AnyKeyIterator&&) = default;
                 AnyKeyIterator& operator =(AnyKeyIterator&&) = default;
 
-                static THolder<IteratorType> MakeIterator(
+                static std::unique_ptr<IteratorType> MakeIterator(
                         TToughDb& database, NTable::TTagsRef columns)
                 {
                     if (!Precharger<typename TableType::Precharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction)) {
                         return nullptr;
                     }
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release());
+                    return std::unique_ptr<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release());
                 }
 
                 static bool Precharge(
@@ -1186,7 +1186,7 @@ struct Schema {
                 EqualPartialKeyIterator(EqualPartialKeyIterator&& iterator) = default;
                 EqualPartialKeyIterator& operator =(EqualPartialKeyIterator&& iterator) = default;
 
-                static THolder<IteratorType> MakeIterator(
+                static std::unique_ptr<IteratorType> MakeIterator(
                         TToughDb& database,
                         const KeyValuesType& keyValues,
                         NTable::TTagsRef columns)
@@ -1201,7 +1201,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = maxKey;
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return std::unique_ptr<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(
@@ -1248,7 +1248,7 @@ struct Schema {
                 GreaterOrEqualKeyIterator(GreaterOrEqualKeyIterator&&) = default;
                 GreaterOrEqualKeyIterator& operator =(GreaterOrEqualKeyIterator&&) = default;
 
-                static THolder<IteratorType> MakeIterator(
+                static std::unique_ptr<IteratorType> MakeIterator(
                         TToughDb& database,
                         const KeyValuesType& keyValues,
                         NTable::TTagsRef columns)
@@ -1262,7 +1262,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = { };
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return std::unique_ptr<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(
@@ -1308,7 +1308,7 @@ struct Schema {
                 LessOrEqualKeyIterator(LessOrEqualKeyIterator&& iterator) = default;
                 LessOrEqualKeyIterator& operator =(LessOrEqualKeyIterator&& iterator) = default;
 
-                static THolder<IteratorType> MakeIterator(
+                static std::unique_ptr<IteratorType> MakeIterator(
                         TToughDb& database,
                         const KeyValuesType& keyValues,
                         NTable::TTagsRef columns)
@@ -1322,7 +1322,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = maxKey;
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return std::unique_ptr<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(
@@ -1375,7 +1375,7 @@ struct Schema {
                 RangeKeyIterator(RangeKeyIterator&& iterator) = default;
                 RangeKeyIterator& operator =(RangeKeyIterator&& iterator) = default;
 
-                static THolder<IteratorType> MakeIterator(
+                static std::unique_ptr<IteratorType> MakeIterator(
                         TToughDb& database,
                         const MinKeyValuesType& minKeyValues,
                         const MaxKeyValuesType& maxKeyValues,
@@ -1391,7 +1391,7 @@ struct Schema {
                     range.MinInclusive = true;
                     range.MaxKey = maxKey;
                     range.MaxInclusive = true;
-                    return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
+                    return std::unique_ptr<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
                 static bool Precharge(TToughDb& database,
@@ -1434,9 +1434,9 @@ struct Schema {
                 EqualKeyIterator(EqualKeyIterator&& iterator) = default;
                 EqualKeyIterator& operator =(EqualKeyIterator&& iterator) = default;
 
-                static THolder<NTable::TTableIter> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static std::unique_ptr<NTable::TTableIter> MakeIterator(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
-                    return THolder<NTable::TTableIter>(database.IterateExact(TableId, key, columns).Release());
+                    return std::unique_ptr<NTable::TTableIter>(database.IterateExact(TableId, key, columns).Release());
                 }
 
                 static bool Precharge(

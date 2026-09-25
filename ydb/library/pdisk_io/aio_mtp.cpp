@@ -163,7 +163,7 @@ class TAsyncIoContextMtp : public IAsyncIoContext {
     TMutex Mutex;
     TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> CompleteQueue;
     ui64 MaxEvents;
-    THolder<TFileHandle> File;
+    std::unique_ptr<TFileHandle> File;
     int LastErrno = 0;
 
     static const ui64 NumThreads = 32;
@@ -264,7 +264,7 @@ public:
     }
 
     EIoResult Setup(ui64 maxEvents, bool doLock) override {
-        File = MakeHolder<TFileHandle>(PDiskInfo.Path.c_str(),
+        File = std::make_unique<TFileHandle>(PDiskInfo.Path.c_str(),
             OpenExisting | RdWr | DirectAligned | Sync);
         bool isFileOpened = File->IsOpen();
         if (isFileOpened && doLock) {

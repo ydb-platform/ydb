@@ -34,9 +34,9 @@ class TCreateExtSubDomain: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<NSubDomainState::TPropose>(OperationId);
+            return std::make_unique<NSubDomainState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -45,7 +45,7 @@ class TCreateExtSubDomain: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& settings = Transaction.GetSubDomain();
@@ -59,7 +59,7 @@ public:
         );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         auto paramErrorResult = [&result](const char* const msg) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,

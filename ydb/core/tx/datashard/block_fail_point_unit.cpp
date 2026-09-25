@@ -69,10 +69,10 @@ void TBlockFailPointUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateBlockFailPointUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateBlockFailPointUnit(TDataShard &dataShard,
                                                   TPipeline &pipeline)
 {
-    return THolder(new TBlockFailPointUnit(dataShard, pipeline));
+    return std::unique_ptr<TBlockFailPointUnit>(new TBlockFailPointUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

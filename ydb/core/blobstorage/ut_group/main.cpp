@@ -635,7 +635,7 @@ Y_UNIT_TEST_SUITE(GroupStress) {
             ui32 done = 0;
             ui32 counter = 0;
             for (ui32 i = 0; i < numTablets; ++i) {
-                auto actor = MakeHolder<TActivityActorImpl>(tabletId++, env.GroupId, &done, &counter,
+                auto actor = std::make_unique<TActivityActorImpl>(tabletId++, env.GroupId, &done, &counter,
                     infinite ? Max<ui32>() : 3);
                 runtime.Register(new TActorCoro(std::move(actor)), TActorId(), 0, std::nullopt, 1);
             }

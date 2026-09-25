@@ -27,7 +27,7 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
     NKikimrViewer::TMetaInfo MetaInfo;
     TString CurrentPath; // TStringBuf?
     NKikimrViewer::EObjectType CurrentType;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     THashSet<TActorId> Handlers;
     TActorId TxProxy = MakeTxProxyID();
 
@@ -234,7 +234,7 @@ public:
                 if (!hasTxAllocators) {
                     break;
                 }
-                THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+                std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
                 if (!BrowseContext.UserToken.empty()) {
                     request->Record.SetUserToken(BrowseContext.UserToken);
                 }
@@ -395,11 +395,11 @@ protected:
     TVector<ui64> Tablets;
     ui32 Requests = 0;
     ui32 Responses = 0;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TString Path;
     IViewer::TBrowseContext BrowseContext;
-    TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> TabletCountersResults;
-    THashMap<ui32, THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo>> GroupInfo;
+    TMap<TTabletId, std::unique_ptr<TEvTablet::TEvGetCountersResponse>> TabletCountersResults;
+    THashMap<ui32, std::unique_ptr<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo>> GroupInfo;
     THashSet<ui32> ErasureSpecies;
     THashSet<ui64> PDiskCategories;
     THashSet<ui64> VDiskCategories;
@@ -449,7 +449,7 @@ public:
     }
 
     void Handle(TEvHive::TEvChannelInfo::TPtr &ev, const TActorContext &ctx) {
-        THolder<TEvHive::TEvChannelInfo> lookupResult = ev->Release();
+        std::unique_ptr<TEvHive::TEvChannelInfo> lookupResult = ev->Release();
         for (const auto& channelInfo : lookupResult->Record.GetChannelInfo()) {
             for (const auto& historyInfo : channelInfo.GetHistory()) {
                 ui32 groupId = historyInfo.GetGroupID();
@@ -470,11 +470,11 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvResponseControllerInfo::TPtr &ev, const TActorContext &ctx) {
-        THolder<TEvBlobStorage::TEvResponseControllerInfo> bsResult = ev->Release();
+        std::unique_ptr<TEvBlobStorage::TEvResponseControllerInfo> bsResult = ev->Release();
         auto& bsGroupInfo = *bsResult->Record.MutableBSGroupInfo();
 
         while (!bsGroupInfo.empty()) {
-            THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo> groupInfo(bsGroupInfo.ReleaseLast());
+            std::unique_ptr<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo> groupInfo(bsGroupInfo.ReleaseLast());
             ErasureSpecies.insert(groupInfo->GetErasureSpecies());
             for (const auto& vDiskInfo : groupInfo->GetVDiskInfo()) {
                 VDiskCategories.insert(vDiskInfo.GetVDiskCategory());
@@ -606,7 +606,7 @@ public:
         }
         pbCommon.SetTablets(Tablets.size());
 
-        THolder<TEvTablet::TEvGetCountersResponse> response = AggregateWhiteboardResponses(TabletCountersResults);
+        std::unique_ptr<TEvTablet::TEvGetCountersResponse> response = AggregateWhiteboardResponses(TabletCountersResults);
 
         ui64 dataSize = 0;
         dataSize += GetCounterValue(response->Record.GetTabletCounters().GetExecutorCounters().GetSimpleCounters(), "LogRedoMemory");

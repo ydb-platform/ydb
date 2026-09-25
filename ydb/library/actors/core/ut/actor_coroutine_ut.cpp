@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
 
         void Run() override {
             if (Step) {
-                THolder<IEventHandle> ev = WaitForEvent();
+                std::unique_ptr<IEventHandle> ev = WaitForEvent();
                 UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvChainMessage::EventType);
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvChainMessage>()->Step, Step);
                 Send(ev->Sender, new TEvChainMessageReceived(Step));
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
             const TActorId nextActor = Register(CreateChainCoroActor<StackKind>(Completion, nextStep, ChainLength));
             Send(nextActor, new TEvChainMessage(nextStep));
 
-            THolder<IEventHandle> ev = WaitForEvent();
+            std::unique_ptr<IEventHandle> ev = WaitForEvent();
             UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvChainMessageReceived::EventType);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvChainMessageReceived>()->Step, nextStep);
             UNIT_ASSERT_C(ev->Sender == nextActor, "TEvChainMessageReceived sender mismatch");
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
 
     template <EChainCoroStackKind StackKind>
     IActor* CreateChainCoroActor(TChainCoroCompletion& completion, ui32 step, ui32 chainLength) {
-        return new TActorCoro(MakeHolder<TChainCoroActor<StackKind>>(completion, step, chainLength));
+        return new TActorCoro(std::make_unique<TChainCoroActor<StackKind>>(completion, step, chainLength));
     }
 
     class TCoroActor: public TActorCoroImpl {
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
             try {
                 while (!Finish) {
                     GetActorContext().Send(child, new TEvRequest());
-                    THolder<IEventHandle> resp = WaitForSpecificEvent<TEvResponse>(&TCoroActor::ProcessUnexpectedEvent);
+                    std::unique_ptr<IEventHandle> resp = WaitForSpecificEvent<TEvResponse>(&TCoroActor::ProcessUnexpectedEvent);
                     UNIT_ASSERT_EQUAL(resp->GetTypeRewrite(), TEvResponse::EventType);
                     ++itemsProcessed;
                 }
@@ -243,8 +243,8 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         }
     };
 
-    void Check(THolder<IEventBase> && message) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+    void Check(std::unique_ptr<IEventBase> && message) {
+        std::unique_ptr<TActorSystemSetup> setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
 
         TManualEvent doneEvent;
         TAtomic itemsProcessed = 0;
-        TActorId actor = actorSystem.Register(new TActorCoro(MakeHolder<TCoroActor>(doneEvent, itemsProcessed)));
+        TActorId actor = actorSystem.Register(new TActorCoro(std::make_unique<TCoroActor>(doneEvent, itemsProcessed)));
         NanoSleep(3UL * 1000 * 1000 * 1000);
         actorSystem.Send(actor, message.Release());
         doneEvent.WaitI();
@@ -274,11 +274,11 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
             // TODO https://st.yandex-team.ru/DEVTOOLS-3154
             return;
         }
-        Check(MakeHolder<TEvEnough>());
+        Check(std::make_unique<TEvEnough>());
     }
 
     Y_UNIT_TEST(PoisonPill) {
-        Check(MakeHolder<TEvents::TEvPoisonPill>());
+        Check(std::make_unique<TEvents::TEvPoisonPill>());
     }
 
     template <EChainCoroStackKind StackKind>
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         UNIT_ASSERT_C(executorThreads > 0, "ACTOR_COROUTINE_CHAIN_EXECUTOR_THREADS must be greater than zero");
         UNIT_ASSERT_C(chainCount > 0, "chainCount must be greater than zero");
 
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        std::unique_ptr<TActorSystemSetup> setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);

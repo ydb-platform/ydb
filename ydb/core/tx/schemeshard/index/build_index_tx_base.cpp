@@ -202,13 +202,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             {"buildInfo", buildInfo},
         );
 
-        auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
+        auto request = std::make_unique<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage
         Send(NMetering::MakeMeteringServiceID(), std::move(request));
     }
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, THolder<IEventBase> message, ui32 flags, ui64 cookie) {
+void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, std::unique_ptr<IEventBase> message, ui32 flags, ui64 cookie) {
     SideEffects.Send(dst, message.Release(), cookie, flags);
 }
 
@@ -216,7 +216,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
     YDB_LOG_DEBUG(LogPrefix << "AllocateTxId",
         {"buildId", buildId},
     );
-    Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
+    Send(Self->TxAllocatorClient, std::make_unique<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state) {
@@ -399,7 +399,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
     TSet<TActorId> toAnswer;
     toAnswer.swap(indexInfo.Subscribers);
     for (auto& actorId: toAnswer) {
-        Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo.Id)));
+        Send(actorId, std::make_unique<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo.Id)));
     }
 }
 

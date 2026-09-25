@@ -30,7 +30,7 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         const auto& request = Request->Get()->Record;
 
         auto respond = [this, &request](Ydb::StatusIds::StatusCode status, const TString& issue = {}) -> bool {
-            auto response = MakeHolder<TEvImport::TEvForgetImportResponse>(request.GetTxId());
+            auto response = std::make_unique<TEvImport::TEvForgetImportResponse>(request.GetTxId());
             auto& proto = *response->Record.MutableResponse();
 
             proto.SetStatus(status);

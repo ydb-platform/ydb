@@ -296,7 +296,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.Connected) {
                 return;
             }
-            auto connectEvent = MakeHolder<NActors::TEvInterconnect::TEvConnectNode>();
+            auto connectEvent = std::make_unique<NActors::TEvInterconnect::TEvConnectNode>();
             auto proxyId = NActors::TActivationContext::InterconnectProxy(nodeId);
             NActors::TActivationContext::Send(
                 new NActors::IEventHandle(proxyId, SelfId, connectEvent.Release(), 0, 0));
@@ -328,7 +328,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
                 return true;
             }
             state.RetryScheduled = true;
-            auto ev = MakeHolder<TEvPrivate::TEvTryConnect>(nodeId);
+            auto ev = std::make_unique<TEvPrivate::TEvTryConnect>(nodeId);
             auto delay = state.RetryState->GetNextDelay();
             NActors::TActivationContext::Schedule(delay, new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
             return false;

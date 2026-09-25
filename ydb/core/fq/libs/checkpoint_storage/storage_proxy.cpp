@@ -125,7 +125,7 @@ private:
         Finished,
     };
     EInitStatus InitStatus = EInitStatus::NotStarted;
-    std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    std::deque<std::unique_ptr<IEventHandle>> DelayedEventsQueue;
     ui64 InitializationGeneration = 0;
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
@@ -183,7 +183,7 @@ private:
     template<typename TEvent>
     bool CheckStatus(TEvent& ev);
 
-    void HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::TIssues issues);
+    void HandleDelayedRequestError(std::unique_ptr<IEventHandle>& ev, NYql::TIssues issues);
 };
 
 static void FillDefaultParameters(TCheckpointStorageSettings& checkpointCoordinatorConfig, TExternalStorageSettings& ydbStorageConfig) {
@@ -674,7 +674,7 @@ bool TStorageProxy::CheckStatus(TEvent& ev) {
                 YDB_LOG_NOTICE("Add to delayed");
                 DelayedEventsQueue.emplace_back(ev.Release());
             } else {
-                auto evHolder = THolder<IEventHandle>(ev.Release());
+                auto evHolder = std::unique_ptr<IEventHandle>(ev.Release());
                 HandleDelayedRequestError(evHolder, NYql::TIssues{NYql::TIssue{"Too many queued requests"}});
             }
             return false;
@@ -717,7 +717,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvDeleteGraphRequest::TPtr& ev
         });
 }
 
-void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::TIssues issues) {
+void TStorageProxy::HandleDelayedRequestError(std::unique_ptr<IEventHandle>& ev, NYql::TIssues issues) {
     switch (ev->GetTypeRewrite()) {
         case TEvCheckpointStorage::TEvRegisterCoordinatorRequest::EventType: {
             YDB_LOG_WARN("Send TEvRegisterCoordinatorResponse",

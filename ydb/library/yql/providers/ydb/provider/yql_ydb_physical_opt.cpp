@@ -153,8 +153,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateYdbPhysicalOptProposalTransformer(TYdbState::TPtr state) {
-    return MakeHolder<TYdbPhysicalOptProposalTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateYdbPhysicalOptProposalTransformer(TYdbState::TPtr state) {
+    return std::make_unique<TYdbPhysicalOptProposalTransformer>(state);
 }
 
 } // namespace NYql

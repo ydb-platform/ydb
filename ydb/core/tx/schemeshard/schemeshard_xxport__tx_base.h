@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard::TXxport::TTxBase: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    TVector<THolder<IEventHandle>> SendOnComplete;
+    TVector<std::unique_ptr<IEventHandle>> SendOnComplete;
 
 protected:
     explicit TTxBase(TSelf* self)
@@ -28,7 +28,7 @@ protected:
     }
 
     template <typename TEvent>
-    void Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
+    void Send(const TActorId& recipient, std::unique_ptr<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
         return Send(recipient, static_cast<IEventBase*>(ev.Release()), flags, cookie);
     }
 

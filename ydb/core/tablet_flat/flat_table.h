@@ -370,7 +370,7 @@ private:
     THashMap<TLogoBlobID, TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     TEpoch FlattenEpoch = TEpoch::Min(); /* Current maximum flatten epoch */
     TStat Stat_;
-    mutable THolder<TLevels> Levels;
+    mutable std::unique_ptr<TLevels> Levels;
     mutable TIntrusivePtr<TKeyRangeCache> ErasedKeysCache;
 
     bool EraseCacheEnabled = false;

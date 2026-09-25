@@ -75,11 +75,11 @@ private:
         TQueryHash Hash;
         ui64 Value;
         TNodeId NodeId;
-        THolder<NKikimrSysView::TQueryStats> Stats;
+        std::unique_ptr<NKikimrSysView::TQueryStats> Stats;
     };
     using TQueryTop = std::vector<TTopQuery>;
 
-    using TPartitionTop = std::vector<THolder<NKikimrSysView::TTopPartitionsInfo>>;
+    using TPartitionTop = std::vector<std::unique_ptr<NKikimrSysView::TTopPartitionsInfo>>;
 
     using THistoryKey = std::pair<ui64, ui32>;
 

@@ -29,7 +29,7 @@ public:
         return true;
     }
 
-    TTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::TagQueue, std::move(cb))
     {
         auto& map = Tags_.GetMapSafe();
@@ -145,7 +145,7 @@ private:
             bool updated = val["updated"];
             if (updated) {
                 RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-                Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+                Send(QueueLeader_, std::make_unique<TSqsEvents::TEvClearQueueAttributesCache>());
             } else {
                 auto message = "Tag queue query failed, conflicting query in parallel";
                 RLOG_SQS_ERROR(message << ": " << record);
@@ -169,7 +169,7 @@ private:
     TString CustomQueueName_ = "";
 };
 
-IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TTagQueueActor(sourceSqsRequest, std::move(cb));
 }
 

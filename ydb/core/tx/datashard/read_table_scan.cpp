@@ -410,14 +410,14 @@ public:
     {
         if (tx.HasApiVersion()) {
             if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V1) {
-                Writer = MakeHolder<TRowsToYdbResult>(tx, false);
+                Writer = std::make_unique<TRowsToYdbResult>(tx, false);
             } else if (tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V2) {
-                Writer = MakeHolder<TRowsToYdbResult>(tx, true);
+                Writer = std::make_unique<TRowsToYdbResult>(tx, true);
             } else {
-                Writer = MakeHolder<TRowsToOldResult>(tx); 
+                Writer = std::make_unique<TRowsToOldResult>(tx); 
             }
         } else {
-            Writer = MakeHolder<TRowsToOldResult>(tx);
+            Writer = std::make_unique<TRowsToOldResult>(tx);
         }
 
         for (auto &col : tx.GetColumns())
@@ -746,7 +746,7 @@ private:
     ui64 MessageRowsLimit;
     TString Error;
     bool IsFatalError = false;
-    THolder<TRowsToResult> Writer;
+    std::unique_ptr<TRowsToResult> Writer;
     TUserTable::TCPtr TableInfo;
     NKikimrTxDataShard::TReadTableTransaction Tx;
     TSerializedTableRange ScanRange;

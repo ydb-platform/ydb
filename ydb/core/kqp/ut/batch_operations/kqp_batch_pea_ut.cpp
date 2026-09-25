@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
                     // There are two ways to get abort with timeout:
                     // 1. From PartitionedExecuterActor or SessionActor (parents, do not forward the event)
                     // 2. From some compute actors (the event forwards to the parent)
-                    auto abort = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Test child executer abort", NYql::TIssues{});
+                    auto abort = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Test child executer abort", NYql::TIssues{});
                     runtime.Send(new IEventHandle(ev->Recipient, MakeSchemeCacheID(), abort.Release()));
                 }
 

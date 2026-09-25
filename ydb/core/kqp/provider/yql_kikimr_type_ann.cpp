@@ -456,7 +456,7 @@ private:
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
-    THolder<TVisitorTransformerBase> DqsTypeAnn;
+    std::unique_ptr<TVisitorTransformerBase> DqsTypeAnn;
 };
 
 namespace {
@@ -3557,7 +3557,7 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
-    const THolder<TVisitorTransformerBase> DqTypeAnn;
+    const std::unique_ptr<TVisitorTransformerBase> DqTypeAnn;
 };
 
 } // namespace

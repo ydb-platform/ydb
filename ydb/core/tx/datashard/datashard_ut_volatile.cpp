@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
-        TVector<THolder<IEventHandle>> capturedPlans;
+        TVector<std::unique_ptr<IEventHandle>> capturedPlans;
         auto capturePlans = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
@@ -263,8 +263,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
 
-        TVector<THolder<IEventHandle>> capturedPlans;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedPlans;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
         size_t observedPlans = 0;
-        TVector<THolder<IEventHandle>> capturedPlans;
+        TVector<std::unique_ptr<IEventHandle>> capturedPlans;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
 
         size_t observedPlans = 0;
-        TVector<THolder<IEventHandle>> capturedPlans;
+        TVector<std::unique_ptr<IEventHandle>> capturedPlans;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
 
         size_t observedPropose = 0;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
@@ -778,7 +778,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
 
         size_t observedPropose = 0;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
@@ -940,7 +940,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
 
         size_t observedSplit = 0;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvSplit::EventType: {
@@ -1027,7 +1027,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -1063,7 +1063,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
         // Note: observer works strangely with edge actor results, so we use a normal actor here
-        TVector<THolder<IEventHandle>> readResults;
+        TVector<std::unique_ptr<IEventHandle>> readResults;
         auto readSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvReadResult::EventType: {
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -1192,7 +1192,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
         // Note: observer works strangely with edge actor results, so we use a normal actor here
-        TVector<THolder<IEventHandle>> readResults;
+        TVector<std::unique_ptr<IEventHandle>> readResults;
         auto readSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvReadResult::EventType: {
@@ -1307,7 +1307,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -1349,7 +1349,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                     if (msg->Record.GetResultSet().rows().size()) {
                         observedResults.emplace_back(FormatResult(msg->Record.GetResultSet()));
                     }
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(msg->Record.GetSeqNo(), msg->Record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(msg->Record.GetSeqNo(), msg->Record.GetChannelId());
                     resp->Record.SetFreeSpace(1);
                     ctx.Send(ev->Sender, resp.Release());
                     break;
@@ -1478,7 +1478,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -1639,7 +1639,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -1762,7 +1762,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
-        TVector<THolder<IEventHandle>> capturedReadSets;
+        TVector<std::unique_ptr<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
@@ -3824,7 +3824,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             if (ev->Sender == shard1actor) {
                 const auto& record = ev->Get()->Record;
                 if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) {
-                    auto event = MakeHolder<TEvTxProcessing::TEvReadSet>(
+                    auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(
                         record.GetStep(),
                         record.GetTxId(),
                         record.GetTabletDest(),
@@ -4099,7 +4099,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         // actor builds the prepare request, making the datashard create a volatile tx
         // with the topic tablet as a participant.
         {
-            auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
             ev->Record.MutableRequest()->SetSessionId(sessionId);
             ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
             ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);

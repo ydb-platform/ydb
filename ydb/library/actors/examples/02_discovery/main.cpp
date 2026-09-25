@@ -30,10 +30,10 @@ void OnTerminate(int) {
     ShouldContinue.ShouldStop();
 }
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ui32 threads, NMonitoring::TDynamicCounters &counters) {
+std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ui32 threads, NMonitoring::TDynamicCounters &counters) {
     Y_ABORT_UNLESS(threads > 0 && threads < 100);
 
-    auto setup = MakeHolder<TActorSystemSetup>();
+    auto setup = std::make_unique<TActorSystemSetup>();
 
     setup->NodeId = nodeId;
 
@@ -97,11 +97,11 @@ int main(int argc, char **argv) {
         config->Replicas.push_back(MakeReplicaId(nodeid));
     }
 
-    TVector<THolder<TActorSystem>> actorSystemHolder;
+    TVector<std::unique_ptr<TActorSystem>> actorSystemHolder;
     TVector<TIntrusivePtr<NMonitoring::TDynamicCounters>> countersHolder;
     for (ui32 nodeid : xrange<ui32>(1, CfgTotalReplicaNodes + 1)) {
         countersHolder.emplace_back(new NMonitoring::TDynamicCounters());
-        THolder<TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup(nodeid, 2, *countersHolder.back());
+        std::unique_ptr<TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup(nodeid, 2, *countersHolder.back());
         actorSystemSetup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(CreateEndpointActor(config.Get(), PublishKey, CfgHttpPort + nodeid), TMailboxType::HTSwap, 0)

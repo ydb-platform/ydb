@@ -34,7 +34,7 @@ void TSSDialogActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
 }
 
 void TSSDialogActor::OnBootstrap() {
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     request->DatabaseName = AppData()->TenantName;
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

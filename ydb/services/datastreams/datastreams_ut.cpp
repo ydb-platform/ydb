@@ -82,7 +82,7 @@ public:
         limit->SetMinStorageMegabytes(50_KB);
         limit->SetMaxStorageMegabytes(1_MB);
 
-        MeteringFile = MakeHolder<TTempFileHandle>();
+        MeteringFile = std::make_unique<TTempFileHandle>();
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
 
         if (secure) {
@@ -132,7 +132,7 @@ public:
     std::unique_ptr<TDriver> Driver;
     std::unique_ptr<NYDS_V1::TDataStreamsClient> DataStreamsClient;
     std::unique_ptr<NYDS_V1::TDataStreamsClient> UnauthenticatedClient;
-    THolder<TTempFileHandle> MeteringFile;
+    std::unique_ptr<TTempFileHandle> MeteringFile;
 };
 
 using TInsecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchema, false>;

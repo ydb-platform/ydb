@@ -31,7 +31,7 @@ public:
 
     }
 private:
-    THolder<IThreadPool> ThreadPool;                    
+    std::unique_ptr<IThreadPool> ThreadPool;                    
 };
 
 IArrowReader::TPtr MakeArrowReader(const TArrowReaderSettings& settings) {

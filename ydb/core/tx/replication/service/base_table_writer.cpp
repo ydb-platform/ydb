@@ -78,7 +78,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
-        auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
+        auto event = std::make_unique<TEvDataShard::TEvApplyReplicationChanges>();
         auto& tableId = *event->Record.MutableTableId();
         tableId.SetOwnerId(TableId.PathId.OwnerId);
         tableId.SetTableId(TableId.PathId.LocalPathId);
@@ -186,7 +186,7 @@ public:
             const TActorId& parent,
             ui64 tabletId,
             const TTableId& tableId,
-            THolder<IChangeRecordSerializer>&& serializer)
+            std::unique_ptr<IChangeRecordSerializer>&& serializer)
         : Parent(parent)
         , TabletId(tabletId)
         , TableId(tableId)
@@ -215,7 +215,7 @@ private:
 
     TActorId LeaderPipeCache;
     ui64 SubscribeCookie = 0;
-    THolder<IChangeRecordSerializer> Serializer;
+    std::unique_ptr<IChangeRecordSerializer> Serializer;
 
 }; // TTablePartitionWriter
 
@@ -310,7 +310,7 @@ class TLocalTableWriter
         Resolving = true;
         const auto generation = ++ResolveGeneration;
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = Database;
 
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
@@ -412,7 +412,7 @@ class TLocalTableWriter
 
         Schema = schema;
         Parser->SetSchema(Schema);
-        KeyDesc = MakeHolder<TKeyDesc>(
+        KeyDesc = std::make_unique<TKeyDesc>(
             entry.TableId,
             GetFullRange(schema->KeyColumns.size()).ToTableRange(),
             TKeyDesc::ERowOperation::Update,
@@ -425,7 +425,7 @@ class TLocalTableWriter
     }
 
     void ResolveKeys(ui64 generation) {
-        auto request = MakeHolder<TResolve>();
+        auto request = std::make_unique<TResolve>();
         request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(KeyDesc));
         Send(MakeSchemeCacheID(), new TEvResolve(request.Release()), 0, generation);
@@ -480,7 +480,7 @@ class TLocalTableWriter
             RefreshingSchema = false;
             Y_ABORT_UNLESS(PendingSchemaChange);
             Send(Worker, new TEvWorker::TEvSchemaChangeApplied(PendingSchemaChange->Schema));
-            LastAppliedSchema = MakeHolder<NKikimrReplication::TSchemaChange>(PendingSchemaChange->Schema);
+            LastAppliedSchema = std::make_unique<NKikimrReplication::TSchemaChange>(PendingSchemaChange->Schema);
             PendingSchemaChange.Reset();
         }
     }
@@ -512,7 +512,7 @@ class TLocalTableWriter
             case IChangeRecordParser::ESchemaChangeResult::SchemaChange:
                 // The worker must replay the schema record after the barrier
                 // is released.  Keep its raw topic payload in InFlightData;
-                PendingSchemaChange = MakeHolder<TEvWorker::TEvSchemaChange>(schema, offset);
+                PendingSchemaChange = std::make_unique<TEvWorker::TEvSchemaChange>(schema, offset);
                 break;
             case IChangeRecordParser::ESchemaChangeResult::NotSchemaChange:
                 break;
@@ -760,8 +760,8 @@ public:
             EWriteMode mode,
             const TString& database,
             const TPathId& tablePathId,
-            THolder<IChangeRecordParser>&& parser,
-            THolder<IChangeRecordSerializer>&& serializer,
+            std::unique_ptr<IChangeRecordParser>&& parser,
+            std::unique_ptr<IChangeRecordSerializer>&& serializer,
             std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
@@ -803,14 +803,14 @@ private:
     const EWriteMode Mode;
     const TString Database;
     const TPathId TablePathId;
-    THolder<IChangeRecordParser> Parser;
-    THolder<IChangeRecordSerializer> Serializer;
+    std::unique_ptr<IChangeRecordParser> Parser;
+    std::unique_ptr<IChangeRecordSerializer> Serializer;
     std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)> CreateResolverFn;
 
     TActorId Worker;
     ui64 TableVersion = 0;
     ui64 ResolveGeneration = 0;
-    THolder<TKeyDesc> KeyDesc;
+    std::unique_ptr<TKeyDesc> KeyDesc;
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
     bool Initialized = false;
@@ -822,16 +822,16 @@ private:
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
-    THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
-    THolder<NKikimrReplication::TSchemaChange> LastAppliedSchema;
+    std::unique_ptr<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    std::unique_ptr<NKikimrReplication::TSchemaChange> LastAppliedSchema;
 
 }; // TLocalTableWriter
 
 IActor* CreateLocalTableWriter(
         const TString& database,
         const TPathId& tablePathId,
-        THolder<IChangeRecordParser>&& parser,
-        THolder<IChangeRecordSerializer>&& serializer,
+        std::unique_ptr<IChangeRecordParser>&& parser,
+        std::unique_ptr<IChangeRecordSerializer>&& serializer,
         std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
         EWriteMode mode)
 {

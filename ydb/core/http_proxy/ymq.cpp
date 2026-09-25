@@ -42,7 +42,7 @@ namespace NKikimr::NHttpProxy {
         {
         }
 
-        void Execute(THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
+        void Execute(THttpRequestContext&& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
             ctx.Register(
                 new TYmqHttpRequestActor(
                     std::move(context),
@@ -62,7 +62,7 @@ namespace NKikimr::NHttpProxy {
 
             TYmqHttpRequestActor(
                     THttpRequestContext&& httpContext,
-                    THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
+                    std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
                     TProtoCall protoCall,
                     const TString& method,
                     std::function<TString(TProtoRequest&)> queueUrlExtractor)
@@ -117,16 +117,16 @@ namespace NKikimr::NHttpProxy {
                     [actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                     (const NThreading::TFuture<TProtoResponse>& future) {
                         auto& response = future.GetValueSync();
-                        auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                        auto result = std::make_unique<TEvServerlessProxy::TEvGrpcRequestResult>();
                         Y_ABORT_UNLESS(response.operation().ready());
                         if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
                             TProtoResult rs;
                             response.operation().result().UnpackTo(&rs);
-                            result->Message = MakeHolder<TProtoResult>(rs);
+                            result->Message = std::make_unique<TProtoResult>(rs);
                         }
                         NYql::TIssues issues;
                         NYql::IssuesFromMessage(response.operation().issues(), issues);
-                        result->Status = MakeHolder<NYdb::TStatus>(
+                        result->Status = std::make_unique<NYdb::TStatus>(
                             NYdb::EStatus(response.operation().status()),
                             NYdb::NAdapters::ToSdkIssues(std::move(issues))
                         );
@@ -134,7 +134,7 @@ namespace NKikimr::NHttpProxy {
                         response.operation().metadata().UnpackTo(&queueTags);
                         for (const auto& [k, v] : queueTags.GetTags()) {
                             if (!result->QueueTags.Get()) {
-                                result->QueueTags = MakeHolder<THashMap<TString, TString>>();
+                                result->QueueTags = std::make_unique<THashMap<TString, TString>>();
                             }
                             result->QueueTags->emplace(k, v);
                         }
@@ -193,14 +193,14 @@ namespace NKikimr::NHttpProxy {
                 TBase::Die(ctx);
             }
 
-            void DoMetering(const THttpResponseData& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
+            void DoMetering(const THttpResponseData& data, std::unique_ptr<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
                 if (!IamAuthenticated) {
                     LOG_D("Skip metering event due to IAM auth failure");
                     return;
                 }
                 if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
                     // Send request attributes to the metering actor
-                    auto reportRequestAttributes = MakeHolder<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
+                    auto reportRequestAttributes = std::make_unique<::NKikimr::NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
 
                     auto& requestAttributes = reportRequestAttributes->Data;
 
@@ -232,7 +232,7 @@ namespace NKikimr::NHttpProxy {
                 }
             }
 
-            void ReplyToHttpContext(THttpResponseData&& data, THolder<THashMap<TString, TString>>&& queueTags) {
+            void ReplyToHttpContext(THttpResponseData&& data, std::unique_ptr<THashMap<TString, TString>>&& queueTags) {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
 
                 DoMetering(data, std::move(queueTags), ctx);
@@ -367,7 +367,7 @@ namespace NKikimr::NHttpProxy {
                 if (!HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
-                    auto requestHolder = MakeHolder<NKikimrClient::TSqsRequest>();
+                    auto requestHolder = std::make_unique<NKikimrClient::TSqsRequest>();
 
                     NKikimr::NSQS::EAction action = NKikimr::NSQS::ActionFromString(Method);
                     requestHolder->SetRequestId(HttpContext.RequestId);
@@ -405,7 +405,7 @@ namespace NKikimr::NHttpProxy {
             TDuration RequestTimeout = TDuration::Seconds(60);
             ui32 PoolId;
             THttpRequestContext HttpContext;
-            THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
+            std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
             TProtoCall ProtoCall;
             TString Method;

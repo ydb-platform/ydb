@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                 TString meta = Sprintf("%zu/%zu %s %s", s1, s2, rope1.DebugString().data(), rope2.DebugString().data());
 
                 {
-                    auto msg = MakeHolder<TEvMessage>();
+                    auto msg = std::make_unique<TEvMessage>();
                     msg->Record.SetMeta(meta);
                     msg->Record.AddPayloadId(msg->AddPayload(TRope(rope1)));
                     msg->Record.AddPayloadId(msg->AddPayload(TRope(rope2)));

@@ -92,7 +92,7 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
     if (PathToConfigCacheFile)
         SaveLogSettingsConfigToCache(logConfig, ctx);
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE_CTX(ctx, "TLogSettingsConfigurator: Send",
         {"ev", resp->Record.ShortDebugString()});

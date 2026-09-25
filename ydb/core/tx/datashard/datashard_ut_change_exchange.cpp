@@ -76,7 +76,7 @@ ui64 GetRejectedByOverloadCount(TTestActorRuntime& runtime, ui64 tabletId) {
 ui64 AsyncAlterFreezeState(TServer::TPtr server, const TString& workingDir, const TString& name,
         NKikimrSchemeOp::EFreezeState state)
 {
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
     auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         InitRoot(server, sender);
 
         bool preventActivation = true;
-        TVector<THolder<IEventHandle>> activations;
+        TVector<std::unique_ptr<IEventHandle>> activations;
 
         THashSet<ui64> enqueued;
         THashSet<ui64> removed;
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
         InitRoot(server, sender);
 
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
         bool inited = false;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+        for (auto& ev : std::exchange(delayed, TVector<std::unique_ptr<IEventHandle>>())) {
             runtime.Send(ev.Release(), 0, true);
         }
 
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         InitRoot(server, sender);
 
         bool preventEnqueueing = true;
-        TVector<THolder<IEventHandle>> enqueued;
+        TVector<std::unique_ptr<IEventHandle>> enqueued;
         THashMap<ui64, ui32> splitAcks;
         ui32 allowedRejects = Max<ui32>();
 
@@ -593,7 +593,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         auto sendEnqueued = [&]() {
             preventEnqueueing = false;
-            for (auto& ev : std::exchange(enqueued, TVector<THolder<IEventHandle>>())) {
+            for (auto& ev : std::exchange(enqueued, TVector<std::unique_ptr<IEventHandle>>())) {
                 server->GetRuntime()->Send(ev.Release(), 0, true);
             }
         };
@@ -707,7 +707,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         InitRoot(server, sender);
 
         bool preventEnqueueing = true;
-        TVector<THolder<IEventHandle>> enqueued;
+        TVector<std::unique_ptr<IEventHandle>> enqueued;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -725,7 +725,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         auto sendEnqueued = [&]() {
             preventEnqueueing = false;
-            for (auto& ev : std::exchange(enqueued, TVector<THolder<IEventHandle>>())) {
+            for (auto& ev : std::exchange(enqueued, TVector<std::unique_ptr<IEventHandle>>())) {
                 server->GetRuntime()->Send(ev.Release(), 0, true);
             }
         };
@@ -858,7 +858,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         findChangeSenderMain.Remove();
 
         // block outgoing records
-        TVector<THolder<IEventHandle>> blockedOutRecords;
+        TVector<std::unique_ptr<IEventHandle>> blockedOutRecords;
         auto blockOutRecords = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>(
             [&](NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
                 if (changeSenderMain == ev->Sender) {
@@ -872,7 +872,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         blockOutRecords.Remove();
 
         // block incoming records
-        TDeque<THolder<IEventHandle>> blockedInRecords;
+        TDeque<std::unique_ptr<IEventHandle>> blockedInRecords;
         auto blockInRecords = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>(
             [&](NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
                 if (changeSenderMain == ev->Recipient) {
@@ -899,7 +899,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         countSplitAcks.Remove();
 
         // send outgoing records
-        for (auto& ev : std::exchange(blockedOutRecords, TVector<THolder<IEventHandle>>())) {
+        for (auto& ev : std::exchange(blockedOutRecords, TVector<std::unique_ptr<IEventHandle>>())) {
             server->GetRuntime()->Send(ev.Release(), 0, true);
         }
 
@@ -1021,7 +1021,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TPortManager PortManager;
         TServer::TPtr Server;
         TActorId EdgeActor;
-        THolder<TClient> Client;
+        std::unique_ptr<TClient> Client;
 
     }; // TTestEnv
 
@@ -1029,8 +1029,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
     public:
         using TTestEnv<TTestPqEnv, TPersQueueClient>::TTestEnv;
 
-        static THolder<TPersQueueClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
-            return MakeHolder<TPersQueueClient>(driver, TPersQueueClientSettings().Database(database));
+        static std::unique_ptr<TPersQueueClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
+            return std::make_unique<TPersQueueClient>(driver, TPersQueueClientSettings().Database(database));
         }
     };
 
@@ -1038,8 +1038,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
     public:
         using TTestEnv<TTestYdsEnv, TDataStreamsClient>::TTestEnv;
 
-        static THolder<TDataStreamsClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
-            return MakeHolder<TDataStreamsClient>(driver, NYdb::TCommonClientSettings().Database(database));
+        static std::unique_ptr<TDataStreamsClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
+            return std::make_unique<TDataStreamsClient>(driver, NYdb::TCommonClientSettings().Database(database));
         }
     };
 
@@ -1047,8 +1047,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
     public:
         using TTestEnv<TTestTopicEnv, NYdb::NTopic::TTopicClient>::TTestEnv;
 
-        static THolder<NYdb::NTopic::TTopicClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
-            return MakeHolder<NYdb::NTopic::TTopicClient>(driver, NYdb::NTopic::TTopicClientSettings().Database(database));
+        static std::unique_ptr<NYdb::NTopic::TTopicClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
+            return std::make_unique<NYdb::NTopic::TTopicClient>(driver, NYdb::NTopic::TTopicClientSettings().Database(database));
         }
     };
 
@@ -2517,7 +2517,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
 
-        auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto req = std::make_unique<TEvPersQueue::TEvRequest>();
         req->Record = std::move(request);
         ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, path, partitionId), sender, req.Release());
 
@@ -2569,7 +2569,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TTestPqEnv env(tableDesc, streamDesc, false);
 
         bool preventEnqueueing = true;
-        TVector<THolder<IEventHandle>> enqueued;
+        TVector<std::unique_ptr<IEventHandle>> enqueued;
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -2587,7 +2587,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         auto sendEnqueued = [&]() {
             preventEnqueueing = false;
-            for (auto& ev : std::exchange(enqueued, TVector<THolder<IEventHandle>>())) {
+            for (auto& ev : std::exchange(enqueued, TVector<std::unique_ptr<IEventHandle>>())) {
                 env.GetServer()->GetRuntime()->Send(ev.Release(), 0, true);
             }
         };
@@ -2795,7 +2795,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto splitTxId = AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 2);
         SimulateSleep(env.GetServer(), TDuration::Seconds(1));
 
-        THolder<IEventHandle> getOwnership;
+        std::unique_ptr<IEventHandle> getOwnership;
         bool txCompleted = false;
         bool splitStarted = false;
         bool splitAcked = false;
@@ -2870,7 +2870,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
 
         bool preventEnqueueing = true;
-        TVector<THolder<IEventHandle>> enqueued;
+        TVector<std::unique_ptr<IEventHandle>> enqueued;
         THashMap<ui64, ui32> splitAcks;
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -2903,7 +2903,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         auto sendEnqueued = [&]() {
             preventEnqueueing = false;
-            for (auto& ev : std::exchange(enqueued, TVector<THolder<IEventHandle>>())) {
+            for (auto& ev : std::exchange(enqueued, TVector<std::unique_ptr<IEventHandle>>())) {
                 env.GetServer()->GetRuntime()->Send(ev.Release(), 0, true);
             }
         };
@@ -2965,9 +2965,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         TMaybe<TActorId> preventEnqueueingOnSpecificSender;
         bool preventEnqueueing = true;
-        TVector<THolder<IEventHandle>> enqueued;
+        TVector<std::unique_ptr<IEventHandle>> enqueued;
         bool preventActivation = false;
-        TVector<THolder<IEventHandle>> activations;
+        TVector<std::unique_ptr<IEventHandle>> activations;
         THashMap<ui64, ui32> splitAcks;
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -3007,9 +3007,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         };
 
-        auto sendDelayed = [&](bool& toggleFlag, TVector<THolder<IEventHandle>>& delayed) {
+        auto sendDelayed = [&](bool& toggleFlag, TVector<std::unique_ptr<IEventHandle>>& delayed) {
             toggleFlag = false;
-            for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+            for (auto& ev : std::exchange(delayed, TVector<std::unique_ptr<IEventHandle>>())) {
                 env.GetServer()->GetRuntime()->Send(ev.Release(), 0, true);
             }
         };
@@ -3094,7 +3094,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
 
         bool added = false;
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
 
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -3163,7 +3163,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
         auto& runtime = *env.GetServer()->GetRuntime();
 
-        TVector<THolder<IEventHandle>> enqueued;
+        TVector<std::unique_ptr<IEventHandle>> enqueued;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                 enqueued.emplace_back(ev.Release());
@@ -3435,7 +3435,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )");
 
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
                 delayed.emplace_back(ev.Release());
@@ -3475,7 +3475,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
 
         runtime.SetObserverFunc(prevObserver);
-        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+        for (auto& ev : std::exchange(delayed, TVector<std::unique_ptr<IEventHandle>>())) {
             runtime.Send(ev.Release(), 0, true);
         }
 
@@ -3512,7 +3512,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )");
 
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
         ui32 progressCount = 0;
 
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -3551,7 +3551,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         runtime.SetObserverFunc(prevObserver);
-        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+        for (auto& ev : std::exchange(delayed, TVector<std::unique_ptr<IEventHandle>>())) {
             runtime.Send(ev.Release(), 0, true);
         }
 
@@ -3583,7 +3583,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (2, 20);
         )");
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvModifySchemeTransaction) {
                 auto* msg = ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
@@ -3707,7 +3707,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         bool delayProgress = true;
         ui32 progressCount = 0;
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
 
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             static constexpr ui32 EvCdcStreamScanProgress = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 24;
@@ -3739,7 +3739,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(server, edgeActor, AsyncAlterDropStream(server, "/Root", "Table", "Stream"));
 
         delayProgress = false;
-        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+        for (auto& ev : std::exchange(delayed, TVector<std::unique_ptr<IEventHandle>>())) {
             runtime.Send(ev.Release(), 0, true);
         }
 
@@ -3794,7 +3794,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         runtime.SetObserverFunc(prevObserver);
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 delayed.Reset(ev.Release());
@@ -4008,7 +4008,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (3, 30);
         )");
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
                 delayed.Reset(ev.Release());

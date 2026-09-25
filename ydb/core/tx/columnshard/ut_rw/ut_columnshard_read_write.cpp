@@ -3866,7 +3866,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 Y_UNIT_TEST_SUITE(TColumnShardConfigRuntime) {
     void NotifyColumnShardConfig(
         TTestBasicRuntime & runtime, const TActorId& edge, const TActorId& shardActor, const std::optional<ui64>& nodePortionsCountLimit) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         auto* columnShardConfig = request->Record.MutableConfig()->MutableColumnShardConfig();
         if (nodePortionsCountLimit) {
             columnShardConfig->SetNodePortionsCountLimit(*nodePortionsCountLimit);

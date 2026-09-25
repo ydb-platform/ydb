@@ -76,7 +76,7 @@ bool IsDatabaseServedHere(const TString& databaseName, TString& error) {
 }
 
 TEvTxProxySchemeCache::TEvNavigateKeySet* MakeDatabaseOwnerRequest(const TString& databaseName) {
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     request->DatabaseName = databaseName;
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -108,7 +108,7 @@ bool CanDecideWithoutDatabaseOwner(const NACLib::TUserToken* userToken) {
 }
 
 TEvTxProxySchemeCache::TEvNavigateKeySet* MakeArtifactDirListingRequest(const TString& databaseName) {
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     request->DatabaseName = databaseName;
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;

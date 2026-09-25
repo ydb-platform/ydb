@@ -41,8 +41,8 @@ struct TTableStrings {
     THashSet<TInternName> DbWrites;
 };
 
-THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& strings, const TTypeEnvironment& env);
-TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env);
+std::unique_ptr<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& strings, const TTypeEnvironment& env);
+TVector<std::unique_ptr<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env);
 TTableId ExtractTableId(const TRuntimeNode& node);
 
 template<typename T>

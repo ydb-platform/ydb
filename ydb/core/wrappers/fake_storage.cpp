@@ -27,7 +27,7 @@ TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(con
     auto& bucket = GetBucket(AwsToString(request.GetBucket()));
     auto& awsPrefix = request.GetPrefix();
     const TString prefix(awsPrefix.data(), awsPrefix.size());
-    THolder<TEvListObjectsResponse> result;
+    std::unique_ptr<TEvListObjectsResponse> result;
     TGuard<TMutex> g(Mutex);
     TEvListObjectsResponse::TAwsResult awsResult;
     for (auto&& i : bucket) {

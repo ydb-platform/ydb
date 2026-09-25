@@ -44,9 +44,9 @@ public:
     // this cookie.
     struct TEvSend: NActors::TEventLocal<TEvSend, EvSend>
     {
-        THolder<NActors::IEventBase> Request;
+        std::unique_ptr<NActors::IEventBase> Request;
 
-        explicit TEvSend(THolder<NActors::IEventBase> request);
+        explicit TEvSend(std::unique_ptr<NActors::IEventBase> request);
     };
 
     // Status on a synthesized result when the BSC pipe fails with an inflight

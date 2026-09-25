@@ -33,8 +33,8 @@ ui32 TTpchWorkloadGenerator::GetDefaultPartitionsCount(const TString& /*tableNam
 }
 
 
-THolder<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TTpchWorkloadGenerator>(*this);
+std::unique_ptr<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TTpchWorkloadGenerator>(*this);
 }
 
 TString TTpchWorkloadParams::GetWorkloadName() const {

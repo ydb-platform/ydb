@@ -364,7 +364,7 @@ public:
 
 private:
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+        auto response = std::make_unique<TEvPersQueue::TEvResponse>();
 
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -377,7 +377,7 @@ private:
     }
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        auto response = std::make_unique<TEvPQ::TEvCheckPartitionStatusResponse>();
         response->Record.SetStatus(Status);
         if (SeqNo) {
             response->Record.SetSeqNo(SeqNo.value());

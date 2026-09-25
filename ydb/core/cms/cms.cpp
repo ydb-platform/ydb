@@ -1685,7 +1685,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 
             const NKikimrCms::TStatus status = resp->Record.GetStatus();
 
-            THolder<TEvCms::TEvManageRequestResponse> manageResponse = MakeHolder<TEvCms::TEvManageRequestResponse>();
+            std::unique_ptr<TEvCms::TEvManageRequestResponse> manageResponse = std::make_unique<TEvCms::TEvManageRequestResponse>();
 
             if (status.GetCode() != TStatus::ALLOW) {
                 manageResponse->Record.MutableStatus()->SetCode(status.GetCode());
@@ -1727,10 +1727,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             ev, TStatus::WRONG_REQUEST, "Unknown request for manual approval", ctx);
     }
 
-    THolder<TRequestInfo> copy = MakeHolder<TRequestInfo>(it->second);
+    std::unique_ptr<TRequestInfo> copy = std::make_unique<TRequestInfo>(it->second);
 
     // Create a permission for each action in the scheduled request
-    THolder<TEvCms::TEvPermissionResponse> resp = MakeHolder<TEvCms::TEvPermissionResponse>();
+    std::unique_ptr<TEvCms::TEvPermissionResponse> resp = std::make_unique<TEvCms::TEvPermissionResponse>();
     resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
     for (const auto& action : copy->Request.GetActions()) {
         auto items = ClusterInfo->FindLockedItems(action, &ctx);
@@ -2079,7 +2079,7 @@ void TCms::StartDDiskSync(const TActorContext& ctx) {
         State->BSControllerPipe = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), config));
     }
 
-    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
     NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
 }
 
@@ -2088,7 +2088,7 @@ void TCms::Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr& ev, const TActorContext
 }
 
 void TCms::QueueDDiskInfoRequest(ui64 tabletId, ui64 knownRevision, const TActorContext& ctx) {
-    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    auto request = std::make_unique<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
     request->Record.SetTabletId(tabletId);
     request->Record.SetKnownRevision(knownRevision);
     DDiskInfoRequestQueue.push(std::move(request));
@@ -2109,7 +2109,7 @@ void TCms::SendQueuedDDiskInfoRequests(const TActorContext& ctx) {
 }
 
 void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvCms::TEvDDiskInfoListResponse>();
+    auto response = std::make_unique<TEvCms::TEvDDiskInfoListResponse>();
     response->Record.SetStatus(NKikimrProto::OK);
     for (const auto& [tabletId, info] : State->DDiskInfo) {
         auto* tablet = response->Record.AddTablets();
@@ -2121,7 +2121,7 @@ void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext
 }
 
 void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvCms::TEvDDiskInfoGetResponse>();
+    auto response = std::make_unique<TEvCms::TEvDDiskInfoGetResponse>();
     const auto it = State->DDiskInfo.find(ev->Get()->Record.GetTabletId());
     if (it == State->DDiskInfo.end()) {
         response->Record.SetStatus(NKikimrProto::NOT_FOUND);
@@ -2295,7 +2295,7 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     }
     items = std::move(sortedItems);
 
-    auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
+    auto response = std::make_unique<TEvCms::TEvDDiskTabletListResponse>();
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     response->Record.SetTotalCount(items.size());
 
@@ -2435,7 +2435,7 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
     }
     items = std::move(sortedItems);
 
-    auto response = MakeHolder<TEvCms::TEvDDiskDiskListResponse>();
+    auto response = std::make_unique<TEvCms::TEvDDiskDiskListResponse>();
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     response->Record.SetTotalCount(items.size());
 
@@ -2488,7 +2488,7 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& e
     SendQueuedDDiskInfoRequests(ctx);
 
     if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
-        auto persist = MakeHolder<TEvPrivate::TEvPersistDDiskInfo>();
+        auto persist = std::make_unique<TEvPrivate::TEvPersistDDiskInfo>();
         persist->Record.CopyFrom(ev->Get()->Record);
         ctx.Send(SelfId(), persist.Release());
     }
@@ -3138,7 +3138,7 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
     if (State->Sentinel) {
         ctx.Send(ev->Forward(State->Sentinel));
     } else {
-        auto Response = MakeHolder<TEvCms::TEvGetSentinelStateResponse>();
+        auto Response = std::make_unique<TEvCms::TEvGetSentinelStateResponse>();
         auto &rec = Response->Record;
         rec.MutableStatus()->SetCode(NKikimrCms::TStatus::ERROR);
         ctx.Send(ev->Sender, Response.Release());
@@ -3163,7 +3163,7 @@ void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
         Execute(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        auto response = std::make_unique<TEvConsole::TEvConfigNotificationResponse>();
         response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }

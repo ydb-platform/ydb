@@ -131,7 +131,7 @@ namespace NSequenceShard {
         // Logging support
         const TLogPrefix LogPrefix;
         // Counters support
-        THolder<TTabletCountersBase> TabletCountersPtr;
+        std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
         TTabletCountersBase* TabletCounters;
         // System params
         ui64 CurrentSchemeShardId = 0;

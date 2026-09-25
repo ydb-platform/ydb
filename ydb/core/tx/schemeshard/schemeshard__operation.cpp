@@ -103,7 +103,7 @@ bool TSchemeShard::ProcessOperationParts(
     const NKikimrScheme::TEvModifySchemeTransaction& record,
     bool prevProposeUndoSafe,
     TOperation::TPtr& operation,
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
     TOperationContext& context)
 {
     auto selfId = TabletID();
@@ -202,9 +202,9 @@ bool TSchemeShard::ProcessOperationParts(
     return true;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context) {
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context) {
     using namespace NGenerated;
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> response = nullptr;
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransactionResult> response = nullptr;
 
     auto selfId = SelfTabletId();
     auto& record = request.Record;
@@ -384,7 +384,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
 
     TEvSchemeShard::TEvModifySchemeTransaction::TPtr Request;
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> Response = nullptr;
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransactionResult> Response = nullptr;
 
     TString PeerName;
     TString UserSID;
@@ -412,7 +412,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         auto [userToken, tokenParseError] = ParseUserToken(Request->Get()->Record.GetUserToken());
         if (tokenParseError) {
-            Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
+            Response = std::make_unique<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
             return true;
         }
         const auto& record = Request->Get()->Record;
@@ -457,7 +457,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             // Check local tx commit redo size
             TString reason;
             if (IsCommitRedoSizeOverLimit(&reason, context)) {
-                Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusSchemeError, ui64(txId), ui64(selfId), reason);
+                Response = std::make_unique<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusSchemeError, ui64(txId), ui64(selfId), reason);
 
                 AbortOperation(context, txId, reason);
 
@@ -609,7 +609,7 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
     );
     const TActorId ackTo = ev->Get()->GetSource();
 
-    auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>(txId);
+    auto event = std::make_unique<TEvDataShard::TEvSchemaChangedResult>(txId);
     context.OnComplete.Send(ackTo, event.Release());
 }
 
@@ -765,7 +765,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
-                THolder<TEvPrivate::TEvOperationPlan> msg = MakeHolder<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
+                std::unique_ptr<TEvPrivate::TEvOperationPlan> msg = std::make_unique<TEvPrivate::TEvOperationPlan>(ui64(step), ui64(txId));
                 TEvPrivate::TEvOperationPlan::TPtr personalEv = (TEventHandle<TEvPrivate::TEvOperationPlan>*) new IEventHandle(
                             context.SS->SelfId(), context.SS->SelfId(), msg.Release());
 
@@ -1446,7 +1446,7 @@ void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActor
     Y_ABORT_UNLESS(IsReadyToNotify());
 
     for (auto& subscriber: Subscribers) {
-        THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
+        std::unique_ptr<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
         YDB_LOG_DEBUG_CTX(ctx, "TOperation DoNotify: send TEvNotifyTxCompletionResult",
             {"actorId", subscriber},
             {"message", msg->Record.ShortDebugString()},
@@ -1524,7 +1524,7 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
     {
         const ui8 execLevel = 0;
         const TStepId maxStep = TStepId(Max<ui64>());
-        THolder<TEvTxProxy::TEvProposeTransaction> message(
+        std::unique_ptr<TEvTxProxy::TEvProposeTransaction> message(
             new TEvTxProxy::TEvProposeTransaction(ui64(coordinatorId), ui64(TxId), execLevel, ui64(effectiveMinStep), ui64(maxStep)));
         auto* proposal = message->Record.MutableTransaction();
         auto* reqAffectedSet = proposal->MutableAffectedSet();

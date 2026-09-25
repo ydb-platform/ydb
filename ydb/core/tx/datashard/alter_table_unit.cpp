@@ -99,9 +99,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline)
+std::unique_ptr<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline)
 {
-    return THolder(new TAlterMoveShadowUnit(dataShard, pipeline));
+    return std::unique_ptr<TAlterMoveShadowUnit>(new TAlterMoveShadowUnit(dataShard, pipeline));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -228,10 +228,10 @@ void TAlterTableUnit::Complete(TOperation::TPtr op,
     DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
 }
 
-THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
                                              TPipeline &pipeline)
 {
-    return THolder(new TAlterTableUnit(dataShard, pipeline));
+    return std::unique_ptr<TAlterTableUnit>(new TAlterTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

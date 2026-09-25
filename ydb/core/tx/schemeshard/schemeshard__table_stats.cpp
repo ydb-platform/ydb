@@ -39,7 +39,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
         {"followerId", followerId},
     );
 
-    auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
+    auto ev = std::make_unique<NSysView::TEvSysView::TEvSendPartitionStats>(
         GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId())));
 
     auto& sysStats = ev->Stats;
@@ -81,7 +81,7 @@ class TTxStoreTableStats: public TTxStoreStats<TEvDataShard::TEvPeriodicTableSta
 
     struct TMessage {
         TActorId Actor;
-        THolder<IEventBase> Event;
+        std::unique_ptr<IEventBase> Event;
 
         TMessage(const TActorId& actor, IEventBase* event)
             : Actor(actor)
@@ -138,10 +138,10 @@ private:
 };
 
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MergeRequest(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> MergeRequest(
     TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
 {
-    auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->TabletID()));
+    auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->TabletID()));
     auto& record = request->Record;
 
     TPath tablePath = TPath::Init(pathId, ss);

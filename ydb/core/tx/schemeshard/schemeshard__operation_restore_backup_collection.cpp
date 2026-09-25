@@ -175,11 +175,11 @@ class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TEmptyPropose>(OperationId);
+            return std::make_unique<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
-            return MakeHolder<TWaitCopyTableBarrier>(OperationId);
+            return std::make_unique<TWaitCopyTableBarrier>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDoneWithIncrementalRestore>(OperationId);
+            return std::make_unique<TDoneWithIncrementalRestore>(OperationId);
         default:
             return nullptr;
         }
@@ -196,9 +196,9 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+            return std::make_unique<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
         }
 
         const auto& tx = Transaction;
@@ -210,7 +210,7 @@ public:
         const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
 
         if (!bcPath.IsResolved()) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+            return std::make_unique<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
         }
 
         const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
@@ -228,7 +228,7 @@ public:
         txState.TargetPathId = bcPath.Base()->PathId;
         bcPath.Base()->PathState = *txState.TargetPathTargetState;
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
         txState.State = TTxState::Waiting;
 

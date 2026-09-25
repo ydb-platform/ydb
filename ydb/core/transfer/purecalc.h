@@ -73,7 +73,7 @@ struct TInputSpecTraits<NKikimr::NReplication::NTransfer::TMessageInputSpec> {
     using TInput = NKikimr::NReplication::NTransfer::TMessage;
     using TInputSpecType = NKikimr::NReplication::NTransfer::TMessageInputSpec;
 
-    static void PreparePullListWorker(const TInputSpecType&, IPullListWorker*, THolder<IStream<TInput*>>);
+    static void PreparePullListWorker(const TInputSpecType&, IPullListWorker*, std::unique_ptr<IStream<TInput*>>);
 };
 
 template <>
@@ -85,7 +85,7 @@ struct TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec> {
     static const constexpr bool SupportPushStreamMode = false;
 
     using TOutputItemType = NKikimr::NReplication::NTransfer::TOutputMessage*;
-    using TPullListReturnType = THolder<IStream<TOutputItemType>>;
+    using TPullListReturnType = std::unique_ptr<IStream<TOutputItemType>>;
 
     static TPullListReturnType ConvertPullListWorkerToOutputType(
         const NKikimr::NReplication::NTransfer::TMessageOutputSpec& outputSpec,

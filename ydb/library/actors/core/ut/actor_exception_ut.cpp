@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(ActorException) {
     };
 
     Y_UNIT_TEST(ActorBootstrapExceptionCaught) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, false);
 
         TActorSystem actorSystem(setup);
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ActorException) {
     }
 
     Y_UNIT_TEST(ActorHandlerExceptionCaught) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, false);
 
         TActorSystem actorSystem(setup);

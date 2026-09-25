@@ -263,9 +263,9 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         TCache cache(6);
         cache.UpdateLimit(6, 3);
 
-        TVector<THolder<NTest::TPage>> pages;
+        TVector<std::unique_ptr<NTest::TPage>> pages;
         for (ui32 pageId : xrange(6)) {
-            pages.push_back(MakeHolder<NTest::TPage>(pageId, 1));
+            pages.push_back(std::make_unique<NTest::TPage>(pageId, 1));
             if (pageId % 2) {
                 pages.back()->CacheMode = ECacheMode::TryKeepInMemory;
             }

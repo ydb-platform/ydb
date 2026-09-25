@@ -38,10 +38,10 @@ TPersQueueGetTopicMetadataProcessor::TPersQueueGetTopicMetadataProcessor(const N
     }
 }
 
-THolder<IActor> TPersQueueGetTopicMetadataProcessor::CreateTopicSubactor(
+std::unique_ptr<IActor> TPersQueueGetTopicMetadataProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    return MakeHolder<TPersQueueGetTopicMetadataTopicWorker>(SelfId(), topicEntry, name);
+    return std::make_unique<TPersQueueGetTopicMetadataTopicWorker>(SelfId(), topicEntry, name);
 }
 
 TPersQueueGetTopicMetadataTopicWorker::TPersQueueGetTopicMetadataTopicWorker(
@@ -91,10 +91,10 @@ TPersQueueGetPartitionOffsetsProcessor::TPersQueueGetPartitionOffsetsProcessor(
     TopicsToRequest = GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionOffsets().GetTopicRequest(), &PartitionsToRequest);
 }
 
-THolder<IActor> TPersQueueGetPartitionOffsetsProcessor::CreateTopicSubactor(
+std::unique_ptr<IActor> TPersQueueGetPartitionOffsetsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    return MakeHolder<TPersQueueGetPartitionOffsetsTopicWorker>(
+    return std::make_unique<TPersQueueGetPartitionOffsetsTopicWorker>(
             SelfId(), topicEntry, name, PartitionsToRequest[name], RequestProto
     );
 }
@@ -127,7 +127,7 @@ void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvOffsetsResponse event
                 continue;
             }
-            THolder<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
+            std::unique_ptr<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
             const TString& clientId = RequestProto->GetMetaRequest().GetCmdGetPartitionOffsets().GetClientId();
             if (!clientId.empty()) {
                 ev->Record.SetClientId(clientId);
@@ -204,10 +204,10 @@ TPersQueueGetPartitionStatusProcessor::TPersQueueGetPartitionStatusProcessor(con
     TopicsToRequest = GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetTopicRequest(), &PartitionsToRequest);
 }
 
-THolder<IActor> TPersQueueGetPartitionStatusProcessor::CreateTopicSubactor(
+std::unique_ptr<IActor> TPersQueueGetPartitionStatusProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    return MakeHolder<TPersQueueGetPartitionStatusTopicWorker>(
+    return std::make_unique<TPersQueueGetPartitionStatusTopicWorker>(
             SelfId(), topicEntry, name, PartitionsToRequest[name], RequestProto
     );
 }
@@ -240,7 +240,7 @@ void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext 
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvStatusResponse event
                 continue;
             }
-            THolder<TEvPersQueue::TEvStatus> ev(new TEvPersQueue::TEvStatus());
+            std::unique_ptr<TEvPersQueue::TEvStatus> ev(new TEvPersQueue::TEvStatus());
             if (RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().HasClientId())
                 ev->Record.SetClientId(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetClientId());
             CreatePipeAndSend(tabletId, ctx, std::move(ev));
@@ -323,11 +323,11 @@ TPersQueueGetPartitionLocationsProcessor::TPersQueueGetPartitionLocationsProcess
     TopicsToRequest = GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionLocations().GetTopicRequest(), &PartitionsToRequest);
 }
 
-THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
+std::unique_ptr<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
     Y_ABORT_UNLESS(NodesInfo.get() != nullptr);
-    return MakeHolder<TPersQueueGetPartitionLocationsTopicWorker>(
+    return std::make_unique<TPersQueueGetPartitionLocationsTopicWorker>(
             SelfId(), topicEntry, name,
             PartitionsToRequest[name], RequestProto, NodesInfo
     );
@@ -480,11 +480,11 @@ TPersQueueGetReadSessionsInfoProcessor::TPersQueueGetReadSessionsInfoProcessor(
     }
 }
 
-THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateTopicSubactor(
+std::unique_ptr<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
     Y_ABORT_UNLESS(NodesInfo.get() != nullptr);
-    return MakeHolder<TPersQueueGetReadSessionsInfoTopicWorker>(
+    return std::make_unique<TPersQueueGetReadSessionsInfoTopicWorker>(
             SelfId(), topicEntry, name, RequestProto, NodesInfo);
 }
 
@@ -516,7 +516,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::SendReadSessionsInfoToBalancer(co
             NTabletPipe::CreateClient(ctx.SelfID, SchemeEntry.PQGroupInfo->Description.GetBalancerTabletID(), clientConfig)
     );
 
-    THolder<TEvPersQueue::TEvGetReadSessionsInfo> ev(new TEvPersQueue::TEvGetReadSessionsInfo());
+    std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> ev(new TEvPersQueue::TEvGetReadSessionsInfo());
     ev->Record.SetClientId(RequestProto->GetMetaRequest().GetCmdGetReadSessionsInfo().GetClientId());
     NTabletPipe::SendData(ctx, BalancerPipe, ev.Release());
 }
@@ -534,7 +534,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::BootstrapImpl(const TActorContext
                 continue;
             }
 
-            THolder<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
+            std::unique_ptr<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
             const TString& clientId = RequestProto->GetMetaRequest().GetCmdGetReadSessionsInfo().GetClientId();
             if (!clientId.empty()) {
                 ev->Record.SetClientId(clientId);
@@ -556,7 +556,7 @@ bool TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEvents(const TActorCon
     return false;
 }
 
-THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
+std::unique_ptr<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
     const THashMap<TString, TActorId>&& readSessions,
     const TActorContext& ctx
 ) {
@@ -564,7 +564,7 @@ THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
     if (factory) {
         return factory->Create(SelfId(), std::move(readSessions), NodesInfo);
     }
-    return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(SelfId(), std::move(readSessions), NodesInfo);
+    return std::make_unique<TPersQueueGetReadSessionsInfoWorker>(SelfId(), std::move(readSessions), NodesInfo);
 }
 
 STFUNC(TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEventsStateFunc) {
@@ -668,7 +668,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, 
                 res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
                 res->SetErrorReason("Getting of session info failed");
             }
-            THolder<TEvPersQueue::TEvReadSessionsInfoResponse> request = MakeHolder<TEvPersQueue::TEvReadSessionsInfoResponse>();
+            std::unique_ptr<TEvPersQueue::TEvReadSessionsInfoResponse> request = std::make_unique<TEvPersQueue::TEvReadSessionsInfoResponse>();
             request->Record.Swap(&(BalancerResponse->Get()->Record));
             request->Record.ClearPartitionInfo();
 

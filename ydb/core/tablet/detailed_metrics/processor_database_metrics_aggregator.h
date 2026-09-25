@@ -29,6 +29,6 @@ namespace NKikimr {
         NMonitoring::TDynamicCounterPtr rawCounterGroup,
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
-        THolder<TTabletCountersBase> executorCountersTemplate);
+        std::unique_ptr<TTabletCountersBase> executorCountersTemplate);
 
 } // namespace NKikimr

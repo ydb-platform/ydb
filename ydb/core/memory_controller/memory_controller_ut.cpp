@@ -125,7 +125,7 @@ private:
                 nodeIndex);
         }
 
-        SharedPageCacheCounters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(Runtime->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+        SharedPageCacheCounters = std::make_unique<TSharedPageCacheCounters>(GetServiceCounters(Runtime->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
         MemoryControllerCounters = GetServiceCounters(Runtime->GetDynamicCounters(), "utils")->GetSubgroup("component", "memory_controller");
 
         Runtime->SetLogPriority(NKikimrServices::MEMORY_CONTROLLER, NLog::PRI_TRACE);
@@ -137,7 +137,7 @@ private:
     TIntrusivePtr<TFixedProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
 public:
-    THolder<TSharedPageCacheCounters> SharedPageCacheCounters;
+    std::unique_ptr<TSharedPageCacheCounters> SharedPageCacheCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> MemoryControllerCounters;
     TProcessMemoryInfo* ProcessMemoryInfo;
 };

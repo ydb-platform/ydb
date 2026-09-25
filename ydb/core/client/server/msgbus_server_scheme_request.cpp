@@ -15,7 +15,7 @@ namespace NMsgBusProxy {
 template <typename T>
 class TMessageBusServerSchemeRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerSchemeRequest<T>>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerSchemeRequest<T>>>;
-    THolder<T> Request;
+    std::unique_ptr<T> Request;
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
         TEvTxUserProxy::TEvProposeTransactionStatus* msg = ev->Get();

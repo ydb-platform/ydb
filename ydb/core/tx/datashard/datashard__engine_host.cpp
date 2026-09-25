@@ -517,9 +517,9 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     , KeyValidator(*self)
 {
     auto now = TAppData::TimeProvider->Now();
-    EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
+    EngineHost = std::make_unique<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
 
-    EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
+    EngineSettings = std::make_unique<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, userCtx, EngineHost.Get(), self->AllocCounters);
 
     auto tabletId = self->TabletID();

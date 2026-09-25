@@ -53,7 +53,7 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(co
 
 NYdb::TValueBuilder& TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::GetBuilder() {
     if (!Builder) {
-        Builder = MakeHolder<NYdb::TValueBuilder>();
+        Builder = std::make_unique<NYdb::TValueBuilder>();
         Builder->BeginList();
     }
     return *Builder;

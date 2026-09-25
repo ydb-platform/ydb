@@ -134,7 +134,7 @@ bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const T
     auto status = owner.GetBackgroundSessionsManager()->GetStatus(
         ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()));
     for (TActorId subscriber : NotifySubscribers) {
-        auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         auto& opResult = *event->Record.MutableOpResult();
         opResult.SetSuccess(status.Success);
         opResult.SetExplain(status.ErrorMessage);

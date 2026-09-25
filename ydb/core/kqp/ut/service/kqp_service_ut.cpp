@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         const ui32 Inflight = 50;
         const TDuration WaitDuration = TDuration::Seconds(1);
 
-        auto kikimr = MakeHolder<TKikimrRunner>();
+        auto kikimr = std::make_unique<TKikimrRunner>();
 
         NPar::LocalExecutor().RunAdditionalThreads(Inflight);
         auto driverConfig = kikimr->GetDriverConfig();
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         THashSet<TActorId> computeActors;
         THashSet<TActorId> abortedComputeActors;
         ui32 stateEvents = 0;
-        THolder<IEventHandle> heldSubscribe;
+        std::unique_ptr<IEventHandle> heldSubscribe;
 
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             const auto type = ev->GetTypeRewrite();

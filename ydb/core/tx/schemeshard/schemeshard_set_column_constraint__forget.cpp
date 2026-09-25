@@ -28,7 +28,7 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
             {"request", request.ShortDebugString()},
         );
 
-        auto response = MakeHolder<TEvSetColumnConstraint::TEvForgetResponse>(request.GetTxId());
+        auto response = std::make_unique<TEvSetColumnConstraint::TEvForgetResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -83,7 +83,7 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
 
 private:
     void Reply(
-        THolder<TEvSetColumnConstraint::TEvForgetResponse> response,
+        std::unique_ptr<TEvSetColumnConstraint::TEvForgetResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString())
     {

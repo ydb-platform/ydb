@@ -53,7 +53,7 @@ struct TTestTableDescription {
     void SerializeTo(NKikimrSchemeOp::TColumnTableDescription& proto) const;
 };
 
-THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc);
-THolder<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc);
+std::unique_ptr<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc);
+std::unique_ptr<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc);
 
 }

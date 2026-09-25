@@ -213,7 +213,7 @@ namespace NActors {
         Proxy->Metrics->SetConnected(0);
         DirectSession = std::make_shared<TDirectSessionV1>(TActivationContext::ActorSystem(), SelfId(), Proxy->PeerNodeId);
         ReceiveContext->DirectSession = DirectSession;
-        auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
+        auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](std::unique_ptr<IEventBase> event) {
             as->Send(id, event.Release());
         };
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
@@ -516,7 +516,7 @@ namespace NActors {
         updateInfo(it->second);
     }
 
-    THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
+    std::unique_ptr<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
         TEvHandshakeAsk *msg = ev->Get();
 
         // close existing input session, if any, and do nothing upon its destruction
@@ -530,7 +530,7 @@ namespace NActors {
             {"counter", msg->Counter},
             {"lastInputSerial", lastInputSerial});
 
-        return MakeHolder<TEvHandshakeAck>(msg->Peer, lastInputSerial, Params);
+        return std::make_unique<TEvHandshakeAck>(msg->Peer, lastInputSerial, Params);
     }
 
     void TInterconnectSessionTCP::SetNewConnection(TEvHandshakeDone::TPtr& ev) {

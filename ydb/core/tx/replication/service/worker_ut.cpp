@@ -122,14 +122,14 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.GrabEdgeEventRethrow<TEvYdbProxy::TEvCommitOffsetRequest>(replacementReadSession);
         runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
 
-        auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto release = std::make_unique<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schema);
         release->Record.SetOffset(1);
         runtime.Send(new IEventHandle(worker, edge, release.Release()));
         auto report = runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
         UNIT_ASSERT(report->Get()->Record.GetApplied());
 
-        auto applied = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto applied = std::make_unique<TEvService::TEvSchemaChangeResult>();
         applied->Record.MutableSchema()->CopyFrom(schema);
         applied->Record.SetOffset(1);
         applied->Record.SetApplied(true);
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         report = runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
         UNIT_ASSERT(report->Get()->Record.GetCompleted());
 
-        auto completed = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto completed = std::make_unique<TEvService::TEvSchemaChangeResult>();
         completed->Record.MutableSchema()->CopyFrom(schema);
         completed->Record.SetOffset(1);
         completed->Record.SetApplied(true);
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.Send(new IEventHandle(worker, replacementReader, new TEvWorker::TEvCommitResult(100)));
         runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
 
-        auto applied = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto applied = std::make_unique<TEvService::TEvSchemaChangeResult>();
         applied->Record.MutableSchema()->CopyFrom(schema);
         applied->Record.SetOffset(42);
         applied->Record.SetApplied(true);
@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(Worker) {
 
         auto report = runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
         UNIT_ASSERT(!report->Get()->Record.GetApplied());
-        auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto release = std::make_unique<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schema);
         release->Record.SetOffset(42);
         runtime.Send(new IEventHandle(worker, edge, release.Release()));
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         UNIT_ASSERT(report->Get()->Record.GetApplied());
         UNIT_ASSERT_VALUES_EQUAL(writerGeneration, 2);
 
-        auto applied = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto applied = std::make_unique<TEvService::TEvSchemaChangeResult>();
         applied->Record.MutableSchema()->CopyFrom(schema);
         applied->Record.SetOffset(42);
         applied->Record.SetApplied(true);
@@ -560,7 +560,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         const auto replacementReader = ready->Sender;
         UNIT_ASSERT_VALUES_UNEQUAL(replacementReader, reader);
 
-        auto completion = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto completion = std::make_unique<TEvService::TEvSchemaChangeResult>();
         completion->Record.MutableSchema()->CopyFrom(schema);
         completion->Record.SetOffset(42);
         completion->Record.SetApplied(true);
@@ -702,14 +702,14 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.Send(new IEventHandle(worker, reader, new TEvWorker::TEvCommitResult(42)));
         runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
 
-        auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto release = std::make_unique<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schema);
         release->Record.SetOffset(42);
         runtime.Send(new IEventHandle(worker, edge, release.Release()));
         auto report = runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
         UNIT_ASSERT(report->Get()->Record.GetApplied());
 
-        auto applied = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto applied = std::make_unique<TEvService::TEvSchemaChangeResult>();
         applied->Record.MutableSchema()->CopyFrom(schema);
         applied->Record.SetOffset(42);
         applied->Record.SetApplied(true);
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         UNIT_ASSERT_VALUES_EQUAL(writerGeneration, 2);
         UNIT_ASSERT_VALUES_EQUAL(replacementRefresh->Sender, latestWriter);
 
-        auto completed = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto completed = std::make_unique<TEvService::TEvSchemaChangeResult>();
         completed->Record.MutableSchema()->CopyFrom(schema);
         completed->Record.SetOffset(42);
         completed->Record.SetApplied(true);
@@ -869,7 +869,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         UNIT_ASSERT_VALUES_EQUAL(writerGeneration, 2);
         UNIT_ASSERT_VALUES_EQUAL(replacementHandshake->Sender, latestWriter);
 
-        auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto release = std::make_unique<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schema);
         release->Record.SetOffset(42);
         runtime.Send(new IEventHandle(worker, edge, release.Release()));

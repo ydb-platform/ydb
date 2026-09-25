@@ -395,10 +395,10 @@ TCloudEventsActor::TCloudEventsActor()
     const auto& cfg = pqConfig.GetCloudEventsConfig();
 
     if (cfg.HasFilePath()) {
-        EventsWriter = MakeHolder<TFileEventsWriter>(cfg.GetFilePath());
+        EventsWriter = std::make_unique<TFileEventsWriter>(cfg.GetFilePath());
     } else if (cfg.HasUaURI()) {
         auto counters = GetServiceCounters(AppData()->Counters.Get(), "pq.cloud_events");
-        EventsWriter = MakeHolder<TUaEventsWriter>(cfg.GetUaURI(), counters);
+        EventsWriter = std::make_unique<TUaEventsWriter>(cfg.GetUaURI(), counters);
     }
 }
 

@@ -206,10 +206,10 @@ private:
     size_t ProcessedEvents = 0;
 };
 
-THolder<NActors::TActorSystemSetup> CreateActorSystemSetup(
+std::unique_ptr<NActors::TActorSystemSetup> CreateActorSystemSetup(
         const NKikimrConfig::TActorSystemConfig& config)
 {
-    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    auto setup = std::make_unique<NActors::TActorSystemSetup>();
     setup->NodeId = 1;
     setup->CpuManager.Shared.United = config.GetUseUnitedPool();
     NActorSystemConfigHelpers::AddExecutorPools(setup->CpuManager, config, nullptr);
@@ -906,7 +906,7 @@ Y_UNIT_TEST(UnitedPoolFallsBackToForeignThreadWithoutAdjacentOwner) {
     static constexpr ui32 TargetPoolId = 0;
     static constexpr ui32 WorkerPoolId = 1;
 
-    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    auto setup = std::make_unique<NActors::TActorSystemSetup>();
     setup->NodeId = 1;
     setup->CpuManager.Shared.United = true;
     setup->CpuManager.Basic.emplace_back(NActors::TBasicExecutorPoolConfig{

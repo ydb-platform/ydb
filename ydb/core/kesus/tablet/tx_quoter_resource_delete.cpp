@@ -10,7 +10,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     const ui64 Cookie;
     NKikimrKesus::TEvDeleteQuoterResource Record;
 
-    THolder<TEvKesus::TEvDeleteQuoterResourceResult> Reply;
+    std::unique_ptr<TEvKesus::TEvDeleteQuoterResourceResult> Reply;
 
     TTxQuoterResourceDelete(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDeleteQuoterResource& record)
         : TTxBase(self)
@@ -25,7 +25,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     void ReplyOk() {
         NKikimrKesus::TEvDeleteQuoterResourceResult result;
         result.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(result);
+        Reply = std::make_unique<TEvKesus::TEvDeleteQuoterResourceResult>(result);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -40,7 +40,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
             Self->QuoterResources.FindId(Record.GetResourceId()) :
             Self->QuoterResources.FindPath(Record.GetResourcePath());
         if (!resource) {
-            Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(
+            Reply = std::make_unique<TEvKesus::TEvDeleteQuoterResourceResult>(
                 Ydb::StatusIds::NOT_FOUND,
                 "Resource doesn't exist.");
             return true;
@@ -51,7 +51,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
 
         TString errorMessage;
         if (!Self->QuoterResources.DeleteResource(resource, errorMessage)) {
-            Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(
+            Reply = std::make_unique<TEvKesus::TEvDeleteQuoterResourceResult>(
                 Ydb::StatusIds::BAD_REQUEST,
                 errorMessage);
             return true;

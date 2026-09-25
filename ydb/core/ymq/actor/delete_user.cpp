@@ -21,7 +21,7 @@ public:
         return false;
     }
 
-    TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::DeleteUser, std::move(cb))
     {
     }
@@ -160,7 +160,7 @@ private:
     TSet<TString> Queues_;
 };
 
-IActor* CreateDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TDeleteUserActor(sourceSqsRequest, std::move(cb));
 }
 

@@ -36,7 +36,7 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
     return checks;
 }
 
-bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
+bool IsParentPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& parentPath) {
     const TString& resourcePoolsDir = JoinPath({parentPath.GetDomainPathString(), ".metadata/workload_manager/pools"});
     if (parentPath.PathString() != resourcePoolsDir) {
         result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Resource pools shoud be placed in " << resourcePoolsDir);
@@ -75,7 +75,7 @@ TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolD
     return resourcePoolInfo;
 }
 
-bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TProposeResponse>& result, const TOperationContext& context) {
+bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const std::unique_ptr<TProposeResponse>& result, const TOperationContext& context) {
     TString errorStr;
     if (!context.SS->CheckApplyIf(transaction, errorStr)) {
         result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
@@ -84,7 +84,7 @@ bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TPro
     return true;
 }
 
-bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description) {
+bool IsDescriptionValid(const std::unique_ptr<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description) {
     TString errorStr;
     if (!NResourcePool::Validate(description, errorStr)) {
         result->SetError(NKikimrScheme::StatusSchemeError, errorStr);
@@ -93,7 +93,7 @@ bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSc
     return true;
 }
 
-bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info) {
+bool IsResourcePoolInfoValid(const std::unique_ptr<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info) {
     NKikimr::NResourcePool::TPoolSettings settings(info->Properties.GetProperties());
     if (auto error = settings.Validate()) {
         result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Invalid resource pool settings: " << error);

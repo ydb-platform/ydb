@@ -312,7 +312,7 @@ namespace NActors {
             }
 
             ui32 NodeId;
-            THolder<TNodeInfo> Node;
+            std::unique_ptr<TNodeInfo> Node;
         };
 
         struct TEvClosePeerSocket : TEventLocal<TEvClosePeerSocket, EvClosePeerSocket> {};

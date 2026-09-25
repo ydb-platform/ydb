@@ -134,7 +134,7 @@ private:
     // SendData via the BSC proxy actor (created on first use).
     void SendToBsc(
         const NActors::TActorContext& ctx,
-        THolder<NActors::IEventBase> request,
+        std::unique_ptr<NActors::IEventBase> request,
         ui64 cookie = 0);
 
     // Poison the BSC proxy and drop the id. No-op if it was never created.

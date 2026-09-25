@@ -241,7 +241,7 @@ namespace NKikimr::NHttpProxy {
         {
         }
 
-        void Execute(THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
+        void Execute(THttpRequestContext&& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
             ctx.Register(new THttpRequestActor(
                     std::move(context),
                     std::move(signature),
@@ -256,7 +256,7 @@ namespace NKikimr::NHttpProxy {
             using TBase = NPQ::TBaseActor<THttpRequestActor>;
 
             THttpRequestActor(THttpRequestContext&& httpContext,
-                              THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
+                              std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
                               TProtoCall protoCall, const TString& method)
                 : TBase(NKikimrServices::HTTP_PROXY)
                 , HttpContext(std::move(httpContext))
@@ -289,7 +289,7 @@ namespace NKikimr::NHttpProxy {
             void SendYdbDriverRequest(const TActorContext& ctx) {
                 Y_ABORT_UNLESS(HttpContext.Driver);
 
-                auto request = MakeHolder<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
+                auto request = std::make_unique<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
                 request->DatabasePath = HttpContext.DatabasePath;
 
                 ctx.Send(MakeTenantDiscoveryID(), std::move(request));
@@ -312,7 +312,7 @@ namespace NKikimr::NHttpProxy {
                 }
                 Y_ABORT_UNLESS(!Client);
                 Client.Reset(new TDataStreamsClient(*HttpContext.Driver, clientSettings));
-                DiscoveryFuture = MakeHolder<NThreading::TFuture<void>>(Client->DiscoveryCompleted());
+                DiscoveryFuture = std::make_unique<NThreading::TFuture<void>>(Client->DiscoveryCompleted());
                 DiscoveryFuture->Subscribe(
                     [actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()] (const NThreading::TFuture<void>&) {
                         actorSystem->Send(actorId, new TEvServerlessProxy::TEvClientReady());
@@ -334,16 +334,16 @@ namespace NKikimr::NHttpProxy {
                 RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                                     (const NThreading::TFuture<TProtoResponse>& future) {
                     auto& response = future.GetValueSync();
-                    auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                    auto result = std::make_unique<TEvServerlessProxy::TEvGrpcRequestResult>();
                     Y_ABORT_UNLESS(response.operation().ready());
                     if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
                         TProtoResult rs;
                         response.operation().result().UnpackTo(&rs);
-                        result->Message = MakeHolder<TProtoResult>(rs);
+                        result->Message = std::make_unique<TProtoResult>(rs);
                     }
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(response.operation().issues(), issues);
-                    result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
+                    result->Status = std::make_unique<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
                                                                NYdb::NAdapters::ToSdkIssues(std::move(issues)));
                     actorSystem->Send(actorId, result.Release());
                 });
@@ -364,19 +364,19 @@ namespace NKikimr::NHttpProxy {
                 LOG_D("Sending grpc request",
                     {"request", Request.DebugString()});
 
-                Future = MakeHolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(
+                Future = std::make_unique<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(
                     Client->template DoProtoRequest<TProtoRequest, TProtoResponse, TProtoResult,
                     TProtoCall>(std::move(Request), ProtoCall));
                 Future->Subscribe(
                     [actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                     (const NThreading::TFuture<TProtoResultWrapper<TProtoResult>>& future) {
                         auto& response = future.GetValueSync();
-                        auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                        auto result = std::make_unique<TEvServerlessProxy::TEvGrpcRequestResult>();
                         if (response.IsSuccess()) {
-                            result->Message = MakeHolder<TProtoResult>(response.GetResult());
+                            result->Message = std::make_unique<TProtoResult>(response.GetResult());
 
                         }
-                        result->Status = MakeHolder<NYdb::TStatus>(response);
+                        result->Status = std::make_unique<NYdb::TStatus>(response);
                         actorSystem->Send(actorId, result.Release());
                     });
             }
@@ -651,15 +651,15 @@ namespace NKikimr::NHttpProxy {
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
             THttpRequestContext HttpContext;
-            THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
-            THolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
+            std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> Signature;
+            std::unique_ptr<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
             NThreading::TFuture<TProtoResponse> RpcFuture;
-            THolder<NThreading::TFuture<void>> DiscoveryFuture;
+            std::unique_ptr<NThreading::TFuture<void>> DiscoveryFuture;
             TProtoCall ProtoCall;
             TString Method;
             TRetryCounter RetryCounter;
 
-            THolder<TDataStreamsClient> Client;
+            std::unique_ptr<TDataStreamsClient> Client;
 
             TActorId AuthActor;
             bool InputCountersReported = false;

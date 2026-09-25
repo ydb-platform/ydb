@@ -35,7 +35,7 @@ ui32 GetSplitProtocolVersion(TTestActorRuntime& runtime) {
 
 void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t requiredPartitionCount = 10) {
     while (true) {
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
 
         WaitForSuppressed(runtime, suppressed, 1, prevObserver);
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::PartitionKeys({""})});
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::PartitionKeys({""})});
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
 
         TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 1000, prevObserver);
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 5*1000, prevObserver);
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         ui64 txId = 100;
 
-        TVector<THolder<IEventHandle>> suppressed;
+        TVector<std::unique_ptr<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -689,7 +689,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                 TControlBoard::SetValue(10, runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
             }
 
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
             {

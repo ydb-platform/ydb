@@ -238,7 +238,7 @@ private:
     std::unique_ptr<grpc::Server> GrpcServer;
     std::unique_ptr<NYdb::TDriver> Driver;
     std::unique_ptr<TFederatedTopicClient> TopicClient;
-    THolder<IThreadPool> ThreadPool;
+    std::unique_ptr<IThreadPool> ThreadPool;
 };
 
 Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {

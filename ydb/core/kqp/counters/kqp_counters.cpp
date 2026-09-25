@@ -1417,12 +1417,12 @@ TKqpDbCountersPtr TKqpCounters::GetDbCounters(const TString& database) {
     return DbCounters.InsertIfAbsentWithInit(database, [&database, this] {
         auto counters = MakeIntrusive<TKqpDbCounters>();
 
-        auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
+        auto evRegister = std::make_unique<NSysView::TEvSysView::TEvRegisterDbCounters>(
             NKikimrSysView::KQP, database, counters);
         ActorSystem->Send(NSysView::MakeSysViewServiceID(ActorSystem->NodeId), evRegister.Release());
 
         if (DbWatcherActorId) {
-            auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+            auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(database);
             ActorSystem->Send(DbWatcherActorId, evWatch.Release());
         }
         return counters;

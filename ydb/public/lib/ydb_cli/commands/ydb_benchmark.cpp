@@ -480,22 +480,22 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     ui32 queriesWithAllSuccess = 0;
     ui32 queriesWithSomeFails = 0;
     ui32 queriesWithDiff = 0;
-    THolder<TOFStream> miniStatReport;
+    std::unique_ptr<TOFStream> miniStatReport;
     if (MiniStatFileName) {
-        miniStatReport = MakeHolder<TOFStream>(MiniStatFileName);
+        miniStatReport = std::make_unique<TOFStream>(MiniStatFileName);
     }
     TTestInfo sumInfo({}, {});
     TTestInfoProduct productInfo;
     TPrettyTable statTable(ColumnNames);
     TStringStream report;
     report << "Results for " << IterationsCount << " iterations" << Endl;
-    THolder<NJson::TJsonValue> jsonReport;
+    std::unique_ptr<NJson::TJsonValue> jsonReport;
     if (JsonReportFileName) {
-        jsonReport = MakeHolder<NJson::TJsonValue>(NJson::JSON_ARRAY);
+        jsonReport = std::make_unique<NJson::TJsonValue>(NJson::JSON_ARRAY);
     }
-    THolder<TOFStream> csvReport;
+    std::unique_ptr<TOFStream> csvReport;
     if (CsvReportFileName) {
-        csvReport = MakeHolder<TOFStream>(CsvReportFileName);
+        csvReport = std::make_unique<TOFStream>(CsvReportFileName);
         *csvReport << JoinSeq(",", ColumnNames) << Endl;
     }
 
@@ -508,7 +508,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
-        THolder<IOutputStream> outFStreamHolder;
+        std::unique_ptr<IOutputStream> outFStreamHolder;
         IOutputStream& outFStream = [&]() -> IOutputStream& {
             if (TSet<TString>{"cout", "stdout", "console"}.contains(OutFilePath)) {
                 return Cout;
@@ -517,9 +517,9 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                 return Cerr;
             }
             if (TSet<TString>{"", "/dev/null", "null"}.contains(OutFilePath)) {
-                outFStreamHolder = MakeHolder<TNullOutput>();
+                outFStreamHolder = std::make_unique<TNullOutput>();
             } else {
-                outFStreamHolder = MakeHolder<TOFStream>(TStringBuilder() << OutFilePath << "." << queryName << ".out");
+                outFStreamHolder = std::make_unique<TOFStream>(TStringBuilder() << OutFilePath << "." << queryName << ".out");
             }
             return *outFStreamHolder;
         }();

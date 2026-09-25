@@ -169,7 +169,7 @@ public:
     void SetupTotalCounters();
     void ReportConsumedTotal(double consumed);
 
-    THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) override;
+    std::unique_ptr<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) override;
 
     void ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) override;
 
@@ -295,13 +295,13 @@ private:
     size_t ActiveChildrenCount = 0;
     size_t ActiveV1ChildrenCount = 0;
 
-    THolder<TRateAccounting> RateAccounting;
+    std::unique_ptr<TRateAccounting> RateAccounting;
     bool ActiveAccounting = false;
 };
 
-THolder<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) {
+std::unique_ptr<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) {
     Y_ABORT_UNLESS(resourceId != parentId);
-    return MakeHolder<THierarchicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props);
+    return std::make_unique<THierarchicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props);
 }
 
 // Session in case of hierarchical DRR algorithm.
@@ -1134,8 +1134,8 @@ void THierarchicalDRRQuoterResourceTree::ReportConsumed(double consumed, TTickPr
     }
 }
 
-THolder<TQuoterSession> THierarchicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {
-    return MakeHolder<THierarchicalDRRQuoterSession>(clientId, clientVersion, this);
+std::unique_ptr<TQuoterSession> THierarchicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {
+    return std::make_unique<THierarchicalDRRQuoterSession>(clientId, clientVersion, this);
 }
 
 void THierarchicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
@@ -1209,7 +1209,7 @@ TQuoterResourceTree* TQuoterResources::AddResource(ui64 resourceId, const NKikim
     resProps.SetResourceId(resourceId);
     resProps.SetResourcePath(canonPath);
     const ui64 parentId = parent ? parent->GetResourceId() : 0;
-    THolder<TQuoterResourceTree> resource = CreateResource(resourceId, parentId, Kesus, BillSink, resProps);
+    std::unique_ptr<TQuoterResourceTree> resource = CreateResource(resourceId, parentId, Kesus, BillSink, resProps);
     if (!resource->ValidateProps(resProps, errorMessage)) {
         return nullptr;
     }

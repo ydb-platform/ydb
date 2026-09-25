@@ -30,7 +30,7 @@ namespace NDq {
     public:
         virtual ~IS3ActorsFactory() = default;
         
-        virtual THolder<NActors::IActor> CreateS3ApplicatorActor(
+        virtual std::unique_ptr<NActors::IActor> CreateS3ApplicatorActor(
             NActors::TActorId parentId,
             IHTTPGateway::TPtr gateway,
             const TString& queryId,

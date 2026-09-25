@@ -2679,7 +2679,7 @@ private:
 
         if (!state.Request->Keys.empty()) {
             for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
-                THolder<TKeyDesc> desc;
+                std::unique_ptr<TKeyDesc> desc;
                 const auto& key = state.Request->Keys[i];
                 if (key.GetCells().size() != TableInfo.KeyColumnCount) {
                     // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
@@ -2689,7 +2689,7 @@ private:
                         key.GetCells(),
                         true);
 
-                    desc = MakeHolder<TKeyDesc>(
+                    desc = std::make_unique<TKeyDesc>(
                         tableId,
                         range,
                         TKeyDesc::ERowOperation::Read,
@@ -2699,7 +2699,7 @@ private:
                         state.Quota.Bytes,
                         state.Reverse);
                 } else {
-                    desc = MakeHolder<TKeyDesc>(
+                    desc = std::make_unique<TKeyDesc>(
                         tableId,
                         TTableRange(key.GetCells()),
                         TKeyDesc::ERowOperation::Read,
@@ -2721,7 +2721,7 @@ private:
             for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
                 TTableRange range = state.Request->Ranges[i].ToTableRange();
 
-                auto desc = MakeHolder<TKeyDesc>(
+                auto desc = std::make_unique<TKeyDesc>(
                     tableId,
                     range,
                     TKeyDesc::ERowOperation::Read,

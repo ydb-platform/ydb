@@ -37,8 +37,8 @@ namespace {
         std::atomic<ui64>* const Completed;
     };
 
-    THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+    std::unique_ptr<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool) {
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);

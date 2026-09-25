@@ -895,7 +895,7 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
 }
 
 void TBlobStorageController::IssueInitialGroupContent() {
-    auto ev = MakeHolder<TEvControllerNotifyGroupChange>();
+    auto ev = std::make_unique<TEvControllerNotifyGroupChange>();
     for (const auto& kv : GroupMap) {
         ev->Created.push_back(kv.first);
     }

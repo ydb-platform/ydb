@@ -73,7 +73,7 @@ private:
     size_t Index = 0;
 };
 
-THolder<TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> MakeProgram(
+std::unique_ptr<TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> MakeProgram(
     const TScheme::TPtr& scheme,
     const TString& lambda)
 {
@@ -130,7 +130,7 @@ $__ydb_transfer_lambda = ($x) -> {
 )");
     TTopicMessage topic = MakeRichMessage("hello", "k");
     TMessage input{.PartitionId = 5, .Message = topic};
-    auto stream = program->Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+    auto stream = program->Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
     auto* row = stream->Fetch();
     UNIT_ASSERT(row);
     UNIT_ASSERT(!row->Table || row->Table->empty());
@@ -148,7 +148,7 @@ $__ydb_transfer_lambda = ($x) -> {
     ];
 };
 )");
-    auto tsStream = tsProgram->Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+    auto tsStream = tsProgram->Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
     UNIT_ASSERT(tsStream->Fetch());
     UNIT_ASSERT(!tsStream->Fetch());
 }
@@ -169,7 +169,7 @@ $__ydb_transfer_lambda = ($x) -> {
 )");
     TTopicMessage topic = MakeRichMessage(TString(100, 'x'));
     TMessage input{.PartitionId = 1, .Message = topic};
-    auto stream = program->Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+    auto stream = program->Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
     auto* row = stream->Fetch();
     UNIT_ASSERT(row);
     UNIT_ASSERT(row->Table);
@@ -193,7 +193,7 @@ $__ydb_transfer_lambda = ($x) -> {
 )");
     TTopicMessage topic(0, "hello");
     TMessage input{.PartitionId = 0, .Message = topic};
-    auto stream = program->Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+    auto stream = program->Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
     UNIT_ASSERT_EXCEPTION_CONTAINS(stream->Fetch(), yexception, "must be non-NULL");
 }
 
@@ -212,7 +212,7 @@ $__ydb_transfer_lambda = ($x) -> {
 )");
     TTopicMessage topic(3, "payload");
     TMessage input{.PartitionId = 9, .Message = topic};
-    auto stream = program->Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+    auto stream = program->Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
     auto* row = stream->Fetch();
     UNIT_ASSERT(row);
     UNIT_ASSERT(!row->Table);
@@ -234,7 +234,7 @@ $__ydb_transfer_lambda = ($x) -> {
 )");
     TTopicMessage topic = MakeRichMessage("hello", "from-meta");
     TMessage input{.PartitionId = 0, .Message = topic};
-    auto stream = program->Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
+    auto stream = program->Apply(std::make_unique<TMessageVectorStream>(TVector<TMessage>{input}));
     auto* row = stream->Fetch();
     UNIT_ASSERT(row);
     UNIT_ASSERT(!stream->Fetch());

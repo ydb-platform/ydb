@@ -165,7 +165,7 @@ private:
 
     void CheckFinish(const NActors::TActorContext& ctx);
 
-    void PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx);
+    void PrepareRequest(std::unique_ptr<TEvWrite>&& ev, const TActorContext& ctx);
     void SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
     void SetupBytesWrittenByUserAgentCounter(const TString& topicPath);
@@ -223,7 +223,7 @@ private:
 
     TString OwnerCookie;
 
-    THolder<TAclWrapper> ACL;
+    std::unique_ptr<TAclWrapper> ACL;
 
     // Future batch request to partition actor
     std::deque<typename TWriteRequestInfo::TPtr> PendingRequests;

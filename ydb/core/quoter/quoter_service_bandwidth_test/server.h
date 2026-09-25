@@ -49,7 +49,7 @@ private:
     Tests::TServerSettings::TPtr ServerSettings;
 
     Tests::TServer::TPtr Server;
-    THolder <Tests::TClient> Client;
+    std::unique_ptr<Tests::TClient> Client;
     TActorId EdgeActor;
 };
 

@@ -773,7 +773,7 @@ size_t TFixture::GetPQCacheRenameKeysCount()
     auto& runtime = Setup->GetRuntime();
     NActors::TActorId edge = runtime.AllocateEdgeActor();
 
-    auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
+    auto request = std::make_unique<TEvPqCache::TEvCacheKeysRequest>();
 
     runtime.Send(MakePersQueueL2CacheID(), edge, request.Release());
 
@@ -1349,7 +1349,7 @@ void TFixture::PQTabletPrepareFromResource(const std::string& topicPath,
     NActors::TActorId edge = runtime.AllocateEdgeActor();
     std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
 
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     std::size_t count = 0;
 
     for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {

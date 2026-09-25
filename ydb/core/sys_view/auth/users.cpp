@@ -51,12 +51,12 @@ protected:
         bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
         IsAdmin = isClusterAdmin || isDatabaseAdmin;
 
-        auto request = MakeHolder<TEvSchemeShard::TEvListUsers>();
+        auto request = std::make_unique<TEvSchemeShard::TEvListUsers>();
         if (!IsAdmin) {
             if (UserToken && UserToken->GetUserSID()) {
                 request->Record.SetUser(UserToken->GetUserSID());
             } else { // non-admins users without sid can't read any data
-                auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
+                auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
                 FillBatch(*batch, NKikimrScheme::TEvListUsersResult());
                 TBase::SendBatch(std::move(batch));
                 return;
@@ -75,7 +75,7 @@ protected:
         YDB_LOG_TRACE_CTX(ctx, "TUsersScan::HandleListUsersResponse: received list users response",
             {"responseRecord", record.ShortUtf8DebugString()});
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
         FillBatch(*batch, record);
 
@@ -175,12 +175,12 @@ private:
     bool IsAdmin = false;
 };
 
-THolder<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TUsersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
+    return std::make_unique<TUsersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

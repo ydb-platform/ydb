@@ -55,14 +55,14 @@ class TKqpReadActor : public TActorBootstrapped<TKqpReadActor>, public NYql::NDq
 public:
     struct TResult {
         ui64 ShardId;
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+        std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
         TMaybe<NKikimr::NMiniKQL::TUnboxedValueVector> Batch;
         size_t ProcessedRows = 0;
         size_t PackedRows = 0;
         ui64 ReadId;
         ui64 SeqNo;
 
-        TResult(ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, ui64 readId, ui64 seqNo)
+        TResult(ui64 shardId, std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>> readResult, ui64 readId, ui64 seqNo)
             : ShardId(shardId)
             , ReadResult(std::move(readResult))
             , ReadId(readId)
@@ -438,7 +438,7 @@ public:
 
     void StartTableScan() {
         ScanStarted = true;
-        THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings->GetShardIdHint());
+        std::unique_ptr<TShardState> stateHolder = std::make_unique<TShardState>(Settings->GetShardIdHint());
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
@@ -500,11 +500,11 @@ public:
                 isFirst = false;
             }
             if (Settings->GetReverse()) {
-                auto state = THolder<TShardState>(PendingShards.PopBack());
+                auto state = std::unique_ptr<TShardState>(PendingShards.PopBack());
                 InFlightShards.PushBack(state.Get());
                 StartRead(state.Release());
             } else {
-                auto state = THolder<TShardState>(PendingShards.PopFront());
+                auto state = std::unique_ptr<TShardState>(PendingShards.PopFront());
                 InFlightShards.PushFront(state.Get());
                 StartRead(state.Release());
             }
@@ -546,7 +546,7 @@ public:
             columns.emplace_back(std::move(op));
         }
 
-        auto keyDesc = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
+        auto keyDesc = std::make_unique<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, columns);
 
         YDB_LOG_DEBUG("Sending TEvResolveKeySet to scheme cache",
@@ -555,7 +555,7 @@ public:
             {"range", DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)},
             {"resolveAttempt", state->ResolveAttempt});
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings->GetDatabase();
         request->ResultSet.emplace_back(std::move(keyDesc));
 
@@ -575,10 +575,10 @@ public:
             {"tablePath", Settings->GetTable().GetTablePath()});
 
         auto* request = ev->Get()->Request.Get();
-        THolder<TShardState> state;
+        std::unique_ptr<TShardState> state;
         if (!request->ResultSet.empty()) {
             if (auto ptr = ResolveShards[request->ResultSet[0].UserData]) {
-                state = THolder<TShardState>(ptr);
+                state = std::unique_ptr<TShardState>(ptr);
                 ResolveShards.erase(request->ResultSet[0].UserData);
             }
         }
@@ -656,7 +656,7 @@ public:
 
         const auto& tr = *AppData()->TypeRegistry;
 
-        TVector<THolder<TShardState>> newShards;
+        TVector<std::unique_ptr<TShardState>> newShards;
         newShards.reserve(keyDesc->GetPartitions().size());
 
         auto bounds = state->GetBounds(Settings->GetReverse());
@@ -690,7 +690,7 @@ public:
                 {"rangesCount", ranges.size()},
                 {"pointsCount", points.size()});
 
-            auto newShard = MakeHolder<TShardState>(partition.ShardId);
+            auto newShard = std::make_unique<TShardState>(partition.ShardId);
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
@@ -1019,7 +1019,7 @@ public:
         return TStringBuilder() << "first request = " << token.GetFirstUnprocessedQuery() << " lastkey = " << lastKey;
     }
 
-    void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
+    void ReportNullValue(const std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
         YDB_LOG_DEBUG("Read validation failed: NULL value in NOT NULL column",
             {"logPrefix", this->LogPrefix},
             {"seqNo", result->Get()->Record.GetSeqNo()},
@@ -1210,7 +1210,7 @@ public:
             {"cells", DebugPrintCells(&msg)},
             {"continuationToken", DebugPrintContinuationToken(record.GetContinuationToken())});
 
-        Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
+        Results.push({Reads[id].Shard->TabletId, std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
     }
 
@@ -1241,7 +1241,7 @@ public:
         if (Reads[id]) {
             Counters->SentIteratorCancels->Inc();
             auto* state = Reads[id].Shard;
-            auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+            auto cancel = std::make_unique<TEvDataShard::TEvReadCancel>();
             cancel->Record.SetReadId(id);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state->TabletId, false));
 

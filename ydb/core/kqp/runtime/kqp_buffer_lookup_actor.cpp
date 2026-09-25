@@ -105,7 +105,7 @@ public:
 
         for (const auto& [readId, state] : ReadIdToState) {
             Settings.Counters->SentIteratorCancels->Inc();
-            auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+            auto cancel = std::make_unique<TEvDataShard::TEvReadCancel>();
             cancel->Record.SetReadId(readId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
@@ -348,7 +348,7 @@ public:
         return CookieToLookupState.at(cookie).LookupColumnsCount;
     }
 
-    void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
+    void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, std::unique_ptr<TEvDataShard::TEvRead> request) {
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -595,7 +595,7 @@ public:
             AFL_ENSURE(!continuationToken.HasLastProcessedKey()); // can't read more than 1 row per range
 
             Settings.Counters->SentIteratorAcks->Inc();
-            THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
+            std::unique_ptr<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
             request->Record.SetSeqNo(record.GetSeqNo());
 
@@ -631,7 +631,7 @@ public:
         {
             const auto guard = Settings.TypeEnv.BindAllocator();
             lookupState.Worker->AddResult(TStreamLookupShardReadResult(
-                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
+                shardId, std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
             ));
         }
 
@@ -764,14 +764,14 @@ public:
 
         Partitioning.reset();
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings.Database;
 
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
 
-        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(Settings.TableId, range, TKeyDesc::ERowOperation::Read,
+        request->ResultSet.emplace_back(std::make_unique<TKeyDesc>(Settings.TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Settings.Counters->IteratorsShardResolve->Inc();

@@ -83,7 +83,7 @@ namespace NInterconnect {
 
     class TSecureSocketContext {
         class TImpl;
-        THolder<TImpl> Impl;
+        std::unique_ptr<TImpl> Impl;
 
         friend class TSecureSocket;
 
@@ -99,7 +99,7 @@ namespace NInterconnect {
         TSecureSocketContext::TPtr Context;
 
         class TImpl;
-        THolder<TImpl> Impl;
+        std::unique_ptr<TImpl> Impl;
 
     public:
         enum class EStatus {

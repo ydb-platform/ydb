@@ -84,7 +84,7 @@ class TPollerActorTest: public TTestBase {
 
 public:
     void SetUp() override {
-        ActorSystem_ = MakeHolder<TTestActorRuntimeBase>();
+        ActorSystem_ = std::make_unique<TTestActorRuntimeBase>();
         ActorSystem_->Initialize();
 
         PollerId_ = ActorSystem_->Register(CreatePollerActor());
@@ -257,7 +257,7 @@ private:
     }
 
 private:
-    THolder<TTestActorRuntimeBase> ActorSystem_;
+    std::unique_ptr<TTestActorRuntimeBase> ActorSystem_;
     TActorId PollerId_;
 };
 

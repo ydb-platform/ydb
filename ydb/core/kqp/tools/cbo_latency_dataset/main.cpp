@@ -313,7 +313,7 @@ void PrintUsage(IOutputStream& os) {
             NKikimrProto::TAuthConfig authConfig;
             authConfig.SetUseBuiltinDomain(true);
 
-            ServerSettings_ = MakeHolder<Tests::TServerSettings>(static_cast<ui16>(MbusPort_), authConfig);
+            ServerSettings_ = std::make_unique<Tests::TServerSettings>(static_cast<ui16>(MbusPort_), authConfig);
             ServerSettings_->SetDomainName(DomainRoot_);
             ServerSettings_->SetKqpSettings(kqpSettings);
             ServerSettings_->SetAppConfig(appConfig);
@@ -329,7 +329,7 @@ void PrintUsage(IOutputStream& os) {
             Server_->EnableGRpc(static_cast<ui16>(GrpcPort_));
             Server_->SetupDefaultProfiles();
 
-            Client_ = MakeHolder<Tests::TClient>(*ServerSettings_);
+            Client_ = std::make_unique<Tests::TClient>(*ServerSettings_);
             Client_->InitRootScheme(DomainRoot_);
 
             Endpoint_ = "localhost:" + ToString(static_cast<ui16>(GrpcPort_));
@@ -337,7 +337,7 @@ void PrintUsage(IOutputStream& os) {
                 .SetEndpoint(Endpoint_)
                 .SetDatabase("/" + DomainRoot_)
                 .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
-            Driver_ = MakeHolder<NYdb::TDriver>(DriverConfig_);
+            Driver_ = std::make_unique<NYdb::TDriver>(DriverConfig_);
         }
 
         ~TCboLocalKikimr() {
@@ -361,12 +361,12 @@ void PrintUsage(IOutputStream& os) {
 
         NTesting::TPortHolder MbusPort_;
         NTesting::TPortHolder GrpcPort_;
-        THolder<Tests::TServerSettings> ServerSettings_;
+        std::unique_ptr<Tests::TServerSettings> ServerSettings_;
         Tests::TServer::TPtr Server_;
-        THolder<Tests::TClient> Client_;
+        std::unique_ptr<Tests::TClient> Client_;
         TString Endpoint_;
         NYdb::TDriverConfig DriverConfig_;
-        THolder<NYdb::TDriver> Driver_;
+        std::unique_ptr<NYdb::TDriver> Driver_;
     };
 
     std::unique_ptr<TCboLocalKikimr> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {

@@ -377,7 +377,7 @@ public:
 
 private:
     void ResolveResourceDatabase() {
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
 
         auto& entry = navigate->ResultSet.emplace_back();

@@ -5837,7 +5837,7 @@ void CompactTableAndCheckResult(TTestActorRuntime& runtime, ui64 shardId, const 
 
 ui64 RunSchemeTx(
         TTestActorRuntimeBase& runtime,
-        THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& request,
         TActorId sender = {},
         bool viaActorSystem = false,
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus expectedStatus
@@ -5854,11 +5854,11 @@ ui64 RunSchemeTx(
     return ev->Get()->Record.GetTxId();
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
         NKikimrSchemeOp::EOperationType type,
         const TString& workingDir
 ) {
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
     auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -5872,7 +5872,7 @@ void WaitTxNotification(TServer::TPtr server, TActorId sender, ui64 txId) {
     auto& runtime = *server->GetRuntime();
     auto& settings = server->GetSettings();
 
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());

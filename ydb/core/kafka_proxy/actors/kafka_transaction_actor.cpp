@@ -384,8 +384,8 @@ namespace NKafka {
         return params.Build();
     }
 
-    THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> TTransactionActor::BuildAddKafkaOperationsRequest(const TString& kqpTransactionId) {
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+    std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> TTransactionActor::BuildAddKafkaOperationsRequest(const TString& kqpTransactionId) {
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
 
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);

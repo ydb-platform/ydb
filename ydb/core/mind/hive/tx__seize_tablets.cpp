@@ -7,11 +7,11 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxSeizeTablets : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvSeizeTablets::THandle> Request;
-    THolder<TEvHive::TEvSeizeTabletsReply> Response = MakeHolder<TEvHive::TEvSeizeTabletsReply>();
+    std::unique_ptr<TEvHive::TEvSeizeTablets::THandle> Request;
+    std::unique_ptr<TEvHive::TEvSeizeTabletsReply> Response = std::make_unique<TEvHive::TEvSeizeTabletsReply>();
 
 public:
-    TTxSeizeTablets(THolder<TEvHive::TEvSeizeTablets::THandle> event, THive *hive)
+    TTxSeizeTablets(std::unique_ptr<TEvHive::TEvSeizeTablets::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -174,7 +174,7 @@ public:
 };
 
 ITransaction* THive::CreateSeizeTablets(TEvHive::TEvSeizeTablets::TPtr event) {
-    return new TTxSeizeTablets(THolder(std::move(event.Release())), this);
+    return new TTxSeizeTablets(std::unique_ptr<TEvHive::TEvSeizeTablets::THandle>(event.Release()), this);
 }
 
 } // NHive

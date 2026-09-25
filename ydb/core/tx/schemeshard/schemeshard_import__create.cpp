@@ -227,7 +227,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             {"message", request.ShortDebugString()},
         );
 
-        auto response = MakeHolder<TEvImport::TEvCreateImportResponse>(request.GetTxId());
+        auto response = std::make_unique<TEvImport::TEvCreateImportResponse>(request.GetTxId());
 
         const ui64 id = request.GetTxId();
         if (Self->Imports.contains(id)) {
@@ -390,7 +390,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
 private:
     bool Reply(
-        THolder<TEvImport::TEvCreateImportResponse> response,
+        std::unique_ptr<TEvImport::TEvCreateImportResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString()
     ) {
@@ -697,7 +697,7 @@ private:
         Y_ABORT_UNLESS(path);
 
         // Only restore permissions, don't create the system view itself
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), Self->TabletID());
+        auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), Self->TabletID());
         auto& record = propose->Record;
 
         auto& modifyScheme = *record.AddTransaction();
@@ -756,7 +756,7 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
-        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), Self->TabletID());
+        auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), Self->TabletID());
         auto& record = propose->Record;
 
         auto& modifyScheme = *record.AddTransaction();

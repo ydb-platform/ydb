@@ -1946,7 +1946,7 @@ private:
     TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
+    const std::unique_ptr<TVisitorTransformerBase> DqTypeAnnTransformer;
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 

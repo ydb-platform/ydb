@@ -95,7 +95,7 @@ public:
             , Weights(weightCpu, weightBytes, weightMs, weightTasks)
             , Tasks(std::move(taskInfo)) {};
 
-    void AddChild(THolder<TPlanGraphEntry> &&child);
+    void AddChild(std::unique_ptr<TPlanGraphEntry> &&child);
 
 
     /// Builds svg for graph, starting from this node
@@ -146,7 +146,7 @@ public:
     TCombinedWeights Weights;
     TVector<TTaskInfo> Tasks;
 
-    TVector<THolder<TPlanGraphEntry>> Children;
+    TVector<std::unique_ptr<TPlanGraphEntry>> Children;
 };
 
 

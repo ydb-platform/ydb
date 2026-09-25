@@ -53,8 +53,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateYdbSourceCallableExecutionTransformer(TYdbState::TPtr state) {
-    return MakeHolder<TYdbDataSourceExecutionTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateYdbSourceCallableExecutionTransformer(TYdbState::TPtr state) {
+    return std::make_unique<TYdbDataSourceExecutionTransformer>(state);
 }
 
 } // namespace NYql

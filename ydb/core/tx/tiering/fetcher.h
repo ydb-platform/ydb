@@ -71,9 +71,9 @@ private:
     TActorId Owner;
 
 private:
-    THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
         const TVector<TVector<TString>>& paths, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = AppDataVerified().TenantName;
         if (userToken && !userToken->GetSerializedToken().empty()) {
             request->UserToken = userToken;

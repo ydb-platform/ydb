@@ -346,7 +346,7 @@ private:
 
             SysViewScanActor = ctx.Register(tableScanActor.Release());
 
-            auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
+            auto ackEv = std::make_unique<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
             ctx.Send(SysViewScanActor, ackEv.Release());
         }
 
@@ -439,7 +439,7 @@ private:
             }
         }
 
-        auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
+        auto ackEv = std::make_unique<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
         ctx.Send(ev->Sender, ackEv.Release());
 
         bool done =

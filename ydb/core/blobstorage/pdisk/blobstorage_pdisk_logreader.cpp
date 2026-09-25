@@ -279,15 +279,15 @@ struct TLogReader::TSectorData {
 class TLogReader::TDoubleBuffer {
     const ui64 PDiskSectorSize;
     const ui32 BufferSizeSectors;
-    THolder<TSectorData> SectorA;
-    THolder<TSectorData> SectorB;
+    std::unique_ptr<TSectorData> SectorA;
+    std::unique_ptr<TSectorData> SectorB;
 
 public:
     TDoubleBuffer(TPDisk *pdisk, ui32 bufferSizeSectors)
         : PDiskSectorSize(pdisk->Format.SectorSize)
         , BufferSizeSectors(bufferSizeSectors)
-        , SectorA(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
-        , SectorB(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
+        , SectorA(std::make_unique<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
+        , SectorB(std::make_unique<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
     {}
 
     ui64 BufferIdxFromOffset(ui64 innerOffset) const {

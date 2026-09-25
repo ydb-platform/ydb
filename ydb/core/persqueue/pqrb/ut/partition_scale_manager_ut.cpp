@@ -232,7 +232,7 @@ void SendScale(
     TMaybe<TString> boundary = TString("m"),
     TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants = Nothing()
 ) {
-    auto ev = MakeHolder<TEvScaleStatus>();
+    auto ev = std::make_unique<TEvScaleStatus>();
     ev->PartitionId = partitionId;
     ev->Status = status;
     ev->SplitBoundary = std::move(boundary);
@@ -543,13 +543,13 @@ Y_UNIT_TEST(ReorderPrefersSmallerPrescribedChildren) {
     early.AddChildPartitionIds(5);
     early.AddChildPartitionIds(6);
 
-    auto first = MakeHolder<TEvScaleStatus>();
+    auto first = std::make_unique<TEvScaleStatus>();
     first->PartitionId = 0;
     first->SplitBoundary = TString("m");
     first->Participants = late;
     tc.Runtime->Send(new IEventHandle(host, tc.Edge, first.Release()));
 
-    auto second = MakeHolder<TEvScaleStatus>();
+    auto second = std::make_unique<TEvScaleStatus>();
     second->PartitionId = 1;
     second->SplitBoundary = TString("n");
     second->Participants = early;
@@ -701,7 +701,7 @@ Y_UNIT_TEST(UpdateConfigClearsMirrorInfoWhenMirroringDisabled) {
     ));
     Y_UNUSED(tc.Runtime->GrabEdgeEvent<TEvMirrorHandled>(TDuration::Seconds(10)));
 
-    auto ev = MakeHolder<TEvUpdateConfig>();
+    auto ev = std::make_unique<TEvUpdateConfig>();
     ev->Config = MakeScaleConfig(10, 1, false);
     tc.Runtime->Send(new IEventHandle(host, tc.Edge, ev.Release()));
     DispatchFor(tc);

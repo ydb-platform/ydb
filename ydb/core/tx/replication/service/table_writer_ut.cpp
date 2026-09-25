@@ -61,11 +61,11 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(1, R"({"tableChanges":[{"table":{"schemaVersion":2,"columns":{"key":{"type":"Uint32"},"value":{"type":"Utf8"}},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"),
         }));
 
-        auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto release = std::make_unique<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schemaChange->Get()->Schema);
         env.Send<TEvWorker::TEvSchemaChangeApplied>(writer, release.Release());
 
-        auto duplicate = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        auto duplicate = std::make_unique<TEvService::TEvSchemaChangeResult>();
         duplicate->Record.MutableSchema()->CopyFrom(schemaChange->Get()->Schema);
         env.GetRuntime().Send(writer, env.GetSender(), duplicate.Release());
 
@@ -205,8 +205,8 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         }));
     }
 
-    THolder<TEvService::TEvTxIdResult> MakeTxIdResult(const TMap<TRowVersion, ui64>& result) {
-        auto ev = MakeHolder<TEvService::TEvTxIdResult>();
+    std::unique_ptr<TEvService::TEvTxIdResult> MakeTxIdResult(const TMap<TRowVersion, ui64>& result) {
+        auto ev = std::make_unique<TEvService::TEvTxIdResult>();
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();

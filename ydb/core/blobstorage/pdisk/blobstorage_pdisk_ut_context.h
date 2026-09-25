@@ -12,7 +12,7 @@ class TTestContext {
 public:
     ui64 PDiskGuid = 0;
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
-    THolder<TTempDir> TempDir;
+    std::unique_ptr<TTempDir> TempDir;
     TString Path;
 
     using EDiskMode = NPDisk::NSectorMap::EDiskMode;

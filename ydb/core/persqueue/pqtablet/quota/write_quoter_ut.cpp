@@ -50,7 +50,7 @@ void RequestQuota(auto& runtime, auto& quoterId, auto& edgeActorId) {
         new TEvPQ::TEvRequestQuota(1, new IEventHandle(quoterId, edgeActorId, writeRequest)));
 }
 
-THolder<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
+std::unique_ptr<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
     auto event = runtime.GrabEdgeEvent<TEvPQ::TEvApproveWriteQuota>(timeout);
     UNIT_ASSERT(event);
     return std::move(event);

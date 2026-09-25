@@ -10,13 +10,13 @@
 
 namespace NYql {
 
-    THolder<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state);
-    THolder<TVisitorTransformerBase> CreateGenericDataSourceTypeAnnotationTransformer(TGenericState::TPtr state);
-    THolder<TVisitorTransformerBase> CreateGenericDataSinkTypeAnnotationTransformer(TGenericState::TPtr state);
+    std::unique_ptr<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state);
+    std::unique_ptr<TVisitorTransformerBase> CreateGenericDataSourceTypeAnnotationTransformer(TGenericState::TPtr state);
+    std::unique_ptr<TVisitorTransformerBase> CreateGenericDataSinkTypeAnnotationTransformer(TGenericState::TPtr state);
 
-    THolder<TExecTransformerBase> CreateGenericDataSinkExecTransformer(TGenericState::TPtr state);
+    std::unique_ptr<TExecTransformerBase> CreateGenericDataSinkExecTransformer(TGenericState::TPtr state);
 
-    THolder<IGraphTransformer> CreateGenericLogicalOptProposalTransformer(TGenericState::TPtr state);
-    THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state);
+    std::unique_ptr<IGraphTransformer> CreateGenericLogicalOptProposalTransformer(TGenericState::TPtr state);
+    std::unique_ptr<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state);
 
 } // namespace NYql

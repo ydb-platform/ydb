@@ -66,7 +66,7 @@ public:
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
-            auto ev = MakeHolder<NReplication::TEvController::TEvDropReplication>();
+            auto ev = std::make_unique<NReplication::TEvController::TEvDropReplication>();
             pathId.ToProto(ev->Record.MutablePathId());
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
@@ -241,13 +241,13 @@ class TDropReplication: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
+            return std::make_unique<TDropParts>(OperationId);
         case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
+            return std::make_unique<TDeleteParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -269,7 +269,7 @@ public:
     }
 
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetDrop();
         const auto& name = op.GetName();
@@ -278,7 +278,7 @@ public:
             {"path", JoinPath({workingDir, name})},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
         const auto path = op.HasId()
             ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)

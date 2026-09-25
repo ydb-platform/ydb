@@ -27,7 +27,7 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTrans
     return checks;
 }
 
-inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
+inline bool IsParentPathValid(const std::unique_ptr<TProposeResponse>& result,
                               const TPath& parentPath,
                               const TTxTransaction& tx,
                               const bool isCreate) {

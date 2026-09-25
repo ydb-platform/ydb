@@ -100,7 +100,7 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     return result;
 }
 
-THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
+std::unique_ptr<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
     return NYql::NDq::TEvDq::TEvAbortExecution::Build(
             NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
             TStringBuilder() << "Channel: " << info.ChannelId
@@ -110,7 +110,7 @@ THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullI
         );
 }
 
-THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelFullInfo& info, const TString& message) {
+std::unique_ptr<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelFullInfo& info, const TString& message) {
     return NYql::NDq::TEvDq::TEvAbortExecution::Build(
             NYql::NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder() << "Channel: " << info.ChannelId
@@ -1193,7 +1193,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
 
 void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     Y_ENSURE(InputNodeActorId);
-    auto ev = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
+    auto ev = std::make_unique<TEvDqCompute::TEvChannelDataV2>();
 
     ev->Record.SetGenMajor(GenMajor);
     ev->Record.SetGenMinor(GenMinor);
@@ -1242,7 +1242,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     } else {
         if (auto failCount = FailureDoubleSend.load(); failCount > 0) {
             FailureDoubleSend.store(failCount - 1);
-            auto ev2 = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
+            auto ev2 = std::make_unique<TEvDqCompute::TEvChannelDataV2>();
             ev2->Record = ev->Record;
             ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(), flags, item->SeqNo));
         }
@@ -1326,7 +1326,7 @@ void TNodeState::FailOutputs(const TString& reason) {
     OutputDescriptors.clear();
 }
 
-void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
+void TNodeState::SendAck(std::unique_ptr<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
@@ -1336,7 +1336,7 @@ void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 coo
 }
 
 void TNodeState::SendAckWithError(ui64 cookie, const TString& message) {
-    auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+    auto evAck = std::make_unique<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
     evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
@@ -1445,7 +1445,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         UpdateProgress(descriptor);
     }
 
-    auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+    auto evAck = std::make_unique<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
     evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
@@ -1544,7 +1544,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
     std::lock_guard lock(Mutex);
     ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor());
 
-    auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+    auto evAck = std::make_unique<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
     evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
@@ -1597,7 +1597,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         if (!ResendAsked.exchange(true)) {
             LOG_W(LogPrefix << "DATA/RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo);
 
-            auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+            auto evAck = std::make_unique<TEvDqCompute::TEvChannelAckV2>();
 
             evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
             evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
@@ -1967,7 +1967,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         (*InputBufferPressureReports)++;
     }
 
-    auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
+    auto evUpdate = std::make_unique<TEvDqCompute::TEvChannelUpdateV2>();
 
     evUpdate->Record.SetGenMajor(OutputNodeGenMajor.load());
     evUpdate->Record.SetGenMinor(OutputNodeGenMinor.load());
@@ -2309,7 +2309,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
 }
 
 void TNodeState::SendDiscovery() {
-    auto evDiscovery = MakeHolder<TEvDqCompute::TEvChannelDiscoveryV2>();
+    auto evDiscovery = std::make_unique<TEvDqCompute::TEvChannelDiscoveryV2>();
 
     evDiscovery->Record.SetGenMajor(GenMajor);
     evDiscovery->Record.SetGenMinor(GenMinor);
@@ -2371,7 +2371,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     descriptor->PopStats.Bytes += record.GetBytes();
 
-    auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+    auto evAck = std::make_unique<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
     evAck->Record.SetGenMinor(OutputNodeGenMinor.load());

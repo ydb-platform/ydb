@@ -35,7 +35,7 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
 }
 
 struct TDatabaseInfo {
-    THolder<TSchemeBoardEvents::TEvNotifyUpdate> SchemeBoardResult;
+    std::unique_ptr<TSchemeBoardEvents::TEvNotifyUpdate> SchemeBoardResult;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
     bool IsDatabaseReady() const {
@@ -415,7 +415,7 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
         event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
     YDB_LOG_INFO_CTX(*TlsActivationContext, "Updated app config");
 
-    auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+    auto responseEv = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
     Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 }
 

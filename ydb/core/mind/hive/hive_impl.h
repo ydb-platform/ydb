@@ -306,7 +306,7 @@ protected:
     ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKikimrHive::ELockLostReason reason);
     ITransaction* CreateRequestTabletSequence(TEvHive::TEvRequestTabletIdSequence::TPtr event);
     ITransaction* CreateResponseTabletSequence(TEvHive::TEvResponseTabletIdSequence::TPtr event);
-    ITransaction* CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event);
+    ITransaction* CreateDisconnectNode(std::unique_ptr<TEvInterconnect::TEvNodeDisconnected> event);
     ITransaction* CreateProcessPendingOperations();
     ITransaction* CreateProcessBootQueue();
     ITransaction* CreateSeizeTablets(TEvHive::TEvSeizeTablets::TPtr event);
@@ -345,7 +345,7 @@ protected:
     TSubDomainKey PrimaryDomainKey;
     TString RootDomainName;
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
-    THolder<NTabletPipe::IClientCache> PipeClientCache;
+    std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
@@ -467,7 +467,7 @@ protected:
     };
 
     std::unordered_map<std::pair<ui64, ui64>, TPendingCreateTablet> PendingCreateTablets;
-    std::deque<THolder<IEventHandle>> PendingOperations;
+    std::deque<std::unique_ptr<IEventHandle>> PendingOperations;
 
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
@@ -768,7 +768,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void RemoveFromPingInProgress(TNodeId node);
     void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);
-    static THolder<TGroupFilter> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
+    static std::unique_ptr<TGroupFilter> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
     void KickTablet(const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
@@ -1098,7 +1098,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     static bool IsSystemTablet(TTabletTypes::EType type);
 
 protected:
-    void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
+    void ScheduleDisconnectNode(std::unique_ptr<TEvPrivate::TEvProcessDisconnectNode> event);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects);
     TInstant GetAllowedBootingTime();

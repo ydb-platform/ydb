@@ -132,7 +132,7 @@ struct TEvPqCache {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_L2_CACHE), "Unexpected TEvPqL2Cache event range");
 
     struct TEvCacheL2Request : public TEventLocal<TEvCacheL2Request, EvCacheRequest> {
-        THolder<TCacheL2Request> Data;
+        std::unique_ptr<TCacheL2Request> Data;
 
         explicit TEvCacheL2Request(TAutoPtr<TCacheL2Request> data)
             : Data(data)
@@ -140,7 +140,7 @@ struct TEvPqCache {
     };
 
     struct TEvCacheL2Response : public TEventLocal<TEvCacheL2Response, EvCacheResponse> {
-        THolder<TCacheL2Response> Data;
+        std::unique_ptr<TCacheL2Response> Data;
 
         TEvCacheL2Response(TAutoPtr<TCacheL2Response> data)
             : Data(data)

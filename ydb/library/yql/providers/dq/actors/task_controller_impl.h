@@ -133,12 +133,12 @@ public:
 
 private:
     void SendNonFatalIssues() {
-        auto req = MakeHolder<TEvDqStats>(Issues.ToIssues());
+        auto req = std::make_unique<TEvDqStats>(Issues.ToIssues());
         Send(ExecuterId, req.Release());
     }
 
     void SendNonFinalStat() {
-        auto ev = MakeHolder<TEvDqStats>();
+        auto ev = std::make_unique<TEvDqStats>();
         FinalStat().CopyCounters(ev->Record);
         Send(ExecuterId, ev.Release());
     }
@@ -560,7 +560,7 @@ private:
 
         YQL_CLOG(DEBUG, ProviderDq) << "Update channels";
         for (const auto& [task, actorId] : Tasks) {
-            auto ev = MakeHolder<NDq::TEvDqCompute::TEvChannelsInfo>();
+            auto ev = std::make_unique<NDq::TEvDqCompute::TEvChannelsInfo>();
 
             for (const auto& input : task.GetInputs()) {
                 for (const auto& channel : input.GetChannels()) {
@@ -600,7 +600,7 @@ public:
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(WARN, ProviderDq) << "OnError IGNORED when Finished";
         } else {
-            auto req = MakeHolder<TEvDqFailure>(statusCode, issues);
+            auto req = std::make_unique<TEvDqFailure>(statusCode, issues);
             FinalStat().FlushCounters(req->Record);
             Send(ExecuterId, req.Release());
             Finished = true;

@@ -1048,7 +1048,7 @@ private:
                     return lambdaResult;
                 }
 
-                auto executionPlanner = THolder<IDqsExecutionPlanner>(
+                auto executionPlanner = std::unique_ptr<IDqsExecutionPlanner>(
                     new TDqsSingleExecutionPlanner(
                         lambda, NActors::TActorId(),
                         NActors::TActorId(1, 0, 1, 0),
@@ -1410,7 +1410,7 @@ private:
 
         auto settings = std::make_shared<TDqSettings>(*State->Settings);
 
-        auto executionPlanner = MakeHolder<TDqsExecutionPlanner>(
+        auto executionPlanner = std::make_unique<TDqsExecutionPlanner>(
             settings, State->TypeCtx, ctx, State->FunctionRegistry,
             optimizedInput);
 
@@ -1861,7 +1861,7 @@ private:
     }
 
     static void CompleteNode(const TExecPrecomputeStatePtr& execState, TExprNode* node, const TAsyncTransformCallback& callback) {
-        auto item = MakeHolder<TExecPrecomputeState::TItem>();
+        auto item = std::make_unique<TExecPrecomputeState::TItem>();
         item->Node = node;
         item->Callback = callback;
 
@@ -1973,7 +1973,7 @@ private:
 
             auto settings = std::make_shared<TDqSettings>(*commonSettings);
 
-            auto executionPlanner = MakeHolder<TDqsExecutionPlanner>(
+            auto executionPlanner = std::make_unique<TDqsExecutionPlanner>(
                 settings, State->TypeCtx, ctx, State->FunctionRegistry,
                 optimizedInput);
 

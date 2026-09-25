@@ -856,7 +856,7 @@ TResourceBroker::TOpError TResourceBroker::SubmitTask(const TEvResourceBroker::T
         }
     }
 
-    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+    auto error = std::make_unique<TEvResourceBroker::TEvTaskOperationError>();
     error->TaskId = ev.Task.TaskId;
     error->Status.Code = TEvResourceBroker::TStatus::ALREADY_EXISTS;
     error->Status.Message = "task with the same ID has been already submitted";
@@ -902,7 +902,7 @@ TResourceBroker::TOpError TResourceBroker::UpdateTask(const TEvResourceBroker::T
         }
     }
 
-    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+    auto error = std::make_unique<TEvResourceBroker::TEvTaskOperationError>();
     error->TaskId = ev.TaskId;
     error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
     error->Status.Message = "cannot update unknown task";
@@ -991,7 +991,7 @@ TResourceBroker::TOpError TResourceBroker::UpdateTaskCookie(const TEvResourceBro
         }
     }
 
-    auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+    auto error = std::make_unique<TEvResourceBroker::TEvTaskOperationError>();
     error->TaskId = ev.TaskId;
     error->Status.Code = TEvResourceBroker::TStatus::UNKNOWN_TASK;
     error->Status.Message = "cannot update unknown task's cookie";
@@ -1009,7 +1009,7 @@ TResourceBroker::TOpError TResourceBroker::RemoveTask(const TEvResourceBroker::T
 
         if (result.Success) {
             if (ev.ReplyOnSuccess) {
-                auto resp = MakeHolder<TEvResourceBroker::TEvTaskRemoved>();
+                auto resp = std::make_unique<TEvResourceBroker::TEvTaskRemoved>();
                 resp->TaskId = result.Task->TaskId;
                 resp->Cookie = result.Task->Cookie;
 
@@ -1023,7 +1023,7 @@ TResourceBroker::TOpError TResourceBroker::RemoveTask(const TEvResourceBroker::T
             return {};
         }
 
-        auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+        auto error = std::make_unique<TEvResourceBroker::TEvTaskOperationError>();
         error->TaskId = ev.TaskId;
 
         if (result.Task) {
@@ -1056,7 +1056,7 @@ TResourceBroker::TOpError TResourceBroker::FinishTask(const TEvResourceBroker::T
             return {};
         }
 
-        auto error = MakeHolder<TEvResourceBroker::TEvTaskOperationError>();
+        auto error = std::make_unique<TEvResourceBroker::TEvTaskOperationError>();
         error->TaskId = ev.TaskId;
 
         if (result.Task) {
@@ -1257,7 +1257,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
             continue;
 
         for(const TActorId& subscriber: it->second) {
-            auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+            auto resp = std::make_unique<TEvResourceBroker::TEvConfigResponse>();
             resp->QueueConfig = queue;
             ctx.Send(subscriber, resp.Release());
         }
@@ -1274,7 +1274,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev,
     }
 
     auto config = ResourceBroker->GetConfig();
-    auto resp = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+    auto resp = std::make_unique<TEvResourceBroker::TEvConfigResponse>();
     for (auto& queue : config.GetQueues()) {
         if (queue.GetName() == ev->Get()->Queue) {
             resp->QueueConfig = queue;
@@ -1286,7 +1286,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigRequest::TPtr& ev,
 
 void TResourceBrokerActor::Handle(TEvResourceBroker::TEvResourceBrokerRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto resp = MakeHolder<TEvResourceBroker::TEvResourceBrokerResponse>();
+    auto resp = std::make_unique<TEvResourceBroker::TEvResourceBrokerResponse>();
     resp->ResourceBroker = ResourceBroker;
 
     ctx.Send(ev->Sender, resp.Release());

@@ -113,7 +113,7 @@ namespace NSchemeShardUT_Private {
         TActorId TxReliablePropose;
         ui32 ChannelsCount;
         TActorId MeteringFake;
-        THolder<NYdb::TDriver> YdbDriver;
+        std::unique_ptr<NYdb::TDriver> YdbDriver;
 
         TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
         bool SysViewsRosterUpdateFinished;
@@ -201,9 +201,9 @@ namespace NSchemeShardUT_Private {
     public:
         TVector<ui64> TabletIds;
         TSet<ui32> NoRebootEventTypes;
-        THolder<TTestActorRuntime> Runtime;
+        std::unique_ptr<TTestActorRuntime> Runtime;
         TTestEnvOptions EnvOpts;
-        THolder<TTestEnv> TestEnv;
+        std::unique_ptr<TTestEnv> TestEnv;
         TTestEnv::TSchemeShardFactory SchemeShardFactory;
         ui64 TxId;
         const ui64 HiveTabletId;

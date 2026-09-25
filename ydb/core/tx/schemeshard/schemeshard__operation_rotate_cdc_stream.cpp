@@ -105,9 +105,9 @@ private:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -116,7 +116,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& oldStreamName = op.GetOldStreamName();
@@ -130,7 +130,7 @@ public:
             {"newStream", workingDir + "/" + newStreamName},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         if (op.GetTableName() != newStreamOp.GetTableName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "New stream should be created on the same table");
@@ -493,13 +493,13 @@ private:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigurePartsAtTable>(OperationId);
+            return std::make_unique<TConfigurePartsAtTable>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
+            return std::make_unique<NCdcStreamState::TProposeAtTable>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -516,7 +516,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRotateCdcStream();
         const auto& tableName = op.GetTableName();
@@ -528,7 +528,7 @@ public:
             {"newStream", workingDir + "/" + tableName + "/" + newStreamName},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         if (op.GetTableName() != op.GetNewStream().GetTableName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "New stream should be created on the same table");

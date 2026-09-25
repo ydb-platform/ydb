@@ -12,7 +12,7 @@
 namespace NKikimr {
 
 class TTrimTest : public TPerfTest {
-    THolder<TFileHandle> File;
+    std::unique_ptr<TFileHandle> File;
     ui64 Size;
     const double DurationSec;
     NPDisk::TAlignedData Buffer;

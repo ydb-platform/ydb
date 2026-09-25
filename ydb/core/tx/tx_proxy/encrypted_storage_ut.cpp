@@ -31,8 +31,8 @@ public:
 
         Server = new Tests::TServer(Settings);
 
-        Client = MakeHolder<Tests::TClient>(GetSettings());
-        Tenants = MakeHolder<Tests::TTenants>(Server);
+        Client = std::make_unique<Tests::TClient>(GetSettings());
+        Tenants = std::make_unique<Tests::TTenants>(Server);
 
         SetLogging();
         InitRoot();

@@ -134,9 +134,9 @@ struct TSharedPageCacheMock {
         Sender2 = Runtime.Register(new TExecutorMock(Results));
         BlockIoSender = Runtime.AllocateEdgeActor();
 
-        Fetches = MakeHolder<TBlockEvents<NBlockIO::TEvFetch>>(Runtime);
+        Fetches = std::make_unique<TBlockEvents<NBlockIO::TEvFetch>>(Runtime);
 
-        Counters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(Runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+        Counters = std::make_unique<TSharedPageCacheCounters>(GetServiceCounters(Runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
     }
 
     TSharedPageCacheMock& Wakeup() {
@@ -160,7 +160,7 @@ struct TSharedPageCacheMock {
     }
 
     TSharedPageCacheMock& UpdateConfig(const NKikimrConfig::TAppConfig& appConfig) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         request->Record.MutableConfig()->CopyFrom(appConfig);
         Send(Sender1, request.Release());
 
@@ -310,9 +310,9 @@ struct TSharedPageCacheMock {
     TTestActorRuntime Runtime;
     TActorId ActorId;
     ui64 RequestId = 0;
-    THolder<TSharedPageCacheCounters> Counters;
+    std::unique_ptr<TSharedPageCacheCounters> Counters;
 
-    THolder<TBlockEvents<NBlockIO::TEvFetch>> Fetches;
+    std::unique_ptr<TBlockEvents<NBlockIO::TEvFetch>> Fetches;
     std::deque<NSharedCache::TEvResult::TPtr> Results;
 
     TActorId Sender1;

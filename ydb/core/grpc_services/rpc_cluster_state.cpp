@@ -374,7 +374,7 @@ public:
     }
 
     void RequestHealthCheck() {
-        THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
+        std::unique_ptr<NHealthCheck::TEvSelfCheckRequest> request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         Send(NHealthCheck::MakeHealthCheckID(), request.Release());
         ++Requested;
     }

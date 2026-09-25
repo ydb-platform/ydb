@@ -15,7 +15,7 @@ class TAssignBlockStoreVolume: public TSubOperationBase {
     public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetAssignBlockStoreVolume().GetName();
         const TString mountToken = Transaction.GetAssignBlockStoreVolume().GetNewMountToken();
@@ -25,7 +25,7 @@ class TAssignBlockStoreVolume: public TSubOperationBase {
             {"path", TStringBuilder() << parentPathStr << "/" << name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
 

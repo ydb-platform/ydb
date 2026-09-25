@@ -78,8 +78,8 @@ namespace NYql {
 
     } // namespace
 
-    THolder<IGraphTransformer> CreateGenericLogicalOptProposalTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericLogicalOptProposalTransformer>(state);
+    std::unique_ptr<IGraphTransformer> CreateGenericLogicalOptProposalTransformer(TGenericState::TPtr state) {
+        return std::make_unique<TGenericLogicalOptProposalTransformer>(state);
     }
 
 } // namespace NYql

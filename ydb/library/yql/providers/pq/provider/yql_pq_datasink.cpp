@@ -218,11 +218,11 @@ public:
 private:
     TPqState::TPtr State_;
     IPqGateway::TPtr Gateway_;
-    THolder<IGraphTransformer> IODiscoveryTransformer_;
-    THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    THolder<TExecTransformerBase> ExecutionTransformer_;
-    THolder<IGraphTransformer> LogicalOptProposalTransformer_;
-    THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+    std::unique_ptr<IGraphTransformer> IODiscoveryTransformer_;
+    std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    std::unique_ptr<TExecTransformerBase> ExecutionTransformer_;
+    std::unique_ptr<IGraphTransformer> LogicalOptProposalTransformer_;
+    std::unique_ptr<IGraphTransformer> PhysicalOptProposalTransformer_;
 };
 
 } // anonymous namespace

@@ -69,7 +69,7 @@ void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {
 
 }
 
-THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {
+std::unique_ptr<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {
     TActorId actorId;
     if (GetTabletActor() && GetAccountQuotingEnabled(AppData()->PQConfig)) {
         actorId = TActivationContext::RegisterWithSameMailbox(
@@ -86,7 +86,7 @@ THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker() const {
         );
     }
     if (actorId) {
-        return MakeHolder<TAccountQuoterHolder>(actorId, Counters);
+        return std::make_unique<TAccountQuoterHolder>(actorId, Counters);
     } else {
         return nullptr;
     }
@@ -115,7 +115,7 @@ IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
     return new TEvPQ::TEvApproveWriteQuota(context.Request->Cookie, context.AccountQuotaWaitTime, ActorContext().Now() - context.PartitionQuotaWaitStart);
 };
 
-TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>&) {
+TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const std::unique_ptr<TEvPQ::TEvRequestQuota>&) {
     if (!GetAccountQuotingEnabled(AppData()->PQConfig) && !QuotingEnabled) {
         return nullptr;
     }

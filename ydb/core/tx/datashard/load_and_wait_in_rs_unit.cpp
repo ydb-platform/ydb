@@ -79,10 +79,10 @@ void TLoadAndWaitInRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard,
                                                   TPipeline &pipeline)
 {
-    return THolder(new TLoadAndWaitInRSUnit(dataShard, pipeline));
+    return std::unique_ptr<TLoadAndWaitInRSUnit>(new TLoadAndWaitInRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

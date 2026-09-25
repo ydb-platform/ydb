@@ -1001,7 +1001,7 @@ namespace NKikimr {
                 lsnBatch.First++;
                 auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie,
                     (itemIdx ? NLWTrace::TOrbit{} : std::move(orbit)), record.GetHandleClass(), info, std::move(result));
-                evLogs->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()), std::move(traceId));
+                evLogs->AddLog(std::unique_ptr<NPDisk::TEvLog>(logMsg.release()), std::move(traceId));
             }
 
             // Manage PDisk scheduler weights
@@ -1564,8 +1564,8 @@ namespace NKikimr {
             // send prepared message to recovery log
             if (versionLogMsg) {
                 auto multiLog = std::make_unique<NPDisk::TEvMultiLog>();
-                multiLog->AddLog(THolder<NPDisk::TEvLog>(versionLogMsg.release()));
-                multiLog->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()), std::move(ev->TraceId));
+                multiLog->AddLog(std::unique_ptr<NPDisk::TEvLog>(versionLogMsg.release()));
+                multiLog->AddLog(std::unique_ptr<NPDisk::TEvLog>(logMsg.release()), std::move(ev->TraceId));
                 ctx.Send(Db->LoggerID, multiLog.release());
             } else {
                 ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(ev->TraceId));

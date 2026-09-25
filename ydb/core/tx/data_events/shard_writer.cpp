@@ -88,7 +88,7 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
     }
 
     void TShardWriter::SendWriteRequest() {
-        auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        auto ev = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         if (UserCtx != nullptr) {
             UserCtx->SerializeToEvent(ev->Record);
         }
@@ -231,7 +231,7 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
         ReportWriteOutcomeToFlowControl();
 
         if (RetryBySubscription && LastOverloadSeqNo) {
-            SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
+            SendToTablet(std::make_unique<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
             LastOverloadSeqNo = 0;
         }
 

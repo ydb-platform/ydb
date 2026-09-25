@@ -24,8 +24,8 @@ TEventHolderPool Setup(T&& callback) {
 Y_UNIT_TEST_SUITE(EventHolderPool) {
 
     Y_UNIT_TEST(Overflow) {
-        TDeque<THolder<IEventBase>> freeQ;
-        auto callback = [&](THolder<IEventBase> event) {
+        TDeque<std::unique_ptr<IEventBase>> freeQ;
+        auto callback = [&](std::unique_ptr<IEventBase> event) {
             freeQ.push_back(std::move(event));
         };
         auto pool = Setup(std::move(callback));
@@ -82,8 +82,8 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
     };
 
     void MemComsumption(size_t repeats, size_t buffSize) {
-        TDeque<THolder<IEventBase>> freeQ;
-        auto callback = [&](THolder<IEventBase> event) {
+        TDeque<std::unique_ptr<IEventBase>> freeQ;
+        auto callback = [&](std::unique_ptr<IEventBase> event) {
             freeQ.push_back(std::move(event));
         };
         auto pool = Setup(std::move(callback));
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         for (ui32 i = 0; i < repeats; i++) {
             TEventHolder& event = pool.Allocate(q);
             TString data = TString::Uninitialized(buffSize);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
+            auto holder = std::make_unique<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
             event.Fill(*holder);
 
             pool.Release(q, q.begin());
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         for (ui32 i = 0; i < repeats; i++) {
             TEventHolder& event = pool.Allocate(q);
             TString data = TString::Uninitialized(buffSize);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
+            auto holder = std::make_unique<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
             event.Fill(*holder);
         }
         for (ui32 i = 0; i < repeats; i++) {

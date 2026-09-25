@@ -216,7 +216,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             {"nextRetryAt", TimeToNextBill},
         );
 
-        auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(billRecord);
+        auto request = std::make_unique<NMetering::TEvMetering::TEvWriteMeteringJson>(billRecord);
         // send message at Complete stage
         SideEffects.Send(NMetering::MakeMeteringServiceID(), std::move(request));
 

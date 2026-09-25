@@ -68,12 +68,12 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
         for (auto i = 1; i <= NODES; ++i) {
             nodes->emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
         }
-        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
+        std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfo = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
         runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
     }
 
     for (auto i = 1; i <= NODES; ++i) {
-        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+        std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = std::make_unique<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
         for (auto k = 0; k < GROUPS; ++k) {
             char delim = (k % 2 == 0) ? '/' : '|';
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
@@ -98,7 +98,7 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
         runtime.DispatchEvents(options, TDuration::Seconds(1));
     }
 
-    THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+    std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
 
     UNIT_ASSERT(response != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(response->Record.LabeledCountersByGroupSize(), NODES * GROUPS);
@@ -785,12 +785,12 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             nodes->emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodes->emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodes->emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
+            std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfo = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+            std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = std::make_unique<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("group1|group2");
             group1.SetGroupNames("AAA|BBB");
@@ -804,7 +804,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+            std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = std::make_unique<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             response->Record.AddCounterNames("value1");
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("group1|group2");
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+            std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = std::make_unique<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             response->Record.AddCounterNames("value1");
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("group1|group2");
@@ -834,7 +834,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         }
 
         runtime.DispatchEvents();
-        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+        std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
 #ifndef NDEBUG
         Cerr << response->Record.DebugString() << Endl;
 #endif
@@ -893,12 +893,12 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             nodes->emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodes->emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodes->emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
+            std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfo = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+            std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = std::make_unique<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("rt3.man--aba@caba--daba");
             group1.SetGroupNames("topic");
@@ -912,7 +912,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         }
 
         {
-            THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = MakeHolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+            std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = std::make_unique<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
             response->Record.AddCounterNames("value1");
             auto& group1 = *response->Record.AddLabeledCountersByGroup();
             group1.SetGroup("cons@aaa/1/rt3.man--aba@caba--daba");
@@ -927,7 +927,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         }
 
         runtime.DispatchEvents();
-        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
+        std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response = runtime.GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>();
 #ifndef NDEBUG
         Cerr << response->Record.DebugString() << Endl;
 #endif
@@ -970,7 +970,7 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             nodes->emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodes->emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
             nodes->emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
+            std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfo = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 

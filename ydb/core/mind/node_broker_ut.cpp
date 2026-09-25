@@ -243,7 +243,7 @@ void AsyncSetConfig(TTestActorRuntime& runtime,
     TActorId sender,
     const NKikimrNodeBroker::TConfig &config)
 {
-    auto event = MakeHolder<TEvNodeBroker::TEvSetConfigRequest>();
+    auto event = std::make_unique<TEvNodeBroker::TEvSetConfigRequest>();
     event->Record.MutableConfig()->CopyFrom(config);
     runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
 }
@@ -288,7 +288,7 @@ void SetNodeBrokerLongLease(TTestActorRuntime& runtime,
                             TActorId sender,
                             bool enable)
 {
-    auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto event = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
     auto& featureFlags = *event->Record.MutableConfig()->MutableFeatureFlags();
     featureFlags.SetEnableStableNodeNames(true);
     featureFlags.SetEnableNodeBrokerLongLease(enable);
@@ -304,7 +304,7 @@ void SetNameserverLongLease(TTestActorRuntime& runtime,
                             TActorId sender,
                             bool enable)
 {
-    auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto event = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
     auto& featureFlags = *event->Record.MutableConfig()->MutableFeatureFlags();
     // Keep the delta protocol flag at whatever the runtime was set up with
     featureFlags.SetEnableNodeBrokerDeltaProtocol(
@@ -367,7 +367,7 @@ void Setup(TTestActorRuntime& runtime,
         const auto databaseName = splittedPath.back();
         splittedPath.pop_back();
         do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto modifyScheme = std::make_unique<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
             modifyScheme->Record.SetTxId(++txId);
             auto* transaction = modifyScheme->Record.AddTransaction();
             transaction->SetWorkingDir(CanonizePath(splittedPath));
@@ -541,10 +541,10 @@ void CheckRegistration(TTestActorRuntime &runtime,
                       false, path, Nothing(), name);
 }
 
-THolder<TEvNodeBroker::TEvGracefulShutdownRequest>
+std::unique_ptr<TEvNodeBroker::TEvGracefulShutdownRequest>
 MakeEventGracefulShutdown (ui32 nodeId)
 {
-    auto eventGracefulShutdown = MakeHolder<TEvNodeBroker::TEvGracefulShutdownRequest>();
+    auto eventGracefulShutdown = std::make_unique<TEvNodeBroker::TEvGracefulShutdownRequest>();
     eventGracefulShutdown->Record.SetNodeId(nodeId);
     return eventGracefulShutdown;
 }
@@ -1024,7 +1024,7 @@ void CheckNoPendingCacheMissesLeft(TTestActorRuntime &runtime, ui32 nodeIndex)
     UNIT_ASSERT_VALUES_EQUAL(nameserver->GetTotalPendingCacheMissesSize(), 0);
 }
 
-THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender) {
+std::unique_ptr<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender) {
     runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
 
     TAutoPtr<IEventHandle> handle;
@@ -1034,7 +1034,7 @@ THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntim
     return IEventHandle::Release<TEvInterconnect::TEvNodesInfo>(handle);
 }
 
-THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender,
+std::unique_ptr<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender,
                                                                 bool onlyAliveNodes) {
     runtime.Send(new IEventHandle(GetNameserviceActorId(), sender,
         new TEvInterconnect::TEvListNodes(false, onlyAliveNodes)));
@@ -1327,7 +1327,7 @@ public:
 };
 
 void LocalMiniKQL(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, const TString& query) {
-    auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+    auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
     request->Record.MutableProgram()->MutableProgram()->SetText(query);
 
     ForwardToTablet(runtime, tabletId, sender, request.Release());
@@ -2162,7 +2162,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
             TTestActorRuntime::TEventObserver PrevObserverFunc;
             bool Installed = false;
             bool Activated = false;
-            TVector<THolder<IEventHandle>> CacheRequests;
+            TVector<std::unique_ptr<IEventHandle>> CacheRequests;
         } hooks(runtime);
 
         hooks.Install();
@@ -2298,7 +2298,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Create shared subdomain
         TSubDomainKey sharedSubdomainKey;
         do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto modifyScheme = std::make_unique<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
             modifyScheme->Record.SetTxId(++txId);
             auto* transaction = modifyScheme->Record.AddTransaction();
             transaction->SetWorkingDir(DOMAIN_NAME);
@@ -2325,7 +2325,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Create serverless subdomain that associated with shared
         TSubDomainKey serverlessSubdomainKey;
         do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto modifyScheme = std::make_unique<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
             modifyScheme->Record.SetTxId(++txId);
             auto* transaction = modifyScheme->Record.AddTransaction();
             transaction->SetWorkingDir(DOMAIN_NAME);

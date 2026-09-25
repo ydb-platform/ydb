@@ -161,11 +161,11 @@ namespace NKikimr {
              * Table level, created on demand: all same-node tablets of the table collapsed
              * into a single bucket, which lives directly in the table group.
              */
-            THolder<TCountersBucket> TableBucket;
+            std::unique_ptr<TCountersBucket> TableBucket;
 
             // Partition level, created on demand
             NMonitoring::TDynamicCounterPtr PerPartitionGroup;
-            THashMap<TTabletKey, THolder<TCountersBucket>> Leaves;
+            THashMap<TTabletKey, std::unique_ptr<TCountersBucket>> Leaves;
 
             bool IsEmpty() const {
                 return !TableBucket && Leaves.empty();
@@ -257,7 +257,7 @@ namespace NKikimr {
                 if (IsTableLevel(metricsLevel)) {
                     auto& bucket = entry->TableBucket;
                     if (!bucket) {
-                        bucket = MakeHolder<TCountersBucket>(
+                        bucket = std::make_unique<TCountersBucket>(
                             entry->TableGroup,
                             tabletType,
                             *counterNames,
@@ -267,7 +267,7 @@ namespace NKikimr {
                 } else {
                     auto& leaf = entry->Leaves[tablet];
                     if (!leaf) {
-                        leaf = MakeHolder<TCountersBucket>(
+                        leaf = std::make_unique<TCountersBucket>(
                             GetOrCreateTabletGroup(GetOrCreatePerPartitionGroup(*entry), tablet),
                             tabletType,
                             *counterNames,

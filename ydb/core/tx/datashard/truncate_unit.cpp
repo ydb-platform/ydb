@@ -119,8 +119,8 @@ void TTruncateUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateTruncateUnit(TDataShard &dataShard, TPipeline &pipeline) {
-    return THolder(new TTruncateUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateTruncateUnit(TDataShard &dataShard, TPipeline &pipeline) {
+    return std::unique_ptr<TTruncateUnit>(new TTruncateUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

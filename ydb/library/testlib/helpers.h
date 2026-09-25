@@ -8,8 +8,8 @@
         TTestCase##N() : F() {                                                                                     \
             if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \
         }                                                                                                          \
-        static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \
-        static THolder<NUnitTest::TBaseTestCase> CreateOff() { return ::MakeHolder<TTestCase##N<false>>(); }       \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> CreateOn()  { return ::std::make_unique<TTestCase##N<true>>();  }       \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> CreateOff() { return ::std::make_unique<TTestCase##N<false>>(); }       \
         void Execute_(NUnitTest::TTestContext&) override;                                                          \
     };                                                                                                             \
     struct TTestRegistration##N {                                                                                  \
@@ -35,7 +35,7 @@
                 if constexpr (OPT2) { Name_ = #N "-" #OPT1 "+" #OPT2; } else { Name_ = #N "-" #OPT1 "-" #OPT2; }   \
             }                                                                                                      \
         }                                                                                                          \
-        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<OPT1, OPT2>>();  }   \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create()  { return ::std::make_unique<TTestCase##N<OPT1, OPT2>>();  }   \
         void Execute_(NUnitTest::TTestContext&) override;                                                          \
     };                                                                                                             \
     struct TTestRegistration##N {                                                                                  \
@@ -61,7 +61,7 @@
             NameHolder_ = TString(#N) + (OPT1 ? "+" : "-") + #OPT1 + (OPT2 ? "+" : "-") + #OPT2 + (OPT3 ? "+" : "-") + #OPT3; \
             Name_ = NameHolder_.c_str();                                                                                      \
         }                                                                                                                     \
-        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<OPT1, OPT2, OPT3>>();  }        \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create()  { return ::std::make_unique<TTestCase##N<OPT1, OPT2, OPT3>>();  }        \
         void Execute_(NUnitTest::TTestContext&) override;                                                                     \
     };                                                                                                                        \
     struct TTestRegistration##N {                                                                                             \

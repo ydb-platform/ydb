@@ -26,7 +26,7 @@ struct THistogramCounter {
     void IncrementFor(ui64 value);
 };
 
-using THistogramVector = TVector<THolder<THistogramCounter>>;
+using THistogramVector = TVector<std::unique_ptr<THistogramCounter>>;
 
 struct TTabletCounterValue {
     TStringBuf Name;
@@ -43,7 +43,7 @@ public:
 
     void Reserve(size_t hint);
 
-    void AddSimpleCounter(const char* name, THolder<THistogramCounter> percentileAggregate = {});
+    void AddSimpleCounter(const char* name, std::unique_ptr<THistogramCounter> percentileAggregate = {});
 
     ui64 GetSum(ui32 counterIndex) const;
     void SetSum(ui32 counterIndex, ui64 value);
@@ -81,7 +81,7 @@ public:
 
     void Reserve(size_t hint);
 
-    void AddCumulativeCounter(const char* name, THolder<THistogramCounter> percentileAggregate = {});
+    void AddCumulativeCounter(const char* name, std::unique_ptr<THistogramCounter> percentileAggregate = {});
 
     ui64 GetMax(ui32 counterIndex) const;
     void SetMax(ui32 counterIndex, ui64 value);
@@ -118,7 +118,7 @@ public:
     void AddCounter(
         const char* name,
         const NKikimr::TTabletPercentileCounter& percentileCounter,
-        THashMap<TString, THolder<THistogramCounter>>& histogramAggregates);
+        THashMap<TString, std::unique_ptr<THistogramCounter>>& histogramAggregates);
 
     void SetValue(
         ui64 tabletId,

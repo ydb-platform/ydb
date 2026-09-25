@@ -217,7 +217,7 @@ namespace NKikimr {
             NMonitoring::TDynamicCounterPtr RawGroup;
             NMonitoring::TDynamicCounterPtr PublicGroup;
             TYdbMetricsAggregatorPtr Aggregator;
-            THashMap<TBucketKey, THolder<TPublishedBucket>> Buckets;
+            THashMap<TBucketKey, std::unique_ptr<TPublishedBucket>> Buckets;
         };
 
         class TProcessorDatabaseMetricsAggregatorImpl: public TProcessorDatabaseMetricsAggregator {
@@ -226,7 +226,7 @@ namespace NKikimr {
                 NMonitoring::TDynamicCounterPtr rawCounterGroup,
                 NMonitoring::TDynamicCounterPtr targetCounterGroup,
                 const TString& databasePath,
-                THolder<TTabletCountersBase> executorCountersTemplate)
+                std::unique_ptr<TTabletCountersBase> executorCountersTemplate)
                 : RawCounterGroup(rawCounterGroup)
                 , TargetCounterGroup(targetCounterGroup)
                 , DatabasePrefix(ChopTrailingSlash(databasePath))
@@ -305,7 +305,7 @@ namespace NKikimr {
                     // The partial's mapped group is detached: only the combined table
                     // rollup is public, so partials and leaves never overwrite each other.
                     auto appTemplate = CreateAppCountersByTabletType(type);
-                    bucket = MakeHolder<TPublishedBucket>(rawGroup, mappedGroup, type, *names,
+                    bucket = std::make_unique<TPublishedBucket>(rawGroup, mappedGroup, type, *names,
                                                           ExecutorCountersTemplate.Get(), appTemplate.Get(), key.Defined());
                     table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, key && key->second != 0);
                 }
@@ -357,7 +357,7 @@ namespace NKikimr {
             NMonitoring::TDynamicCounterPtr RawCounterGroup;
             NMonitoring::TDynamicCounterPtr TargetCounterGroup;
             const TString DatabasePrefix;
-            THolder<TTabletCountersBase> ExecutorCountersTemplate;
+            std::unique_ptr<TTabletCountersBase> ExecutorCountersTemplate;
             THashMap<TString, TTableEntry> Tables;
             THashMap<TNodeRoleKey, TContributions> ContributionsByNodeRole;
         };
@@ -368,7 +368,7 @@ namespace NKikimr {
         NMonitoring::TDynamicCounterPtr rawCounterGroup,
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
-        THolder<TTabletCountersBase> executorCountersTemplate) {
+        std::unique_ptr<TTabletCountersBase> executorCountersTemplate) {
         return MakeIntrusive<TProcessorDatabaseMetricsAggregatorImpl>(
             rawCounterGroup, targetCounterGroup, databasePath, std::move(executorCountersTemplate));
     }

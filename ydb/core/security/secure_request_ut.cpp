@@ -46,7 +46,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        auto response = MakeHolder<TEvSecureRequestTest::TEvResponse>();
+        auto response = std::make_unique<TEvSecureRequestTest::TEvResponse>();
         response->AccessDenied = false;
         response->UserToken = GetParsedToken();
         response->IsUserAdmin = IsUserAdmin();
@@ -55,7 +55,7 @@ public:
     }
 
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvSecureRequestTest::TEvResponse>();
+        auto response = std::make_unique<TEvSecureRequestTest::TEvResponse>();
         response->AccessDenied = true;
         response->UserToken = GetParsedToken();
         response->IsUserAdmin = IsUserAdmin();

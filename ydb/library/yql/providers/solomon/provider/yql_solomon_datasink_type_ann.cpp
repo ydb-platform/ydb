@@ -248,8 +248,8 @@ private:
 
 } // anonymous namespace
 
-THolder<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonDataSinkTypeAnnotationTransformer(state));
+std::unique_ptr<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state) {
+    return std::unique_ptr<TSolomonDataSinkTypeAnnotationTransformer>(new TSolomonDataSinkTypeAnnotationTransformer(state));
 }
 
 } // namespace NYql

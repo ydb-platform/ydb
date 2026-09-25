@@ -238,8 +238,8 @@ private:
     TSolomonState::TPtr State_;
 };
 
-THolder<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonIODiscoveryTransformer(state));
+std::unique_ptr<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state) {
+    return std::unique_ptr<TSolomonIODiscoveryTransformer>(new TSolomonIODiscoveryTransformer(state));
 }
 
 } // namespace NYql

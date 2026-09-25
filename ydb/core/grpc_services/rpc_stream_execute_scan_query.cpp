@@ -236,7 +236,7 @@ private:
             : NKikimrKqp::QUERY_ACTION_EXPLAIN;
 
         auto text = req->query().yql_text();
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>(
             action,
             NKikimrKqp::QUERY_TYPE_SQL_SCAN,
             SelfId(),
@@ -292,7 +292,7 @@ private:
                 {"to", ExecuterActorId_});
 
             // scan query has single result set, so it's ok to put zero as channelId here.
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
+            auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
             resp->Record.SetFreeSpace(freeSpaceBytes);
             ctx.Send(ExecuterActorId_, resp.Release());
             AckedFreeSpaceBytes_ = freeSpaceBytes;
@@ -398,7 +398,7 @@ private:
             {"to", ev->Sender},
             {"queue", FlowControl_.QueueSize()});
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
+        auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());
@@ -441,7 +441,7 @@ private:
                 YDB_LOG_WARN_CTX(ctx, message);
 
                 if (ExecuterActorId_) {
-                    auto timeoutEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");
+                    auto timeoutEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");
 
                     ctx.Send(ExecuterActorId_, timeoutEv.Release());
                 }

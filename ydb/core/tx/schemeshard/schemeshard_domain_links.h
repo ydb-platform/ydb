@@ -22,7 +22,7 @@ class TParentDomainLink {
 public:
     TParentDomainLink(TSchemeShard* self);
     void Shutdown(const TActorContext& ctx);
-    THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> MakeSyncMsg() const;
+    std::unique_ptr<TEvSchemeShard::TEvSyncTenantSchemeShard> MakeSyncMsg() const;
     void SendSync(const TActorContext& ctx);
     void AtPipeError(const TActorContext& ctx);
     bool HasPipeTo(TTabletId tabletId, TActorId clientId);

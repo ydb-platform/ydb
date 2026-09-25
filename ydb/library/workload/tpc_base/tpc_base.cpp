@@ -71,7 +71,7 @@ TString TTpcBaseWorkloadGenerator::GetExpectedResult(const TString& name, const 
     }
     if (NResource::Has(key + ".gz")) {
         const auto data = NResource::Find(key + ".gz");
-        auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TStringInput>(data));
+        auto input = OpenOwnedMaybeCompressedInput(std::make_unique<TStringInput>(data));
         return input->ReadAll();
     }
     return {};

@@ -44,7 +44,7 @@ namespace NKikimr::NHttpProxy {
         using TBase = NPQ::TBaseActor<THttpAuthActor>;
 
         THttpAuthActor(const TActorId sender, THttpRequestContext& context,
-                       THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
+                       std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
             : TBase(NKikimrServices::HTTP_PROXY)
             , Sender(sender)
             , Prefix(context.LogPrefix())
@@ -90,7 +90,7 @@ namespace NKikimr::NHttpProxy {
             entry.SyncVersion = false;
             schemeCacheRequest->ResultSet.emplace_back(entry);
             schemeCacheRequest->DatabaseName = DatabasePath;
-            ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+            ctx.Send(MakeSchemeCacheID(), std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -245,11 +245,11 @@ namespace NKikimr::NHttpProxy {
             };
 
             if (EnableAccessServiceV2Interface) {
-                auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+                auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
                 setupRequest(request);
                 ctx.Send(MakeAccessServiceID(), std::move(request));
             } else {
-                auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+                auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequest>();
                 setupRequest(request);
                 ctx.Send(MakeAccessServiceID(), std::move(request));
             }
@@ -297,7 +297,7 @@ namespace NKikimr::NHttpProxy {
         }
 
         void SendIamTokenRequest(const TActorContext& ctx) {
-            auto request = MakeHolder<NCloud::TEvIamTokenService::TEvCreateForServiceAccountRequest>();
+            auto request = std::make_unique<NCloud::TEvIamTokenService::TEvCreateForServiceAccountRequest>();
             request->RequestId = RequestId;
             request->Token = ServiceAccountCredentialsProvider->GetAuthInfo();
             request->Request.set_service_account_id(ServiceAccountId);
@@ -361,7 +361,7 @@ namespace NKikimr::NHttpProxy {
         TString ServiceAccountId;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
         const TString RequestId;
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
+        std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> Signature;
         TRetryCounter RetryCounter;
         const NKikimrConfig::TServerlessProxyConfig& ServiceConfig;
         TString IamToken;
@@ -374,7 +374,7 @@ namespace NKikimr::NHttpProxy {
         bool EnableAccessServiceV2Interface{false};
     };
 
-    NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature)
+    NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature)
     {
         return new THttpAuthActor(sender, context, std::move(signature));
     }

@@ -505,7 +505,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
 
 void TPartitionCompaction::TCompactState::AddCmdWrite(const TKey& key, TBatch& batch) {
     if (!Request) {
-        Request = MakeHolder<TEvKeyValue::TEvRequest>();
+        Request = std::make_unique<TEvKeyValue::TEvRequest>();
     }
     TString data;
     batch.Pack();
@@ -865,7 +865,7 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
     // Currently unused;
     //DroppedKeys.push_back(key);
     if (!Request) {
-        Request = MakeHolder<TEvKeyValue::TEvRequest>();
+        Request = std::make_unique<TEvKeyValue::TEvRequest>();
     }
     LOG_D(
         "Compaction for topic add CmdDeleteRange for key",
@@ -931,7 +931,7 @@ bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResp
 
 void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
     CommitCookie = cookie;
-    auto ev = MakeHolder<TEvPQ::TEvSetClientInfo>(CommitCookie, CLIENTID_COMPACTION_CONSUMER, MaxOffset, TString{}, 0, 0, 0, TActorId{});
+    auto ev = std::make_unique<TEvPQ::TEvSetClientInfo>(CommitCookie, CLIENTID_COMPACTION_CONSUMER, MaxOffset, TString{}, 0, 0, 0, TActorId{});
     ev->IsInternal = true;
     LOG_D(
         "Compaction for topic commit",

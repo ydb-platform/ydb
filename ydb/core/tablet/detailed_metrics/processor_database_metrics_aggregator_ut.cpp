@@ -25,7 +25,7 @@ namespace {
         const ui64 TabletId;
         const ui32 FollowerId;
         TExecutorCounters Executor;
-        THolder<TTabletCountersBase> App = CreateAppCountersByTabletType(TABLET_TYPE);
+        std::unique_ptr<TTabletCountersBase> App = CreateAppCountersByTabletType(TABLET_TYPE);
         TTabletCountersBase ExecutorBaseline;
         TTabletCountersBase AppBaseline;
 
@@ -71,7 +71,7 @@ namespace {
         NMonitoring::TDynamicCounterPtr RawRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
         NMonitoring::TDynamicCounterPtr PublicRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TProcessorDatabaseMetricsAggregatorPtr Processor = CreateProcessorDatabaseMetricsAggregator(
-            RawRoot, PublicRoot, DATABASE_PATH, MakeHolder<TExecutorCounters>());
+            RawRoot, PublicRoot, DATABASE_PATH, std::make_unique<TExecutorCounters>());
 
         void ApplyNode(ui32 nodeId, TSimulatedNode& node) {
             NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;

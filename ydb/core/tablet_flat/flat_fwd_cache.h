@@ -521,11 +521,11 @@ namespace NFwd {
         TVector<TLevel> Levels;
     };
 
-    inline THolder<IPageLoadingLogic> CreateCache(const TPart* part, TIndexPageLocator& indexPageLocator, NPage::TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr) {
+    inline std::unique_ptr<IPageLoadingLogic> CreateCache(const TPart* part, TIndexPageLocator& indexPageLocator, NPage::TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr) {
         if (groupId.Index < (groupId.IsHistoric() ? part->IndexPages.BTreeHistoric : part->IndexPages.BTreeGroups).size()) {
-            return MakeHolder<TBTreeIndexCache>(part, indexPageLocator, groupId, slices);
+            return std::make_unique<TBTreeIndexCache>(part, indexPageLocator, groupId, slices);
         } else {
-            return MakeHolder<TFlatIndexCache>(part, indexPageLocator, groupId, slices);
+            return std::make_unique<TFlatIndexCache>(part, indexPageLocator, groupId, slices);
         }
     }
 }

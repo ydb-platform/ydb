@@ -155,7 +155,7 @@ void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedV
 
 void RunWriteTestWithSectorMap(NSectorMap::EDiskMode diskMode, ui64 diskSize, ui32 bufferSize) {
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-    THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+    std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
     TActorSystemCreator creator;
     TIntrusivePtr<TSectorMap> sectorMap;
@@ -167,7 +167,7 @@ void RunWriteTestWithSectorMap(NSectorMap::EDiskMode diskMode, ui64 diskSize, ui
         /* path can be empty when sector map is used */
         sectorMap = new TSectorMap(diskSize, diskMode);
     }
-    THolder<IBlockDevice> device(CreateRealBlockDeviceWithDefaults(path, *mon, TDeviceMode::None, sectorMap, creator.GetActorSystem()));
+    std::unique_ptr<IBlockDevice> device(CreateRealBlockDeviceWithDefaults(path, *mon, TDeviceMode::None, sectorMap, creator.GetActorSystem()));
 
     TAlignedData writeData(bufferSize);
     TAlignedData readData(bufferSize);
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
 
     Y_UNIT_TEST(TestDeviceWithSubmitGetThread) {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         const ui32 fileSize = 4 << 20;
         const ui32 dataSize = 4 << 10;
         NPDisk::TAlignedData data(dataSize);
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
         TString path = CreateFile(tempDir().c_str(), fileSize);
 
         TActorSystemCreator creator;
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
                     NPDisk::TDeviceMode::LockFile | NPDisk::TDeviceMode::UseSubmitGetThread, nullptr, creator.GetActorSystem()));
 
         device->PreadSync(data.Get(), data.Size(), 0, {}, nullptr);
@@ -226,18 +226,18 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
         while ((TMonotonic::Now() - start).Seconds() < 5) {
             for (auto completionThreadsCount : {0, 1, 2, 3}) {
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-                THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+                std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
 
                 ui32 buffSize = 64_KB;
                 auto randomData = PrepareData(buffSize);
                 ui32 bufferPoolSize = 512;
-                THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(buffSize, bufferPoolSize, false, {}));
+                std::unique_ptr<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(buffSize, bufferPoolSize, false, {}));
                 ui64 inFlight = 128;
                 ui32 maxQueuedCompletionActions = bufferPoolSize / 2;
                 ui64 diskSize = 32_GB;
 
                 TIntrusivePtr<NPDisk::TSectorMap> sectorMap = new NPDisk::TSectorMap(diskSize, NSectorMap::DM_NONE);
-                THolder<NPDisk::IBlockDevice> device(CreateRealBlockDevice("", *mon, 0, 0, inFlight, TDeviceMode::None,
+                std::unique_ptr<NPDisk::IBlockDevice> device(CreateRealBlockDevice("", *mon, 0, 0, inFlight, TDeviceMode::None,
                         maxQueuedCompletionActions, completionThreadsCount, sectorMap));
                 device->Initialize(std::make_shared<TPDiskCtx>(creator.GetActorSystem()));
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
     /*
     Y_UNIT_TEST(TestRabbitCompletionAction) {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        std::unique_ptr<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         const ui32 dataSize = 4 << 10;
         const i32 generations = 8;
         TAtomic counter = 0;
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
             NPDisk::TAlignedData alignedBuffer;
             alignedBuffer.Resize(dataSize);
             memset(alignedBuffer.Get(), 0, dataSize);
-            THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon));
+            std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, *mon));
             device->Initialize(nullptr);
 
             (new TRabbit(*device, alignedBuffer, generations, &counter))->Exec(nullptr);

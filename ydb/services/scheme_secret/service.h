@@ -51,8 +51,8 @@ public:
             Y_ENSURE(!Database.empty(), "Database name must be set in secret requests");
         }
 
-        THolder<TEvResolveSecret> MakeCopy() const {
-            return MakeHolder<TEvResolveSecret>(UserToken, Database, SecretNames, Promise, Settings);
+        std::unique_ptr<TEvResolveSecret> MakeCopy() const {
+            return std::make_unique<TEvResolveSecret>(UserToken, Database, SecretNames, Promise, Settings);
         }
 
     public:
@@ -103,13 +103,13 @@ private:
     };
 
     struct TRequestContext {
-        THolder<TEvResolveSecret> Request;
+        std::unique_ptr<TEvResolveSecret> Request;
         // SchemeCache support batch requests, so there's a single retry state for the whole batch
         TRetryPolicy::IRetryState::TPtr SchemeCacheRetryState;
         // SchemeShard does not support batch requests, so there's a separate retry state for each secret
         THashMap<TString, TRetryPolicy::IRetryState::TPtr> SchemeShardRetryStates;
 
-        TRequestContext(THolder<TEvResolveSecret> request)
+        TRequestContext(std::unique_ptr<TEvResolveSecret> request)
             : Request(std::move(request))
         {
         }

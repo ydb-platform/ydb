@@ -39,14 +39,14 @@ public:
 
     // Create new accumulator for log2Buckets for given layout using given memory.
     // Accumulator will not allocate any memory
-    static THolder<TAccumulator> Create(
+    static std::unique_ptr<TAccumulator> Create(
         const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
 
     // Create new accumulator for log2Buckets for given layout.
     // Accumulator will manage memory by itself
-    static THolder<TAccumulator> Create(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets);
+    static std::unique_ptr<TAccumulator> Create(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets);
 
     // Add new nItems of data in TTupleLayout representation to accumulator 
     virtual void AddData(const ui8* data, const ui8* overflow, ui32 nItems) = 0;

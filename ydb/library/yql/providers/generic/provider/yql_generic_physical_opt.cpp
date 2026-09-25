@@ -259,13 +259,13 @@ namespace NYql {
 
         private:
             const std::unique_ptr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
-            const THolder<TGraphTransformerBase> ListTransformer_;
+            const std::unique_ptr<TGraphTransformerBase> ListTransformer_;
             bool AllowAsync_;
         };
     } // namespace
 
-    THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericPhysicalOptProposalWithListTransformer>(state);
+    std::unique_ptr<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
+        return std::make_unique<TGenericPhysicalOptProposalWithListTransformer>(state);
     }
 
 } // namespace NYql

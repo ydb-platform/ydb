@@ -25,11 +25,11 @@ void OnTerminate(int) {
     ShouldContinue.ShouldStop();
 }
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
+std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
     Y_ABORT_UNLESS(threads > 0 && threads < 100);
     Y_ABORT_UNLESS(pools > 0 && pools < 10);
 
-    auto setup = MakeHolder<TActorSystemSetup>();
+    auto setup = std::make_unique<TActorSystemSetup>();
 
     setup->NodeId = 1;
 
@@ -89,7 +89,7 @@ void TQueryReplayApp::Start() {
     QueryReplayStats.reset(new TQueryReplayStats());
     RandomProvider = CreateDefaultRandomProvider();
     InitializeLogger();
-    THolder<TActorSystemSetup> setup = BuildActorSystemSetup(ActorSystemThreadsCount, 1);
+    std::unique_ptr<TActorSystemSetup> setup = BuildActorSystemSetup(ActorSystemThreadsCount, 1);
     TypeRegistry.Reset(new NKikimr::NScheme::TKikimrTypeRegistry());
     FunctionRegistry.Reset(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone());
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);

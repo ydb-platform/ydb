@@ -13,7 +13,7 @@ private:
     TString SecurityToken;
     TString PeerName;
     TString RequestId;
-    THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
+    std::unique_ptr<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
     bool RequireAdminAccess = false;
     bool UserAdmin = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
@@ -59,7 +59,7 @@ private:
         return false;
     }
 
-    void ProcessAuthorizeTicketResult(THolder<TEvTicketParser::TEvAuthorizeTicketResult> result, const TActorContext& ctx) {
+    void ProcessAuthorizeTicketResult(std::unique_ptr<TEvTicketParser::TEvAuthorizeTicketResult> result, const TActorContext& ctx) {
         if (result->HasError()) {
             if (IsTokenRequired()) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(result->Error, ctx);
@@ -197,7 +197,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         if (InternalToken) {
             // Perform access checks
-            ProcessAuthorizeTicketResult(MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(SecurityToken, InternalToken), ctx);
+            ProcessAuthorizeTicketResult(std::make_unique<TEvTicketParser::TEvAuthorizeTicketResult>(SecurityToken, InternalToken), ctx);
         } else {
             if (IsTokenRequired() && !IsTokenExists()) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
@@ -210,7 +210,7 @@ public:
                     userToken = nullptr;
                 }
 
-                THolder<TEvTicketParser::TEvAuthorizeTicketResult> authorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
+                std::unique_ptr<TEvTicketParser::TEvAuthorizeTicketResult> authorizeTicketResult = std::make_unique<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
                 ctx.Send(ctx.SelfID, authorizeTicketResult.Release());
             } else {
                 ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({

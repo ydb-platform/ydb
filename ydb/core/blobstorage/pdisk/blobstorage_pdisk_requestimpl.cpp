@@ -77,7 +77,7 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
         Y_VERIFY(!IsReplied);
         TStringStream error;
         error << "ReqId# " << ReqId << " ChunkRead is deleted because of PDisk stoppage";
-        THolder<NPDisk::TEvChunkReadResult> result = MakeHolder
+        std::unique_ptr<NPDisk::TEvChunkReadResult> result = std::make_unique
             <NPDisk::TEvChunkReadResult>(NKikimrProto::ERROR,
                     ChunkIdx, Offset, Cookie,
                     NKikimrBlobStorage::StatusIsValid, error.Str());

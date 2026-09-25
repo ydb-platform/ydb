@@ -197,7 +197,7 @@ namespace NKikimr {
 
                     const TActorId rewriterActorId = Register(CreateDefragRewriter(DCtx, SelfVDiskId, SelfActorId,
                         std::move(records)));
-                    THolder<TEvDefragRewritten::THandle> ev;
+                    std::unique_ptr<TEvDefragRewritten::THandle> ev;
                     try {
                         ev = WaitForSpecificEvent<TEvDefragRewritten>(&TDefragQuantum::ProcessUnexpectedEvent);
                     } catch (const TExPoison&) {
@@ -290,7 +290,7 @@ namespace NKikimr {
 
     IActor *CreateDefragQuantumActor(const std::shared_ptr<TDefragCtx>& dctx, const TVDiskID& selfVDiskId,
             std::optional<TChunksToDefrag> chunksToDefrag) {
-        return new TActorCoro(MakeHolder<TDefragQuantum>(dctx, selfVDiskId, std::move(chunksToDefrag)),
+        return new TActorCoro(std::make_unique<TDefragQuantum>(dctx, selfVDiskId, std::move(chunksToDefrag)),
             NKikimrServices::TActivity::BS_DEFRAG_QUANTUM);
     }
 

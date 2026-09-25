@@ -113,7 +113,7 @@ private:
 
 template<class TDriver>
 void BM_PingActor(benchmark::State& state) {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -217,7 +217,7 @@ private:
 
 template<class TDriver>
 void BM_YieldActor(benchmark::State& state) {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -284,7 +284,7 @@ private:
 };
 
 void BM_CallAsync(benchmark::State& state) {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -355,7 +355,7 @@ private:
 };
 
 void BM_RescheduleRunnableAsync(benchmark::State& state) {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);

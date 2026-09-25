@@ -301,7 +301,7 @@ public:
         WallClockAccepted = Now();
 
         if (!Settings.UserToken.empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(Settings.UserToken);
+            UserToken = std::make_unique<NACLib::TUserToken>(Settings.UserToken);
         }
 
         if (Settings.MaxRows > 0) {
@@ -387,7 +387,7 @@ private:
             if (PlanStep != 0) {
                 // If we have a known PlanStep we know snapshot Step/TxId
                 // Attempt to discard it (best effort, no retries or waiting for replies)
-                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
+                auto req = std::make_unique<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
                 req->Record.SetOwnerId(TableId.PathId.OwnerId);
                 req->Record.SetPathId(TableId.PathId.LocalPathId);
                 req->Record.SetStep(PlanStep);
@@ -470,7 +470,7 @@ private:
 
     void SendNavigateKeySet(const TActorContext& ctx) {
         // Send the navigate request to find out table schema
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Settings.DatabaseName;
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(Settings.TablePath);
@@ -703,7 +703,7 @@ private:
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, ctx);
         }
 
-        KeyDesc = MakeHolder<TKeyDesc>(res.TableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columns);
+        KeyDesc = std::make_unique<TKeyDesc>(res.TableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columns);
 
         SendResolveKeySet(ctx);
     }
@@ -720,7 +720,7 @@ private:
     void SendResolveKeySet(const TActorContext& ctx) {
         Y_ABORT_UNLESS(!ResolveInProgress, "Only one resolve request may be active at a time");
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings.DatabaseName;
         request->DomainOwnerId = DomainInfo->ExtractSchemeShard();
         request->ResultSet.emplace_back(std::move(KeyDesc));
@@ -1315,7 +1315,7 @@ private:
 
         Y_ABORT_UNLESS(SelectedCoordinator, "Unexpected null SelectedCoordinator");
 
-        auto req = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
+        auto req = std::make_unique<TEvTxProxy::TEvProposeTransaction>(
             SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
 
         auto* reqAffectedSet = req->Record.MutableTransaction()->MutableAffectedSet();
@@ -1643,7 +1643,7 @@ private:
             // end, but no interruptions since stream clearance request was
             // sent by the shard. Otherwise outdated tx would be stuck waiting
             // forever, even if we already retried with a newer tx.
-            auto response = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
+            auto response = std::make_unique<TEvTxProcessing::TEvStreamClearanceResponse>();
             response->Record.SetTxId(txId);
             response->Record.SetCleared(false);
             ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
@@ -1712,7 +1712,7 @@ private:
         Y_ABORT_UNLESS(ClearancePendingShards.contains(shardId));
         Y_ABORT_UNLESS(!StreamingShards.contains(shardId));
 
-        auto response = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
+        auto response = std::make_unique<TEvTxProcessing::TEvStreamClearanceResponse>();
         response->Record.SetTxId(state.ReadTxId);
         response->Record.SetCleared(true);
 
@@ -1845,7 +1845,7 @@ private:
             }
         }
 
-        auto x = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(TEvTxUserProxy::TResultStatus::ExecResponseData);
+        auto x = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(TEvTxUserProxy::TResultStatus::ExecResponseData);
         x->Record.SetStatusCode(NKikimrIssues::TStatusIds::TRANSIENT);
 
         if (PlanStep) {
@@ -1923,7 +1923,7 @@ private:
             }
         }
 
-        auto x = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(TEvTxUserProxy::TResultStatus::ExecResponseData);
+        auto x = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(TEvTxUserProxy::TResultStatus::ExecResponseData);
         x->Record.SetStatusCode(NKikimrIssues::TStatusIds::TRANSIENT);
 
         if (PlanStep) {
@@ -2194,7 +2194,7 @@ private:
         QuotaNeeded.insert(shardId);
 
         // Send a new quota request to owner
-        auto request = MakeHolder<TEvTxProcessing::TEvStreamQuotaRequest>();
+        auto request = std::make_unique<TEvTxProcessing::TEvStreamQuotaRequest>();
         request->Record.SetTxId(TxId);
         request->Record.SetShardId(0);
         ctx.Send(Settings.Owner, request.Release(), IEventHandle::FlagTrackDelivery);
@@ -2291,7 +2291,7 @@ private:
                 {"logPrefix", LogPrefix},
                 {"available", available},
                 {"shardId", shardId});
-            auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>();
+            auto response = std::make_unique<TEvTxProcessing::TEvStreamQuotaResponse>();
             response->Record.SetTxId(state.ReadTxId);
             response->Record.SetReservedMessages(available);
             response->Record.SetMessageSizeLimit(Quota.MessageSize);
@@ -2326,7 +2326,7 @@ private:
 
         // Respond to any outstanding requests with an empty quota
         for (size_t idx = 0; idx < state.QuotaRequests; ++idx) {
-            auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>();
+            auto response = std::make_unique<TEvTxProcessing::TEvStreamQuotaResponse>();
             response->Record.SetTxId(state.ReadTxId);
             response->Record.SetReservedMessages(0);
             response->Record.SetMessageSizeLimit(Quota.MessageSize);
@@ -2574,7 +2574,7 @@ private:
         YDB_LOG_DEBUG("Sending TEvRefreshVolatileSnapshotRequest",
             {"logPrefix", LogPrefix},
             {"shardId", shardId});
-        auto req = MakeHolder<TEvDataShard::TEvRefreshVolatileSnapshotRequest>();
+        auto req = std::make_unique<TEvDataShard::TEvRefreshVolatileSnapshotRequest>();
         req->Record.SetOwnerId(TableId.PathId.OwnerId);
         req->Record.SetPathId(TableId.PathId.LocalPathId);
         req->Record.SetStep(PlanStep);
@@ -2662,14 +2662,14 @@ private:
 
         Y_ABORT_UNLESS(!ResolveInProgress);
 
-        auto updatedKeyDesc = MakeHolder<TKeyDesc>(
+        auto updatedKeyDesc = std::make_unique<TKeyDesc>(
                 TableId, KeyDesc->Range, TKeyDesc::ERowOperation::Read,
                 KeyDesc->KeyColumnTypes, KeyDesc->Columns);
 
         YDB_LOG_DEBUG("Sending TEvResolveKeySet update",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         // Avoid setting DomainOwnerId to reduce possible races with schemeshard migration
         request->DatabaseName = Settings.DatabaseName;
         request->ResultSet.emplace_back(std::move(updatedKeyDesc));
@@ -2986,7 +2986,7 @@ private:
 
 private:
     void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvDataShard::TEvGetReadTableSinkStateResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvGetReadTableSinkStateResponse>();
 
         auto& rec = response->Record;
         rec.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -3049,7 +3049,7 @@ private:
     }
 
     void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext& ctx) {
-        auto x = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
+        auto x = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
 
         if (PlanStep) {
             x->Record.SetStep(PlanStep);
@@ -3175,14 +3175,14 @@ private:
     ui64 SelectedCoordinator = 0;
     NTxProxy::TTxProxyServices Services;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
-    THolder<const NACLib::TUserToken> UserToken;
+    std::unique_ptr<const NACLib::TUserToken> UserToken;
 
     TTableId TableId;
     NSchemeCache::TDomainInfo::TPtr DomainInfo;
     TVector<TTableColumnInfo> Columns;
     TSerializedCellVec KeyFromValues;
     TSerializedCellVec KeyToValues;
-    THolder<TKeyDesc> KeyDesc;
+    std::unique_ptr<TKeyDesc> KeyDesc;
 
     TShardMap ShardMap;
     TShardList ShardList;

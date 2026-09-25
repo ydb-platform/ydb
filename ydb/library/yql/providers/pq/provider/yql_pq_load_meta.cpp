@@ -200,8 +200,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state) {
-    return MakeHolder<TPqLoadTopicMetadataTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state) {
+    return std::make_unique<TPqLoadTopicMetadataTransformer>(state);
 }
 
 } // namespace NYql

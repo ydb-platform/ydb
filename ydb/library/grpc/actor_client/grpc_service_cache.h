@@ -18,7 +18,7 @@ class TGrpcServiceCache : public NActors::TActorBootstrapped<TGrpcServiceCache<T
 
     struct TCacheRecord {
         TInstant UpdateTimestamp;
-        THolder<TEventResponseType> Response;
+        std::unique_ptr<TEventResponseType> Response;
         std::deque<typename TEventRequestType::TPtr> Waiters;
 
         bool IsSafeToRelease() {
@@ -63,7 +63,7 @@ class TGrpcServiceCache : public NActors::TActorBootstrapped<TGrpcServiceCache<T
 
     void SendReply(typename TEventRequestType::TPtr& ev, TCacheRecord* cacheRecord) {
         NActors::TActorId sender = ev->Sender;
-        THolder<TEventResponseType> response = MakeHolder<TEventResponseType>();
+        std::unique_ptr<TEventResponseType> response = std::make_unique<TEventResponseType>();
         if (ev->HasEvent()) {
             response->Request = ev;
         } else {
@@ -86,7 +86,7 @@ class TGrpcServiceCache : public NActors::TActorBootstrapped<TGrpcServiceCache<T
             cacheRecord = &Cache.Update(cacheKey);
         }
         if (cacheRecord->Waiters.empty()) {
-            THolder<TEventRequestType> request = ev->Release();
+            std::unique_ptr<TEventRequestType> request = ev->Release();
             TBase::Send(GetUnderlyingActor(), request.Release());
         }
         cacheRecord->Waiters.emplace_back(ev);

@@ -101,7 +101,7 @@ public:
 
     void ReadPoolState(const TActorContext &ctx)
     {
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto &read = *request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
         if (Pool->Config.HasBoxId()) {
             read.SetBoxId(Pool->Config.GetBoxId());
@@ -117,7 +117,7 @@ public:
 
     void AllocatePool(const TActorContext &ctx)
     {
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto *pool = request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
         pool->CopyFrom(Pool->Config);
         if (!pool->GetKind()) {
@@ -142,7 +142,7 @@ public:
             return;
         }
 
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto &del = *request->Record.MutableRequest()->AddCommand()->MutableDeleteStoragePool();
         del.SetBoxId(Pool->Config.GetBoxId());
         del.SetStoragePoolId(PoolId);
@@ -568,8 +568,8 @@ public:
         }
     }
 
-    THolder<TEvTxUserProxy::TEvProposeTransaction> MakeProposeTransaction() {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> MakeProposeTransaction() {
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
         request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
@@ -796,7 +796,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(TxId);
 
         YDB_LOG_TRACE("TSubdomainManip send notification",
@@ -812,7 +812,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(Tenant->Path);
+        auto request = std::make_unique<TEvSchemeShard::TEvDescribeScheme>(Tenant->Path);
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
 
@@ -1032,7 +1032,7 @@ public:
     }
 
     void ResolveHive(const TActorContext &ctx) const {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Tenant->Path;
 
         auto& entry = request->ResultSet.emplace_back();
@@ -2388,7 +2388,7 @@ void TTenantsManager::RequestTenantResources(TTenant::TPtr tenant, const TActorC
     if (!TenantSlotBrokerPipe)
         OpenTenantSlotBrokerPipe(ctx);
 
-    auto request = MakeHolder<TEvTenantSlotBroker::TEvAlterTenant>();
+    auto request = std::make_unique<TEvTenantSlotBroker::TEvAlterTenant>();
     request->Record.SetTenantName(tenant->Path);
     for (auto &pr : tenant->Slots) {
         auto &slot = *request->Record.AddRequiredSlots();
@@ -2408,7 +2408,7 @@ void TTenantsManager::RequestTenantSlotsState(TTenant::TPtr tenant, const TActor
     if (!TenantSlotBrokerPipe)
         OpenTenantSlotBrokerPipe(ctx);
 
-    auto request = MakeHolder<TEvTenantSlotBroker::TEvGetTenantState>();
+    auto request = std::make_unique<TEvTenantSlotBroker::TEvGetTenantState>();
     request->Record.SetTenantName(tenant->Path);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvGetTenantState",
@@ -2422,7 +2422,7 @@ void TTenantsManager::RequestTenantSlotsStats(const TActorContext &ctx)
     if (!TenantSlotBrokerPipe)
         OpenTenantSlotBrokerPipe(ctx);
 
-    auto request = MakeHolder<TEvTenantSlotBroker::TEvGetSlotStats>();
+    auto request = std::make_unique<TEvTenantSlotBroker::TEvGetSlotStats>();
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvGetSlotStats",
         {"ev", request->Record.ShortDebugString()});
@@ -2721,7 +2721,7 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
                                               const TActorContext &ctx)
 {
     for (auto &subscriber : tenant->Subscribers) {
-        auto notification = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
+        auto notification = std::make_unique<TEvConsole::TEvOperationCompletionNotification>();
         auto &operation = *notification->Record.MutableResponse()->mutable_operation();
         Ydb::TOperationId id = MakeOperationId(tenant, action);
         operation.set_id(ProtoToString(id));
@@ -2848,7 +2848,7 @@ void TTenantsManager::ProcessOrDelayTx(ITransaction *tx,
     if (Config.TotalComputationalUnitsLoadQuota) {
         if (DelayedTxs.empty())
             RequestTenantSlotsStats(ctx);
-        DelayedTxs.push(THolder<ITransaction>(tx));
+        DelayedTxs.push(std::unique_ptr<ITransaction>(tx));
     } else {
         TxProcessor->ProcessTx(tx, ctx);
     }
@@ -3650,7 +3650,7 @@ void TTenantsManager::Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &
         (*description.mutable_labels())["slot_type"] = pr.second.TenantSlotType;
     }
 
-    auto resp = MakeHolder<TEvConsole::TEvDescribeTenantOptionsResponse>();
+    auto resp = std::make_unique<TEvConsole::TEvDescribeTenantOptionsResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     operation.set_ready(true);
     operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -3666,7 +3666,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const
 {
     Counters.Inc(COUNTER_GET_OPERATION_REQUESTS);
 
-    auto resp = MakeHolder<TEvConsole::TEvGetOperationResponse>();
+    auto resp = std::make_unique<TEvConsole::TEvGetOperationResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     FillOperationStatus(ev->Get()->Record.GetRequest().id(), operation);
 
@@ -3686,7 +3686,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
     auto path = CanonizePath(ev->Get()->Record.GetRequest().path());
     auto tenant = GetTenant(path);
 
-    auto resp = MakeHolder<TEvConsole::TEvGetTenantStatusResponse>();
+    auto resp = std::make_unique<TEvConsole::TEvGetTenantStatusResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     operation.set_ready(true);
 
@@ -3732,7 +3732,7 @@ void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const 
     for (auto &pr : Tenants)
         result.add_paths(pr.first);
 
-    auto resp = MakeHolder<TEvConsole::TEvListTenantsResponse>();
+    auto resp = std::make_unique<TEvConsole::TEvListTenantsResponse>();
     auto &operation = *resp->Record.MutableResponse()->mutable_operation();
     operation.set_ready(true);
     operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -3751,7 +3751,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
     auto tenant = FillOperationStatus(rec.GetRequest().id(), operation);
 
     if (operation.ready() && operation.status() != Ydb::StatusIds::NOT_FOUND) {
-        auto resp = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
+        auto resp = std::make_unique<TEvConsole::TEvOperationCompletionNotification>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvOperationCompletionNotification",
             {"ev", resp->Record.ShortDebugString()});
@@ -3765,7 +3765,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
             tenant->Subscribers.push_back(ev->Sender);
         }
 
-        auto resp = MakeHolder<TEvConsole::TEvNotifyOperationCompletionResponse>();
+        auto resp = std::make_unique<TEvConsole::TEvNotifyOperationCompletionResponse>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvNotifyOperationCompletionResponse",
             {"ev", resp->Record.ShortDebugString()});
@@ -4101,7 +4101,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
         FillTenantStatus(tenant, result);
         FillTenantAllocatedSlots(tenant, result, rec);
 
-        auto resp = MakeHolder<TEvConsole::TEvGetTenantStatusResponse>();
+        auto resp = std::make_unique<TEvConsole::TEvGetTenantStatusResponse>();
         auto &operation = *resp->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);

@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceForbid, 1)
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
         }
         {
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1)
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 1000), 1)
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, resId, 1)
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
 
             runtime->Send(new IEventHandle(MakeQuoterServiceID(), sender,
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
     // Send a scheme operation and wait for it to be accepted (ExecInProgress).
     // Use SimulateSleep after calling this to give schemeshard time to complete.
-    void SendSchemeOpAndWaitAccepted(TTestActorRuntime* runtime, THolder<TEvTxUserProxy::TEvProposeTransaction> propose, const TString& opName) {
+    void SendSchemeOpAndWaitAccepted(TTestActorRuntime* runtime, std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> propose, const TString& opName) {
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTxProxyID(), sender, propose.Release()));
 
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
     // Async helper: initialize root scheme storage pools (equivalent of TClient::InitRootScheme)
     void InitRootSchemeAsync(TTestActorRuntime* runtime) {
-        auto propose = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto propose = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto* tx = propose->Record.MutableTransaction()->MutableModifyScheme();
         tx->SetWorkingDir("/");
         tx->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain);
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
 
     // Async helper: create Kesus node via tx proxy
     void CreateKesusAsync(TTestActorRuntime* runtime) {
-        auto propose = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto propose = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto* tx = propose->Record.MutableTransaction()->MutableModifyScheme();
         tx->SetWorkingDir(TStringBuilder() << "/" << Tests::TestDomainName);
         tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
     ui64 GetKesusTabletIdAsync(TTestActorRuntime* runtime) {
         TActorId sender = runtime->AllocateEdgeActor();
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter");
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Deadline);
         }
         {
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
         }
 
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::ResourceNocheck, 1),
                     }, TDuration::Max())));
 
-            THolder<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT(reply->Result == TEvQuota::TEvClearance::EResult::Success);
         }
     }
@@ -394,13 +394,13 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
                     TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(1, 10), 20)
                     }, TDuration::Seconds(3))));
 
-            THolder<TEvQuota::TEvClearance> reply1 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply1 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT_C(reply1->Result == TEvQuota::TEvClearance::EResult::Success, "Result: " << static_cast<int>(reply1->Result));
 
-            THolder<TEvQuota::TEvClearance> reply2 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply2 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT_C(reply2->Result == TEvQuota::TEvClearance::EResult::Success, "Result: " << static_cast<int>(reply2->Result));
 
-            THolder<TEvQuota::TEvClearance> reply3 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
+            std::unique_ptr<TEvQuota::TEvClearance> reply3 = runtime->GrabEdgeEvent<TEvQuota::TEvClearance>();
             UNIT_ASSERT_C(reply3->Result == TEvQuota::TEvClearance::EResult::Deadline, "Result: " << static_cast<int>(reply3->Result));
         }
     }
@@ -596,8 +596,8 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         // after the session the service has no balance until an update arrives,
         // and the next real update is only sent on the proxy's 100ms tick, which
         // is well past the 1ms deadline.
-        THolder<IEventHandle> heldSession;
-        TVector<THolder<IEventHandle>> heldUpdates;
+        std::unique_ptr<IEventHandle> heldSession;
+        TVector<std::unique_ptr<IEventHandle>> heldUpdates;
         bool replaying = false;
         auto sessionObserver = runtime->AddObserver<TEvQuota::TEvProxySession>(
             [&](TEvQuota::TEvProxySession::TPtr& ev) {
@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
             1);
 
         // Drop the quoter path resolve answer so the quoter never gets resolved.
-        THolder<IEventHandle> heldNavigate;
+        std::unique_ptr<IEventHandle> heldNavigate;
         auto observer = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
             [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
                 if (!heldNavigate && ev->Recipient == serviceActorId) {
@@ -762,7 +762,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         }
 
         // Drop the "Res2" session answer so its resource resolve hangs.
-        THolder<IEventHandle> heldSession;
+        std::unique_ptr<IEventHandle> heldSession;
         auto observer = runtime->AddObserver<TEvQuota::TEvProxySession>(
             [&](TEvQuota::TEvProxySession::TPtr& ev) {
                 if (!heldSession && ev->Get()->Resource == "Res2") {

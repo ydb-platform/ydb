@@ -110,7 +110,7 @@ Y_UNIT_TEST(DestroyFreeFamilyOnRereadParentDoesNotCrash) {
     );
     DispatchFor(tc);
 
-    auto sessions = MakeHolder<TEvPersQueue::TEvGetReadSessionsInfo>();
+    auto sessions = std::make_unique<TEvPersQueue::TEvGetReadSessionsInfo>();
     sessions->Record.SetClientId("user");
     tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, sessions.Release(), 0, GetPipeConfigWithRetries());
     auto info = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvReadSessionsInfoResponse>(TDuration::Seconds(10));
@@ -152,7 +152,7 @@ Y_UNIT_TEST(SecondSessionTriggersRebalance) {
     const ui32 releasedPartition = release->Record.GetGroup() - 1;
     UNIT_ASSERT(lockedByFirst.contains(releasedPartition));
 
-    auto released = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+    auto released = std::make_unique<TEvPersQueue::TEvPartitionReleased>();
     released->Record.SetSession("session-0");
     released->Record.SetPartition(releasedPartition);
     released->Record.SetTopic("topic");

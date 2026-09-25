@@ -34,7 +34,7 @@ namespace NSchemeBoard {
 
 namespace {
 
-    using TDelayedUpdates = TVector<THolder<IEventHandle>>;
+    using TDelayedUpdates = TVector<std::unique_ptr<IEventHandle>>;
 
     void ReplayUpdates(TDelayedUpdates& updates) {
         for (auto& update : updates) {
@@ -67,14 +67,14 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
         }
 
         if (msg->Commit) {
-            auto commit = MakeHolder<NInternalEvents::TEvCommitRequest>(Owner, Generation);
+            auto commit = std::make_unique<NInternalEvents::TEvCommitRequest>(Owner, Generation);
             Send(Replica, std::move(commit), IEventHandle::FlagTrackDelivery);
             return;
         }
 
         auto update = msg->HasDescription()
-            ? MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, msg->Description)
-            : MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation);
+            ? std::make_unique<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, msg->Description)
+            : std::make_unique<NInternalEvents::TEvUpdateBuilder>(Owner, Generation);
 
         if (msg->HasDeletedLocalPathIds()) {
             auto& deletedLocalPathIds = *update->Record.MutableDeletedLocalPathIds();
@@ -332,7 +332,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
         const auto limit = ev->Get()->Record.GetLimitRepeatedFields();
 
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
         auto& record = *response->Record.MutableReplicaPopulatorResponse();
 
         ActorIdToProto(Parent, record.MutableParent());
@@ -427,7 +427,7 @@ public:
     void Bootstrap() {
         TMonitorableActor::Bootstrap();
 
-        auto handshake = MakeHolder<NInternalEvents::TEvHandshakeRequest>(Owner, Generation);
+        auto handshake = std::make_unique<NInternalEvents::TEvHandshakeRequest>(Owner, Generation);
         Send(Replica, std::move(handshake), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
         Become(&TThis::StateHandshake);
     }
@@ -542,7 +542,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_ABORT_UNLESS(replicaPopulator != nullptr);
 
-            auto update = MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, desc, isDeletion);
+            auto update = std::make_unique<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, desc, isDeletion);
             if (!isDeletion) {
                 update->SetDescribeSchemeResultSerialized(desc.DescribeSchemeResultSerialized);
             }
@@ -657,14 +657,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             {"sender", ev->Sender});
 
         const TPathId pathId = ev->Get()->PathId;
-        THolder<NInternalEvents::TEvUpdateBuilder> update;
+        std::unique_ptr<NInternalEvents::TEvUpdateBuilder> update;
 
         auto it = Descriptions.find(pathId);
         if (it == Descriptions.end()) {
-            update = MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, pathId);
+            update = std::make_unique<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, pathId);
         } else {
             const auto& desc = it->second;
-            update = MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, desc);
+            update = std::make_unique<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, desc);
             update->SetDescribeSchemeResultSerialized(desc.DescribeSchemeResultSerialized);
         }
         update->Record.SetNeedAck(true);
@@ -723,7 +723,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                     {"cookie", ev->Cookie},
                     {"pathId", pathId});
 
-                auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, Max<ui64>());
+                auto ack = std::make_unique<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, Max<ui64>());
                 Send(ev->Sender, std::move(ack), 0, ev->Cookie);
                 return;
             }
@@ -809,7 +809,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                     {"pathId", pathId},
                     {"version", pathIt->first.second});
 
-                auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
+                auto ack = std::make_unique<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
                 Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
 
                 auto eraseIt = pathIt;
@@ -879,7 +879,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
         const auto limit = ev->Get()->Record.GetLimitRepeatedFields();
 
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
         auto& record = *response->Record.MutablePopulatorResponse();
 
         record.SetOwner(Owner);

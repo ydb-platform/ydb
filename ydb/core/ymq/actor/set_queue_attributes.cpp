@@ -24,7 +24,7 @@ class TSetQueueAttributesActor
     : public TActionActor<TSetQueueAttributesActor>
 {
 public:
-    TSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::SetQueueAttributes, std::move(cb))
     {
         for (const auto& attr : Request().attributes()) {
@@ -204,7 +204,7 @@ private:
 
     void NotifyQueueLeader() {
         RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
-        Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
+        Send(QueueLeader_, std::make_unique<TSqsEvents::TEvClearQueueAttributesCache>());
     }
 
     void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
@@ -225,7 +225,7 @@ private:
     TQueueAttributes ValidatedAttributes_;
 };
 
-IActor* CreateSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TSetQueueAttributesActor(sourceSqsRequest, std::move(cb));
 }
 

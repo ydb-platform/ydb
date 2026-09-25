@@ -186,7 +186,7 @@ namespace NKikimr {
             TString AuthToken;
             ui32 MaxInFlight = 0;
             ui32 InFlight = 0;
-            TQueue<THolder<IProcessorBase>> PendingQ;
+            TQueue<std::unique_ptr<IProcessorBase>> PendingQ;
             TMutex Mutex;
             TSet<void*> StreamTags;
 
@@ -226,7 +226,7 @@ namespace NKikimr {
             template<typename TRequest, typename TResponse>
             void Issue(const TRequest& request, TCallback<TResponse>&& callback,
                     typename TRequestProcessor<TRequest, TResponse>::TAsyncRequest asyncRequest) {
-                auto processor = MakeHolder<TRequestProcessor<TRequest, TResponse>>(this, asyncRequest, request,
+                auto processor = std::make_unique<TRequestProcessor<TRequest, TResponse>>(this, asyncRequest, request,
                     std::move(callback), Timeout);
                 with_lock (Mutex) {
                     if (!MaxInFlight || InFlight < MaxInFlight) {
@@ -242,7 +242,7 @@ namespace NKikimr {
                              TSimpleCallback<TResponse>&& processCb,
                              TFinishCallback&& finishCb,
                              typename TStreamRequestProcessor<TRequest, TResponse>::TAsyncRequest streamRequest) {
-                auto processor = MakeHolder<TStreamRequestProcessor<TRequest, TResponse>>
+                auto processor = std::make_unique<TStreamRequestProcessor<TRequest, TResponse>>
                     (this, streamRequest, request, std::move(processCb), std::move(finishCb), Timeout);
                 with_lock (Mutex) {
                     StreamTags.insert(processor.Get());
@@ -275,7 +275,7 @@ namespace NKikimr {
                         break;
                     }
                     if (IsStreamTag(tag)) {
-                        THolder<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag));
+                        std::unique_ptr<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag));
                         if (ok) {
                             processor->InvokeProcess();
                             Y_UNUSED(processor.Release()); // keep processor alive
@@ -285,7 +285,7 @@ namespace NKikimr {
                             EraseStreamTag(tag);
                         }
                     } else {
-                        THolder<IRequestProcessor> processor(static_cast<IRequestProcessor*>(tag));
+                        std::unique_ptr<IRequestProcessor> processor(static_cast<IRequestProcessor*>(tag));
                         if (ok) {
                             processor->Finished();
                         }
@@ -304,7 +304,7 @@ namespace NKikimr {
                 return nullptr;
             }
 
-            void Start(THolder<IProcessorBase> &&processor) {
+            void Start(std::unique_ptr<IProcessorBase> &&processor) {
                 processor->Start();
                 Y_UNUSED(processor.Release());
                 ++InFlight;

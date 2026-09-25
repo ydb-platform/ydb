@@ -69,7 +69,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
     YDB_LOG_TRACE_CTX(ctx, "TJaegerTracingConfigurator: Send TEvConfigNotificationResponse");
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }

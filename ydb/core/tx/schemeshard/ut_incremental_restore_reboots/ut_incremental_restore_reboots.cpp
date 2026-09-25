@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         env.TestWaitNotification(runtime, txId);
 
         const ui64 rejectedId = ++txId;
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(
             rejectedId, TTestTxConfig::SchemeShard);
         auto* first = request->Record.AddTransaction();
         first->SetWorkingDir("/MyRoot");

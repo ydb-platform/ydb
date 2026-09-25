@@ -204,7 +204,7 @@ private:
                 }
             }
 
-            auto response = MakeHolder<TEvAllocateWorkersResponse>(ResourceId, workerIds);
+            auto response = std::make_unique<TEvAllocateWorkersResponse>(ResourceId, workerIds);
             QueryStat.FlushCounters(response->Record);
             auto* workerGroup = response->Record.MutableWorkers();
             TVector<Yql::DqsProto::TWorkerInfo> workers;
@@ -229,14 +229,14 @@ private:
             for (const auto& actorIdProto : group.GetWorkerActor()) {
                 auto actorNode = NActors::ActorIdFromProto(actorIdProto).NodeId();
                 YQL_CLOG(DEBUG, ProviderDq) << "TEvFreeWorkersNotify " << group.GetResourceId();
-                auto request = MakeHolder<TEvFreeWorkersNotify>(group.GetResourceId());
+                auto request = std::make_unique<TEvFreeWorkersNotify>(group.GetResourceId());
                 request->Record.SetTraceId(TraceId);
                 Send(MakeWorkerManagerActorID(actorNode), request.Release());
             }
         }
         if (!LocalMode) {
             YQL_CLOG(DEBUG, ProviderDq) << "TEvFreeWorkersNotify " << ResourceId << " (failed)";
-            auto request = MakeHolder<TEvFreeWorkersNotify>(ResourceId);
+            auto request = std::make_unique<TEvFreeWorkersNotify>(ResourceId);
             request->Record.SetTraceId(TraceId);
             for (const auto& failedWorker : FailedWorkers) {
                 *request->Record.AddFailedWorkerGuid() = failedWorker.GetGuid();
@@ -247,7 +247,7 @@ private:
 
     void SendToWorker(const TRequestInfo& node, TDuration backoff = TDuration()) {
         auto nodeId = node.WorkerInfo.GetNodeId();
-        auto request = MakeHolder<TEvAllocateWorkersRequest>(1, "", TMaybe<ui64>(node.ResourceId));
+        auto request = std::make_unique<TEvAllocateWorkersRequest>(1, "", TMaybe<ui64>(node.ResourceId));
         if (Timeout) {
             request->Record.SetFreeWorkerAfterMs(Timeout.MilliSeconds());
         }
@@ -305,7 +305,7 @@ private:
         TString message = TStringBuilder()
             << "Disconnected from worker: `" << workerInfo << "`, reason: " << reason;
         YQL_CLOG(ERROR, ProviderDq) << message;
-        auto response = MakeHolder<TEvAllocateWorkersResponse>(message, NYql::NDqProto::StatusIds::UNAVAILABLE);
+        auto response = std::make_unique<TEvAllocateWorkersResponse>(message, NYql::NDqProto::StatusIds::UNAVAILABLE);
         QueryStat.FlushCounters(response->Record);
         Send(SenderId, response.Release());
     }

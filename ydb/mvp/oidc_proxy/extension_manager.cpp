@@ -16,7 +16,7 @@ TExtensionManager::TExtensionManager(const TActorId sender,
     , AuthHeader(std::move(authHeader))
     , Timeout(settings.DefaultRequestTimeout)
 {
-    ExtensionCtx->Params.ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
+    ExtensionCtx->Params.ProtectedPage = std::make_unique<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
 }
 
@@ -34,7 +34,7 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
 
 void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     auto& params = ExtensionCtx->Params;
-    params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+    params.HeadersOverride = std::make_unique<NHttp::THeadersBuilder>();
     params.ResponseError = event->Get()->GetError();
 
     auto response = std::move(event->Get()->Response);

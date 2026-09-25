@@ -36,7 +36,7 @@ bool THive::SeenDomain(TSubDomainKey domain) {
 }
 
 void THive::ResolveDomain(TSubDomainKey domain) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     request->DatabaseName = RootDomainName;
 
     request->ResultSet.emplace_back();

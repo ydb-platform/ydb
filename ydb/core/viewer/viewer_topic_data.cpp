@@ -129,7 +129,7 @@ void TTopicData::SendPQReadRequest() {
     cmdRead->SetExternalOperation(true);
     cmdRead->SetCanReadBatches(true);
 
-    auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto req = std::make_unique<TEvPersQueue::TEvRequest>();
     req->Record.Swap(&request);
     SendRequestToPipe(pipeClient, req.Release());
 }
@@ -313,17 +313,17 @@ NYdb::NTopic::ICodec* TTopicData::GetCodec(NPersQueueCommon::ECodec codec) {
         return iter->second.Get();
     }
     if (codecId == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1) {
-        auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TKafkaBatchCodec>());
+        auto [iterator, ins] = Codecs.emplace(codecId, std::make_unique<NYdb::NTopic::TKafkaBatchCodec>());
         return iterator->second.Get();
     }
     switch (codec) {
         case NPersQueueCommon::GZIP: {
-            auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TGzipCodec>());
+            auto [iterator, ins] = Codecs.emplace(codecId, std::make_unique<NYdb::NTopic::TGzipCodec>());
             return iterator->second.Get();
             break;
         }
         case NPersQueueCommon::ZSTD: {
-            auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TZstdCodec>());
+            auto [iterator, ins] = Codecs.emplace(codecId, std::make_unique<NYdb::NTopic::TZstdCodec>());
             return iterator->second.Get();
         }
         default:

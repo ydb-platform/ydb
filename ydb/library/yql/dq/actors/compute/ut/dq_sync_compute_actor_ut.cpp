@@ -883,7 +883,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     void DumpMonPage(auto syncCA, auto hook) {
         TMockHttpRequest request;
         {
-            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
+            auto evHttpInfo = std::make_unique<NActors::NMon::TEvHttpInfo>(request);
             ActorSystem.Send(syncCA, EdgeActor, evHttpInfo.Release());
         }
         {
@@ -912,7 +912,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqOutputChannel->Finish();
             }
 
-            auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+            auto evInputChannelData = std::make_unique<TEvDqCompute::TEvChannelData>();
             evInputChannelData->Record.SetSeqNo(++*seqNo);
             auto& chData = *evInputChannelData->Record.MutableChannelData();
             auto channelId = dqOutputChannel->GetChannelId();
@@ -943,7 +943,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     void SendWatermark(NActors::TActorId syncCA, ui64 channelId, TInstant watermark, bool finish, ui32* seqNo) {
-        auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+        auto evInputChannelData = std::make_unique<TEvDqCompute::TEvChannelData>();
         evInputChannelData->Record.SetSeqNo(++*seqNo);
         auto& chData = *evInputChannelData->Record.MutableChannelData();
         chData.SetChannelId(channelId);
@@ -1046,7 +1046,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     void SendFinish(NActors::TActorId syncCA, IDqOutputChannel::TPtr dqOutputChannel, ui32* seqNo) {
-        auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+        auto evInputChannelData = std::make_unique<TEvDqCompute::TEvChannelData>();
         evInputChannelData->Record.SetSeqNo(++*seqNo);
         auto& chData = *evInputChannelData->Record.MutableChannelData();
         auto channelId = dqOutputChannel->GetChannelId();

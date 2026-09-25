@@ -46,7 +46,7 @@ struct ITaskRunnerActorFactory {
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
+        std::unique_ptr<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
 };
 
 ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory);

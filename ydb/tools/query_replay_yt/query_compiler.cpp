@@ -288,7 +288,7 @@ private:
         TActorId selfId = SelfId();
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
+            auto processEv = std::make_unique<TEvKqp::TEvContinueProcess>(0, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 

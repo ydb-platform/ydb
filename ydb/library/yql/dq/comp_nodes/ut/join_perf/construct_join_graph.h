@@ -30,7 +30,7 @@ struct TJoinDescription {
 
 bool IsBlockJoin(ETestedJoinAlgo algo);
 
-THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
+std::unique_ptr<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
                                                      bool withSpiller = true,
                                                      TBlockHashJoinSettings joinSettings = {});
 

@@ -1120,8 +1120,8 @@ public:
 
 };  // TExecuteWriteUnit
 
-THolder<TExecutionUnit> CreateExecuteWriteUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TExecuteWriteUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateExecuteWriteUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TExecuteWriteUnit>(new TExecuteWriteUnit(self, pipeline));
 }
 
 } // NDataShard

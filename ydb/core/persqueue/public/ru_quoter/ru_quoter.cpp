@@ -103,7 +103,7 @@ private:
     }
 
     void SendDatabaseNavigate() {
-        auto request = MakeHolder<TSchemeCacheNavigate>();
+        auto request = std::make_unique<TSchemeCacheNavigate>();
         TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(Settings_.Database);
         entry.Operation = TSchemeCacheNavigate::OpPath;

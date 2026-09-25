@@ -11,7 +11,7 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    TCpuManager::TCpuManager(THolder<TActorSystemSetup>& setup)
+    TCpuManager::TCpuManager(std::unique_ptr<TActorSystemSetup>& setup)
         : ExecutorPoolCount(setup->GetExecutorsCount())
         , Config(setup->CpuManager)
     {

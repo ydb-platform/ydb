@@ -144,7 +144,7 @@ namespace NActors {
         TActor::PassAway();
     }
 
-    THolder<TEvHandshakeAck> TInterconnectSessionTCPv2::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
+    std::unique_ptr<TEvHandshakeAck> TInterconnectSessionTCPv2::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
         Y_UNUSED(ev);
         // v2 does not support continuation; the proxy is expected to reject such requests via
         // SupportsContinuation(), so we should never get here.

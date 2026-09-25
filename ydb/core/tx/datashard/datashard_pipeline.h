@@ -239,7 +239,7 @@ public:
     }
     // Read set iface.
     bool SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
-                       THolder<IEventHandle> &ack,
+                       std::unique_ptr<IEventHandle> &ack,
                        TTransactionContext &txc,
                        const TActorContext &ctx);
     bool LoadInReadSets(TOperation::TPtr op,
@@ -337,7 +337,7 @@ public:
     }
 
     ui64 GetDataTxCacheSize() const { return DataTxCache.size(); }
-    const TMap<TStepOrder, TStackVec<THolder<IEventHandle>, 1>> &GetDelayedAcks() const
+    const TMap<TStepOrder, TStackVec<std::unique_ptr<IEventHandle>, 1>> &GetDelayedAcks() const
     {
         return DelayedAcks;
     }
@@ -541,14 +541,14 @@ private:
     TSortedOps::iterator ActivePlannedOpsLogicallyCompleteEnd;
     TSortedOps::iterator ActivePlannedOpsLogicallyIncompleteEnd;
     THashMap<ui64, TValidatedTx::TPtr> DataTxCache;
-    TMap<TStepOrder, TStackVec<THolder<IEventHandle>, 1>> DelayedAcks;
+    TMap<TStepOrder, TStackVec<std::unique_ptr<IEventHandle>, 1>> DelayedAcks;
     TStepOrder LastPlannedTx;
     TStepOrder LastCompleteTx;
     TStepOrder UtmostCompleteTx;
     ui64 KeepSchemaStep;
     ui64 LastCleanupTime;
     TSchemaOperation * SchemaTx;
-    std::array<THolder<TExecutionUnit>, (ui32)EExecutionUnitKind::Count> ExecutionUnits;
+    std::array<std::unique_ptr<TExecutionUnit>, (ui32)EExecutionUnitKind::Count> ExecutionUnits;
     THashSet<TOperation::TPtr> ExecuteBlockers;
     // Candidates for execution.
     TMap<TStepOrder, TOperation::TPtr> CandidateOps;

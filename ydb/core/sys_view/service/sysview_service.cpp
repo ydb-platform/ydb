@@ -109,24 +109,24 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto now = AppData()->TimeProvider->Now();
 
-        TopByDuration1Minute = MakeHolder<TServiceQueryHistory<TDurationGreater>>(
+        TopByDuration1Minute = std::make_unique<TServiceQueryHistory<TDurationGreater>>(
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE, now);
-        TopByDuration1Hour = MakeHolder<TServiceQueryHistory<TDurationGreater>>(
+        TopByDuration1Hour = std::make_unique<TServiceQueryHistory<TDurationGreater>>(
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE, now);
 
-        TopByReadBytes1Minute = MakeHolder<TServiceQueryHistory<TReadBytesGreater>>(
+        TopByReadBytes1Minute = std::make_unique<TServiceQueryHistory<TReadBytesGreater>>(
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE, now);
-        TopByReadBytes1Hour = MakeHolder<TServiceQueryHistory<TReadBytesGreater>>(
+        TopByReadBytes1Hour = std::make_unique<TServiceQueryHistory<TReadBytesGreater>>(
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE, now);
 
-        TopByCpuTime1Minute = MakeHolder<TServiceQueryHistory<TCpuTimeGreater>>(
+        TopByCpuTime1Minute = std::make_unique<TServiceQueryHistory<TCpuTimeGreater>>(
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE, now);
-        TopByCpuTime1Hour = MakeHolder<TServiceQueryHistory<TCpuTimeGreater>>(
+        TopByCpuTime1Hour = std::make_unique<TServiceQueryHistory<TCpuTimeGreater>>(
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE, now);
 
-        TopByRequestUnits1Minute = MakeHolder<TServiceQueryHistory<TRequestUnitsGreater>>(
+        TopByRequestUnits1Minute = std::make_unique<TServiceQueryHistory<TRequestUnitsGreater>>(
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE, now);
-        TopByRequestUnits1Hour = MakeHolder<TServiceQueryHistory<TRequestUnitsGreater>>(
+        TopByRequestUnits1Hour = std::make_unique<TServiceQueryHistory<TRequestUnitsGreater>>(
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE, now);
 
         ScanLimiter = MakeIntrusive<TScanLimiter>(ConcurrentScansLimit);
@@ -245,7 +245,7 @@ private:
         {}
 
         void OnDatabaseRemoved(const TString& database, TPathId pathId) override {
-            auto evRemove = MakeHolder<TEvPrivate::TEvRemoveDatabase>(database, pathId);
+            auto evRemove = std::make_unique<TEvPrivate::TEvRemoveDatabase>(database, pathId);
             auto service = MakeSysViewServiceID(ActorSystem->NodeId);
             ActorSystem->Send(service, evRemove.Release());
         }
@@ -263,7 +263,7 @@ private:
             return;
         }
 
-        auto summary = MakeHolder<TEvSysView::TEvIntervalQuerySummary>();
+        auto summary = std::make_unique<TEvSysView::TEvIntervalQuerySummary>();
         auto& record = summary->Record;
         record.SetDatabase(database);
         record.SetIntervalEndUs(intervalEnd.MicroSeconds());
@@ -356,7 +356,7 @@ private:
     void RequestProcessorId(const TString& database) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = database;
         request->ResultSet.push_back({});
 
@@ -380,7 +380,7 @@ private:
 
         constexpr bool isLabeled = std::is_same<T, TEvSysView::TEvSendDbLabeledCountersRequest>::value;
         auto& dbCounters = isLabeled ? DatabaseLabeledCounters[database] : DatabaseCounters[database];
-        auto sendEv = MakeHolder<T>();
+        auto sendEv = std::make_unique<T>();
         auto& record = sendEv->Record;
 
         TDuration packingTime;
@@ -453,7 +453,7 @@ private:
 
     void RequestDatabaseName(TPathId pathId) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         request->ResultSet.push_back({});
 
@@ -476,7 +476,7 @@ private:
             }
 
             if (DbWatcherActorId) {
-                auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(database);
                 Send(DbWatcherActorId, evWatch.Release());
             }
         }
@@ -493,7 +493,7 @@ private:
             }
 
             if (DbWatcherActorId) {
-                auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(database);
                 Send(DbWatcherActorId, evWatch.Release());
             }
         }
@@ -524,7 +524,7 @@ private:
     }
 
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
-        auto response = MakeHolder<TEvSysView::TEvGetIntervalMetricsResponse>();
+        auto response = std::make_unique<TEvSysView::TEvGetIntervalMetricsResponse>();
 
         if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
             Send(ev->Sender, std::move(response), 0, ev->Cookie);
@@ -734,7 +734,7 @@ private:
             }
 
             if (DbWatcherActorId) {
-                auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(database);
                 Send(DbWatcherActorId, evWatch.Release());
             }
         }
@@ -797,7 +797,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-        THolder<TNavigate> request(ev->Get()->Request.Release());
+        std::unique_ptr<TNavigate> request(ev->Get()->Request.Release());
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         auto& entry = request->ResultSet.back();
 
@@ -885,7 +885,7 @@ private:
                 RequestProcessorId(database);
 
                 if (DbWatcherActorId) {
-                    auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                    auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(database);
                     Send(DbWatcherActorId, evWatch.Release());
                 }
             }
@@ -905,7 +905,7 @@ private:
 
     void Handle(TEvSysView::TEvGetQueryStats::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        auto result = MakeHolder<TEvSysView::TEvGetQueryStatsResult>();
+        auto result = std::make_unique<TEvSysView::TEvGetQueryStatsResult>();
 
         ui64 startBucket = 0;
         if (record.HasStartBucket()) {
@@ -955,7 +955,7 @@ private:
     }
 
     void Handle(TEvSysView::TEvGetScanLimiter::TPtr& ev) {
-        auto result = MakeHolder<TEvSysView::TEvGetScanLimiterResult>();
+        auto result = std::make_unique<TEvSysView::TEvGetScanLimiterResult>();
         result->ScanLimiter = ScanLimiter;
         Send(ev->Sender, std::move(result));
     }
@@ -1029,17 +1029,17 @@ private:
 
     std::unordered_map<TString, std::pair<TInstant, size_t>> Attempts;
 
-    THolder<TServiceQueryHistory<TDurationGreater>> TopByDuration1Minute;
-    THolder<TServiceQueryHistory<TDurationGreater>> TopByDuration1Hour;
+    std::unique_ptr<TServiceQueryHistory<TDurationGreater>> TopByDuration1Minute;
+    std::unique_ptr<TServiceQueryHistory<TDurationGreater>> TopByDuration1Hour;
 
-    THolder<TServiceQueryHistory<TReadBytesGreater>> TopByReadBytes1Minute;
-    THolder<TServiceQueryHistory<TReadBytesGreater>> TopByReadBytes1Hour;
+    std::unique_ptr<TServiceQueryHistory<TReadBytesGreater>> TopByReadBytes1Minute;
+    std::unique_ptr<TServiceQueryHistory<TReadBytesGreater>> TopByReadBytes1Hour;
 
-    THolder<TServiceQueryHistory<TCpuTimeGreater>> TopByCpuTime1Minute;
-    THolder<TServiceQueryHistory<TCpuTimeGreater>> TopByCpuTime1Hour;
+    std::unique_ptr<TServiceQueryHistory<TCpuTimeGreater>> TopByCpuTime1Minute;
+    std::unique_ptr<TServiceQueryHistory<TCpuTimeGreater>> TopByCpuTime1Hour;
 
-    THolder<TServiceQueryHistory<TRequestUnitsGreater>> TopByRequestUnits1Minute;
-    THolder<TServiceQueryHistory<TRequestUnitsGreater>> TopByRequestUnits1Hour;
+    std::unique_ptr<TServiceQueryHistory<TRequestUnitsGreater>> TopByRequestUnits1Minute;
+    std::unique_ptr<TServiceQueryHistory<TRequestUnitsGreater>> TopByRequestUnits1Hour;
 
     struct TDbCountersState {
         TIntrusivePtr<IDbCounters> Counters;
@@ -1079,15 +1079,15 @@ private:
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
 };
 
-THolder<NActors::IActor> CreateSysViewService(
+std::unique_ptr<NActors::IActor> CreateSysViewService(
     TExtCountersConfig&& config, bool hasExternalCounters)
 {
-    return MakeHolder<TSysViewService>(
+    return std::make_unique<TSysViewService>(
         std::move(config), hasExternalCounters, EProcessorMode::MINUTE);
 }
 
-THolder<NActors::IActor> CreateSysViewServiceForTests() {
-    return MakeHolder<TSysViewService>(
+std::unique_ptr<NActors::IActor> CreateSysViewServiceForTests() {
+    return std::make_unique<TSysViewService>(
         TExtCountersConfig(), true, EProcessorMode::FAST);
 }
 

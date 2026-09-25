@@ -318,7 +318,7 @@ private:
             SetWriteActorSettings(event.GetConfig().GetTableServiceConfig().GetWriteActorSettings());
         }
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
@@ -471,7 +471,7 @@ private:
     void ReplyError(TActorId executerId, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
-        auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+        auto ev = std::make_unique<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(request.GetTxId());
         for (auto& task : request.GetTasks()) {
             auto* resp = ev->Record.AddNotStartedTasks();

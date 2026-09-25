@@ -95,10 +95,10 @@ void TStoreSchemeTxUnit::Complete(TOperation::TPtr op,
     Pipeline.ProposeComplete(op, ctx);
 }
 
-THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TStoreSchemeTxUnit(dataShard, pipeline));
+    return std::unique_ptr<TStoreSchemeTxUnit>(new TStoreSchemeTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

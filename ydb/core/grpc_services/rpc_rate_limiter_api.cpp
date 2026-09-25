@@ -170,7 +170,7 @@ protected:
             return;
         }
 
-        auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         req->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
         req->ResultSet.emplace_back();
         req->ResultSet.back().Path.swap(path);
@@ -179,7 +179,7 @@ protected:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        THolder<NSchemeCache::TSchemeCacheNavigate> navigate = std::move(ev->Get()->Request);
+        std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> navigate = std::move(ev->Get()->Request);
         if (navigate->ResultSet.size() != 1 || navigate->ErrorCount > 0) {
             this->Reply(StatusIds::SCHEME_ERROR, this->ActorContext());
             return;
@@ -278,7 +278,7 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TCreateRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvAddQuoterResource> req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
+        std::unique_ptr<TEvKesus::TEvAddQuoterResource> req = std::make_unique<TEvKesus::TEvAddQuoterResource>();
         FillRateLimiterDescription(*req->Record.MutableResource(), GetProtoRequest()->resource());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
@@ -309,7 +309,7 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TAlterRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvUpdateQuoterResource> req = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
+        std::unique_ptr<TEvKesus::TEvUpdateQuoterResource> req = std::make_unique<TEvKesus::TEvUpdateQuoterResource>();
         FillRateLimiterDescription(*req->Record.MutableResource(), GetProtoRequest()->resource());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
@@ -340,7 +340,7 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TDropRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvDeleteQuoterResource> req = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
+        std::unique_ptr<TEvKesus::TEvDeleteQuoterResource> req = std::make_unique<TEvKesus::TEvDeleteQuoterResource>();
         req->Record.SetResourcePath(GetProtoRequest()->resource_path());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }
@@ -374,7 +374,7 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TListRateLimiterResourcesRPC::StateFunc);
 
-        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        std::unique_ptr<TEvKesus::TEvDescribeQuoterResources> req = std::make_unique<TEvKesus::TEvDescribeQuoterResources>();
         if (const TString& path = GetProtoRequest()->resource_path()) {
             req->Record.AddResourcePaths(path);
         }
@@ -418,7 +418,7 @@ public:
     void SendRequest() override {
         UnsafeBecome(&TDescribeRateLimiterResourceRPC::StateFunc);
 
-        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        std::unique_ptr<TEvKesus::TEvDescribeQuoterResources> req = std::make_unique<TEvKesus::TEvDescribeQuoterResources>();
         req->Record.AddResourcePaths(GetProtoRequest()->resource_path());
         NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release(), 0);
     }

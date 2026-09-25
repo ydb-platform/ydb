@@ -638,7 +638,7 @@ void TReadSessionActor::AnswerForCommitsIfCan(const TActorContext& ctx) {
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvReadSessionStatus::TPtr& ev, const TActorContext& ctx) {
 
-    THolder<TEvPQProxy::TEvReadSessionStatusResponse> result(new TEvPQProxy::TEvReadSessionStatusResponse());
+    std::unique_ptr<TEvPQProxy::TEvReadSessionStatusResponse> result(new TEvPQProxy::TEvReadSessionStatusResponse());
     result->Record.SetSession(Session);
     result->Record.SetTimestamp(StartTimestamp.MilliSeconds());
 
@@ -663,7 +663,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadSessionStatus::TPtr& ev, const
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorContext& ctx) {
 
-    THolder<TEvPQProxy::TEvReadInit> event(ev->Release());
+    std::unique_ptr<TEvPQProxy::TEvReadInit> event(ev->Release());
 
     if (!Topics.empty()) {
         //answer error
@@ -873,7 +873,7 @@ void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& top
     YDB_LOG_INFO_CTX(ctx, "Register session",
         {PQ_LOG_PREFIX},
         {"topic", topic});
-    THolder<TEvPersQueue::TEvRegisterReadSession> request;
+    std::unique_ptr<TEvPersQueue::TEvRegisterReadSession> request;
     request.Reset(new TEvPersQueue::TEvRegisterReadSession);
     auto& req = request->Record;
     req.SetSession(Session);
@@ -1361,7 +1361,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionReleased::TPtr& ev, const
 
 void TReadSessionActor::InformBalancerAboutRelease(const THashMap<std::pair<TString, ui32>, TPartitionActorInfo>::iterator& it, const TActorContext& ctx) {
 
-    THolder<TEvPersQueue::TEvPartitionReleased> request;
+    std::unique_ptr<TEvPersQueue::TEvPartitionReleased> request;
     request.Reset(new TEvPersQueue::TEvPartitionReleased);
     auto& req = request->Record;
 
@@ -1576,7 +1576,7 @@ void TReadSessionActor::ProcessAuth(const NPersQueueCommon::TCredentials& auth) 
 void TReadSessionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext& ctx) {
     RequestNotChecked = true;
 
-    THolder<TEvPQProxy::TEvRead> event(ev->Release());
+    std::unique_ptr<TEvPQProxy::TEvRead> event(ev->Release());
 
     Handler->ReadyForNextRead();
 
@@ -1610,7 +1610,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const TAct
     if (!ActualPartitionActor(sender))
         return;
 
-    THolder<TEvPQProxy::TEvReadResponse> event(ev->Release());
+    std::unique_ptr<TEvPQProxy::TEvReadResponse> event(ev->Release());
 
     Y_ABORT_UNLESS(event->Response.GetBatchedData().GetCookie() == 0); // cookie is not assigned
     Y_ABORT_UNLESS(event->Response.GetBatchedData().PartitionDataSize() == 1);
@@ -2502,7 +2502,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     ReadGuid = TString();
 
-    auto readResponse = MakeHolder<TEvPQProxy::TEvReadResponse>(
+    auto readResponse = std::make_unique<TEvPQProxy::TEvReadResponse>(
         std::move(response),
         ReadOffset,
         res.GetBlobsFromDisk() > 0,

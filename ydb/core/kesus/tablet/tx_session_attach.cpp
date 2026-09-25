@@ -14,7 +14,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     TActorId PreviousOwner;
     ui64 PreviousGeneration = 0;
     ui64 PreviousCookie = 0;
-    THolder<TEvKesus::TEvAttachSessionResult> Reply;
+    std::unique_ptr<TEvKesus::TEvAttachSessionResult> Reply;
 
     explicit TTxSessionAttach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvAttachSession& record)
         : TTxBase(self)

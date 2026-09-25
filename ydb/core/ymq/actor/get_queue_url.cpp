@@ -18,7 +18,7 @@ class TGetQueueUrlActor
     : public TActionActor<TGetQueueUrlActor>
 {
 public:
-    TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::GetQueueUrl, std::move(cb))
     {
     }
@@ -85,7 +85,7 @@ private:
     }
 };
 
-IActor* CreateGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TGetQueueUrlActor(sourceSqsRequest, std::move(cb));
 }
 

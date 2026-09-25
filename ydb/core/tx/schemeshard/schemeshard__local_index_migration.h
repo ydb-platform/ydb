@@ -22,7 +22,7 @@ struct TLocalIndexMigrationItem {
     TString DebugString() const;
 };
 
-THolder<NActors::IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, NActors::TActorId selfActorId,
+std::unique_ptr<NActors::IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, NActors::TActorId selfActorId,
                                                   TSchemeShard* schemeshard,
                                                   TVector<TLocalIndexMigrationItem>&& items);
 

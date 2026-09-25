@@ -405,7 +405,7 @@ public:
             "SchemeShard generation did not change after restart: " << oldGeneration);
         runtime.Send(new IEventHandle(newPipe, sender, new TEvents::TEvPoisonPill()));
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(TString(tablePath));
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;

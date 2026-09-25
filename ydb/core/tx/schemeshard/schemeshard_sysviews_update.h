@@ -15,7 +15,7 @@ struct TModifySysViewRequestInfo {
     TString DebugString() const;
 };
 
-THolder<NActors::IActor> CreateSysViewsRosterUpdate(TTabletId selfTabletId, NActors::TActorId selfActorId,
+std::unique_ptr<NActors::IActor> CreateSysViewsRosterUpdate(TTabletId selfTabletId, NActors::TActorId selfActorId,
                                                     TVector<std::pair<TTxId, TModifySysViewRequestInfo>>&& sysViewUpdates);
 
 } // namespace NKikimr::NSchemeShard

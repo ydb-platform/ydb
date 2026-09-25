@@ -7,18 +7,18 @@ namespace NMiniKQL {
 namespace NPackedTuple {
 
 // -----------------------------------------------------------------
-THolder<TPageHashTable> TPageHashTable::Create(const TTupleLayout* layout, ui32) {
+std::unique_ptr<TPageHashTable> TPageHashTable::Create(const TTupleLayout* layout, ui32) {
 #ifdef USE_X86_SIMD
     if (NX86::HaveAVX2()) {
-        return MakeHolder<TPageHashTableImpl<NSimd::TSimdAVX2Traits>>(layout);
+        return std::make_unique<TPageHashTableImpl<NSimd::TSimdAVX2Traits>>(layout);
     }
 
     if (NX86::HaveSSE42()) {
-        return MakeHolder<TPageHashTableImpl<NSimd::TSimdSSE42Traits>>(layout);
+        return std::make_unique<TPageHashTableImpl<NSimd::TSimdSSE42Traits>>(layout);
     }
 #endif
 
-    return MakeHolder<TPageHashTableImpl<NSimd::TSimdFallbackTraits>>(layout);
+    return std::make_unique<TPageHashTableImpl<NSimd::TSimdFallbackTraits>>(layout);
 }
 
 

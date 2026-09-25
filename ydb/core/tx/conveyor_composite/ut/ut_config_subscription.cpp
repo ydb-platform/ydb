@@ -27,7 +27,7 @@ private:
         ctx.Send(Sink, new NActors::TEvents::TEvWakeup(observation));
         ctx.Send(ev->Sender, new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse());
 
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.SetSubscriptionId(SubscriptionId);
         notification->Record.AddItemKinds(kinds.front());
         ctx.Send(ev->Sender, notification.Release(), 0, NotificationCookie);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfigSubscription) {
 
         constexpr ui64 updateSubscriptionId = 43;
         constexpr ui64 updateCookie = 0x5678;
-        auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto update = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         update->Record.SetSubscriptionId(updateSubscriptionId);
         update->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem);
         update->Record.MutableConfig()->MutableCompositeConveyorConfig()->SetEnabled(true);

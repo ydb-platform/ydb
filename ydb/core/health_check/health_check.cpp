@@ -104,11 +104,11 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MONITORING_REQUEST; }
 
     TActorId Sender;
-    THolder<TEvSelfCheckRequest> Request;
+    std::unique_ptr<TEvSelfCheckRequest> Request;
     ui64 Cookie;
     NWilson::TSpan Span;
 
-    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId, const NKikimrConfig::THealthCheckConfig& config)
+    TSelfCheckRequest(const TActorId& sender, std::unique_ptr<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId, const NKikimrConfig::THealthCheckConfig& config)
         : Sender(sender)
         , Request(std::move(request))
         , Cookie(cookie)
@@ -667,7 +667,7 @@ public:
     THashMap<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>> DescribeByPath;
     THashMap<TTabletId, TRequestResponse<TEvSysView::TEvGetPartitionStatsResult>> GetPartitionStatsResult;
     THashMap<TString, THashSet<TString>> PathsByPoolName;
-    THashMap<TString, THolder<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
+    THashMap<TString, std::unique_ptr<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
     THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveInfo>> HiveInfo;
     ui64 HiveNodeStatsToGo = 0;
@@ -884,7 +884,7 @@ public:
         const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
         RequestDone("TEvNodeWardenStorageConfig");
         if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
-            auto result = MakeHolder<TEvSelfCheckResult>();
+            auto result = std::make_unique<TEvSelfCheckResult>();
             result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_MAINTENANCE_REQUIRED);
             auto* issue = result->Result.add_issue_log();
             issue->set_id("0");
@@ -1063,7 +1063,7 @@ public:
 
     [[nodiscard]] TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> RequestDescribe(TTabletId schemeShardId, const TString& path,
             const NKikimrSchemeOp::TDescribeOptions* options = nullptr) {
-        THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+        std::unique_ptr<TEvSchemeShard::TEvDescribeScheme> request = std::make_unique<TEvSchemeShard::TEvDescribeScheme>();
         NKikimrSchemeOp::TDescribePath& record = request->Record;
         record.SetPath(path);
         if (options) {
@@ -1082,7 +1082,7 @@ public:
     }
 
     [[nodiscard]] TRequestResponse<TEvSysView::TEvGetPartitionStatsResult> RequestPartitionStats(TTabletId schemeShardId, TSubDomainKey subDomainKey) {
-        THolder<TEvSysView::TEvGetPartitionStats> request = MakeHolder<TEvSysView::TEvGetPartitionStats>();
+        std::unique_ptr<TEvSysView::TEvGetPartitionStats> request = std::make_unique<TEvSysView::TEvGetPartitionStats>();
         NKikimrSysView::TEvGetPartitionStats& record = request->Record;
         record.MutableFilter()->MutableNotLess()->SetCPUCores(OVERLOADED_SHARDS_CPU_CORES);
         record.SetDomainKeyOwnerId(subDomainKey.GetSchemeShard());
@@ -1091,7 +1091,7 @@ public:
     }
 
     [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId, std::optional<TSubDomainKey> filterDomain) {
-        THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+        std::unique_ptr<TEvHive::TEvRequestHiveInfo> request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
         request->Record.SetReturnFollowers(true);
         if (filterDomain) {
             request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(*filterDomain);
@@ -1100,27 +1100,27 @@ public:
     }
 
     [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveNodeStats> RequestHiveNodeStats(TTabletId hiveId) {
-        THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
+        std::unique_ptr<TEvHive::TEvRequestHiveNodeStats> request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
         return RequestTabletPipe<TEvHive::TEvResponseHiveNodeStats>(hiveId, request.Release());
     }
 
     [[nodiscard]] TRequestResponse<TEvConsole::TEvListTenantsResponse> RequestListTenants() {
-        THolder<TEvConsole::TEvListTenantsRequest> request = MakeHolder<TEvConsole::TEvListTenantsRequest>();
+        std::unique_ptr<TEvConsole::TEvListTenantsRequest> request = std::make_unique<TEvConsole::TEvListTenantsRequest>();
         return RequestTabletPipe<TEvConsole::TEvListTenantsResponse>(ConsoleId, request.Release());
     }
 
     void RequestBsController() {
-        THolder<TEvSysView::TEvGetStoragePoolsRequest> requestPools = MakeHolder<TEvSysView::TEvGetStoragePoolsRequest>();
+        std::unique_ptr<TEvSysView::TEvGetStoragePoolsRequest> requestPools = std::make_unique<TEvSysView::TEvGetStoragePoolsRequest>();
         StoragePools = RequestTabletPipe<TEvSysView::TEvGetStoragePoolsResponse>(BsControllerId, requestPools.Release(), TTabletRequestsState::RequestStoragePools);
-        THolder<TEvSysView::TEvGetGroupsRequest> requestGroups = MakeHolder<TEvSysView::TEvGetGroupsRequest>();
+        std::unique_ptr<TEvSysView::TEvGetGroupsRequest> requestGroups = std::make_unique<TEvSysView::TEvGetGroupsRequest>();
         Groups = RequestTabletPipe<TEvSysView::TEvGetGroupsResponse>(BsControllerId, requestGroups.Release(), TTabletRequestsState::RequestGroups);
-        THolder<TEvSysView::TEvGetVSlotsRequest> requestVSlots = MakeHolder<TEvSysView::TEvGetVSlotsRequest>();
+        std::unique_ptr<TEvSysView::TEvGetVSlotsRequest> requestVSlots = std::make_unique<TEvSysView::TEvGetVSlotsRequest>();
         VSlots = RequestTabletPipe<TEvSysView::TEvGetVSlotsResponse>(BsControllerId, requestVSlots.Release(), TTabletRequestsState::RequestVSlots);
-        THolder<TEvSysView::TEvGetPDisksRequest> requestPDisks = MakeHolder<TEvSysView::TEvGetPDisksRequest>();
+        std::unique_ptr<TEvSysView::TEvGetPDisksRequest> requestPDisks = std::make_unique<TEvSysView::TEvGetPDisksRequest>();
         PDisks = RequestTabletPipe<TEvSysView::TEvGetPDisksResponse>(BsControllerId, requestPDisks.Release(), TTabletRequestsState::RequestPDisks);
     }
 
-    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(THolder<TSchemeCacheNavigate> request) {
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(std::unique_ptr<TSchemeCacheNavigate> request) {
         TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName(*request.Get())));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
         ++Requests;
@@ -1128,7 +1128,7 @@ public:
     }
 
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie) {
-        THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
+        std::unique_ptr<TSchemeCacheNavigate> request = std::make_unique<TSchemeCacheNavigate>();
         request->Cookie = cookie;
         request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
@@ -1142,7 +1142,7 @@ public:
     }
 
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TPathId& pathId, ui64 cookie) {
-        THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
+        std::unique_ptr<TSchemeCacheNavigate> request = std::make_unique<TSchemeCacheNavigate>();
         request->Cookie = cookie;
         request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
@@ -1234,7 +1234,7 @@ public:
     template<typename TEvent>
     [[nodiscard]] TRequestResponse<typename WhiteboardResponse<TEvent>::Type> RequestNodeWhiteboard(TNodeId nodeId) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        auto request = MakeHolder<TEvent>();
+        auto request = std::make_unique<TEvent>();
         for (int field : GetRequiredFields<TEvent>()) {
             request->Record.AddFieldsRequired(field);
         }
@@ -1771,7 +1771,7 @@ public:
             YDB_LOG_DEBUG("TEvNavigateKeySetResult",
                 {"error", response.GetError()});
             if (response.GetError() == "PathErrorUnknown") {
-                auto result = MakeHolder<TEvSelfCheckResult>();
+                auto result = std::make_unique<TEvSelfCheckResult>();
                 result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_UNSPECIFIED);
                 auto* issue = result->Result.add_issue_log();
                 issue->set_id("0");
@@ -3711,7 +3711,7 @@ public:
 
     void ReplyAndPassAway() {
         Span.Event("ReplyAndPassAway");
-        THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+        std::unique_ptr<TEvSelfCheckResult> response = std::make_unique<TEvSelfCheckResult>();
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         AggregateHiveInfo();
@@ -3730,7 +3730,7 @@ public:
         return ReplyAndPassAway(std::move(response));
     }
 
-    void ReplyAndPassAway(THolder<TEvSelfCheckResult> response) {
+    void ReplyAndPassAway(std::unique_ptr<TEvSelfCheckResult> response) {
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         FillNodeInfo(SelfId().NodeId(), result.mutable_location());
@@ -3812,11 +3812,11 @@ public:
     TDuration Timeout = TDuration::MilliSeconds(10000);
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
     TActorId Sender;
-    THolder<RequestType> Request;
+    std::unique_ptr<RequestType> Request;
     ui64 Cookie;
     Ydb::Monitoring::SelfCheckResult Result;
 
-    TNodeCheckRequest(std::shared_ptr<NYdbGrpc::TGRpcClientLow> grpcClient, const TActorId& sender, THolder<RequestType> request, ui64 cookie)
+    TNodeCheckRequest(std::shared_ptr<NYdbGrpc::TGRpcClientLow> grpcClient, const TActorId& sender, std::unique_ptr<RequestType> request, ui64 cookie)
         : GRpcClientLow(grpcClient)
         , Sender(sender)
         , Request(std::move(request))
@@ -3913,7 +3913,7 @@ public:
 
 template<>
 void TNodeCheckRequest<TEvNodeCheckRequest>::ReplyAndPassAway() {
-    THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+    std::unique_ptr<TEvSelfCheckResult> response = std::make_unique<TEvSelfCheckResult>();
     Ydb::Monitoring::SelfCheckResult& result = response->Result;
     FillResult(result);
     Send(Sender, response.Release(), 0, Cookie);

@@ -240,7 +240,7 @@ public:
 
         ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
 
-        Aggregator = MakeHolder<TProcessedRequestsAggregator>(Cfg());
+        Aggregator = std::make_unique<TProcessedRequestsAggregator>(Cfg());
 
         FlushProcessedRequestsAttributes();
     }
@@ -304,7 +304,7 @@ private:
 
 private:
     const TString HostFQDN;
-    THolder<TProcessedRequestsAggregator> Aggregator;
+    std::unique_ptr<TProcessedRequestsAggregator> Aggregator;
 };
 
 IActor* CreateSqsMeteringService() { return new TMeteringActor(); }

@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
     struct TDyingChecker : TTestDecorator {
         TActorId MasterId;
 
-        TDyingChecker(THolder<IActor> &&actor, TActorId masterId)
+        TDyingChecker(std::unique_ptr<IActor> &&actor, TActorId masterId)
             : TTestDecorator(std::move(actor))
             , MasterId(masterId)
         {
@@ -45,10 +45,10 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         friend TActorBootstrapped<TTestMasterActor>;
 
         TSet<TActorId> ActorIds;
-        TVector<THolder<IActor>> Actors;
+        TVector<std::unique_ptr<IActor>> Actors;
         TActorId EdgeActor;
 
-        TTestMasterActor(TVector<THolder<IActor>> &&actors, TActorId edgeActor)
+        TTestMasterActor(TVector<std::unique_ptr<IActor>> &&actors, TActorId edgeActor)
             : TActorBootstrapped()
             , Actors(std::move(actors))
             , EdgeActor(edgeActor)
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         {
             Write("Start master actor");
             for (auto &actor : Actors) {
-                THolder<IActor> decaratedActor = MakeHolder<TDyingChecker>(std::move(actor), SelfId());
+                std::unique_ptr<IActor> decaratedActor = std::make_unique<TDyingChecker>(std::move(actor), SelfId());
                 TActorId id = Register(decaratedActor.Release());
                 Write("Register test actor");
                 UNIT_ASSERT(ActorIds.insert(id).second);
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
     };
 
     struct TFizzBuzzToFooBar : TTestDecorator {
-        TFizzBuzzToFooBar(THolder<IActor> &&actor)
+        TFizzBuzzToFooBar(std::unique_ptr<IActor> &&actor)
             : TTestDecorator(std::move(actor))
         {
         }
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
     struct TWordEraser : TTestDecorator {
         TString ErasingWord;
 
-        TWordEraser(THolder<IActor> &&actor, TString word)
+        TWordEraser(std::unique_ptr<IActor> &&actor, TString word)
             : TTestDecorator(std::move(actor))
             , ErasingWord(word)
         {
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
     };
 
     struct TWithoutWordsDroper : TTestDecorator {
-        TWithoutWordsDroper(THolder<IActor> &&actor)
+        TWithoutWordsDroper(std::unique_ptr<IActor> &&actor)
             : TTestDecorator(std::move(actor))
         {
         }
@@ -232,11 +232,11 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
 
         void Bootstrap() {
             Write("TFizzBuzzSender::Bootstrap");
-            THolder<IActor> actor = MakeHolder<TFooBarReceiver>(SelfId());
-            THolder<IActor> decoratedActor = MakeHolder<TDyingChecker>(std::move(actor), SelfId());
+            std::unique_ptr<IActor> actor = std::make_unique<TFooBarReceiver>(SelfId());
+            std::unique_ptr<IActor> decoratedActor = std::make_unique<TDyingChecker>(std::move(actor), SelfId());
             SlaveId = Register(decoratedActor.Release());
             for (ui64 idx = 1; idx <= 30; ++idx) {
-                THolder<TEvWords> ev = MakeHolder<TEvWords>();
+                std::unique_ptr<TEvWords> ev = std::make_unique<TEvWords>();
                 if (idx % 3 == 0) {
                     ev->Words.push_back("Fizz");
                 }
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
     struct TCountingDecorator : TTestDecorator {
         TCounters *Counters;
 
-        TCountingDecorator(THolder<IActor> &&actor, TCounters *counters)
+        TCountingDecorator(std::unique_ptr<IActor> &&actor, TCounters *counters)
             : TTestDecorator(std::move(actor))
             , Counters(counters)
         {
@@ -294,12 +294,12 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         return true;
     }
 
-    THolder<IActor> CreateFizzBuzzSender() {
-        THolder<IActor> actor = MakeHolder<TFizzBuzzSender>();
-        THolder<IActor> foobar = MakeHolder<TFizzBuzzToFooBar>(std::move(actor));
-        THolder<IActor> fizzEraser = MakeHolder<TWordEraser>(std::move(foobar), "Fizz");
-        THolder<IActor> buzzEraser = MakeHolder<TWordEraser>(std::move(fizzEraser), "Buzz");
-        return MakeHolder<TWithoutWordsDroper>(std::move(buzzEraser));
+    std::unique_ptr<IActor> CreateFizzBuzzSender() {
+        std::unique_ptr<IActor> actor = std::make_unique<TFizzBuzzSender>();
+        std::unique_ptr<IActor> foobar = std::make_unique<TFizzBuzzToFooBar>(std::move(actor));
+        std::unique_ptr<IActor> fizzEraser = std::make_unique<TWordEraser>(std::move(foobar), "Fizz");
+        std::unique_ptr<IActor> buzzEraser = std::make_unique<TWordEraser>(std::move(fizzEraser), "Buzz");
+        return std::make_unique<TWithoutWordsDroper>(std::move(buzzEraser));
     }
 
     Y_UNIT_TEST(Basic) {
@@ -312,10 +312,10 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
         runtime.Initialize();
 
         TActorId edgeActor = runtime.AllocateEdgeActor();
-        TVector<THolder<IActor>> actors(1);
+        TVector<std::unique_ptr<IActor>> actors(1);
         actors[0] = CreateFizzBuzzSender();
         //actors[1] = CreateFizzBuzzSender();
-        THolder<IActor> testActor = MakeHolder<TTestMasterActor>(std::move(actors), edgeActor);
+        std::unique_ptr<IActor> testActor = std::make_unique<TTestMasterActor>(std::move(actors), edgeActor);
         Write("Start test");
         runtime.Register(testActor.Release());
 

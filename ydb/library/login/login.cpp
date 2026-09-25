@@ -34,7 +34,7 @@ namespace NLogin {
 
 struct TLoginProvider::TImpl {
 public:
-    static const THolder<const NArgonish::IArgon2Base> ArgonHasher;
+    static const std::unique_ptr<const NArgonish::IArgon2Base> ArgonHasher;
 
 public:
     TImpl() = default;
@@ -48,7 +48,7 @@ public:
     static TString SaslScramComputeServerSignature(const TString& hashName, const TString& authMessage, const TString& storedHashValues);
 };
 
-const THolder<const NArgonish::IArgon2Base> TLoginProvider::TImpl::ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
+const std::unique_ptr<const NArgonish::IArgon2Base> TLoginProvider::TImpl::ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
     NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
     2, // 2-pass computation
     (1<<11), // 2 mebibytes memory usage (in KiB)

@@ -6,7 +6,7 @@ namespace NActors {
     class TThreadParkPad {
     private:
         class TImpl;
-        THolder<TImpl> Impl;
+        std::unique_ptr<TImpl> Impl;
 
     public:
         TThreadParkPad();

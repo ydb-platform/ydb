@@ -209,7 +209,7 @@ public:
             Self->AddUnhappyTenant(tenant);
         }
 
-        TenantState = MakeHolder<TEvTenantSlotBroker::TEvTenantState>();
+        TenantState = std::make_unique<TEvTenantSlotBroker::TEvTenantState>();
         Self->FillTenantState(name, TenantState->Record);
 
         return true;
@@ -231,7 +231,7 @@ public:
 
 private:
     TEvTenantSlotBroker::TEvAlterTenant::TPtr Event;
-    THolder<TEvTenantSlotBroker::TEvTenantState> TenantState;
+    std::unique_ptr<TEvTenantSlotBroker::TEvTenantState> TenantState;
     bool Modified;
 };
 

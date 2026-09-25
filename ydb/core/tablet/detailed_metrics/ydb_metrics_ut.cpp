@@ -78,8 +78,8 @@ void SendDataShardMetrics(
     ui32 cpuLoadPercentage
 ) {
     // Populate executor counters with some fake values
-    auto executorCounters = MakeHolder<TExecutorCounters>();
-    auto executorCountersBaseline = MakeHolder<TExecutorCounters>();
+    auto executorCounters = std::make_unique<TExecutorCounters>();
+    auto executorCountersBaseline = std::make_unique<TExecutorCounters>();
 
     executorCounters->RememberCurrentStateAsBaseline(*executorCountersBaseline);
 

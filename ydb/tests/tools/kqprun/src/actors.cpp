@@ -45,7 +45,7 @@ public:
     )
     
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto response = std::make_unique<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -233,7 +233,7 @@ private:
     }
 
     void StartScriptQuery() {
-        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
         event->Record.SetUserToken(NACLib::TUserToken("", BUILTIN_ACL_ROOT, {}).SerializeAsString());
 
         auto request = event->Record.MutableRequest();

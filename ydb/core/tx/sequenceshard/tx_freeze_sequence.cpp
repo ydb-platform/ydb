@@ -84,7 +84,7 @@ namespace NSequenceShard {
         }
 
         TEvSequenceShard::TEvFreezeSequence::TPtr Ev;
-        THolder<TEvSequenceShard::TEvFreezeSequenceResult> Result;
+        std::unique_ptr<TEvSequenceShard::TEvFreezeSequenceResult> Result;
     };
 
 

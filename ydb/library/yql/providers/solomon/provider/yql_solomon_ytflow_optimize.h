@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IYtflowOptimization> CreateSolomonYtflowOptimization(const TSolomonState::TPtr& state);
+std::unique_ptr<IYtflowOptimization> CreateSolomonYtflowOptimization(const TSolomonState::TPtr& state);
 
 } // namespace NYql

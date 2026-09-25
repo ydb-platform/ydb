@@ -34,7 +34,7 @@ public:
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
 
     void SendHealthCheckRequest() {
-        THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
+        std::unique_ptr<NHealthCheck::TEvSelfCheckRequest> request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         request->Request = *GetProtoRequest();
         if (Request->GetDatabaseName()) {
             request->Database = Request->GetDatabaseName().GetRef();
@@ -96,7 +96,7 @@ public:
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         std::optional<TActorId> cache = ResolveActiveDatabaseMetadataCache(ev->Get()->InfoEntries);
         if (cache) {
-            auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+            auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequestProto>();
             request->Record = *GetProtoRequest();
             Send(*cache, request.Release());
             Become(&TThis::StateWaitCache, TDuration::Minutes(1), new TEvents::TEvWakeup);
@@ -127,11 +127,11 @@ class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
-    THolder<NHealthCheck::TEvSelfCheckResult> Result;
+    std::unique_ptr<NHealthCheck::TEvSelfCheckResult> Result;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
 
     void Bootstrap() {
-        THolder<NHealthCheck::TEvNodeCheckRequest> request = MakeHolder<NHealthCheck::TEvNodeCheckRequest>();
+        std::unique_ptr<NHealthCheck::TEvNodeCheckRequest> request = std::make_unique<NHealthCheck::TEvNodeCheckRequest>();
         request->Request = *GetProtoRequest();
         Send(NHealthCheck::MakeHealthCheckID(), request.Release());
         Become(&TThis::StateWait);

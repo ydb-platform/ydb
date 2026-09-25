@@ -33,7 +33,7 @@ ui64 MaxTaskIdForCookieVersion(ui32 version) {
     return 1ULL << (64 - SEQNO_SPACE - reservedBits);
 }
 
-TStreamLookupShardReadResult::TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc)
+TStreamLookupShardReadResult::TStreamLookupShardReadResult(const ui64 shardId, std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc)
     : ShardId(shardId)
     , ReadResult(std::move(readResult))
 {
@@ -255,7 +255,7 @@ public:
         }
 
         if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
@@ -266,7 +266,7 @@ public:
         }
 
         if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
@@ -280,12 +280,12 @@ public:
         return ScheduledReads.size();
     }
 
-    std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
+    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> PopNextRequest() final {
         if (ScheduledReads.empty()) {
             return {0, nullptr};
         }
 
-        std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
+        std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
         ScheduledReads.pop_front();
         return std::move(next);
     }
@@ -304,7 +304,7 @@ public:
             if (!CacheKeys.empty()) {
                 ui64 pendingReads = 0;
                 for(auto [shardId, range] : partitions) {
-                    THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+                    std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
                     std::vector<TOwnedTableRange> ranges = {range};
                     ui64 nextReadId = ++readId;
                     FillReadRequest(nextReadId, request, ranges);
@@ -333,7 +333,7 @@ public:
         }
 
         for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
             ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
@@ -344,7 +344,7 @@ public:
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
             ScheduledReads.emplace_back(shardId, std::move(request));
             YQL_ENSURE(ReadStateByReadId.emplace(
@@ -551,7 +551,7 @@ public:
     }
 
 private:
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
+    void FillReadRequest(ui64 readId, std::unique_ptr<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
         auto& record = request->Record;
 
         record.SetReadId(readId);
@@ -601,7 +601,7 @@ private:
     std::unordered_map<TString, TCacheData> CacheKeysMap;
     std::deque<TString> CacheKeys;
     std::deque<TOwnedTableRange> UnprocessedKeys;
-    std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
+    std::deque<std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>>> ScheduledReads;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
     std::deque<TStreamLookupShardReadResult> ReadResults;
     std::unordered_set<TString> UniqueKeys;
@@ -734,12 +734,12 @@ public:
         return ScheduledReads.size();
     }
 
-    std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
+    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> PopNextRequest() final {
         if (ScheduledReads.empty()) {
             return {0, nullptr};
         }
 
-        std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
+        std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
         ScheduledReads.pop_front();
         return std::move(next);
     }
@@ -790,7 +790,7 @@ public:
         }
 
         if (!unprocessedPoints.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             ScheduledReads.emplace_back(shardId, std::move(request));
 
@@ -808,7 +808,7 @@ public:
         }
 
         if (!unprocessedRanges.empty()) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             ScheduledReads.emplace_back(shardId, std::move(request));
 
@@ -876,7 +876,7 @@ public:
         }
 
         for (auto& [shardId, points] : pointsPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
             ScheduledReads.emplace_back(shardId, std::move(request));
 
@@ -894,7 +894,7 @@ public:
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
-            THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+            std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
             ScheduledReads.emplace_back(shardId, std::move(request));
 
@@ -1232,7 +1232,7 @@ private:
         return Settings.KeepRowsOrder;
     }
 
-    void FillReadRequest(ui64 readId, THolder<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
+    void FillReadRequest(ui64 readId, std::unique_ptr<TEvDataShard::TEvRead>& request, const std::vector<TOwnedTableRange>& ranges) {
         auto& record = request->Record;
 
         record.SetReadId(readId);
@@ -1325,7 +1325,7 @@ private:
     std::deque<TUnprocessedLeftRow> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
-    std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
+    std::deque<std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>>> ScheduledReads;
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     absl::flat_hash_map<ui64, TIntrusivePtr<TResultBatch>> ResultRowsBySeqNo;
     std::deque<TResultBatch::TResultRow> FlushedResultRows;

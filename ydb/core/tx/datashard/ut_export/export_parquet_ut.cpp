@@ -84,7 +84,7 @@ namespace {
             ConfigureParquetBackupTask(task, settings, rowGroupSize);
 
             TS3Export exportTask(task, columns);
-            THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
+            std::unique_ptr<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
             Y_ENSURE(buffer, "CreateBuffer returned null");
 
             buffer->ColumnsOrder({0, 1});
@@ -98,7 +98,7 @@ namespace {
             }
 
             NExportScan::IBuffer::TStats stats;
-            THolder<NActors::IEventBase> event(buffer->PrepareEvent(true, stats));
+            std::unique_ptr<NActors::IEventBase> event(buffer->PrepareEvent(true, stats));
             Y_ENSURE(event, "PrepareEvent returned null: " << buffer->GetError());
 
             auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
@@ -137,7 +137,7 @@ namespace {
             ConfigureParquetBackupTask(task, settings, /*rowGroupSize=*/1);
 
             TS3Export exportTask(task, columns);
-            THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
+            std::unique_ptr<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
             Y_ENSURE(buffer, "CreateBuffer returned null");
 
             buffer->ColumnsOrder({0, 1, 2, 3});
@@ -151,7 +151,7 @@ namespace {
             Y_ENSURE(buffer->Collect(row), "Collect failed: " << buffer->GetError());
 
             NExportScan::IBuffer::TStats stats;
-            THolder<NActors::IEventBase> event(buffer->PrepareEvent(true, stats));
+            std::unique_ptr<NActors::IEventBase> event(buffer->PrepareEvent(true, stats));
             Y_ENSURE(event, "PrepareEvent returned null: " << buffer->GetError());
 
             auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());

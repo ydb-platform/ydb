@@ -37,7 +37,7 @@ TDuration MeasureGeneratorTime(IComputationGraph& graph, const IDataSampler& sam
 }
 
 template<bool LLVM, bool Spilling>
-THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM, Spilling>& setup, std::shared_ptr<ISpillerFactory> spillerFactory, IDataSampler& sampler)
+std::unique_ptr<IComputationGraph> BuildGraph(TKqpSetup<LLVM, Spilling>& setup, std::shared_ptr<ISpillerFactory> spillerFactory, IDataSampler& sampler)
 {
     TKqpProgramBuilder& pb = setup.GetKqpBuilder();
 
@@ -81,7 +81,7 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
 
     NYql::NLog::InitLogger("cerr", false);
 
-    THolder<IDataSampler> sampler = CreateWideSamplerFromParams(params);
+    std::unique_ptr<IDataSampler> sampler = CreateWideSamplerFromParams(params);
     Cerr << "Sampler type: " << sampler->Describe() << Endl;
 
     std::shared_ptr<ISpillerFactory> spillerFactory = Spilling ? std::make_shared<TPreallocatedSpillerFactory>() : nullptr;

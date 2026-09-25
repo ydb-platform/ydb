@@ -90,15 +90,15 @@ class TCreateExternalDataSource : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
+    static bool IsDestinationPathValid(const std::unique_ptr<TProposeResponse>& result,
                                 const TOperationContext& context,
                                 const TPath& dstPath,
                                 const TString& acl,
@@ -136,7 +136,7 @@ class TCreateExternalDataSource : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result,
+    bool IsApplyIfChecksPassed(const std::unique_ptr<TProposeResponse>& result,
                                const TOperationContext& context) const {
         TString errorMessage;
         if (!context.SS->CheckApplyIf(Transaction, errorMessage)) {
@@ -147,7 +147,7 @@ class TCreateExternalDataSource : public TSubOperation {
     }
 
     static bool IsDescriptionValid(
-        const THolder<TProposeResponse>& result,
+        const std::unique_ptr<TProposeResponse>& result,
         const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
         const NExternalSource::IExternalSourceFactory::TPtr& factory) {
         TString errorMessage;
@@ -161,7 +161,7 @@ class TCreateExternalDataSource : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner,
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner,
                                       TOperationContext& context) override {
         const auto acceptExisted     = !Transaction.GetFailOnExist();
         const auto ssId              = context.SS->SelfTabletId();
@@ -174,7 +174,7 @@ public:
             {"path", JoinPath({parentPathStr, name})},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(ssId));
 

@@ -34,7 +34,7 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool preValidateDst,
     TOperationContext& context,
-    THolder<TProposeResponse>& result,
+    std::unique_ptr<TProposeResponse>& result,
     bool enforceBackupCollectionsDirExists = true);
 
 std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(

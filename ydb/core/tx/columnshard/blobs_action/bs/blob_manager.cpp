@@ -83,7 +83,7 @@ void TBlobBatch::SendWriteRequest(
     //auto handleClass = NKikimrBlobStorage::AsyncBlob; // TODO: what's the difference?
     auto tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput;
 
-    THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+    std::unique_ptr<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
         .BlobId = logoBlobId,
         .Buffer = TRope(data),
         .Deadline = deadline,

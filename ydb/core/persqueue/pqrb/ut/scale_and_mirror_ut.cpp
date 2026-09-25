@@ -105,7 +105,7 @@ Y_UNIT_TEST(ForeignPipeDestroyedIsIgnored) {
     );
     UNIT_ASSERT_C(!early, "ClientDestroyed for an unknown pipe must be ignored");
 
-    auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+    auto status = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError
     );
     tc.Runtime->Send(new IEventHandle(actorId, tc.Edge, status.Release()));
@@ -138,7 +138,7 @@ Y_UNIT_TEST(ProposeStatusSendsDoneOnlyOnce) {
     DispatchFor(tc);
 
     for (ui32 i = 0; i < 2; ++i) {
-        auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+        auto status = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
             TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError
         );
         tc.Runtime->Send(new IEventHandle(actorId, tc.Edge, status.Release()));
@@ -179,7 +179,7 @@ Y_UNIT_TEST(ScaleRequestInflightIsClearedWhenSplitMergeDisabled) {
         }
     );
 
-    auto needSplit = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
+    auto needSplit = std::make_unique<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
     needSplit->Record.SetSplitBoundary("m");
     tc.Runtime->SendToPipe(
         tc.BalancerTabletId,
@@ -214,7 +214,7 @@ Y_UNIT_TEST(ScaleRequestInflightIsClearedWhenSplitMergeDisabled) {
     NotifyDatabasePath(tc);
     const ui32 afterReenable = scaleRequestActors;
 
-    auto needSplitAgain = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
+    auto needSplitAgain = std::make_unique<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
     needSplitAgain->Record.SetSplitBoundary("m");
     tc.Runtime->SendToPipe(
         tc.BalancerTabletId,
@@ -304,7 +304,7 @@ Y_UNIT_TEST(DirectExecCompleteFromTxProxySendsDone) {
     );
     DispatchFor(tc);
 
-    auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+    auto status = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
     );
     tc.Runtime->Send(new IEventHandle(actorId, tc.Edge, status.Release()));
@@ -342,7 +342,7 @@ Y_UNIT_TEST(ExecInProgressPipeConnectErrorRepliesUnavailable) {
     Y_UNUSED(prev);
     DispatchFor(tc);
 
-    auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+    auto status = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress
     );
     status->Record.SetSchemeShardTabletId(999);
@@ -390,7 +390,7 @@ Y_UNIT_TEST(ExecInProgressNotifyCompletionSendsExecComplete) {
     );
     DispatchFor(tc);
 
-    auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+    auto status = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress
     );
     status->Record.SetSchemeShardTabletId(999);
@@ -450,7 +450,7 @@ Y_UNIT_TEST(OurPipeDestroyedRepliesUnavailable) {
     );
     DispatchFor(tc);
 
-    auto status = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+    auto status = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress
     );
     status->Record.SetSchemeShardTabletId(999);
@@ -499,7 +499,7 @@ Y_UNIT_TEST(ForeignPipeConnectedIsIgnored) {
     );
     UNIT_ASSERT_C(!early, "ClientConnected for an unknown pipe must be ignored");
 
-    auto err = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(
+    auto err = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>(
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError
     );
     err->Record.AddIssues()->set_message("denied");

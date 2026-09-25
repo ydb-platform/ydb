@@ -730,6 +730,18 @@ class TrackApiTest(unittest.TestCase):
             self.assertEqual(row["source"], "ya_phase")
             self.assertEqual(row["value"], 5.0)
 
+    def test_analytics_enrich_method(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            analytics = Analytics(file=path, source="ya_phase")
+            analytics.start("ya_make", started_epoch="1000")
+            self.assertEqual(analytics.end("ya_make", conclusion="success", finished_epoch="1003"), 1)
+            self.assertEqual(analytics.enrich("ya_make", {"report_url": "https://s3.example/ya"}), 1)
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["value"], 3000.0)
+            self.assertEqual(row["labels"]["report_url"], "https://s3.example/ya")
+
     def test_start_send_computes_duration(self):
         sends = []
 

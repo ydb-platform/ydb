@@ -25,6 +25,7 @@ from core import (
     Analytics as CoreAnalytics,
     add_track_cli_args as add_core_cli_args,
     _as_uint,
+    _open_ydb_wrapper,
     _ydb_wrapper_cls,
     build_create_table_sql as core_build_create_table_sql,
     duration_ms_between,
@@ -666,7 +667,7 @@ def upload_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) ->
         print("Analytics YDB credentials are missing, skipping")
         return 0
     try:
-        with _ydb_wrapper_cls()() as wrapper:
+        with _open_ydb_wrapper() as wrapper:
             if not wrapper.check_credentials():
                 print("Analytics YDB credentials are missing, skipping")
                 return 0

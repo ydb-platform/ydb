@@ -108,14 +108,13 @@ def nodes_from_evlog(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
             args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
             raw_name = str(args.get("name") or ev.get("name") or "")
             kind, path = parse_node_name(raw_name or str(ev.get("name") or ""))
-            if kind not in KEEP_NODE_KINDS:
-                continue
             stacks.setdefault(key, []).append(
                 {
                     "ts": ev.get("ts"),
                     "name": path,
                     "node_kind": kind,
                     "raw_name": raw_name or str(ev.get("name") or ""),
+                    "keep": kind in KEEP_NODE_KINDS,
                 }
             )
             continue
@@ -123,6 +122,8 @@ def nodes_from_evlog(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not stack:
             continue
         start = stack.pop()
+        if not start.get("keep"):
+            continue
         try:
             start_ts = float(start.get("ts"))
             end_ts = float(ev.get("ts"))

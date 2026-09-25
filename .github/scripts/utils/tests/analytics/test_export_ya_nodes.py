@@ -82,6 +82,30 @@ class EvlogNodesTest(unittest.TestCase):
         self.assertEqual(nodes[0]["name"], "ydb/a.cpp")
         self.assertEqual(nodes[0]["duration_ms"], 2000.0)
 
+    def test_chrome_nested_non_kept_does_not_steal_outer(self):
+        events = [
+            {"ph": "B", "pid": 1, "tid": 2, "ts": 1_000_000, "name": "Compile", "args": {"name": "Compile($B/ydb/a.cpp)"}},
+            {"ph": "B", "pid": 1, "tid": 2, "ts": 1_100_000, "name": "Run", "args": {"name": "Run(inner)"}},
+            {"ph": "E", "pid": 1, "tid": 2, "ts": 1_200_000, "name": "Run"},
+            {"ph": "E", "pid": 1, "tid": 2, "ts": 3_000_000, "name": "Compile"},
+        ]
+        nodes = nodes_from_evlog(events)
+        self.assertEqual(len(nodes), 1)
+        self.assertEqual(nodes[0]["name"], "ydb/a.cpp")
+        self.assertEqual(nodes[0]["duration_ms"], 2000.0)
+
+    def test_chrome_kept_inside_non_kept(self):
+        events = [
+            {"ph": "B", "pid": 1, "tid": 2, "ts": 500_000, "name": "Run", "args": {"name": "Run(outer)"}},
+            {"ph": "B", "pid": 1, "tid": 2, "ts": 1_000_000, "name": "Compile", "args": {"name": "Compile($B/ydb/a.cpp)"}},
+            {"ph": "E", "pid": 1, "tid": 2, "ts": 3_000_000, "name": "Compile"},
+            {"ph": "E", "pid": 1, "tid": 2, "ts": 3_100_000, "name": "Run"},
+        ]
+        nodes = nodes_from_evlog(events)
+        self.assertEqual(len(nodes), 1)
+        self.assertEqual(nodes[0]["name"], "ydb/a.cpp")
+        self.assertEqual(nodes[0]["duration_ms"], 2000.0)
+
     def test_prefers_node_finished_over_chrome(self):
         events = [
             {

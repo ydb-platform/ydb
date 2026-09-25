@@ -107,6 +107,14 @@ def _ydb_wrapper_cls():
         return YDBWrapper
 
 
+def _open_ydb_wrapper(factory: Optional[Callable] = None):
+    resolved = factory or _ydb_wrapper_cls
+    value = resolved() if callable(resolved) else resolved
+    if isinstance(value, type):
+        value = value()
+    return value
+
+
 def _ydb_primitive(sql_type: str):
     if ydb is None:
         raise RuntimeError("ydb SDK is required to flush analytics")
@@ -379,11 +387,11 @@ def load_unsent_lines(path: str) -> tuple[List[str], int]:
         offset = 0
     if offset >= size:
         return [], size
-    with open(path, encoding="utf-8") as handle:
+    with open(path, "rb") as handle:
         handle.seek(offset)
         chunk = handle.read()
         new_offset = handle.tell()
-    return chunk.splitlines(), new_offset
+    return chunk.decode("utf-8").splitlines(), new_offset
 
 
 def has_send_credentials(envs: Sequence[str] = CREDENTIAL_ENVS) -> bool:
@@ -658,9 +666,12 @@ def enrich(
     if not name or not os.path.exists(path):
         return 0
     offset = read_send_offset(path)
-    with open(path, encoding="utf-8") as handle:
-        prefix = handle.read(offset) if offset else ""
-        rest = handle.read()
+    size = os.path.getsize(path)
+    if offset > size:
+        offset = 0
+    with open(path, "rb") as handle:
+        prefix = handle.read(offset) if offset else b""
+        rest = handle.read().decode("utf-8")
     lines = rest.splitlines()
     index = None
     parsed: List[Optional[Dict[str, Any]]] = []
@@ -705,13 +716,13 @@ def enrich(
     if parent:
         os.makedirs(parent, exist_ok=True)
     tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
+    with open(tmp, "wb") as handle:
         if prefix:
             handle.write(prefix)
-            if not prefix.endswith("\n") and out_lines:
-                handle.write("\n")
+            if not prefix.endswith(b"\n") and out_lines:
+                handle.write(b"\n")
         if out_lines:
-            handle.write("\n".join(out_lines) + "\n")
+            handle.write(("\n".join(out_lines) + "\n").encode("utf-8"))
     os.replace(tmp, path)
     return 1
 
@@ -843,7 +854,7 @@ class Analytics:
         self.file = file
         self.source = source
         self.attach = attach
-        self.enrich = enrich
+        self._enrich_hook = enrich
         self.info_name = info_name
         self.flush_fn = flush
         self._start = start_fn or start
@@ -862,8 +873,8 @@ class Analytics:
         kwargs = self._base_kwargs(kwargs)
         if self.attach and kwargs.get("attach") is None:
             kwargs["attach"] = self.attach
-        if self.enrich and kwargs.get("enrich") is None:
-            kwargs["enrich"] = self.enrich
+        if self._enrich_hook and kwargs.get("enrich") is None:
+            kwargs["enrich"] = self._enrich_hook
         return kwargs
 
     def start(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
@@ -871,8 +882,8 @@ class Analytics:
 
     def end(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
         kwargs = self._base_kwargs(kwargs)
-        if self.enrich and kwargs.get("enrich") is None:
-            kwargs["enrich"] = self.enrich
+        if self._enrich_hook and kwargs.get("enrich") is None:
+            kwargs["enrich"] = self._enrich_hook
         return self._end(name, properties, **kwargs)
 
     def enrich(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
@@ -976,8 +987,7 @@ def flush_file(
         if not has_send_credentials():
             print("Analytics YDB credentials are missing, keeping local batch")
             return 0
-        wrapper_cls = ydb_wrapper_factory or _ydb_wrapper_cls
-        with wrapper_cls() as wrapper:
+        with _open_ydb_wrapper(ydb_wrapper_factory) as wrapper:
             if not wrapper.check_credentials():
                 print("Analytics YDB credentials are missing, keeping local batch")
                 return 0

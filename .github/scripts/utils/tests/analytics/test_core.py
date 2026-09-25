@@ -22,11 +22,13 @@ from core import (
     attach_context,
     end,
     enrich,
+    flush_file,
     main,
     normalize_metric,
     read_pending_spans,
     start,
     track,
+    write_send_offset,
 )
 
 
@@ -199,6 +201,77 @@ class CoreLifecycleTest(unittest.TestCase):
             by_name = {row["name"]: row for row in rows}
             self.assertEqual(by_name["ya_make_try_1"]["labels"]["report_url"], "try1")
             self.assertNotIn("report_url", by_name["ya_make_try_2"]["labels"])
+
+    def test_analytics_enrich_method(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "analytics.jsonl")
+            analytics = Analytics(file=path, source="llm_eval")
+            analytics.start("llm_call", started_epoch="1000")
+            self.assertEqual(analytics.end("llm_call", conclusion="success", finished_epoch="1002"), 1)
+            self.assertEqual(analytics.enrich("llm_call", {"report_url": "https://s3.example/x"}), 1)
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["value"], 2000.0)
+            self.assertEqual(row["labels"]["report_url"], "https://s3.example/x")
+
+    def test_enrich_after_non_ascii_sent_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "analytics.jsonl")
+            start("dashboard", file=path, source="ya_phase", started_epoch="1000")
+            end("dashboard", file=path, conclusion="success", finished_epoch="1002")
+            with open(path, encoding="utf-8") as handle:
+                rest = handle.read()
+            sent = json.dumps({"name": "sent", "labels": {"msg": "ошибка"}}, ensure_ascii=False) + "\n"
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(sent + rest)
+            write_send_offset(path, len(sent.encode("utf-8")))
+            self.assertEqual(enrich("dashboard", {"report_url": "https://s3.example/d.html"}, file=path), 1)
+            with open(path, encoding="utf-8") as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            self.assertEqual(rows[0]["labels"]["msg"], "ошибка")
+            self.assertEqual(rows[1]["labels"]["report_url"], "https://s3.example/d.html")
+
+    def test_flush_instantiates_wrapper_class(self):
+        created = []
+
+        class Wrapper:
+            def __init__(self):
+                created.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def check_credentials(self):
+                return True
+
+            def get_table_path(self, key):
+                raise KeyError(key)
+
+        def factory():
+            return Wrapper
+
+        import core as client
+
+        original = client.upsert_metrics
+        saved_cred = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
+        client.upsert_metrics = lambda wrapper, rows, **kwargs: len(rows)
+        os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "analytics.jsonl")
+                track("llm_call", {"value": 1, "kind": "count"}, file=path, source="arcadia")
+                uploaded = flush_file(path, ydb_wrapper_factory=factory)
+            self.assertEqual(uploaded, 1)
+            self.assertEqual(len(created), 1)
+        finally:
+            client.upsert_metrics = original
+            if saved_cred is None:
+                os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
+            else:
+                os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved_cred
 
 
 if __name__ == "__main__":

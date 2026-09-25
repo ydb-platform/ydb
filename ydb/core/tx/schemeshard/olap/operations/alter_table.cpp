@@ -308,7 +308,9 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         if (update->GetShardIds().size()) {
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterColumnTable, path->PathId);
@@ -319,46 +321,46 @@ public:
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+                context.MemChanges.GrabShard(context.SS, shardIdx);
+                context.DbChanges.PersistShard(shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
 
                 context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
-                context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
             }
 
             path->LastTxId = OperationId.GetTxId();
             path->PathState = TPathElement::EPathState::EPathStateAlter;
-            context.SS->PersistLastTxId(db, path.Base());
+            context.DbChanges.PersistPath(path.Base()->PathId);
 
             {
-                TUpdateStartContext startContext(&path, &context, &db);
+                TUpdateStartContext startContext(&path, &context, nullptr);
                 auto status = update->Start(startContext);
                 if (status.IsFail()) {
                     errors.AddError(status.GetErrorMessage());
                     return result;
                 }
             }
-            context.SS->PersistTxState(db, OperationId);
+            context.DbChanges.PersistColumnTableAlter(path.Base()->PathId);
+            context.DbChanges.PersistTxState(OperationId);
 
             context.OnComplete.ActivateTx(OperationId);
 
             SetState(NextState());
         } else {
             {
-                {
-                    TUpdateStartContext startContext(&path, &context, &db);
-                    auto status = update->Start(startContext);
-                    if (status.IsFail()) {
-                        errors.AddError(status.GetErrorMessage());
-                        return result;
-                    }
+                TUpdateStartContext startContext(&path, &context, nullptr);
+                auto status = update->Start(startContext);
+                if (status.IsFail()) {
+                    errors.AddError(status.GetErrorMessage());
+                    return result;
                 }
-                {
-                    TUpdateFinishContext fContext(&path, &context, &db, {});
-                    auto status = update->Finish(fContext);
-                    if (status.IsFail()) {
-                        errors.AddError(status.GetErrorMessage());
-                        return result;
-                    }
+            }
+            {
+                TUpdateFinishContext fContext(&path, &context, nullptr, {});
+                auto status = update->Finish(fContext);
+                if (status.IsFail()) {
+                    errors.AddError(status.GetErrorMessage());
+                    return result;
                 }
             }
             const auto& alter = Transaction.GetAlterColumnTable();
@@ -377,8 +379,8 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TAlterColumnTable");
+    void AbortPropose(TOperationContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

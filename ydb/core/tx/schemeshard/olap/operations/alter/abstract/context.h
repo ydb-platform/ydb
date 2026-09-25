@@ -94,6 +94,7 @@ public:
         return ObjectPath;
     }
     NIceDb::TNiceDb* GetDB() const {
+        AFL_VERIFY(DB);
         return DB;
     }
     const TOperationContext* GetSSOperationContext() const {
@@ -105,7 +106,6 @@ public:
         , SSOperationContext(ssOperationContext)
         , DB(db)
     {
-        AFL_VERIFY(DB);
         AFL_VERIFY(ObjectPath);
         AFL_VERIFY(SSOperationContext);
     }

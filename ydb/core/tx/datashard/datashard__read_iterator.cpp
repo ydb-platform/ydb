@@ -1298,8 +1298,15 @@ private:
     THnswSearchResult SearchHnswDistinct(const TTableRange& range) const {
         const auto& topK = *State.VectorTopK;
         // Search resolves vector versions and tombstones before selecting K.
-        // Only posting-key deduplication may require additional candidates here.
-        const size_t maxCandidates = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
+        // Range filtering and posting-key deduplication may need more candidates.
+        const size_t availableCandidates = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
+        // Cluster prefixes can use the shared graph by progressively asking
+        // for more neighbors. Bound work for selective or empty ranges and
+        // retain the table-scan fallback when the graph cannot fill top-K.
+        constexpr size_t MaxFilteredHnswCandidates = 1024;
+        const size_t maxCandidates = TableInfo.CoversFullShard(range)
+            ? availableCandidates
+            : Min(availableCandidates, Max<size_t>(topK.Limit, MaxFilteredHnswCandidates));
         size_t requested = Min(maxCandidates, static_cast<size_t>(topK.Limit));
         if (!topK.DistinctColumns.empty()) {
             requested = Min(maxCandidates, Max<size_t>(requested * 2, 32));
@@ -1307,19 +1314,34 @@ private:
 
         while (true) {
             auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
+            if (!candidates.Covered) {
+                return candidates;
+            }
 
             THnswSearchResult inRange;
             for (auto& candidate : candidates.Results) {
                 TSerializedCellVec key(candidate.first);
-                if (ComparePointAndRange(
-                        key.GetCells(), range,
-                        TableInfo.KeyColumnTypes, TableInfo.KeyColumnTypes) == 0) {
+                // ReadRange uses legacy borders: a shortened key ends in
+                // +infinity, including an exclusive lower cluster prefix.
+                // ComparePointAndRange treats the missing lower suffix as
+                // NULL and would admit rows from the preceding cluster.
+                const bool afterFrom = range.From.empty()
+                    || CompareBorders<false, false>(key.GetCells(), range.From,
+                        true, range.InclusiveFrom, TableInfo.KeyColumnTypes) >= 0;
+                const bool beforeTo = range.To.empty()
+                    || CompareBorders<true, true>(key.GetCells(), range.To,
+                        true, range.InclusiveTo, TableInfo.KeyColumnTypes) <= 0;
+                if (afterFrom && beforeTo) {
                     inRange.Results.push_back(std::move(candidate));
                 }
             }
 
             if (topK.DistinctColumns.empty()) {
-                if (inRange.Results.size() >= topK.Limit || requested == maxCandidates) {
+                if (inRange.Results.size() >= topK.Limit) {
+                    inRange.Results.resize(topK.Limit);
+                    return inRange;
+                }
+                if (requested == maxCandidates) {
                     return inRange;
                 }
                 requested = Min(maxCandidates, requested * 2);
@@ -1338,9 +1360,10 @@ private:
                 distinctKeyPositions.push_back(it - TableInfo.KeyColumnIds.begin());
             }
             if (!keysOnly) {
-                // This is not expected for vector-index plans. Search all rows
-                // so MaterializeHnswResults can safely deduplicate by values.
-                return topK.HnswIndex->Search(topK.Target, maxCandidates, State.ReadVersion);
+                // Non-key DISTINCT values are unavailable in the graph. Keep
+                // the exact table path; returning unfiltered graph rows here
+                // would also violate the bounds of a restricted range.
+                return THnswSearchResult{.Covered = false};
             }
 
             THnswSearchResult unique;
@@ -1367,8 +1390,7 @@ private:
 
     bool TryReadHnswCoveredRange(const TTableRange& range, TTransactionContext& txc) {
         if (!Self->IsFollower() || !CanUseHnsw(*Self, State)
-                || !State.VectorTopK || !State.VectorTopK->HnswIndex
-                || !TableInfo.CoversFullShard(range)) {
+                || !State.VectorTopK || !State.VectorTopK->HnswIndex) {
             return false;
         }
         auto& topK = *State.VectorTopK;
@@ -1396,6 +1418,9 @@ private:
         }
 
         const auto candidates = SearchHnswDistinct(range);
+        if (!candidates.Covered || candidates.Results.size() < topK.Limit) {
+            return false;
+        }
         TVector<TOwnedCellVec> rows;
         rows.reserve(candidates.Results.size());
         for (const auto& [serializedKey, _] : candidates.Results) {
@@ -1486,23 +1511,18 @@ private:
         const TTableRange& tableRange,
         TTransactionContext& txc)
     {
-        // NMSLIB bounds graph traversal by efSearch even when k is the full
-        // index size, so post-filtering candidates cannot correctly serve a
-        // restricted prefix/range. A range covering the entire local shard is
-        // safe: a distributed full scan is clipped to each shard's key bounds.
+        // SearchHnswDistinct widens graph exploration for cluster ranges
+        // and keeps only visible keys inside this request's bounds.
         if (CanUseHnsw(*Self, State) && State.VectorTopK && State.VectorTopK->HnswIndex
-                && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)
-                && TableInfo.CoversFullShard(tableRange)) {
+                && State.VectorTopK->HnswIndex->CanRead(State.ReadVersion)) {
             auto results = SearchHnswDistinct(tableRange);
             // Filtering may exhaust NMSLIB's bounded candidate set. Preserve
             // the exact path when it cannot supply enough visible neighbors.
             if (results.Covered && results.Results.size() >= State.VectorTopK->Limit) {
                 return MaterializeHnswResults(results, txc);
             }
-            Self->RegisterHnswFallback(TableInfo.LocalTid, TDataShard::EHnswFallback::Candidates);
-        } else if (State.VectorTopK && State.VectorTopK->HnswIndex
-                && !TableInfo.CoversFullShard(tableRange)) {
-            Self->RegisterHnswFallback(TableInfo.LocalTid, TDataShard::EHnswFallback::PartialRange);
+            Self->RegisterHnswFallback(TableInfo.LocalTid, TableInfo.CoversFullShard(tableRange)
+                ? TDataShard::EHnswFallback::Candidates : TDataShard::EHnswFallback::PartialRange);
         }
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();

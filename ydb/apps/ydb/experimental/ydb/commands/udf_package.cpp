@@ -10,7 +10,7 @@
 
 #include <array>
 #include <limits>
-#include <map>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
 namespace {
@@ -148,9 +148,12 @@ ui64 ParseTarDecimal(TStringBuf field, TStringBuf fieldName) {
     return result;
 }
 
-using TPaxFields = std::map<TString, TString>;
+struct TPaxAttributes {
+    std::optional<TString> Path;
+    std::optional<TString> Size;
+};
 
-void ParsePaxRecords(TStringBuf data, TPaxFields& fields) {
+void ParsePaxRecords(TStringBuf data, TPaxAttributes& attributes) {
     size_t offset = 0;
     while (offset < data.size()) {
         const size_t space = data.find(' ', offset);
@@ -168,17 +171,28 @@ void ParsePaxRecords(TStringBuf data, TPaxFields& fields) {
         {
             ythrow yexception() << "Invalid PAX record";
         }
-        fields[TString(record.Head(equals))] = TString(record.SubStr(equals + 1, record.size() - equals - 2));
+        const TStringBuf key = record.Head(equals);
+        const TStringBuf value = record.SubStr(equals + 1, record.size() - equals - 2);
+        if (key.StartsWith("GNU.sparse.")) {
+            ythrow yexception() << "Sparse TAR entries are not supported";
+        }
+        if (key == "path") {
+            attributes.Path = TString(value);
+        } else if (key == "size") {
+            attributes.Size = TString(value);
+        }
+        // Other metadata (timestamps, owner, etc.) does not affect package contents.
         offset += length;
     }
 }
 
-TStringBuf PaxValue(const TPaxFields& global, const TPaxFields& local, const TString& key) {
-    if (auto it = local.find(key); it != local.end()) {
-        return it->second;
+TStringBuf PaxValue(const std::optional<TString>& global, const std::optional<TString>& local) {
+    // An explicitly empty local value suppresses the global override.
+    if (local) {
+        return *local;
     }
-    if (auto it = global.find(key); it != global.end()) {
-        return it->second;
+    if (global) {
+        return *global;
     }
     return {};
 }
@@ -187,6 +201,18 @@ TStringBuf TarStringField(TStringBuf header, size_t offset, size_t length) {
     TStringBuf field = header.SubStr(offset, length);
     const size_t end = field.find('\0');
     return end == TStringBuf::npos ? field : field.Head(end);
+}
+
+TString TarEntryName(TStringBuf header, TStringBuf paxPath) {
+    if (!paxPath.empty()) {
+        return TString(paxPath);
+    }
+    const TStringBuf name = TarStringField(header, 0, 100);
+    const TStringBuf prefix = TarStringField(header, 345, 155);
+    if (!prefix.empty()) {
+        return TString(prefix) + "/" + TString(name);
+    }
+    return TString(name);
 }
 
 void ValidateTarChecksum(TStringBuf header) {
@@ -202,8 +228,9 @@ void ValidateTarChecksum(TStringBuf header) {
 
 TUdfPackage ParseTar(TStringBuf data) {
     TPackageBuilder builder;
-    TPaxFields globalPax;
-    TPaxFields localPax;
+    TPaxAttributes globalPax;
+    TPaxAttributes localPax;
+    bool haveLocalPax = false;
     size_t offset = 0;
     bool endSeen = false;
     while (offset < data.size()) {
@@ -223,7 +250,7 @@ TUdfPackage ParseTar(TStringBuf data) {
             ythrow yexception() << "Package contains a non-regular TAR entry '" << headerName << "'";
         }
         const bool isPax = type == 'x' || type == 'g';
-        const TStringBuf paxSize = isPax ? TStringBuf{} : PaxValue(globalPax, localPax, "size");
+        const TStringBuf paxSize = isPax ? TStringBuf{} : PaxValue(globalPax.Size, localPax.Size);
         const ui64 size64 = paxSize.empty()
             ? ParseTarOctal(header.SubStr(124, 12), "file size")
             : ParseTarDecimal(paxSize, "PAX file size");
@@ -236,18 +263,17 @@ TUdfPackage ParseTar(TStringBuf data) {
                 ythrow yexception() << "PAX metadata exceeds " << MaxManifestSize << " bytes";
             }
             ParsePaxRecords(data.SubStr(offset, size), type == 'g' ? globalPax : localPax);
+            haveLocalPax |= type == 'x';
         } else {
-            const TStringBuf prefix = TarStringField(header, 345, 155);
-            const TStringBuf paxPath = PaxValue(globalPax, localPax, "path");
-            const TString name = !paxPath.empty() ? TString(paxPath)
-                : prefix.empty() ? TString(headerName) : TString(prefix) + "/" + TString(headerName);
+            const TString name = TarEntryName(header, PaxValue(globalPax.Path, localPax.Path));
             ValidateEntryName(name);
             const size_t limit = name == "manifest.json" ? MaxManifestSize : MaxBodySize;
             if (size > limit) {
                 ythrow yexception() << "Package entry '" << name << "' exceeds " << limit << " bytes";
             }
             builder.Add(name, std::string(data.data() + offset, size));
-            localPax.clear();
+            localPax = {};
+            haveLocalPax = false;
         }
         const size_t paddedSize = (size + TarBlockSize - 1) / TarBlockSize * TarBlockSize;
         if (paddedSize > data.size() - offset) {
@@ -258,7 +284,7 @@ TUdfPackage ParseTar(TStringBuf data) {
     if (!endSeen) {
         ythrow yexception() << "TAR package has no end marker";
     }
-    if (!localPax.empty()) {
+    if (haveLocalPax) {
         ythrow yexception() << "TAR package ends with unused PAX metadata";
     }
     while (offset < data.size()) {

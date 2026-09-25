@@ -182,7 +182,7 @@ struct TKqpSessionInfo {
     TString QueryText;
     TString TraceId;
     ui64 QueryRequestId = 0;
-    std::optional<TCurrentQueryResources> CurrentQueryStats;
+    std::optional<TCurrentQueryStats::TPublishedSnapshot> CurrentQueryStats;
     ui64 CurrentQueryStatsSequenceNo = 0;
     TString ClientApplicationName;
     TString ClientSID;

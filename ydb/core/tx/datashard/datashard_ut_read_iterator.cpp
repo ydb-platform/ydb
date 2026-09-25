@@ -6209,6 +6209,86 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
 
+    Y_UNIT_TEST_QUAD(HnswPrefixRangeUsesLegacyBorders, Followers, Distinct) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(serverSettings, 1, Followers);
+        helper.CreateCustomTable("table-vector-prefix", {
+            {"parent", "Uint64", true, false},
+            {"key", "Uint64", true, false},
+            {"emb", "String", false, false}});
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-prefix` (parent, key, emb) VALUES
+                (9223372036854775809ul, 1ul, "\x00\x00\xC8\x42\x00\x00\x00\x00\x01"),
+                (9223372036854775810ul, 2ul, "\x00\x00\x00\x40\x00\x00\x00\x00\x01"),
+                (9223372036854775810ul, 3ul, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (9223372036854775811ul, 4ul, "\x00\x00\x48\x43\x00\x00\x00\x00\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        constexpr ui64 previous = (ui64(1) << 63) + 1;
+        constexpr ui64 selected = previous + 1;
+        ui64 readId = 0;
+        auto read = [&](bool restricted) {
+            // Avoid creating a new volatile snapshot on every probe: that
+            // advances the follower edge and prevents a repeatable HEAD cache.
+            auto request = helper.GetBaseReadRequest("table-vector-prefix", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            if (restricted) {
+                // Exactly the legacy prefix range produced by VectorSearch:
+                // (previous,+inf) .. (selected,+inf], excluding ALL previous keys.
+                AddRangeQuery<ui64>(*request, {previous}, false, {selected}, true);
+            } else {
+                AddRangeQuery<ui64>(*request, {}, true, {}, true);
+            }
+            auto* topK = request->Record.MutableVectorTopK();
+            topK->SetColumn(2);
+            topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            topK->SetLimit(1);
+            if (Distinct) {
+                topK->AddDistinctColumns(1);
+            }
+            auto* settings = topK->MutableSettings();
+            settings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+            settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings->set_vector_dimension(2);
+            settings->set_hnsw_min_rows(1);
+            return helper.SendRead("table-vector-prefix", request.release());
+        };
+        const auto cold = read(true);
+        UNIT_ASSERT_VALUES_EQUAL(cold->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(cold->GetRowsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cold->GetCells(0)[0].template AsValue<ui64>(), selected);
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            auto result = read(false);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            if (result->Record.GetStats().GetRows() == 1) {
+                accelerated = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(accelerated, "full-range graph did not become ready");
+        auto result = read(true);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(result->Record.GetFinished());
+        CheckResult(helper.Tables.at("table-vector-prefix").UserTable, *result, {
+            {TCell::Make(selected), TCell::Make(ui64(2)),
+                TCell("\x00\x00\x00\x40\x00\x00\x00\x00\x01", 9)},
+        }, {
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+            NScheme::TTypeInfo(NScheme::NTypeIds::String)
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+    }
+
     Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

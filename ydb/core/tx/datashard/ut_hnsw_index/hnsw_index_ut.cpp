@@ -122,6 +122,10 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
 
     Y_UNIT_TEST(CacheMemoryTrackerBoundariesAndUnderflow) {
         THnswCacheMemoryTracker tracker;
+        UNIT_ASSERT(!tracker.HasLimit());
+        UNIT_ASSERT(!tracker.TryAcquire(1));
+        tracker.SetLimit(0);
+        UNIT_ASSERT(tracker.HasLimit());
         UNIT_ASSERT(!tracker.TryAcquire(1));
 
         tracker.SetLimit(100);
@@ -310,6 +314,39 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
                 }
             }
             UNIT_ASSERT_C(hits >= k - 1, "metric=" << static_cast<int>(metric) << " hits=" << hits << " of " << k);
+        }
+    }
+
+    Y_UNIT_TEST(RequestedCandidatesExpandSearchBreadth) {
+        constexpr ui32 dimensions = 8;
+        constexpr size_t count = 256;
+        constexpr size_t requested = 64;
+        TFastRng<ui64> rng(42);
+        std::vector<std::pair<TString, TString>> data;
+        for (size_t i = 0; i < count; ++i) {
+            data.emplace_back(KeyFor(i), RandomFloatVector(rng, dimensions));
+        }
+        const auto target = RandomFloatVector(rng, dimensions);
+        for (const auto metric : {
+                Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN,
+                Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT}) {
+            auto settings = MakeSettings(metric,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, dimensions);
+            settings.set_hnsw_search_candidates(1);
+            settings.set_hnsw_connectivity(4);
+            TString error;
+            auto index = THnswIndex::Build(settings, data, 0, error);
+            UNIT_ASSERT_C(index, error);
+            const auto result = index->Search(target, requested);
+            UNIT_ASSERT_C(result.Covered, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Results.size(), requested, static_cast<int>(metric));
+            THashSet<TString> keys;
+            for (const auto& [key, distance] : result.Results) {
+                Y_UNUSED(distance);
+                keys.insert(key);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), requested);
         }
     }
 

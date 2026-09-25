@@ -38,6 +38,12 @@ public:
     void SetLimit(ui64 limit) noexcept {
         std::lock_guard guard(Mutex);
         Limit = limit;
+        LimitKnown = true;
+    }
+
+    bool HasLimit() const noexcept {
+        std::lock_guard guard(Mutex);
+        return LimitKnown;
     }
 
     ui64 GetLimit() const noexcept {
@@ -91,6 +97,7 @@ private:
 
     mutable std::mutex Mutex;
     ui64 Limit = 0;
+    bool LimitKnown = false;
     ui64 Used = 0;
     // Preserve the whole request when an unsuccessful build releases its
     // partial reservations. Cleared on completion, invalidation, or eviction.

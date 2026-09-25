@@ -36,6 +36,11 @@ protected:
 
     virtual void Cancel(TActiveTransaction* tx, const TActorContext& ctx) = 0;
 
+    void ScheduleRestart(TOperation::TPtr op, const TActorContext& ctx) {
+        op->SetWaitingForRestartFlag();
+        ctx.Schedule(TDuration::Seconds(1), new TDataShard::TEvPrivate::TEvRestartOperation(op->GetTxId()));
+    }
+
     void Abort(TOperation::TPtr op, const TActorContext& ctx, const TString& error) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
@@ -125,8 +130,7 @@ public:
                 PersistResult(op, txc);
             } else {
                 Y_DEBUG_ABORT_UNLESS(!HasResult(op));
-                op->SetWaitingForRestartFlag();
-                ctx.Schedule(TDuration::Seconds(1), new TDataShard::TEvPrivate::TEvRestartOperation(op->GetTxId()));
+                ScheduleRestart(op, ctx);
             }
         }
 

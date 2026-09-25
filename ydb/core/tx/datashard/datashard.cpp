@@ -4722,6 +4722,15 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
 }
 
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
+        // Some embedded runtimes, including tests, have no controller.
+        // Distinguish that disabled cache from a pending first limit grant.
+        if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->SetLimit(0);
+        }
+        return;
+    }
+
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
         op->AddInputEvent(ev.Release());

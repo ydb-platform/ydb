@@ -24,6 +24,10 @@ public:
     {
     }
 
+    bool IsKeyedOperation() const override {
+        return true;
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxDirectBase Execute",
             {"txType", GetTxType()},

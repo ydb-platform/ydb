@@ -7,6 +7,20 @@
 // Its main-group page boundaries and owner changes delimit units. Where no part
 // covers the keys, a deterministic hash picks memtable keys as boundaries.
 //
+// Part slices -> BuildLayout -> owner regions
+//                                    |
+//                     +--------------+--------------+
+//                     |                             |
+//                owner present                  no owner
+//                     |                             |
+//         main-group index separators      hashed memtable keys
+//                     |                             |
+//                     +--------> key blocks <-------+
+//                                    |
+//                             caller's decision
+//                               +-- skip: no data-page read
+//                               `-- select: normal MVCC read of the block
+//
 // LayoutId and SelectionKey, together with a table namespace and seed, let
 // callers repeat sampling choices. Selected units are read from all parts and
 // memtables through the normal table iterator, with snapshot visibility.

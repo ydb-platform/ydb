@@ -11,12 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 import os
 import unittest
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from github_actions.export_github_job_metrics import (
     already_exported,
     attach_pull_requests,
-    created_since,
+    completed_since,
     pull_refs_from_commit_pulls,
     pull_requests_have_target,
     selected_workflows,
@@ -74,12 +74,17 @@ class PullRefsTest(unittest.TestCase):
         self.assertIs(attach_pull_requests("ydb-platform", "ydb", run), run)
 
 
-class CreatedSinceTest(unittest.TestCase):
-    def test_since_is_now_minus_hours(self):
-        since = created_since(36)
+class CompletedSinceTest(unittest.TestCase):
+    def test_cold_start_uses_hours(self):
+        since = completed_since(2, None)
         delta = datetime.now(timezone.utc) - since
-        self.assertGreater(delta.total_seconds(), 36 * 3600 - 5)
-        self.assertLess(delta.total_seconds(), 36 * 3600 + 5)
+        self.assertGreater(delta.total_seconds(), 2 * 3600 - 5)
+        self.assertLess(delta.total_seconds(), 2 * 3600 + 5)
+
+    def test_watermark_is_last_export_minus_30m(self):
+        last = datetime.now(timezone.utc) - timedelta(minutes=10)
+        since = completed_since(2, last)
+        self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
 
 
 class AlreadyExportedTest(unittest.TestCase):

@@ -7,6 +7,7 @@ Writes into analytics/ci_metrics via ci_metrics.upsert_metrics.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -162,8 +163,48 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     return [row for row in rows if row is not None]
 
 
-def created_since(hours: int) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(hours=hours)
+OVERLAP = timedelta(minutes=30)
+MAX_LOOKBACK = timedelta(hours=12)
+STATE_SOURCE = "export_state"
+STATE_NAME = "open_runs"
+
+
+def completed_since(hours: int, last_export: Optional[datetime] = None) -> datetime:
+    """Short GitHub `created` window.
+
+    Cold start uses `--hours`. After a successful export the window starts at
+    that timestamp minus 30 minutes. Runs that were already running are tracked
+    separately, so this window does not have to cover the longest job.
+    """
+    if last_export is None:
+        return datetime.now(timezone.utc) - timedelta(hours=hours)
+    return last_export - OVERLAP
+
+
+def last_export_at(table_path: Optional[str] = None) -> Optional[datetime]:
+    if not has_send_credentials():
+        return None
+    floor = datetime.now(timezone.utc) - MAX_LOOKBACK
+    ts = floor.strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        with _open_ydb_wrapper() as wrapper:
+            if not wrapper.check_credentials():
+                return None
+            path = table_path or resolve_table_path(wrapper)
+            rows = wrapper.execute_scan_query(
+                f"""
+                SELECT MAX(exported_at) AS last_export
+                FROM `{path}`
+                WHERE event_ts >= Timestamp("{ts}")
+                  AND source IN ("github_job", "github_step")
+                """
+            )
+    except Exception as exc:  # noqa: BLE001 — cold-start window
+        print(f"Warning: export watermark query failed: {exc}")
+        return None
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    return parse_datetime(rows[0].get("last_export"))
 
 
 def already_exported(run_id: Any, run_attempt: Any, exported: set) -> bool:
@@ -289,6 +330,7 @@ def iter_workflow_runs(
     workflow: str,
     created_since: datetime,
     per_page: int = 50,
+    status: str = "completed",
 ) -> Iterable[Dict[str, Any]]:
     created = f">={created_since.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     url = f"https://api.github.com/repos/{org}/{repo}/actions/workflows/{quote(workflow)}/runs"
@@ -297,7 +339,7 @@ def iter_workflow_runs(
         payload = github_get(
             url,
             params={
-                "status": "completed",
+                "status": status,
                 "created": created,
                 "per_page": per_page,
                 "page": page,
@@ -404,6 +446,83 @@ def collect_rows(
     return rows
 
 
+def run_ref(run: Dict[str, Any]) -> Optional[tuple]:
+    try:
+        return int(run["id"]), int(run.get("run_attempt") or 1)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def load_open_runs(table_path: Optional[str] = None) -> List[tuple]:
+    if not has_send_credentials():
+        return []
+    floor = (datetime.now(timezone.utc) - MAX_LOOKBACK).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        with _open_ydb_wrapper() as wrapper:
+            if not wrapper.check_credentials():
+                return []
+            path = table_path or resolve_table_path(wrapper)
+            rows = wrapper.execute_scan_query(
+                f"""
+                SELECT event_ts, labels
+                FROM `{path}`
+                WHERE event_ts >= Timestamp("{floor}")
+                  AND source = "{STATE_SOURCE}"
+                  AND name = "{STATE_NAME}"
+                """
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: open-run watermark read failed: {exc}")
+        return []
+    latest = None
+    latest_ts = None
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        ts = parse_datetime(row.get("event_ts"))
+        if latest_ts is None or (ts is not None and ts >= latest_ts):
+            latest_ts = ts
+            latest = row.get("labels")
+    if isinstance(latest, str):
+        try:
+            latest = json.loads(latest)
+        except json.JSONDecodeError:
+            return []
+    runs = latest.get("runs") if isinstance(latest, dict) else None
+    refs = []
+    for item in runs or []:
+        if isinstance(item, dict):
+            ref = run_ref({"id": item.get("id"), "run_attempt": item.get("attempt")})
+            if ref:
+                refs.append(ref)
+    return refs
+
+
+def save_open_runs(refs: List[tuple], table_path: Optional[str] = None) -> None:
+    now = datetime.now(timezone.utc)
+    row = {
+        "date": now.date(),
+        "event_ts": now,
+        "run_id": 0,
+        "github_job_id": 0,
+        "run_attempt": 0,
+        "source": STATE_SOURCE,
+        "name": STATE_NAME,
+        "kind": "event",
+        "span_id": f"export-state-{int(now.timestamp())}",
+        "labels": json.dumps(
+            {"runs": [{"id": run_id, "attempt": attempt} for run_id, attempt in refs]},
+            separators=(",", ":"),
+        ),
+        "exported_at": now,
+    }
+    upload_rows([row], table_path=table_path)
+
+
+def fetch_run(org: str, repo: str, run_id: int) -> Dict[str, Any]:
+    return github_get(f"https://api.github.com/repos/{org}/{repo}/actions/runs/{run_id}")
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export GitHub job/step timings as CI metrics")
     parser.add_argument("--org", default=os.environ.get("CI_METRICS_ORG", DEFAULT_ORG))
@@ -414,7 +533,7 @@ def parse_args(argv=None) -> argparse.Namespace:
         default=None,
         help="Workflow file (repeatable or comma-separated). Default: all active workflows.",
     )
-    parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours (default 24)")
+    parser.add_argument("--hours", type=int, default=2, help="Cold-start lookback in hours (default 2)")
     parser.add_argument("--table-path", default=None)
     return parser.parse_args(argv)
 
@@ -423,18 +542,47 @@ def main(argv=None) -> int:
     try:
         args = parse_args(argv)
         workflows = workflows_to_export(args.org, args.repo, args.workflow)
-        since = created_since(args.hours)
+        since = completed_since(args.hours, last_export_at(args.table_path))
         exported = exported_run_ids(since, table_path=args.table_path)
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
             f"since {since.isoformat()} skip={len(exported)}"
         )
         rows: List[Dict[str, Any]] = []
+        still_open: List[tuple] = []
+        open_since = datetime.now(timezone.utc) - MAX_LOOKBACK
         for workflow in workflows:
             try:
                 rows.extend(collect_rows(args.org, args.repo, workflow, since, exported))
             except Exception as exc:  # noqa: BLE001 — keep other workflows
                 print(f"Warning: failed to export workflow {workflow}: {exc}")
+            for status in ("in_progress", "queued"):
+                try:
+                    for run in iter_workflow_runs(args.org, args.repo, workflow, open_since, status=status):
+                        ref = run_ref(run)
+                        if ref and ref not in still_open:
+                            still_open.append(ref)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"Warning: failed to list {status} runs for {workflow}: {exc}")
+        for run_id, attempt in load_open_runs(args.table_path):
+            if (run_id, attempt) in still_open or already_exported(run_id, attempt, exported):
+                continue
+            try:
+                run = fetch_run(args.org, args.repo, run_id)
+            except Exception as exc:  # noqa: BLE001
+                print(f"Warning: failed to refresh run {run_id}: {exc}")
+                continue
+            if run.get("status") != "completed":
+                ref = run_ref(run)
+                if ref and ref not in still_open:
+                    still_open.append(ref)
+                continue
+            try:
+                jobs = list_run_jobs(args.org, args.repo, run_id)
+                rows.extend(metrics_from_workflow_run(attach_pull_requests(args.org, args.repo, run), jobs))
+            except Exception as exc:  # noqa: BLE001
+                print(f"Warning: failed to export finished run {run_id}: {exc}")
+        save_open_runs(still_open, args.table_path)
         if not rows:
             print("No GitHub job metric rows to upload")
             return 0

@@ -54,10 +54,10 @@ python3 "$CI_METRICS_PY" enrich ya_make_try_1 --label ya_attempt=1 --report "$CU
 ```bash
 export GITHUB_TOKEN=...
 python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py \
-  --hours 36
+  --hours 2
 ```
 
-Окно GitHub `created` всегда `--hours` (в cron — 36). Уже записанные пары `(run_id, run_attempt)` это окно не уменьшают. Если запрос к YDB не удался, записываем окно целиком: повтор той же строки безопасен. По умолчанию все активные workflow. `--workflow pr_check.yml` ограничивает список. `--org` / `--repo` / `--table-path` по желанию.
+По умолчанию все активные workflow. Окно `created` для уже завершённых run — `--hours` с холодного старта (в cron — 2), дальше от последнего `exported_at` минус 30 минут. Run, которые ещё идут, запоминаются и дочитываются по id, когда завершатся, даже если их `created` старше этого окна. Уже записанные `(run_id, run_attempt)` пропускаются. Если запрос watermark не удался, берём `--hours`. `--workflow` подменяет список. `--org` / `--repo` / `--table-path` по желанию.
 
 ```bash
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py'

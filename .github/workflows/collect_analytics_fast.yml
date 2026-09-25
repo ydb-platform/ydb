@@ -8,7 +8,7 @@ on:
         type: string
         default: ""
       workflow:
-        description: "GitHub job metrics: all or a workflow file (pr_check.yml, nightly_build.yml, ...)"
+        description: "GitHub job metrics: all or a comma-separated workflow file list"
         type: string
         default: "all"
 
@@ -147,4 +147,4 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         CI_METRICS_WORKFLOW: ${{ github.event_name == 'workflow_dispatch' && inputs.workflow || 'all' }}
       continue-on-error: true
-      run: python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 36
+      run: python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2

@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import logging
+import traceback
 import ydb.tests.olap.lib.remote_execution as remote_execution
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
@@ -53,11 +54,11 @@ class ErrorArea(Enum):
 
 
 class WorkloadError(RuntimeError):
-    def __init__(self, message: str, priority: ErrorPriority = ErrorPriority.ERROR, area: ErrorArea = ErrorArea.OTHER, traceback: Optional[TracebackType] = None):
+    def __init__(self, message: str, priority: ErrorPriority = ErrorPriority.ERROR, area: ErrorArea = ErrorArea.OTHER, tb: Optional[TracebackType] = None):
         super().__init__(message)
         self.__priority = priority
         self.__area = area
-        self.__traceback__ = traceback
+        self.__traceback__ = tb
 
     @property
     def priority(self):
@@ -66,6 +67,16 @@ class WorkloadError(RuntimeError):
     @property
     def area(self):
         return self.__area
+
+    def serialize(self) -> dict:
+        result = {
+            'priority': self.__priority.name,
+            'area': self.__area.name,
+            'message': str(self)
+        }
+        if self.__traceback__ is not None:
+            result['traceback'] = [t.rstrip() for t in traceback.extract_tb(self.__traceback__).format()]
+        return result
 
 
 class YdbCliHelper:
@@ -211,7 +222,7 @@ class YdbCliHelper:
                 '\n'.join([f'{e.area.name}: {e}' for e in errors]),
                 priority=max(e.priority for e in errors),
                 area=errors[0].area,
-                traceback=next((e.__traceback__ for e in errors if e.__traceback__ is not None), None),
+                tb=next((e.__traceback__ for e in errors if e.__traceback__ is not None), None),
             )
 
     class WorkloadRunner():
@@ -318,7 +329,7 @@ class YdbCliHelper:
             except WorkloadError as e:
                 self.result.add_custom_error(e)
             except BaseException as e:
-                self.result.add_custom_error(WorkloadError(str(e), traceback=e.__traceback__))
+                self.result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
             return self.result.success
 
     class WorkloadResultParser:
@@ -559,7 +570,7 @@ class YdbCliHelper:
             except WorkloadError as e:
                 res.add_custom_error(e)
             except BaseException as e:
-                res.add_custom_error(WorkloadError(str(e), traceback=e.__traceback__))
+                res.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
             results[user] = res
 
         return results

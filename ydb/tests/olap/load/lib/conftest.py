@@ -2,6 +2,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 import allure
 import json
+import yaml
 import logging
 import re as regex
 import os
@@ -561,6 +562,27 @@ class LoadSuiteBase:
                 median_duration=_get_duraton(stats, 'Median'),
                 statistics=stats,
             )
+
+        errors = sorted(result.get_errors(), key=lambda x: (-x.priority.value, x.area.value))
+        rp = os.getenv('RESULT_RESOURCES_PATH')
+        if rp and errors:
+            fn = os.path.join(rp, 'errors.yaml')
+            tmp_fn = fn + '_'
+            try:
+                data = {}
+                if os.path.exists(fn):
+                    with open(fn, 'r') as f:
+                        data = yaml.safe_load(f)
+                        if not isinstance(data, dict):
+                            data = {}
+                data[query_name] = [e.serialize() for e in errors]
+                with open(tmp_fn, 'w') as f:
+                    yaml.safe_dump(data, f, allow_unicode=True)
+                os.replace(tmp_fn, fn)
+            except BaseException as e:
+                result.add_warning(f'Error while write {fn}: {e}', area=ErrorArea.TEST_INFRA)
+                if os.path.exists(tmp_fn):
+                    os.remove(tmp_fn)
         if not result.success:
             ie = result.get_integrated_error()
             exc = pytest.fail.Exception(str(ie))
@@ -587,7 +609,7 @@ class LoadSuiteBase:
             except WorkloadError as e:
                 result.add_custom_error(e)
             except BaseException as e:
-                result.add_custom_error(WorkloadError(str(e), traceback=e.__traceback__))
+                result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
         result.iterations[0].time = time() - cls._setup_start_time
         query_name = '_Verification'
         result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)

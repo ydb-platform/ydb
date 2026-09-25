@@ -74,7 +74,7 @@ class UploadSuiteBase(LoadSuiteBase):
             result.add_custom_error(e)
         except BaseException as e:
             logging.error(f'Error: {e}')
-            result.add_custom_error(WorkloadError(str(e), traceback=e.__traceback__))
+            result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
             raise e
         result.iterations[0].time = time() - start_time
         cls.validate(result)

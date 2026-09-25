@@ -67,6 +67,17 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         }
     }
 
+    Y_UNIT_TEST(MetricNameWithDotsIsRejected) {
+        constexpr auto inputMetrics =
+            "# TYPE service_account.authorized_key.create_token_events_count_total counter\n"
+            "service_account.authorized_key.create_token_events_count_total 1\n";
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            Decode(inputMetrics),
+            TPrometheusDecodeException,
+            "unknown metric type: .authorized_key.create_token_events_count_total");
+    }
+
     Y_UNIT_TEST(Minimal) {
         auto samples = Decode(
                 "minimal_metric 1.234\n"

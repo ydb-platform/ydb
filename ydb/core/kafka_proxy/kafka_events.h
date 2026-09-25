@@ -53,7 +53,6 @@ struct TEvKafka {
         EvTokenRecheck,
         EvGetGroupMemberCounter,
         EvSaveGroupMemberCounter,
-        EvDecrementGroupMemberCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -325,15 +324,6 @@ struct PartitionConsumerOffset {
         TEvSaveGroupMemberCounter(NMonitoring::TDynamicCounters::TCounterPtr counter, TString groupId)
             : Counter(std::move(counter))
             , GroupId(std::move(groupId))
-        {}
-    };
-
-    struct TEvDecrementGroupMemberCounter : public TEventLocal<TEvDecrementGroupMemberCounter, EvDecrementGroupMemberCounter> {
-        NMonitoring::TDynamicCounters::TCounterPtr Counter;
-        TString GroupId;
-
-        TEvDecrementGroupMemberCounter(TString groupId)
-            : GroupId(std::move(groupId))
         {}
     };
 

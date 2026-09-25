@@ -3535,30 +3535,6 @@ void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
     DeferredReadSetAcks.clear();
 }
 
-void TPersQueue::MovePendingDeferredPlanStepAcks()
-{
-    AFL_ENSURE(DeferredPlanStepAcks.empty())("DeferredPlanStepAcks", DeferredPlanStepAcks.size());
-    DeferredPlanStepAcks = std::move(PendingDeferredPlanStepAcks);
-    PendingDeferredPlanStepAcks.clear();
-}
-
-void TPersQueue::AddPendingDeferredPlanStepAck(TDeferredPlanStepAck&& ack)
-{
-    PendingDeferredPlanStepAcks.push_back(std::move(ack));
-}
-
-void TPersQueue::SendDeferredPlanStepAcks(const TActorContext& ctx)
-{
-    for (auto& e : DeferredPlanStepAcks) {
-        PQ_LOG_TX_D("Send deferred TEvPlanStep acks." <<
-                    "Step: " << e.Event->Record.GetStep() <<
-		    ", TxCount: " << e.Event->Record.TransactionsSize());
-        SendPlanStepAcks(ctx, e.Sender, *e.Event);
-    }
-
-    DeferredPlanStepAcks.clear();
-}
-
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
     PQ_LOG_TX_I("Handle TEvTxProcessing::TEvReadSetAck " << ev->Get()->Record.ShortDebugString());
@@ -3674,7 +3650,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
     PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
 }
 
@@ -3682,7 +3658,7 @@ void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
     PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
 }
 
@@ -3705,8 +3681,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessTxWrites() ||
         TxWritesChanged ||
         !DeleteTxs.empty() ||
-        !PendingDeferredReadSetAcks.empty() ||
-        !PendingDeferredPlanStepAcks.empty()
+        !PendingDeferredReadSetAcks.empty()
         ;
     if (!canProcess) {
         return;
@@ -3720,7 +3695,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     AddCmdWriteTabletTxInfo(request->Record);
 
     MovePendingDeferredReadSetAcks();
-    MovePendingDeferredPlanStepAcks();
 
     WriteTxsInProgress = true;
 
@@ -3763,7 +3737,6 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
     SendDeferredReadSetAcks(ctx);
-    SendDeferredPlanStepAcks(ctx);
 
     WriteTxsInProgress = false;
 
@@ -3876,7 +3849,6 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     }
 
-    // PlanStep / PlanTxId advance only when at least one TxId from this message is in Txs.
     if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
         PlanStep = step;
@@ -3889,28 +3861,17 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         TDistributedTransaction& tx = p->second;
 
         // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.SendPlanStepAcksAfterCompletion(sender, std::move(ev));
+        tx.AddPlanStepSender(sender, std::move(ev));
 
         if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
             // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
             SendPlanStepAcks(ctx, tx);
         }
     } else {
-        // No known TxId in this PlanStep (including an empty Transactions list).
-        //
-        // Do not ack immediately: PlanStep is advanced in memory before _txinfo is persisted.
-        // A stale leader can keep that inflated PlanStep after losing generation while the new
-        // leader still has the older durable watermark. Immediate ack on step <= PlanStep
-        // (retransmit of an already-handled step) or on step > PlanStep (e.g. SchemeShard
-        // CreatePQ re-plan after Attach→NODATA) would let the stale tablet confirm the step
-        // without a successful KV write. Defer ack until WRITE_TX succeeds — same fence as
-        // deferred TEvReadSetAck for unknown txs. Watermark is not moved on this path.
-        PQ_LOG_TX_W("All-unknown PlanStep; deferring ack until WRITE_TX completes." <<
-                    " Step: " << step <<
-		    ", PlanStep: " << PlanStep <<
-		    ", TxCount: " << event.TransactionsSize());
-        AddPendingDeferredPlanStepAck({.Sender = sender, .Event = std::move(ev)});
-        TryWriteTxs(ctx);
+        // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
+        // or a retransmit after the step's txs were already executed and deleted.
+        // Ack immediately so the mediator sees steps in order.
+        SendPlanStepAcks(ctx, sender, *ev);
     }
 
     PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
@@ -3919,11 +3880,13 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
                                   const TDistributedTransaction& tx)
 {
-    if (!tx.PlanStepSender) {
+    if (tx.PlanStepSenders.empty()) {
         return;
     }
 
-    SendPlanStepAcks(ctx, tx.PlanStepSender, *tx.PlanStepEvent);
+    for (const auto& [receiver, event] : tx.PlanStepSenders) {
+        SendPlanStepAcks(ctx, receiver, *event);
+    }
 }
 
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,

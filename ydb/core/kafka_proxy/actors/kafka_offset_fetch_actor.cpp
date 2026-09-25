@@ -460,13 +460,11 @@ void TKafkaOffsetFetchActor::ParseGroupsAssignments(const NKqp::TEvKqp::TEvQuery
         TString groupId = parser.ColumnParser("consumer_group").GetUtf8().c_str();
         if (!assignmentStr.empty()) {
             TKafkaBytes assignment = assignmentStr;
-            TKafkaVersion version = *(TKafkaVersion*)(assignment.value().data() + sizeof(TKafkaVersion));
-            TBuffer buffer(assignment.value().data() + sizeof(TKafkaVersion), assignment.value().size_bytes() - sizeof(TKafkaVersion));
-            TKafkaReadable readable(buffer);
-
-            TConsumerProtocolAssignment consumerAssignment;
-            consumerAssignment.Read(readable, version);
-            assignments.emplace_back(groupId, consumerAssignment);
+            auto consumerAssignment = TryReadConsumerProtocolBlob<TConsumerProtocolAssignment>(assignment);
+            if (!consumerAssignment) {
+                continue;
+            }
+            assignments.emplace_back(groupId, *consumerAssignment);
         }
     }
 }

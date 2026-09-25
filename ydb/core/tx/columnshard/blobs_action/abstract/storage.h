@@ -90,7 +90,7 @@ public:
 
     void Stop();
 
-    const NSplitter::TSplitSettings& GetBlobSplitSettings() const;
+    NSplitter::TSplitSettings GetBlobSplitSettings() const;
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
 

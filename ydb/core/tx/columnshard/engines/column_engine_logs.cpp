@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
@@ -41,6 +42,7 @@ using namespace NKikimr::NOlap::NReader::LWTRACE_GET_NAMESPACE(YDB_CS_SCAN);
 
 class TPortionsSelector {
     const std::shared_ptr<TGranuleMeta> GranuleMeta;
+    const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
     const TInternalPathId PathId;
     const TSnapshot Snapshot;
     const TPKRangesFilter& PkRangesFilter;
@@ -58,22 +60,21 @@ class TPortionsSelector {
     ui64 TotalFilteredPortionsCount = 0;
 
 public:
-    TPortionsSelector(std::shared_ptr<TGranuleMeta> granuleMeta, TInternalPathId pathId, TSnapshot snapshot,
-        const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-        const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 tabletId, ui64 txId,
-        ui64 scanId)
+    TPortionsSelector(std::shared_ptr<TGranuleMeta> granuleMeta, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
+        TInternalPathId pathId, const NReader::TReadDescription& read)
         : GranuleMeta(std::move(granuleMeta))
+        , DataLocksManager(dataLocksManager)
         , PathId(pathId)
-        , Snapshot(snapshot)
-        , PkRangesFilter(pkRangesFilter)
-        , WithNonconflicting(withNonconflicting)
-        , WithConflicting(withConflicting)
-        , OwnPortions(ownPortions)
-        , CalculateProbe(LWPROBE_ENABLED(ColumnEngineForLogsSelect) || (orbit && orbit->HasShuttles()))
-        , Orbit(orbit)
-        , TabletId(tabletId)
-        , TxId(txId)
-        , ScanId(scanId)
+        , Snapshot(read.GetSnapshot())
+        , PkRangesFilter(*read.PKRangesFilter)
+        , WithNonconflicting(read.readNonconflictingPortions)
+        , WithConflicting(read.readConflictingPortions)
+        , OwnPortions(read.ownPortions)
+        , CalculateProbe(LWPROBE_ENABLED(ColumnEngineForLogsSelect) || (read.Orbit && read.Orbit->HasShuttles()))
+        , Orbit(read.Orbit)
+        , TabletId(read.GetTabletId())
+        , TxId(read.TxId)
+        , ScanId(read.ScanId)
     {
     }
 
@@ -120,6 +121,9 @@ private:
             }
 
             bool takePortion = PkRangesFilter.IsUsed(*portion);
+            if (takePortion) {
+                takePortion = !DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan);
+            }
 
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", PathId)(
                 "portion", portion->DebugString());
@@ -151,6 +155,9 @@ private:
             }
 
             bool takePortion = PkRangesFilter.IsUsed(*portion);
+            if (takePortion) {
+                takePortion = !DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan);
+            }
 
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", PathId)(
                 "portion", portion->DebugString());
@@ -183,6 +190,10 @@ private:
             }
 
             if (nonconflicting && !WithNonconflicting || conflicting && !WithConflicting) {
+                return true;
+            }
+
+            if (DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan)) {
                 return true;
             }
 
@@ -387,7 +398,7 @@ bool TColumnEngineForLogs::FinishLoading() {
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             Counters->AddPortion(*portionInfo);
-            if (portionInfo->CheckForCleanup()) {
+            if (portionInfo->HasRemoveSnapshot()) {
                 AddCleanupPortion(portionInfo);
             }
         }
@@ -569,7 +580,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 continue;
             }
             for (auto& [portion, info] : g->GetPortions()) {
-                if (info->CheckForCleanup()) {
+                if (info->HasRemoveSnapshot()) {
                     continue;
                 }
                 if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {
@@ -721,19 +732,16 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId, TSnapshot snapshot,
-    const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-    const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId, ui64 scanId) const {
-    std::vector<TSelectedPortionInfo> out;
+std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId,
+    const NReader::TReadDescription& readDescription, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    AFL_VERIFY(dataLocksManager);
 
     auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
     if (!granuleMeta) {
         return {};
     }
 
-    return TPortionsSelector(
-        granuleMeta, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions, orbit, TabletId, txId, scanId)
-        .Select();
+    return TPortionsSelector(granuleMeta, dataLocksManager, pathId, readDescription).Select();
 }
 
 bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {

@@ -165,6 +165,7 @@ namespace NKikimr::NBlobDepot {
         CurrentMaxS3GetsInFlight = 1;
         *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
         ConsecutiveSuccessfulGetBatches = 0;
+        ++*S3GetThrottleActivations;
         const TDuration delay = S3GetBackoff.Next();
         S3GetThrottleUntil = TActivationContext::Monotonic() + delay;
 

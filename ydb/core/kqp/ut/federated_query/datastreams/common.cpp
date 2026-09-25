@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -100,6 +102,34 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
         tableServiceConfig.SetDqChannelVersion(2u);
+
+        auto& authConfig = *AppConfig->MutableAuthConfig();
+
+        if (auto vmMetadataEmulatorHost = getenv("VM_METADATA_EMULATOR_HOST")) {
+            auto& localMetadataService = *authConfig.MutableLocalMetadataService();
+            localMetadataService.SetHost(vmMetadataEmulatorHost);
+            localMetadataService.SetPort(FromString<ui16>(getenv("VM_METADATA_EMULATOR_PORT")));
+        }
+
+        if (auto iamEndpoint = getenv("IAM_EMULATOR_ENDPOINT")) {
+            auto& iamServiceControl = *AppConfig->MutableReplicationConfig()->MutableIamServiceControl();
+            iamServiceControl.SetEndpoint(iamEndpoint);
+            iamServiceControl.SetEnableSsl(false);
+
+            iamServiceControl.SetServiceId("ydb");
+            iamServiceControl.SetMicroserviceId("data-plane");
+            iamServiceControl.SetResourceType("resource-manager.cloud");
+
+            authConfig.SetAccessServiceEndpoint(iamEndpoint);
+            authConfig.SetUseAccessServiceTLS(false);
+        }
+
+#if 0 // [BACKPORT stable-26-2]
+        {
+            auto useAccessServiceV2 = getenv("USE_ACCESS_SERVICE_V2");
+            featureFlags.SetEnableAccessServiceV2Interface(!useAccessServiceV2 || FromString<bool>(useAccessServiceV2));
+        }
+#endif
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
@@ -284,6 +314,18 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
     bool sort,
     bool local,
     bool checkResult) {
+
+    return ReadTopicMessages(topicName, expectedMessages, *GetTopicClient(local), disposition, sort, checkResult);
+}
+
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(
+    const std::string& topicName,
+    std::vector<std::string> expectedMessages,
+    NYdb::NTopic::TTopicClient& topicClient,
+    TInstant disposition,
+    bool sort,
+    bool checkResult) {
+
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
         .WithoutConsumer()
@@ -298,7 +340,7 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
         }
     );
 
-    auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
+    auto readSession = topicClient.CreateReadSession(readSettings);
     std::vector<std::pair<std::string, TInstant>> received;
 
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {

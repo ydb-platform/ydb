@@ -87,6 +87,7 @@ namespace NKikimr::NBlobDepot {
         S3GetsOk = s3->GetCounter("GetsOk", true);
         S3GetsError = s3->GetCounter("GetsError", true);
         S3GetsSlowDown = s3->GetCounter("GetsSlowDown", true);
+        S3GetThrottleActivations = s3->GetCounter("GetThrottleActivations", true);
         S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
         S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);
         S3GetsPendingQueueSizeCounter = s3->GetCounter("GetsPendingQueueSize", false);

@@ -37,7 +37,7 @@ struct TDistributedTransaction {
     void OnReadSetAck(ui64 tabletId);
     void OnTxDone(const TEvPQ::TEvTxDone& event);
 
-    void SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
+    void AddPlanStepSender(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
 
     bool GetSkipSrcIdInfo() const;
 
@@ -130,8 +130,7 @@ struct TDistributedTransaction {
 
     TMaybe<NKikimrPQ::TError> Error;
 
-    TActorId PlanStepSender;
-    std::unique_ptr<TEvTxProcessing::TEvPlanStep> PlanStepEvent;
+    THashMap<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>> PlanStepSenders;
 
 private:
     NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);

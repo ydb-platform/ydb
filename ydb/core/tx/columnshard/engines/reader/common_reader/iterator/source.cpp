@@ -43,9 +43,11 @@ void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     NArrow::NSSA::TProcessorContext context(
         source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
+    AFL_VERIFY(!Program);
+    Program = program;
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
-    SetPrevCategoryName(step.GetPrevName());
+    SetStartCategoryName(step.GetPrevName());
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {

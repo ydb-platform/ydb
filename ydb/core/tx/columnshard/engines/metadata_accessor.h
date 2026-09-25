@@ -22,10 +22,14 @@ enum class EReaderClass {
     Simple,
     Trivial
 };
-}
+}   // namespace NKikimr::NOlap::NReader
 
 namespace NKikimr::NOlap::NReader::NCommon {
 class ISourcesConstructor;
+}
+
+namespace NKikimr::NOlap::NDataLocks {
+class TManager;
 }
 
 namespace NKikimr::NOlap {
@@ -51,6 +55,7 @@ public:
     }
 
     virtual ~ITableMetadataAccessor() = default;
+
     virtual TString GetOverridenScanType(const TString& defScanType) const {
         return defScanType;
     }
@@ -92,6 +97,7 @@ public:
         const NOlap::IPathIdTranslator& PathIdTranslator;
         const IColumnEngine& Engine;
         std::shared_ptr<NLWTrace::TOrbit> Orbit;
+        std::shared_ptr<NDataLocks::TManager> DataLocksManager;
 
     public:
         const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
@@ -101,14 +107,22 @@ public:
         const IColumnEngine& GetEngine() const {
             return Engine;
         }
+
         const std::shared_ptr<NLWTrace::TOrbit>& GetOrbit() const {
             return Orbit;
         }
 
-        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const std::shared_ptr<NLWTrace::TOrbit>& orbit)
+        const std::shared_ptr<NDataLocks::TManager>& GetDataLocksManager() const {
+            return DataLocksManager;
+        }
+
+        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine,
+            const std::shared_ptr<NLWTrace::TOrbit>& orbit, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager)
             : PathIdTranslator(pathIdTranslator)
             , Engine(engine)
-            , Orbit(orbit) {
+            , Orbit(orbit)
+            , DataLocksManager(dataLocksManager)
+        {
         }
     };
 
@@ -141,6 +155,7 @@ public:
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const override;
+
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
         return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
@@ -176,6 +191,7 @@ public:
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;
     }
+
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
         const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const override;
 };

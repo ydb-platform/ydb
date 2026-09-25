@@ -191,7 +191,8 @@ inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
     return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,
+                                            TKafkaVersion requestApiVersion);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,

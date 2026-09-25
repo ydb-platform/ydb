@@ -105,11 +105,18 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        BytesRead += record.GetBytesRead();
-        BytesWritten += record.GetBytesWritten();
-        if (Config.HasVirtualGroupId()) {
+        if (record.HasBytesRead()) {
+            BytesRead += record.GetBytesRead();
+        }
+
+        if (record.HasBytesWritten()) {
+            BytesWritten += record.GetBytesWritten();
+        }
+
+        if (Config.HasVirtualGroupId() && (record.HasBytesRead() || record.HasBytesWritten())) {
             MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
+
         UpdateThroughputs(false);
     }
 

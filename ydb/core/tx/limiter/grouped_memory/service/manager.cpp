@@ -133,7 +133,11 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
         ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
         UpdateWaitingProcesses(&info.first->second);
     } else {
-        ++Processes.find(*internalId)->second.MutableLinksCount();
+        auto& process = Processes.find(*internalId)->second;
+        AFL_VERIFY(process.GetStages().size() == stages.size())("external_process_id", externalProcessId)(
+            "registered_stages", process.GetStages().size())("new_stages", stages.size())(
+            "reason", "process_id_collision: externalProcessId reused for a different set of stages");
+        ++process.MutableLinksCount();
     }
     RefreshSignals();
 }

@@ -10049,7 +10049,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                                   : NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STOPPED,
                               tabletState(tabletIdExt));
 
-            RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+            runtime.Register(CreateTabletKiller(hiveTablet));
+            {
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvLocal::EvStatus, runtime.GetNodeCount());
+                runtime.DispatchEvents(options);
+            }
 
             SendLockTabletExecution(runtime, hiveTablet, tabletIdExt, 0,
                                     NKikimrProto::OK, owner, 60000, true);

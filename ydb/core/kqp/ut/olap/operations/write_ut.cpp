@@ -695,16 +695,23 @@ public:
 
     TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
             std::optional<ui32> maxBatchSize = {})
-        : TColumnShardLogWriter(runner, component, TColumnShardLogWriter::TDatabaseSettings {
+        : TColumnShardLogWriter(runner, [component](NActors::NStructuredLog::TLogMessage message) {
+            return message.Component == component;
+        }, TColumnShardLogWriter::TDatabaseSettings {
             .TableName = "olapTable",
             .StoreName = "olapStore",
             .MaxBatchSize = maxBatchSize
         }, columns)
-    {}
+    {
+        Y_UNUSED(component);
+    }
 
-    void Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        TColumnShardLogWriter::Write(message);
+    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        if (!TColumnShardLogWriter::Write(message)) {
+            return false;
+        }
         WrittenCount++;
+        return true;
     }
 
     TString FormatLogColumnValueYson(const NYdb::TValue& value) {
@@ -851,14 +858,14 @@ public:
 };
 
 struct TEnvironment {
+    static constexpr int Component = NActorsServices::TEST;
 
     TKikimrRunner Kikimr;
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
 
     TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = {})
         : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
-        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, NActorsServices::TEST, columns, maxBatchSize);
-        Writer->CreateOrUpdateStorage();
+        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
     }
 
     void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
@@ -867,7 +874,7 @@ struct TEnvironment {
             runtime->GetLogSettings(i)->FlushSinksTimeout = (Writer->GetDatabaseSettings().MaxBatchSize.has_value())?1000000:0;
             runtime->GetLogSettings(i)->Sinks.push_back(Writer);
         }
-        runtime->SetLogPriority(Writer->GetComponent(), NActors::NLog::PRI_TRACE);
+        runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
 
         runtime->Register(new TEmitTestLog(writeFunc));
     }
@@ -885,21 +892,21 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             std::make_shared<TDBLogColumnUint64>("ui64_value", std::vector<TKeyName>{"value"})
         });
         env.WriteLog([](){
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Test info message",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test info message",
                 {"value", 3});
-            YDB_LOG_NOTICE_COMP(NActorsServices::TEST, "Test notice message",
+            YDB_LOG_NOTICE_COMP(TEnvironment::Component, "Test notice message",
                 {"value", 7});
-            YDB_LOG_WARN_COMP(NActorsServices::TEST, "Test warn message",
+            YDB_LOG_WARN_COMP(TEnvironment::Component, "Test warn message",
                 {"value", "ace"});
-            YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test error message");
+            YDB_LOG_ERROR_COMP(TEnvironment::Component, "Test error message");
         });
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:889"])", R"(["3"])",  "[3u]"},
-            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:891"])", R"(["7"])",   "[7u]"},
-            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:893"])", R"(["ace"])", "#"},
-            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:894"])", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:896")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:898")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:900")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:901")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -910,13 +917,13 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             std::make_shared<TDBLogColumnUint64>("value2", std::vector<TKeyName>{"value2"}),
             std::make_shared<TDBLogColumnUint64>("value3", std::vector<TKeyName>{"value3"})});
         env.WriteLog([](){
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 0 values");
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 1 values",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Write 0 values");
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Write 1 values",
                 {"value1", 1});
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 2 values",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Write 2 values",
                 {"value1", 1},
                 {"value2", 2});
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 3 values",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Write 3 values",
                 {"value1", 1},
                 {"value2", 2},
                 {"value3", 3});
@@ -939,7 +946,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Write data
         NActors::NStructuredLog::TLogMessage message;
-        message.Component = NActorsServices::TEST;
+        message.Component = TEnvironment::Component;
         message.Time = TInstant::MicroSeconds(1789233327128336);
         env.Writer->Write(message);
         message.Time = TInstant::MicroSeconds(1789233327128337);
@@ -964,7 +971,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Write data
         NActors::NStructuredLog::TLogMessage message;
-        message.Component = NActorsServices::TEST;
+        message.Component = TEnvironment::Component;
         message.NodeId = 1;
         env.Writer->Write(message);
         message.NodeId = 2;
@@ -990,27 +997,27 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             std::make_shared<TDBLogMessageErrorColumn>()
         });
         env.WriteLog([](){
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "",
                 {"value1", 1});
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "",
                 {"value1", 1},
                 {"value2", 2});
 
             // TWriteResultKind::DummyValueInsteadOfNull
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "",
                 {"value2", 1});
 
             // TWriteResultKind::DummyValueInsteadOfCastError
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "",
                 {"value1", "string value"});
 
             // TWriteResultKind::NullInsteadOfCastError
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "",
                 {"value1", 1},
                 {"value2", "string_value"});
 
             // Two errors
-            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "",
                 {"value2", "string-value"});
         });
 
@@ -1033,7 +1040,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Write data
         NActors::NStructuredLog::TLogMessage message;
-        message.Component = NActorsServices::TEST;
+        message.Component = TEnvironment::Component;
 
         // First chunk
         message.NodeId = 1;
@@ -1071,7 +1078,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Write data
         NActors::NStructuredLog::TLogMessage message;
-        message.Component = NActorsServices::TEST;
+        message.Component = TEnvironment::Component;
 
         // Trigger first auto flush
         message.NodeId = 1;
@@ -1186,11 +1193,11 @@ void TestType(const TValueType& value, const std::optional<TInvalidValueType>& i
         std::make_shared<TDBLogMessageTypedValueColumn<TValueType>>("native_value", std::vector<TKeyName>{"value"})
     });
     env.WriteLog([&](){
-        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write valid value",
+        YDB_LOG_INFO_COMP(TEnvironment::Component, "Write valid value",
             {"value", value});
-        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write invalid value",
+        YDB_LOG_INFO_COMP(TEnvironment::Component, "Write invalid value",
             {"value", invalidValue});
-        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write no value");
+        YDB_LOG_INFO_COMP(TEnvironment::Component, "Write no value");
     });
 
     TStringBuilder stringValue;

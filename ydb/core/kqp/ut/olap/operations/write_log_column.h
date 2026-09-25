@@ -29,21 +29,51 @@ public:
         bool IsPK {false};
         bool IsNotNull {false};
         bool IsShardingKey {false};
+        bool IsDictionary {false};
 
-        static TDatabaseSettings PK(const TString& extra = {}) {
-            return TDatabaseSettings {.Extra = extra, .IsPK = true, .IsNotNull = true};
+        TDatabaseSettings& SetExtra(const TString& extra) {
+            Extra = extra;
+            return *this;
         }
 
-        static TDatabaseSettings ShardingKey(const TString& extra = {}) {
-            return TDatabaseSettings {.Extra = extra, .IsNotNull = true, .IsShardingKey = true};
+        TDatabaseSettings& SetPK(bool isPK) {
+            IsPK = isPK;
+            return *this;
         }
 
-        static TDatabaseSettings PKShardingKey(const TString& extra = {}) {
-            return TDatabaseSettings {.Extra = extra, .IsPK = true, .IsNotNull = true, .IsShardingKey = true};
+        TDatabaseSettings& SetNotNull(bool isNotNull) {
+            IsNotNull = isNotNull;
+            return *this;
         }
 
-        static TDatabaseSettings NotNull(const TString& extra = {}) {
-            return TDatabaseSettings {.Extra = extra, .IsNotNull = true};
+        TDatabaseSettings& SetShardingKey(bool isShardingKey) {
+            IsShardingKey = isShardingKey;
+            return *this;
+        }
+
+        TDatabaseSettings& SetDictionary(bool isDictionary) {
+            IsDictionary = isDictionary;
+            return *this;
+        }
+
+        static TDatabaseSettings PK() {
+            return TDatabaseSettings {.IsPK = true, .IsNotNull = true};
+        }
+
+        static TDatabaseSettings ShardingKey() {
+            return TDatabaseSettings {.IsNotNull = true, .IsShardingKey = true};
+        }
+
+        static TDatabaseSettings PKShardingKey() {
+            return TDatabaseSettings {.IsPK = true, .IsNotNull = true, .IsShardingKey = true};
+        }
+
+        static TDatabaseSettings NotNull() {
+            return TDatabaseSettings {.IsNotNull = true};
+        }
+
+        static TDatabaseSettings Dictionary() {
+            return TDatabaseSettings {.IsDictionary = true};
         }
     };
 
@@ -163,7 +193,7 @@ class TDBLogMessagePrioColumn : public TTypedDBLogColumn<ui16> {
 public:
     using TBase = TTypedDBLogColumn<ui16>;
 
-    TDBLogMessagePrioColumn() : TBase("priority", TDatabaseSettings()) {
+    TDBLogMessagePrioColumn() : TBase("priority", TDatabaseSettings().SetNotNull(true)) {
     }
 
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
@@ -176,7 +206,7 @@ class TDBLogMessageNodeIdColumn : public TTypedDBLogColumn<ui16> {
 public:
     using TBase = TTypedDBLogColumn<ui16>;
 
-    TDBLogMessageNodeIdColumn() : TBase("node_id", TDatabaseSettings{.IsPK = true, .IsNotNull = true}) {
+    TDBLogMessageNodeIdColumn() : TBase("node_id", TDatabaseSettings::PK().SetNotNull(true)) {
     }
 
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
@@ -189,7 +219,7 @@ class TDBLogMessageTextColumn : public TTypedDBLogColumn<TString> {
 public:
     using TBase = TTypedDBLogColumn<TString>;
 
-    TDBLogMessageTextColumn() : TBase("message", TDatabaseSettings()) {
+    TDBLogMessageTextColumn() : TBase("message", TDatabaseSettings().SetNotNull(true).SetDictionary(true)) {
     }
 
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
@@ -202,7 +232,7 @@ class TDBLogMessageLocationColumn : public TTypedDBLogColumn<TString> {
 public:
     using TBase = TTypedDBLogColumn<TString>;
 
-    TDBLogMessageLocationColumn() : TBase("location", TDatabaseSettings()) {
+    TDBLogMessageLocationColumn() : TBase("location", TDatabaseSettings().SetNotNull(true).SetDictionary(true)) {
     }
 
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
@@ -219,7 +249,7 @@ class TDBLogMessageErrorColumn : public TTypedDBLogColumn<TString> {
 public:
     using TBase = TTypedDBLogColumn<TString>;
 
-    TDBLogMessageErrorColumn() : TBase("write_error", TDatabaseSettings()) {
+    TDBLogMessageErrorColumn() : TBase("write_error", TDatabaseSettings().SetDictionary(true)) {
     }
 
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& ) override {

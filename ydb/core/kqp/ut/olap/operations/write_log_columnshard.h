@@ -23,8 +23,8 @@ public:
             NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64;
     };
 
-    TColumnShardLogWriter(TKikimrRunner& runner, NLog::EComponent component, const TDatabaseSettings& settings, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
-        : TBaseSchematizedLogWriter(runner, component, std::move(columns))
+    TColumnShardLogWriter(TKikimrRunner& runner, TBaseSchematizedLogWriter::TLogMessageFilter filter, const TDatabaseSettings& settings, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
+        : TBaseSchematizedLogWriter(runner, std::move(filter), std::move(columns))
         , Settings(settings)
     {
     }
@@ -33,12 +33,8 @@ public:
         return Settings;
     }
 
-    void Write(const NActors::NStructuredLog::TLogMessage&) override;
+    bool Write(const NActors::NStructuredLog::TLogMessage&) override;
     void Flush() override;
-
-    void CreateOrUpdateStorage() override;
-    void DeleteStorageIfExists() override {}
-    void CleanupStorageIfExists(TInstant) override {}
 
 protected:
     TString GetStoreDescription();
@@ -50,6 +46,7 @@ protected:
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme);
 
+    void CreateOrUpdateStorage() override;
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
 
 };

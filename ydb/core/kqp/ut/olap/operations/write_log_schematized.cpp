@@ -7,9 +7,15 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
-void TBaseSchematizedLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    if (message.Component != Component) {
-        return ;
+bool TBaseSchematizedLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+    if (Filter && !Filter(message)) {
+        return false;
+    }
+    if (!StorageExists) {
+        CreateOrUpdateStorage();
+        if (!StorageExists) {
+            return false;
+        }
     }
 
     TStringBuilder columnWriteErrors;
@@ -51,13 +57,14 @@ void TBaseSchematizedLogWriter::Write(const NActors::NStructuredLog::TLogMessage
         ErrorColumn->Write(columnWriteErrors);
     }
     WrittenRecordCount++;
+    return true;
 }
 
 void TBaseSchematizedLogWriter::Flush() {
     if (WrittenRecordCount==0) {
         return ;
     }
-    if (!TableExists) {
+    if (!StorageExists) {
         return ;
     }
     auto batch = CreateCurrentBatch();

@@ -23,12 +23,15 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
-void TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    TBaseSchematizedLogWriter::Write(message);
+bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+    if (!TBaseSchematizedLogWriter::Write(message)) {
+        return false;
+    }
     CurrentBatchSize++;
     if (Settings.MaxBatchSize.has_value() && CurrentBatchSize == Settings.MaxBatchSize.value() ) {
         Flush();
     }
+    return true;
 }
 
 void TColumnShardLogWriter::Flush() {
@@ -41,13 +44,15 @@ TString TColumnShardLogWriter::GetStoreDescription() {
     TStringBuilder sb;
     for (const auto& column : Columns) {
         sb << "Columns{ Name: \"" << column->Name << "\" Type : \"" << column->Type << "\"";
+        if (column->Settings.IsDictionary) {
+            sb << " DataAccessorConstructor{ ClassName: \"DICTIONARY\" } ";
+        }
         if (column->Settings.IsNotNull) {
             sb << " NotNull : true";
         }
         if (!column->Settings.Extra.empty()) {
             sb << " " << column->Settings.Extra;
         }
-        // Columns{ Name: "message" Type : "Utf8" DataAccessorConstructor{ ClassName: "DICTIONARY" } }
         sb << " }";
     }
 
@@ -158,7 +163,7 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
     op.MutableCreateColumnTable()->CopyFrom(table);
     ExecuteModifyScheme(op);
 
-    TableExists = true;
+    StorageExists = true;
 }
 
 void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {

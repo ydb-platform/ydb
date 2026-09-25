@@ -1061,13 +1061,19 @@ namespace NKikimr {
             const char* ProgressBarClass;
         };
 
-        static constexpr size_t BreakdownItemCount = 14;
+        static constexpr size_t BreakdownItemCount = 15;
         using TBreakdownItems = std::array<TBreakdownItem, BreakdownItemCount>;
+
+        enum EWakeupTag : ui64 {
+            Retry = 1,
+            Timeout = 2,
+        };
 
         const TActorId NotifyId;
         const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
         const EOutputFormat OutputFormat;
+        const bool ForceRecalculation;
 
         friend class TActorBootstrapped<TSkeletonFrontMonSpaceReportActor>;
 
@@ -1077,6 +1083,17 @@ namespace NKikimr {
 
         static TString FormatBytes(i64 bytes) {
             return TStringBuilder() << HumanReadableSize(bytes, SF_BYTES) << " (" << bytes << " bytes)";
+        }
+
+        static TString FormatTimestamp(ui64 unixMs) {
+            return unixMs ? TInstant::MilliSeconds(unixMs).ToString() : TString("Unknown");
+        }
+
+        static TString FormatAge(ui64 unixMs) {
+            const ui64 nowMs = TInstant::Now().MilliSeconds();
+            return unixMs && unixMs <= nowMs
+                ? TDuration::MilliSeconds(nowMs - unixMs).ToString()
+                : TString("Unknown");
         }
 
         static TBreakdownItems GetBreakdownItems(
@@ -1102,6 +1119,8 @@ namespace NKikimr {
                 {"Slot internal fragmentation", "Fragmentation", breakdown.GetSlotInternalFragmentationBytes(),
                     "progress-bar progress-bar-warning"},
                 {"Free slot space", "Fragmentation", breakdown.GetFreeSlotBytes(),
+                    "progress-bar progress-bar-warning"},
+                {"Free stripe space", "Fragmentation", breakdown.GetFreeStripeBytes(),
                     "progress-bar progress-bar-warning"},
                 {"Chunk tail", "Other", breakdown.GetChunkTailBytes(),
                     "progress-bar progress-bar-striped"},
@@ -1178,6 +1197,9 @@ namespace NKikimr {
                     TABLED_ATTRS({{"data-text", ToString(component.GetAllocatedBytes())}}) {
                         str << FormatBytes(component.GetAllocatedBytes());
                     }
+                    TABLED_ATTRS({{"data-text", ToString(component.GetStripedBytes())}}) {
+                        str << FormatBytes(component.GetStripedBytes());
+                    }
                     TABLED_ATTRS({{"data-text", ToString(accountedBytes)}}) {
                         str << FormatBytes(accountedBytes);
                     }
@@ -1194,7 +1216,9 @@ namespace NKikimr {
                     DIV_CLASS("panel-heading") {
                         str << "VDisk Space Report"
                             << "<a class=\"btn btn-primary btn-xs navbar-right\""
-                            << " href=\"?type=spacereport\">Raw Proto</a>";
+                            << " href=\"?type=spacereport\">Raw Proto</a>"
+                            << "<a class=\"btn btn-warning btn-xs navbar-right\" style=\"margin-right:5px\""
+                            << " href=\"?type=spacereportvisual&force=1\">Recalculate</a>";
                     }
                     DIV_CLASS("panel-body") {
                         const bool ok = response.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::OK);
@@ -1219,11 +1243,23 @@ namespace NKikimr {
                                 RenderSummaryRow(str, "PDisk allocated space", FormatBytes(report.GetPDiskAllocatedBytes()));
                                 RenderSummaryRow(str, "Accounted space", FormatBytes(report.GetAccountedBytes()));
                                 RenderSummaryRow(str, "Reconciliation delta", FormatBytes(report.GetReconciliationDeltaBytes()));
+                                RenderSummaryRow(str, "Collection started",
+                                    FormatTimestamp(report.GetCollectionStartedAtUnixMs()));
+                                RenderSummaryRow(str, "Collection completed",
+                                    FormatTimestamp(report.GetCollectionCompletedAtUnixMs()));
+                                if (report.GetCollectionStartedAtUnixMs()
+                                        && report.GetCollectionCompletedAtUnixMs() >= report.GetCollectionStartedAtUnixMs()) {
+                                    RenderSummaryRow(str, "Collection duration", TDuration::MilliSeconds(
+                                        report.GetCollectionCompletedAtUnixMs()
+                                            - report.GetCollectionStartedAtUnixMs()).ToString());
+                                }
+                                RenderSummaryRow(str, "Report age",
+                                    FormatAge(report.GetCollectionCompletedAtUnixMs()));
                             }
                         }
                         DIV_CLASS("text-muted") {
-                            str << "Values are sampled without a global snapshot; reconciliation delta and "
-                                << "unclassified space may be nonzero.";
+                            str << "This is the latest report cached by the VDisk. Values are sampled without a global "
+                                << "snapshot; reconciliation delta and unclassified space may be nonzero.";
                         }
 
                         H4_CLASS("text-info") { str << "Total breakdown"; }
@@ -1264,6 +1300,7 @@ namespace NKikimr {
                                     TABLEH() { str << "Component"; }
                                     TABLEH() { str << "Chunks"; }
                                     TABLEH() { str << "Allocated"; }
+                                    TABLEH() { str << "Striped"; }
                                     TABLEH() { str << "Accounted"; }
                                     TABLEH() { str << "Breakdown"; }
                                 }
@@ -1280,6 +1317,23 @@ namespace NKikimr {
                                         chunkKeeper.GetTotal());
                                 }
                                 RenderComponentRow(str, "Unattributed", report.GetUnattributed());
+                            }
+                        }
+
+                        if (report.HasStripeHeap()) {
+                            const auto& stripeHeap = report.GetStripeHeap();
+                            H4_CLASS("text-info") { str << "Stripe heap"; }
+                            TABLE_CLASS("table table-condensed") {
+                                TABLEBODY() {
+                                    RenderSummaryRow(str, "Chunks", ToString(stripeHeap.GetChunkCount()));
+                                    RenderSummaryRow(str, "Allocated", FormatBytes(stripeHeap.GetAllocatedBytes()));
+                                    RenderSummaryRow(str, "Used", FormatBytes(stripeHeap.GetUsedBytes()));
+                                    RenderSummaryRow(str, "Free", FormatBytes(stripeHeap.GetFreeBytes()));
+                                    RenderSummaryRow(str, "Locked free", FormatBytes(stripeHeap.GetLockedFreeBytes()));
+                                }
+                            }
+                            DIV_CLASS("text-muted") {
+                                str << "Allocator summary only; these bytes are already attributed to components above.";
                             }
                         }
 
@@ -1319,27 +1373,47 @@ namespace NKikimr {
             }
         }
 
+        void SendRequest(const TActorContext& ctx) {
+            auto request = std::make_unique<TEvGetVDiskSpaceReportRequest>();
+            request->Record.SetForceRecalculation(ForceRecalculation);
+            ctx.Send(SkeletonFrontID, request.release());
+        }
+
         void Bootstrap(const TActorContext &ctx) {
-            ctx.Send(SkeletonFrontID, new TEvGetVDiskSpaceReportRequest);
-            ctx.Schedule(TDuration::Minutes(1), new TEvents::TEvWakeup());
+            SendRequest(ctx);
+            ctx.Schedule(TDuration::Minutes(1), new TEvents::TEvWakeup(Timeout));
             Become(&TThis::StateFunc);
         }
 
         void Handle(TEvGetVDiskSpaceReportResponse::TPtr &ev, const TActorContext &ctx) {
+            const auto& response = ev->Get()->Record;
             if (OutputFormat == EOutputFormat::RawProto) {
                 TStringStream str;
-                str << NMonitoring::HTTPOKTEXT << ev->Get()->Record.DebugString();
+                str << NMonitoring::HTTPOKTEXT << response.DebugString();
                 Finish(ctx, new NMon::TEvHttpInfoRes(
                     str.Str(), Ev->Get()->SubRequestId, NMon::TEvHttpInfoRes::Custom));
+            } else if (response.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY)
+                    && !response.HasReport()) {
+                ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(Retry));
             } else {
                 TStringStream str;
-                RenderVisualization(ev->Get()->Record, str);
+                RenderVisualization(response, str);
                 Finish(ctx, new NMon::TEvHttpInfoRes(str.Str(), Ev->Get()->SubRequestId));
             }
         }
 
-        void HandleWakeup(const TActorContext &ctx) {
-            Finish(ctx, new NMon::TEvHttpInfoRes("<strong>Timeout</strong>"));
+        void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+            switch (ev->Get()->Tag) {
+                case Retry:
+                    SendRequest(ctx);
+                    break;
+                case Timeout:
+                    Finish(ctx, new NMon::TEvHttpInfoRes(
+                        "<strong>VDisk space report cache is not ready after one minute</strong>"));
+                    break;
+                default:
+                    Y_ABORT("Unexpected VDisk space report wakeup tag");
+            }
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
@@ -1355,7 +1429,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateFunc,
             HFunc(TEvGetVDiskSpaceReportResponse, Handle)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+            HFunc(TEvents::TEvWakeup, HandleWakeup)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
 
@@ -1368,12 +1442,14 @@ namespace NKikimr {
                 const TActorId &notifyId,
                 const TActorId &skeletonFrontID,
                 NMon::TEvHttpInfo::TPtr &ev,
-                EOutputFormat outputFormat)
+                EOutputFormat outputFormat,
+                bool forceRecalculation)
             : TActorBootstrapped<TSkeletonFrontMonSpaceReportActor>()
             , NotifyId(notifyId)
             , SkeletonFrontID(skeletonFrontID)
             , Ev(ev)
             , OutputFormat(outputFormat)
+            , ForceRecalculation(forceRecalculation)
         {}
     };
 
@@ -1521,6 +1597,7 @@ namespace NKikimr {
 
         const TString &type = cgi.Get("type");
         const TString &dbname = cgi.Get("dbname");
+        const bool forceSpaceReportRecalculation = cgi.Get("force") == "1";
         if (type == TString()) {
             return new TSkeletonFrontMonMainPageActor(notifyId, skeletonID, ev, frontHtml);
         } else if (type == "query") {
@@ -1546,10 +1623,12 @@ namespace NKikimr {
                     ev, NKikimrBlobStorage::StatHugeAction, dbname);
         } else if (type == "spacereport") {
             return new TSkeletonFrontMonSpaceReportActor(
-                notifyId, skeletonFrontID, ev, TSkeletonFrontMonSpaceReportActor::EOutputFormat::RawProto);
+                notifyId, skeletonFrontID, ev, TSkeletonFrontMonSpaceReportActor::EOutputFormat::RawProto,
+                forceSpaceReportRecalculation);
         } else if (type == "spacereportvisual") {
             return new TSkeletonFrontMonSpaceReportActor(
-                notifyId, skeletonFrontID, ev, TSkeletonFrontMonSpaceReportActor::EOutputFormat::Visualization);
+                notifyId, skeletonFrontID, ev, TSkeletonFrontMonSpaceReportActor::EOutputFormat::Visualization,
+                forceSpaceReportRecalculation);
         } else if (type == "dbmainpage") {
             return CreateMonDbMainPageActor(selfVDiskId, notifyId, skeletonFrontID, skeletonID, ev);
         } else if (type == "restart") {

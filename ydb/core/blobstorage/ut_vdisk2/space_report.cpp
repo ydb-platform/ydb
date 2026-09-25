@@ -79,9 +79,11 @@ namespace {
         }
     }
 
-    void SendSpaceReportRequest(TTestEnv& env, const TActorId& edge) {
+    void SendSpaceReportRequest(TTestEnv& env, const TActorId& edge, bool forceRecalculation = false) {
+        auto request = std::make_unique<TEvGetVDiskSpaceReportRequest>();
+        request->Record.SetForceRecalculation(forceRecalculation);
         env.GetRuntime()->Send(new IEventHandle(
-            env.GetVDiskServiceId(), edge, new TEvGetVDiskSpaceReportRequest), 1);
+            env.GetVDiskServiceId(), edge, request.release()), 1);
     }
 
     const NKikimrVDisk::TGetVDiskSpaceReportResponse& WaitForSpaceReport(
@@ -229,6 +231,39 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
                 + report.GetHuge().GetTotal().GetStripedBytes(),
             report.GetStripeHeap().GetAllocatedBytes());
         UNIT_ASSERT_VALUES_EQUAL(report.GetReconciliationDeltaBytes(), 0);
+    }
+
+    Y_UNIT_TEST(ForcedRequestRefreshesCachedReport) {
+        TTestEnv env;
+
+        const TActorId coldEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, coldEdge);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> coldHandle;
+        const auto& cold = WaitForSpaceReport(env, coldEdge, coldHandle);
+        UNIT_ASSERT_VALUES_EQUAL(
+            cold.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY));
+        WaitForSuccessfulRefresh(env);
+
+        const TActorId cachedEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, cachedEdge);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> cachedHandle;
+        const auto& cached = WaitForSpaceReport(env, cachedEdge, cachedHandle);
+        AssertCompletedReport(cached);
+        const ui64 oldUsefulBytes = cached.GetReport().GetTotal().GetUsefulBlobDataBytes();
+
+        const TString data(100, 'x');
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Put(id, data).GetStatus(), NKikimrProto::OK);
+        env.Compact();
+
+        const TActorId forcedEdge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, forcedEdge, true);
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> forcedHandle;
+        const auto& forced = WaitForSpaceReport(env, forcedEdge, forcedHandle);
+        AssertCompletedReport(forced);
+        UNIT_ASSERT(forced.GetReport().GetTotal().GetUsefulBlobDataBytes() > oldUsefulBytes);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true)->Val(), 2);
     }
 
     Y_UNIT_TEST(ReportsHugeStatsTimeoutOnColdCache) {

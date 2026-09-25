@@ -68,3 +68,5 @@ items:
   href: resource-consumption-management.md
 - name: Structure and limitations of a shared topic reader
   href: shared-consumer-internals.md
+- name: "hints"
+  href: optimization/hints.md

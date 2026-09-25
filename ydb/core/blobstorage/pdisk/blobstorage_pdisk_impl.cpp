@@ -1500,7 +1500,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     Keeper.SetAllocationReserves(SystemReserveChunks, MaintenanceReserveChunks);
-    const ui64 purposeHeadroom = Keeper.GetAllocationHeadroom(purpose);
+    const ui64 purposeHeadroom = Keeper.GetAllocationHeadroom(req->Owner, purpose);
     double occupancy;
     auto color = Keeper.EstimateAllocationColor(req->Owner, count, forHousekeeping, &occupancy);
     if (estimatedColor) {
@@ -1972,8 +1972,8 @@ struct TPDisk::TCompactionArbiterSpace : TCompactionArbiter::ISpace {
         const ui32 sharedFree = PDisk.Keeper.GetFreeChunkCount() - 1;
         double occupancy;
         const TColor::E color = PDisk.Keeper.EstimateAllocationColor(owner, chunks, true, &occupancy);
-        return sharedFree > chunks && color < TColor::BLACK
-            && chunks <= PDisk.Keeper.GetAllocationHeadroom(EAllocationPurpose::Maintenance);
+        // Housekeeping is Maintenance, which the allocation reserves do not hold back.
+        return sharedFree > chunks && color < TColor::BLACK;
     }
 };
 
@@ -1995,7 +1995,8 @@ void TPDisk::ProcessCompactionBidder(TCompactionBidder& req) {
 void TPDisk::UpdateCompactionArbiter() {
     Keeper.SetAllocationReserves(SystemReserveChunks, MaintenanceReserveChunks);
     for (size_t i = 0; i < size_t(EAllocationPurpose::Count); ++i) {
-        *HeadroomByPurpose[i] = Min<ui64>(Keeper.GetFreeChunkCount(), Keeper.GetAllocationHeadroom(EAllocationPurpose(i)));
+        *HeadroomByPurpose[i] = Min<ui64>(Keeper.GetFreeChunkCount(),
+            Keeper.GetWorstAllocationHeadroom(EAllocationPurpose(i)));
     }
     if (!CompactionArbiter) {
         return;
@@ -3884,7 +3885,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             }
             if (ev.ChunkIdx == 0) {
                 TString allocError;
-                TVector<TChunkIdx> chunks = AllocateChunkForOwner(request, 1, allocError);
+                // A chunk allocated by writing to it is VDisk metadata -- the sync log swapping to disk -- that every
+                // write, SYSTEM ones included, depends on; so it may spend the system reserve.
+                TVector<TChunkIdx> chunks = AllocateChunkForOwner(request, 1, allocError, false,
+                    NKikimrBlobStorage::TPDiskSpaceColor::BLACK, nullptr, EAllocationPurpose::System);
                  if (chunks.empty()) {
                      err << allocError;
                      SendChunkWriteError(ev, err.Str(), NKikimrProto::OUT_OF_SPACE);

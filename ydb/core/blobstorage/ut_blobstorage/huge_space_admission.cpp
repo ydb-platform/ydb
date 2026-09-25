@@ -30,6 +30,7 @@ struct THugeAdmissionEnv {
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TActorId Queue;
     TActorId Skeleton;
+    TActorId HugeKeeper;
     ui32 NextStep = 1;
     ui32 HugeWrites = 0;
     ui32 FreshReserves = 0;
@@ -48,8 +49,15 @@ struct THugeAdmissionEnv {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvCutLog:
                     return false;
+                case TEvBlobStorage::EvVPut:
+                    // the skeleton front forwards the put to the skeleton, which reserves Fresh chunks
+                    if (ev->Recipient != Info->GetActorId(0)) {
+                        Skeleton = ev->Recipient;
+                    }
+                    break;
                 case TEvBlobStorage::EvHullWriteHugeBlob: {
-                    Skeleton = ev->Sender;
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Sender, Skeleton);
+                    HugeKeeper = ev->Recipient;
                     ++HugeWrites;
                     const auto* msg = ev->Get<TEvHullWriteHugeBlob>();
                     UNIT_ASSERT_C(!msg->FreshAdmission.Empty(), "huge data sent without an index reservation");
@@ -61,16 +69,15 @@ struct THugeAdmissionEnv {
                     if (msg->ForHousekeeping) {
                         break;
                     }
-                    // Before the first huge write, the only client reservation
-                    // is its Fresh index. Afterwards Skeleton is known explicitly.
-                    const bool fresh = !Skeleton || ev->Sender == Skeleton;
-                    if (fresh) {
+                    // Fresh reservations come from the skeleton, data chunk ones from the allocators HugeKeeper
+                    // registers in its own mailbox. Anything else (sync log, chunk keeper) is not ours to count.
+                    if (ev->Sender == Skeleton) {
                         ++FreshReserves;
                         if (RejectFresh || RejectFurtherFresh) {
                             Reject(std::move(ev), nodeId);
                             return false;
                         }
-                    } else {
+                    } else if (HugeKeeper && ev->Sender.Hint() == HugeKeeper.Hint()) {
                         HugeReserveBounds.push_back(msg->RefuseAtColor);
                         UNIT_ASSERT_VALUES_EQUAL(msg->SizeChunks, 1);
                         if (HoldHugeReserve) {
@@ -97,9 +104,9 @@ struct THugeAdmissionEnv {
         Env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, result.release(), 0, ev->Cookie), nodeId);
     }
 
-    TActorId SendPut(TDataKind::E kind = TDataKind::USER, bool unavoidable = false) {
+    TActorId SendPut(TDataKind::E kind = TDataKind::USER, bool unavoidable = false, ui32 size = 1_MB) {
         const TActorId edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        const TString data(1_MB, 'x');
+        const TString data(size, 'x');
         const TLogoBlobID id(1000, 1, NextStep++, 0, data.size(), 0, 1);
         Env.Runtime->Send(new IEventHandle(Queue, edge, new TEvBlobStorage::TEvVPut(id, TRope(data),
             Info->GetVDiskId(0), unavoidable, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog,
@@ -162,6 +169,53 @@ Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
         env.Compact(); // also checks that the rejected USER index charge landed
     }
 
+    // The index of a huge put waiting for its data to be written has no LSN yet: Fresh compaction rotates the
+    // segment without waiting for it, and the index lands in the new one.
+    Y_UNIT_TEST(FreshCompactionDoesNotWaitForHugeData) {
+        THugeAdmissionEnv env;
+        env.ExpectPut(env.SendPut(TDataKind::USER, false, 100), NKikimrProto::OK); // something for Fresh to compact
+        env.HoldHugeReserve = true;
+        const TActorId huge = env.SendPut();
+        env.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(env.HeldReserve);
+
+        env.Compact(); // with the huge put's index still admitted and its data not written
+        env.HoldHugeReserve = false;
+        env.Env.Runtime->Send(env.HeldReserve.release(), 1);
+        env.ExpectPut(huge, NKikimrProto::OK);
+        env.Compact();
+    }
+
+    Y_UNIT_TEST(CompactionSlotsSurviveUserAllocationRefusal) {
+        THugeAdmissionEnv env;
+        env.HoldHugeReserve = true;
+        const TActorId user = env.SendPut();
+        env.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(env.HeldReserve);
+        UNIT_ASSERT(env.HugeKeeper);
+
+        // What a compaction asks for: it queues behind the USER put's allocator, the heap having no room yet.
+        const TActorId compaction = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Env.Runtime->Send(new IEventHandle(env.HugeKeeper, compaction,
+            new TEvHugeAllocateSlots(std::vector<ui32>{ui32(1_MB)})), 1);
+        env.Env.Sim(TDuration::Seconds(1));
+
+        // Refusing the USER allocator refuses the USER put, not the maintenance request behind it.
+        env.HoldHugeReserve = false;
+        env.Reject(std::move(env.HeldReserve), 1);
+        env.ExpectPut(user, NKikimrProto::OUT_OF_SPACE);
+        auto slots = env.Env.WaitForEdgeActorEvent<TEvHugeAllocateSlotsResult>(compaction, true,
+            env.Env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(slots, "compaction slot allocation did not finish");
+        UNIT_ASSERT_VALUES_EQUAL(slots->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(slots->Get()->Locations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.HugeReserveBounds.size(), 1); // no second USER allocator
+
+        env.Env.Runtime->Send(new IEventHandle(env.HugeKeeper, compaction,
+            new TEvHugeDropAllocatedSlots(std::move(slots->Get()->Locations))), 1);
+        env.Compact();
+    }
+
     Y_UNIT_TEST(IndexCreditSurvivesDelayedDataAndSlotsShareChunks) {
         THugeAdmissionEnv env;
         env.HoldHugeReserve = true;
@@ -176,11 +230,17 @@ Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
         env.HoldHugeReserve = false;
         env.Env.Runtime->Send(env.HeldReserve.release(), 1);
         env.ExpectPut(first, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.FreshReserves, 1);
+
+        // With the first index in Cur, the next unsequenced one takes a chunk of its own, so that a rotation can
+        // carry it over to the new Cur; after that Cur has what every further one needs. The data of all of them
+        // shares the chunk the first put allocated.
+        env.RejectFurtherFresh = false;
         const size_t requests = env.HugeReserveBounds.size();
         for (ui32 i = 0; i < 8; ++i) {
             env.ExpectPut(env.SendPut(), NKikimrProto::OK);
         }
-        UNIT_ASSERT_VALUES_EQUAL(env.FreshReserves, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.FreshReserves, 2);
         UNIT_ASSERT_VALUES_EQUAL(env.HugeReserveBounds.size(), requests);
         env.Compact();
     }

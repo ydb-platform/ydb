@@ -563,8 +563,7 @@ namespace NKikimr {
         // been parked, or answered by `refuse`, and must not be handled any further now.
         template <typename TEvPtr, typename TRefuse>
         bool AdmitToFresh(TEvPtr& ev, TFreshAdmission admission, ESpaceColor refuseAtColor, bool housekeeping,
-                const TActorContext& ctx, TRefuse&& refuse,
-                NPDisk::EAllocationPurpose purpose = NPDisk::EAllocationPurpose::Maintenance) {
+                const TActorContext& ctx, TRefuse&& refuse, NPDisk::EAllocationPurpose purpose) {
             Y_VERIFY_DEBUG_S(PendingFreshAdmission.Empty(), VCtx->VDiskLogPrefix);
             if (FreshGate->MustQueue()) {
                 FreshGate->Park(ev);
@@ -599,9 +598,6 @@ namespace NKikimr {
                     break;
                 case TEvBlobStorage::EvVCollectGarbage:
                     Handle(*reinterpret_cast<TEvBlobStorage::TEvVCollectGarbage::TPtr*>(&handle), ctx);
-                    break;
-                case TEvBlobStorage::EvHullLogHugeBlob:
-                    Handle(*reinterpret_cast<TEvHullLogHugeBlob::TPtr*>(&handle), ctx);
                     break;
                 default:
                     Y_ABORT("unexpected event type %" PRIu32 " waiting for Fresh admission", handle->GetTypeRewrite());
@@ -1064,7 +1060,9 @@ namespace NKikimr {
                 if (OutOfSpaceLogic->WouldAllowVPutLikeWrite(record.GetIgnoreBlock(), record.GetIsZeroEntry(),
                         record.GetDataKind())) {
                     if (IsHugePut(LogoBlobIDFromLogoBlobID(record.GetBlobID()))) {
+                        // no LSN until its data is written, so Fresh can rotate meanwhile
                         admission.LogoBlobs.AddHuge();
+                        admission.Unsequenced = true;
                     } else {
                         admission = FreshAdmissionForPut(ev->Get()->GetBufferBytes());
                     }
@@ -1201,25 +1199,11 @@ namespace NKikimr {
         void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) {
             TEvHullLogHugeBlob *msg = ev->Get();
             Y_VERIFY_DEBUG_S(PendingFreshAdmission.Empty(), VCtx->VDiskLogPrefix);
-            if (!msg->FreshAdmission.Empty()) {
-                PendingFreshAdmission = std::exchange(msg->FreshAdmission, {});
-            } else if (FreshGate && msg->FreshRefuseAtColor) {
-                // Only the index record reaches Fresh; the data is already written to its huge slot. Refusing it
-                // hands the slot back, exactly as a blob that turns out to be blocked does below.
-                TFreshAdmission admission;
-                admission.LogoBlobs.AddHuge();
-                auto refuse = [&] {
-                    if (msg->HugeBlob != TDiskPart()) {
-                        ctx.Send(Db->HugeKeeperID, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, 0, false));
-                    }
-                    msg->Result->UpdateStatus(NKikimrProto::OUT_OF_SPACE);
-                    SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, VCtx,
-                        msg->HandleClass);
-                };
-                if (!AdmitToFresh(ev, std::move(admission), *msg->FreshRefuseAtColor, false, ctx, refuse)) {
-                    return;
-                }
-            }
+            // A put Fresh admission gates had its index record admitted before its data was written
+            // (PrivateHandle(TEvVPut)) and carries that admission here.
+            Y_VERIFY_DEBUG_S(!FreshGate || !msg->FreshRefuseAtColor || !msg->FreshAdmission.Empty(),
+                VCtx->VDiskLogPrefix << "huge blob index not admitted to Fresh");
+            PendingFreshAdmission = std::exchange(msg->FreshAdmission, {});
             Y_SCOPE_EXIT(&) { LandPendingFreshAdmission(ctx); };
 
             // HugeKeeper could not obtain data capacity. No data or index was
@@ -1259,6 +1243,10 @@ namespace NKikimr {
 
             msg->Result->WrittenLocation = msg->HugeBlob;
 
+            // The index record gets its LSN right here; from now on it has to land in the current Fresh segment.
+            if (PendingFreshAdmission.Unsequenced) {
+                Hull->SequenceFresh(PendingFreshAdmission);
+            }
 #ifdef OPTIMIZE_SYNC
             TLsnSeg seg = Db->LsnMngr->AllocLsnForHull();
 #else
@@ -1488,7 +1476,7 @@ namespace NKikimr {
                     ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, TAppData::TimeProvider->Now());
                 };
                 if (!AdmitToFresh(ev, std::move(admission), TOutOfSpaceLogic::FreshRefuseAtColorForBlock(hasExistingEntry),
-                        true, ctx, refuse)) {
+                        true, ctx, refuse, NPDisk::EAllocationPurpose::Maintenance)) {
                     return;
                 }
             }
@@ -1670,7 +1658,7 @@ namespace NKikimr {
                     ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space"}, ev, ctx, TAppData::TimeProvider->Now());
                 };
                 if (!AdmitToFresh(ev, std::move(admission), TOutOfSpaceLogic::FreshRefuseAtColorForGC(), true, ctx,
-                        refuse)) {
+                        refuse, NPDisk::EAllocationPurpose::Maintenance)) {
                     return;
                 }
             }

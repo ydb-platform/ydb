@@ -82,12 +82,17 @@ namespace NKikimr {
 
         if (msg->Status == NKikimrProto::OK) {
             Hull->AddFreshReservedChunks(reservation.Split, msg->ChunkIds);
-            // A grant tells nothing of the bounds stricter than its own: a batch refused at its strictest bound
-            // and admitted at the next is handled again without asking at the strictest one once more.
+            // A grant tells nothing of the bounds stricter than its own, nor of the purposes that have to leave
+            // more of the reserves alone: a batch refused at its strictest bound and admitted at the next is handled
+            // again without asking at the strictest one once more.
+            const ui32 rank = NPDisk::AllocationReserveRank(reservation.Purpose);
             for (auto& byPurpose : RefusedAtColor) {
-                auto& refused = byPurpose[size_t(reservation.Purpose)];
-                if (refused && reservation.RefuseAtColor <= *refused) {
-                    refused.reset();
+                for (size_t i = 0; i < byPurpose.size(); ++i) {
+                    auto& refused = byPurpose[i];
+                    if (NPDisk::AllocationReserveRank(NPDisk::EAllocationPurpose(i)) <= rank && refused
+                            && reservation.RefuseAtColor <= *refused) {
+                        refused.reset();
+                    }
                 }
             }
         } else {
@@ -99,13 +104,20 @@ namespace NKikimr {
                 {"housekeeping", reservation.Housekeeping},
                 {"purpose", NPDisk::AllocationPurposeName(reservation.Purpose)},
                 {"marker", "BSVSFA02"});
-            auto remember = [&](std::optional<ESpaceColor>& refused) {
-                refused = refused ? Max(*refused, reservation.RefuseAtColor) : reservation.RefuseAtColor;
+            // A refusal settles the purposes that have to leave at least as much of the reserves alone; and a
+            // housekeeping reservation is judged more leniently, so its refusal settles ordinary ones too.
+            const ui32 rank = NPDisk::AllocationReserveRank(reservation.Purpose);
+            auto remember = [&](auto& byPurpose) {
+                for (size_t i = 0; i < byPurpose.size(); ++i) {
+                    if (NPDisk::AllocationReserveRank(NPDisk::EAllocationPurpose(i)) >= rank) {
+                        auto& refused = byPurpose[i];
+                        refused = refused ? Max(*refused, reservation.RefuseAtColor) : reservation.RefuseAtColor;
+                    }
+                }
             };
-            // A housekeeping reservation is judged more leniently, so its refusal settles ordinary ones too.
-            remember(RefusedAtColor[reservation.Housekeeping][size_t(reservation.Purpose)]);
+            remember(RefusedAtColor[reservation.Housekeeping]);
             if (reservation.Housekeeping) {
-                remember(RefusedAtColor[0][size_t(reservation.Purpose)]);
+                remember(RefusedAtColor[0]);
             }
         }
 

@@ -2277,13 +2277,14 @@ message TImmediateControlsConfig {
             MaxValue: 60,
             DefaultValue: 20 }];
         optional uint64 SystemReserveChunks = 11 [(ControlOptions) = {
-            Description: "Chunks kept above every dynamic owner's RED boundary for SYSTEM data and common log bursts. "
-                         "USER, maintenance and recovery data allocations cannot spend this reserve. 0 disables the policy",
+            Description: "Chunks kept below each owner's RED boundary for SYSTEM data and the VDisk metadata it needs. "
+                         "USER and recovery allocations cannot spend this reserve; SYSTEM and maintenance (compaction, "
+                         "garbage collection) are not limited by it. 0 disables the policy",
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
         optional uint64 MaintenanceReserveChunks = 12 [(ControlOptions) = {
-            Description: "Additional PDisk chunks withheld from USER allocations for maintenance/recovery workspace. "
+            Description: "Additional chunks withheld from USER allocations only, as workspace for recovery and maintenance. "
                          "Effective when SystemReserveChunks is nonzero; only actual chunk releases replenish headroom",
             MinValue: 0,
             MaxValue: 1000000,

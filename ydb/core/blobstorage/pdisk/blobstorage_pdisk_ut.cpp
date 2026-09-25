@@ -2241,7 +2241,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     // lock that does the allocation, whether the reservation is worth the colour it
     // would cost -- instead of reserving first and discovering from the reply that the
     // colour has already moved.
-    Y_UNIT_TEST(ChunkReserveProtectsSystemFromUserAndMaintenance) {
+    Y_UNIT_TEST(ChunkReserveProtectsSystemFromUserAndRecovery) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         using TPurpose = NPDisk::EAllocationPurpose;
         TActorTestContext testCtx({.DiskSize = 10_GB, .SmallDisk = true, .EnableTightPDiskSpaceColors = true});
@@ -2269,11 +2269,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         };
         reserve(space->Headroom.ToRed - 20, TPurpose::User, NKikimrProto::OK);
         reserve(1, TPurpose::User, NKikimrProto::OUT_OF_SPACE);
-        reserve(12, TPurpose::Maintenance, NKikimrProto::OK);
-        reserve(1, TPurpose::Maintenance, NKikimrProto::OUT_OF_SPACE);
+        reserve(12, TPurpose::Recovery, NKikimrProto::OK);
         reserve(1, TPurpose::Recovery, NKikimrProto::OUT_OF_SPACE);
-        // Same VDisk owner and RED cutoff, but SYSTEM can spend its reserve.
+        // Same VDisk owner and RED cutoff, but SYSTEM can spend its reserve, and maintenance is never held back by
+        // it: it is what gives space back.
         reserve(1, TPurpose::System, NKikimrProto::OK);
+        reserve(1, TPurpose::Maintenance, NKikimrProto::OK);
         testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
             new NPDisk::TEvChunkForget(owner, round, std::move(chunks)), NKikimrProto::OK);
         reserve(1, TPurpose::User, NKikimrProto::OK);

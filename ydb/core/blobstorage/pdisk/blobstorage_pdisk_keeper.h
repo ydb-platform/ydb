@@ -186,8 +186,12 @@ public:
         ChunkTracker.SetAllocationReserves(system, maintenance);
     }
 
-    ui64 GetAllocationHeadroom(EAllocationPurpose purpose) const {
-        return ChunkTracker.GetAllocationHeadroom(purpose);
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        return ChunkTracker.GetAllocationHeadroom(owner, purpose);
+    }
+
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        return ChunkTracker.GetWorstAllocationHeadroom(purpose);
     }
 
     NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {

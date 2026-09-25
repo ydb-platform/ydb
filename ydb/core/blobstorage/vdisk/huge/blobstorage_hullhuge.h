@@ -101,6 +101,9 @@ namespace NKikimr {
         // The colour at which reserving Fresh chunks for this blob's index record is refused, as for any put
         // of its data kind. Unset for writers Fresh admission does not gate, such as replication.
         const std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
+        // The index record's Fresh admission, taken before the data was written; empty exactly when
+        // FreshRefuseAtColor is unset or the gate is off. Skeleton lands it once the record is in Fresh, or
+        // instead of that when HugeKeeper refused the data.
         TFreshAdmission FreshAdmission;
 
         TEvHullLogHugeBlob(ui64 writeId,

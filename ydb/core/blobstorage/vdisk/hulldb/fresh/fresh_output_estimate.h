@@ -164,21 +164,37 @@ namespace NKikimr {
         TFreshOutputEstimate LogoBlobs;
         TFreshOutputEstimate Blocks;
         TFreshOutputEstimate Barriers;
+        // The records have no LSN yet: a huge blob whose data is still being written gets one only once it is about
+        // to be logged. Until then they belong to no particular segment and may land in whichever is Cur by then,
+        // so a rotation of Fresh does not have to wait for them (see TFreshData).
+        bool Unsequenced = false;
 
         bool Empty() const {
             return LogoBlobs.Empty() && Blocks.Empty() && Barriers.Empty();
         }
 
         void Merge(const TFreshAdmission& other) {
+            if (other.Empty()) {
+                return;
+            }
+            Y_ABORT_UNLESS(Empty() || Unsequenced == other.Unsequenced, "merging sequenced and unsequenced records");
+            Unsequenced = other.Unsequenced;
             LogoBlobs.Merge(other.LogoBlobs);
             Blocks.Merge(other.Blocks);
             Barriers.Merge(other.Barriers);
         }
 
         void Subtract(const TFreshAdmission& other) {
+            if (other.Empty()) {
+                return;
+            }
+            Y_ABORT_UNLESS(Unsequenced == other.Unsequenced, "subtracting sequenced and unsequenced records");
             LogoBlobs.Subtract(other.LogoBlobs);
             Blocks.Subtract(other.Blocks);
             Barriers.Subtract(other.Barriers);
+            if (Empty()) {
+                Unsequenced = false;
+            }
         }
     };
 

@@ -23,8 +23,10 @@ struct TSpaceHeadroom {
     ui64 ToOrange = 0;
     ui64 ToRed = 0;
     ui64 ToBlack = 0;
-    // Physical housekeeping capacity below BLACK, further limited by the
-    // configured system reserve. The historical name is kept for callers.
+    // ToBlack without the static group reserve held back, which is what an allocation
+    // marked as housekeeping is judged by. The reserve stops new user data; it must not
+    // stop the compaction that is trying to free some, because on a disk this full the
+    // compaction is the only thing that can.
     ui64 AllocatableToBlack = 0;
 
     TString ToString() const {

@@ -580,21 +580,55 @@ public:
         MaintenanceReserveChunks = maintenance;
     }
 
+    // Chunks `owner` may still allocate for `purpose` below RED without touching
+    // the reserves that purpose has to leave alone (see EAllocationPurpose). The
+    // room is the owner's own, as GetHeadroomBelow() has it: an owner at its
+    // personal quota does not take the room of its neighbours with it.
     // Physical reservations consume this headroom immediately, before any I/O.
     // There is no forecast credit: only releasing actual chunks restores it.
     // A zero system reserve disables the policy for staged rollout/recovery.
     // Called on the worker thread, like GetCompactionPressureColor().
-    ui64 GetAllocationHeadroom(EAllocationPurpose purpose) const {
-        if (!SystemReserveChunks || purpose == EAllocationPurpose::System) {
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        const ui64 reserve = GetAllocationReserve(purpose);
+        if (!reserve) {
+            return Max<ui64>();
+        }
+        const i64 room = IsOwnerUser(owner)
+            ? GetHeadroomBelow(owner, TColor::RED)
+            : SharedQuota->GetHeadroomBelow(TColor::RED);
+        return ui64(Max<i64>(room, 0)) > reserve ? ui64(room) - reserve : 0;
+    }
+
+    // The least headroom any dynamic owner has for `purpose`, for monitoring.
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        const ui64 reserve = GetAllocationReserve(purpose);
+        if (!reserve) {
             return Max<ui64>();
         }
         i64 room = SharedQuota->GetHeadroomBelow(TColor::RED);
         for (TOwner owner : DynamicOwners) {
             room = Min(room, GetHeadroomBelow(owner, TColor::RED));
         }
-        const ui64 reserve = SystemReserveChunks
-            + (purpose == EAllocationPurpose::User ? MaintenanceReserveChunks : 0);
         return ui64(Max<i64>(room, 0)) > reserve ? ui64(room) - reserve : 0;
+    }
+
+    // What an allocation of `purpose` has to leave alone; zero when it is not held back at all.
+    ui64 GetAllocationReserve(EAllocationPurpose purpose) const {
+        if (!SystemReserveChunks) {
+            return 0;
+        }
+        switch (purpose) {
+            case EAllocationPurpose::User:
+                return SystemReserveChunks + MaintenanceReserveChunks;
+            case EAllocationPurpose::Recovery:
+                return SystemReserveChunks;
+            case EAllocationPurpose::System:
+            case EAllocationPurpose::Maintenance:
+                return 0;
+            case EAllocationPurpose::Count:
+                break;
+        }
+        Y_ABORT("invalid allocation purpose");
     }
 
     TColor::E GetPDiskCapacityAlert() const {
@@ -662,14 +696,13 @@ public:
         headroom.ToOrange = GetHeadroomBelow(owner, TColor::ORANGE);
         headroom.ToRed = GetHeadroomBelow(owner, TColor::RED);
         headroom.ToBlack = GetHeadroomBelow(owner, TColor::BLACK);
-        headroom.AllocatableToBlack = Min<ui64>(GetAllocatableHeadroomBelowBlack(owner),
-            GetAllocationHeadroom(EAllocationPurpose::Maintenance));
+        // Housekeeping is Maintenance, which the allocation reserves do not hold back.
+        headroom.AllocatableToBlack = GetAllocatableHeadroomBelowBlack(owner);
         return headroom;
     }
 
     // Room below BLACK an allocation marked as housekeeping still has: the same two-quota
-    // rule, with the static group reserve deliberately left out. Callers apply the
-    // configured maintenance workspace limit on top of this value. See EstimateAllocationColor.
+    // rule, with the static group reserve deliberately left out. See EstimateAllocationColor.
     i64 GetAllocatableHeadroomBelowBlack(TOwner owner) const {
         if (!IsOwnerUser(owner)) {
             return 0;

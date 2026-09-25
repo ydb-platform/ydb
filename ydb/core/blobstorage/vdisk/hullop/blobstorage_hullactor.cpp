@@ -432,8 +432,10 @@ namespace NKikimr {
                 // BLACK is the boundary AllocateChunkForOwner() actually enforces. Left
                 // unbounded until the first space observation arrives.
                 if (const TSpaceHeadroom headroom = oos.GetSpaceHeadroom(); headroom.Valid) {
-                    // PDisk reports the housekeeping limit including its configured
-                    // system reserve. A candidate must fit that physical workspace.
+                    // AllocatableToBlack, not ToBlack: compaction output is housekeeping and
+                    // PDisk lets it past the static group reserve. Budgeting it against the
+                    // admission headroom instead would read zero on exactly the disks that
+                    // need compacting most, and nothing would ever reclaim anything.
                     const ui64 room = headroom.AllocatableToBlack;
                     const ui64 budget = room > reserve ? room - reserve : 0;
                     params.FreeChunksBudget = ui32(Min<ui64>(budget, Max<ui32>() - 1));

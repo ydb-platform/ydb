@@ -409,6 +409,9 @@ public:
     //! Returns the ordered schema used in replication logs.
     TTableSchemaPtr ToReplicationLog() const;
 
+    //! Returns the column count of #ToReplicationLog().
+    int GetReplicationLogColumnCount() const;
+
     //! Only applies to sorted dynamic tables.
     //! Returns the static schema used for unversioned updates from bulk insert.
     //! Key columns remain unchanged. Additional column |($change_type)| is prepended.

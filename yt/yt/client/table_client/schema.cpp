@@ -1384,6 +1384,19 @@ TTableSchemaPtr TTableSchema::ToReplicationLog() const
         DeletedColumns());
 }
 
+int TTableSchema::GetReplicationLogColumnCount() const
+{
+    if (IsSorted()) {
+        constexpr int TimestampAndChangeTypeColumnCount = 2;
+        constexpr int ReplicationLogColumnsPerValueColumn = 2;
+        return TimestampAndChangeTypeColumnCount + GetKeyColumnCount() +
+            ReplicationLogColumnsPerValueColumn * GetValueColumnCount();
+    }
+
+    constexpr int TimestampAndTabletIndexColumnCount = 2;
+    return TimestampAndTabletIndexColumnCount + GetColumnCount();
+}
+
 TTableSchemaPtr TTableSchema::ToUnversionedUpdate(bool sorted) const
 {
     YT_VERIFY(IsSorted());

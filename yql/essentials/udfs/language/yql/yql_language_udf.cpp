@@ -429,15 +429,16 @@ using TSql2YqlResult = TTuple<
     /*IsOk=*/bool,
     /*Issues=*/TListType<char*>>;
 
-SIMPLE_UDF(TSql2Yql, TSql2YqlResult(
-                         TAutoMap<char*> /* query */,
-                         TAutoMap<char*> /* langversion */,
-                         TAutoMap<char*> /* gateways */))
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSql2Yql, TSql2YqlResult(TAutoMap<char*>,
+                                                       TAutoMap<char*>,
+                                                       TAutoMap<char*>,
+                                                       TOptional<char*>), 1)
 try {
     NYqlLangModule::TSql2YqlInput input = {
         .Query = TString(args[0].AsStringRef()),
         .LangVersion = TString(args[1].AsStringRef()),
         .GatewaysCfg = TString(args[2].AsStringRef()),
+        .GatewaysCfgPatch = args[3] ? TString(args[3].AsStringRef()) : TString(),
     };
 
     NYqlLangModule::TSql2YqlOutput output = NYqlLangModule::Sql2Yql(input);

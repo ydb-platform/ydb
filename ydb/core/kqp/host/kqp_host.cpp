@@ -2,6 +2,7 @@
 #include "kqp_statement_rewrite.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -1230,6 +1231,11 @@ public:
             FuncRegistry = FuncRegistryHolder.Get();
         }
 
+        if (!config->NormalizePath && HasAppData(ActorSystem)) {
+            if (auto normalizer = AppData(ActorSystem)->PathNormalizer) {
+                config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+            }
+        }
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
         TypesCtx->LangVer = config->GetDefaultLangVer();

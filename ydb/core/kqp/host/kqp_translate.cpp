@@ -175,12 +175,14 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
+    NormalizePath = config.NormalizePath;
     return *this;
 }
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = LangVer;
+    settings.NormalizePath = NormalizePath;
     settings.BackportMode = BackportMode;
 
     settings.SyntaxVersion = 1;

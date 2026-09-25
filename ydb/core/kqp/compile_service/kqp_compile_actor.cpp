@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -197,6 +198,9 @@ private:
 
 private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
+        if (auto normalizer = AppData(ctx)->PathNormalizer) {
+            Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+        }
         TString cluster = QueryId.Cluster;
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())

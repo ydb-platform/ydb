@@ -60,6 +60,8 @@ public:
                     const auto& sortBy = params.Get("sort_by");
                     if (sortBy == "last_changed_at") {
                         event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT);
+                    } else if (sortBy == "degrade") {
+                        event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE);
                     } else if (sortBy == "groups_count") {
                         event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT);
                     } else {
@@ -71,6 +73,9 @@ public:
                 }
                 if (params.contains("only_problems")) {
                     event->Record.SetOnlyProblems(IsTrue(params.Get("only_problems")));
+                }
+                if (params.contains("group_by_degrade")) {
+                    event->Record.SetGroupByDegrade(IsTrue(params.Get("group_by_degrade")));
                 }
                 NTabletPipe::SendData(ctx, Pipe, event.Release());
                 break;

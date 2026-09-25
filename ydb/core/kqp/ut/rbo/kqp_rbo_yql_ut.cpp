@@ -12633,6 +12633,91 @@ FROM (
         }
     }
 
+    void TestBlockHashCombine(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDqHashOperatorsUseBlocks(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            )
+        )";
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (i64 i = 1; i <= 3; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(10)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        const std::vector<std::string> queries = {
+            R"(
+                select sum(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select min(t1.a), max(t1.a), count(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select sum(t1.a), max(t1.b) from `/Root/t1` as t1;
+            )",
+        };
+
+        const std::vector<std::string> results = {
+            R"([[6;[10]]])",
+            R"([[1;3;3u;[10]]])",
+            R"([[[6];[10]]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "DqPhyHashCombine"), 2, ast);
+            // Row tables convert to blocks around each combine, column tables stay in blocks
+            // from the block read up to the result stage.
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "WideToBlocks"), columnTables ? 0 : 2, ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "WideFromBlocks"), columnTables ? 1 : 2, ast);
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(BlockHashCombine, ColumnStore) {
+        TestBlockHashCombine(ColumnStore);
+    }
+
     void CreateSimpleTable(TKikimrRunner &kikimr) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -1474,9 +1474,20 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     // clang-format on
 
     // clang-format off
+    auto wideInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx);
+    if (UseBlocks) {
+        wideInput = Build<TCoToFlow>(Ctx, Pos)
+            .Input<TCoWideToBlocks>()
+                .Input<TCoFromFlow>()
+                    .Input(wideInput)
+                .Build()
+            .Build()
+        .Done().Ptr();
+    }
+
     auto wideCombiner = Ctx.Builder(Pos)
         .Callable(PhysicalAggregationName)
-            .Add(0, NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx))
+            .Add(0, wideInput)
             .Add(1, memoryLimit)
             .Add(2, BuildKeyExtractorLambda(keyFields, inputColumns))
             .Add(3, BuildInitHandlerLambda(keyFields, inputFields, phyAggregationTraitsList))
@@ -1485,6 +1496,16 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
         .Seal()
     .Build();
     // clang-format on
+
+    if (UseBlocks) {
+        wideCombiner = Build<TCoToFlow>(Ctx, Pos)
+            .Input<TCoWideFromBlocks>()
+                .Input<TCoFromFlow>()
+                    .Input(wideCombiner)
+                .Build()
+            .Build()
+        .Done().Ptr();
+    }
 
     auto physicalAggregation =
         BuildNarrowMapForPhysicalAggregationOutput(wideCombiner, keyFields, phyAggregationTraitsList, renameMap, isDistinct, aggregationPhase);

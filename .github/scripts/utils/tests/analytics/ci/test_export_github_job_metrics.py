@@ -13,6 +13,7 @@ import unittest
 
 from datetime import datetime, timedelta, timezone
 
+from github_actions import ci_metrics
 from github_actions.export_github_job_metrics import (
     already_exported,
     attach_pull_requests,
@@ -95,6 +96,41 @@ class AlreadyExportedTest(unittest.TestCase):
         self.assertFalse(already_exported(10, 2, exported))
         self.assertFalse(already_exported(12, 1, exported))
         self.assertFalse(already_exported(None, 1, exported))
+
+
+class UpsertMissingColumnsTest(unittest.TestCase):
+    def test_open_run_state_gets_workflow_column(self):
+        seen = {}
+        original = ci_metrics.collector_upsert_metrics
+
+        def fake(_wrapper, rows, **_kwargs):
+            seen["rows"] = rows
+            return len(rows)
+
+        ci_metrics.collector_upsert_metrics = fake
+        try:
+            ci_metrics.upsert_metrics(
+                object(),
+                [{
+                    "date": datetime.now(timezone.utc).date(),
+                    "event_ts": datetime.now(timezone.utc),
+                    "run_id": 0,
+                    "github_job_id": 0,
+                    "run_attempt": 0,
+                    "source": "export_state",
+                    "name": "open_runs",
+                    "kind": "event",
+                    "span_id": "export-state-1",
+                    "labels": "{}",
+                    "exported_at": datetime.now(timezone.utc),
+                }],
+            )
+        finally:
+            ci_metrics.collector_upsert_metrics = original
+        row = seen["rows"][0]
+        self.assertIsNone(row["workflow"])
+        self.assertIsNone(row["job_name"])
+        self.assertIsNone(row["run_url"])
 
 
 if __name__ == "__main__":

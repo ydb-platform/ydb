@@ -307,11 +307,14 @@ def upsert_metrics(
     batch_size: int = 200,
     **kwargs: Any,
 ) -> int:
-    kwargs.setdefault("columns", COLUMNS_SCHEMA)
+    columns = kwargs.setdefault("columns", COLUMNS_SCHEMA)
     kwargs.setdefault("primary_keys", PRIMARY_KEYS)
     kwargs.setdefault("table_config_key", TABLE_CONFIG_KEY)
     kwargs.setdefault("default_table", DEFAULT_TABLE_PATH)
     kwargs.setdefault("ensure_table", False)
+    for row in rows:
+        for name, _sql_type, _nullable in columns:
+            row.setdefault(name, None)
     return collector_upsert_metrics(
         ydb_wrapper,
         rows,

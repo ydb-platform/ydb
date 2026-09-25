@@ -1,5 +1,7 @@
 # min_max index
 
+{% include [min_max_index_unavailable_26_2.md](../_includes/min_max_index_unavailable_26_2.md) %}
+
 {% if backend_name == 'YDB' %} [min-max index](../../../../dev/min_max-skip-index.md){% else %}min-max index{% endif %} is a [local index](../../../../concepts/glossary.md#local-index) that can only be specified with the `LOCAL` keyword. When creating a table, the `min_max` type is used in the `INDEX` section (similar to a [secondary index](secondary_index.md), but with a mandatory `LOCAL` and corresponding `USING`). See also [local indexes](../../../../concepts/query_execution/local_indexes.md).
 
 

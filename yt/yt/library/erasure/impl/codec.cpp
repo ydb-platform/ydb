@@ -8,14 +8,7 @@ namespace NYT::NErasure {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ICodec::GetTotalPartCount() const
-{
-    return GetParams().TotalPartCount;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-ICodec* GetCodec(ECodec id)
+ICodec* GetCodecOrThrow(ECodec id)
 {
     if (auto* codec = FindCodec(id)) {
         return codec;

@@ -58,36 +58,6 @@ ECodec TCodec<TUnderlying, Id, Bytewise>::GetId() const
 }
 
 template <class TUnderlying, ECodec Id, bool Bytewise>
-int TCodec<TUnderlying, Id, Bytewise>::GetDataPartCount() const
-{
-    return Params_.DataPartCount;
-}
-
-template <class TUnderlying, ECodec Id, bool Bytewise>
-int TCodec<TUnderlying, Id, Bytewise>::GetParityPartCount() const
-{
-    return Params_.ParityPartCount;
-}
-
-template <class TUnderlying, ECodec Id, bool Bytewise>
-int TCodec<TUnderlying, Id, Bytewise>::GetGuaranteedRepairablePartCount() const
-{
-    return Params_.GuaranteedRepairablePartCount;
-}
-
-template <class TUnderlying, ECodec Id, bool Bytewise>
-int TCodec<TUnderlying, Id, Bytewise>::GetWordSize() const
-{
-    return Params_.WordSize;
-}
-
-template <class TUnderlying, ECodec Id, bool Bytewise>
-bool TCodec<TUnderlying, Id, Bytewise>::IsBytewise() const
-{
-    return Params_.Bytewise;
-}
-
-template <class TUnderlying, ECodec Id, bool Bytewise>
 TCodecParams TCodec<TUnderlying, Id, Bytewise>::BuildParams(const TUnderlying& underlying)
 {
     return {

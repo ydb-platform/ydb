@@ -41,11 +41,6 @@ public:
     std::optional<TPartIndexList> GetRepairIndices(const TPartIndexList& erasedIndices) const override;
 
     ECodec GetId() const override;
-    int GetDataPartCount() const override;
-    int GetParityPartCount() const override;
-    int GetGuaranteedRepairablePartCount() const override;
-    int GetWordSize() const override;
-    bool IsBytewise() const override;
 
 private:
     //! Declared before #Params_, which is initialized from it.

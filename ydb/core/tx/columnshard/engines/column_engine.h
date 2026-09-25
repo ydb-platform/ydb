@@ -148,12 +148,14 @@ public:
     class TSelectedPortionInfo {
     private:
         YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
-        YDB_READONLY_DEF(bool, IsVisible);
+        // A conflicting portion is not visible in the read snapshot and belongs to a foreign transaction.
+        // It is selected only so the reader can detect the conflict, never to return its rows.
+        YDB_READONLY_DEF(bool, IsConflicting);
 
     public:
-        TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isVisible)
+        TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isConflicting)
             : Portion(portion)
-            , IsVisible(isVisible)
+            , IsConflicting(isConflicting)
         {
         }
     };

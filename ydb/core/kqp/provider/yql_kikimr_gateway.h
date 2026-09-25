@@ -436,6 +436,22 @@ public:
         }
     }
 
+    bool IsCompact() const {
+        switch (Type) {
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsWrittenBySink(bool enableIndexStreamWrite) const {
+        return IsCompact() || enableIndexStreamWrite &&
+            (Type == EType::GlobalSync || Type == EType::GlobalSyncUnique);
+    }
+
     std::span<const std::string_view> GetImplTables() const {
         switch (Type) {
             case EType::GlobalSync:

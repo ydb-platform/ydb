@@ -16,12 +16,11 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/backup/proto/proto.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
-
-#include <google/protobuf/text_format.h>
 
 #include <util/stream/file.h>
 #include <util/system/fs.h>
@@ -618,19 +617,19 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             item.CreationQuery = content;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
-            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+            if (!NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
         } else if (IsSysView(SchemeKey)) {
             Ydb::Table::DescribeSystemViewResult sysView;
-            if (!google::protobuf::TextFormat::ParseFromString(content, &sysView)) {
+            if (!NYdb::NBackup::ParseProto(content, sysView)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse system view description");
             }
             item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
-            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+            if (!NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
             }
             item.Table = request;
@@ -678,7 +677,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
+        if (!NYdb::NBackup::ParseProto(content, permissions)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse permissions");
         }
         item.Permissions = std::move(permissions);
@@ -719,7 +718,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::CreateTableRequest request;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+        if (!NYdb::NBackup::ParseProto(content, request)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse index");
         }
 
@@ -770,7 +769,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::ChangefeedDescription changefeed;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &changefeed)) {
+        if (!NYdb::NBackup::ParseProto(content, changefeed)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse changefeed");
         }
 
@@ -813,7 +812,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Topic::DescribeTopicResult topic;
-        if (!google::protobuf::TextFormat::ParseFromString(content, &topic)) {
+        if (!NYdb::NBackup::ParseProto(content, topic)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic");
         }
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);

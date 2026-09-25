@@ -63,7 +63,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
         {"event", "problem_on_restore_data"},
         {"reason", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues())});
-    RestoreTask->OnError(NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+    RestoreTask->OnError(ev->Get()->Record.GetStatus(), NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
     PassAway();
 }
 
@@ -72,7 +72,7 @@ void TActor::HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
         {"event", "problem_on_event_undelivered"},
         {"reason", ev->Get()->Reason});
-    RestoreTask->OnError("cannot delivery event: " + ::ToString(ev->Get()->Reason));
+    RestoreTask->OnError(Ydb::StatusIds::INTERNAL_ERROR, "cannot delivery event: " + ::ToString(ev->Get()->Reason));
     PassAway();
 }
 
@@ -86,7 +86,7 @@ void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         SwitchStage(std::nullopt, EStage::Finished);
         YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
             {"event", "problem_timeout"});
-        RestoreTask->OnError("timeout on restore data");
+        RestoreTask->OnError(Ydb::StatusIds::TIMEOUT, "timeout on restore data");
         AbortScanIfKnown();
         PassAway();
         return;
@@ -126,7 +126,7 @@ bool TActor::CheckActivity() {
     YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "restoring_cancelled_from_operation"});
     SwitchStage(std::nullopt, EStage::Finished);
-    RestoreTask->OnError("restore task aborted through operation cancelled");
+    RestoreTask->OnError(Ydb::StatusIds::CANCELLED, "restore task aborted through operation cancelled");
     PassAway();
     return false;
 }

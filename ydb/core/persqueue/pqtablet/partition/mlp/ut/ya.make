@@ -11,6 +11,7 @@ SIZE(MEDIUM)
 
 SRCS(
     mlp_commit_ut.cpp
+    mlp_consumer_precharge_fifo_ut.cpp
     mlp_consumer_split_ut.cpp
     mlp_consumer_ut.cpp
     mlp_consumer_wakeup_ut.cpp

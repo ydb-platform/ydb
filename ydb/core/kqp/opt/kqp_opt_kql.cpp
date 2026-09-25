@@ -215,15 +215,12 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultLiteralColumns(const
     return {writeData, columnList};
 }
 
-bool HasIndexesToWrite(const TKikimrTableDescription& tableData, bool useStreamIndex) {
+bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     YQL_ENSURE(tableData.Metadata->Indexes.size() == tableData.Metadata->ImplTables.size());
     for (const auto& index : tableData.Metadata->Indexes) {
         if (index.ItUsedForWrite()) {
-            // Skip compact fulltext types to be in line with BuildAffectedIndexTables()
-            if (index.Type == TIndexDescription::EType::GlobalFulltextCompact ||
-                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
-                index.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                YQL_ENSURE(useStreamIndex, "Compact fulltext index update requires EnableIndexStreamWrite");
+            if (index.IsCompact()) {
+                // Compact indexes are always updated by the sink (KqpWriteActor)
                 continue;
             }
             return true;
@@ -539,7 +536,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
     generateColumnsIfInsert = ExtendGenerateOnInsertColumnsList(write, generateColumnsIfInsert, inputColumns, autoincrement, ctx);
 
     if (isStreamIndexWrite) {
-        auto indexes = BuildAffectedIndexTables(table, write.Pos(), ctx, kqpCtx, nullptr,
+        auto indexes = BuildAffectedIndexTables(table, write.Pos(), ctx, nullptr,
             [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
                 return BuildTableMeta(meta, pos, ctx);
             });
@@ -672,9 +669,9 @@ TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inpu
 
 
 TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomList& inputColumns,
-    const bool isStreamIndexWrite, const TKikimrTableDescription& tableData, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    const bool isStreamIndexWrite, const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
-    auto indexes = BuildAffectedIndexTables(tableData, write.Pos(), ctx, kqpCtx, nullptr,
+    auto indexes = BuildAffectedIndexTables(tableData, write.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });
@@ -1097,7 +1094,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
 
-    auto indexes = BuildAffectedIndexTables(tableData, update.Pos(), ctx, kqpCtx, nullptr,
+    auto indexes = BuildAffectedIndexTables(tableData, update.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });
@@ -1336,7 +1333,7 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
         case TYdbOperation::InsertRevert:
             return BuildInsertTableWithIndex(write, op == TYdbOperation::InsertAbort, inputColumns, autoincrement, tableData, ctx, kqpCtx);
         case TYdbOperation::UpdateOn:
-            return BuildUpdateOnTableWithIndex(write, inputColumns, isStreamIndexWrite, tableData, ctx, kqpCtx);
+            return BuildUpdateOnTableWithIndex(write, inputColumns, isStreamIndexWrite, tableData, ctx);
         case TYdbOperation::DeleteOn:
             return BuildDeleteTableWithIndex(write, tableData, ctx);
         default:
@@ -1408,7 +1405,7 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
     }
 
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    if (HasIndexesToWrite(tableData, useStreamIndex)) {
+    if (HasIndexesToWrite(tableData)) {
         return WriteTableWithIndexUpdate(write, inputColumns, defaultConstraintColumns, tableData, ctx, useStreamIndex, kqpCtx).Ptr();
     } else {
         return WriteTableSimple(write, inputColumns, defaultConstraintColumns, tableData, ctx, kqpCtx).Ptr();
@@ -1427,8 +1424,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         return nullptr;
     }
 
-    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    if (HasIndexesToWrite(tableData, useStreamIndex)) {
+    if (HasIndexesToWrite(tableData)) {
         return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     } else {
         return BuildUpdateTable(update, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
@@ -1447,8 +1443,7 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         return nullptr;
     }
 
-    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
-    if (HasIndexesToWrite(tableData, useStreamIndex)) {
+    if (HasIndexesToWrite(tableData)) {
         return BuildDeleteTableWithIndex(del, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     } else {
         return BuildDeleteTable(del, tableData, withSystemColumns, ctx, kqpCtx).Ptr();

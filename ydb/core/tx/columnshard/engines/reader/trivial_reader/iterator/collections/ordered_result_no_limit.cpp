@@ -1,3 +1,3 @@
-#include "full_scan_sorted.h"
+#include "ordered_result_no_limit.h"
 
 namespace NKikimr::NOlap::NReader::NTrivial {}   // namespace NKikimr::NOlap::NReader::NTrivial

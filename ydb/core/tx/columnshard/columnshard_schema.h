@@ -141,9 +141,11 @@ struct Schema: NIceDb::Schema {
 
         struct SendingGeneration: Column<9, NScheme::NTypeIds::Uint32> {};
 
+        struct RequestProto: Column<10, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<Sequence>;
-        using TColumns =
-            TableColumns<Sequence, TabletID, Channel, FromGeneration, GroupID, TimestampUs, Recipient, ToGeneration, SendingGeneration>;
+        using TColumns = TableColumns<Sequence, TabletID, Channel, FromGeneration, GroupID, TimestampUs, Recipient, ToGeneration,
+            SendingGeneration, RequestProto>;
     };
 
     // Tablet tables

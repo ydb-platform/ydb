@@ -521,7 +521,7 @@ public:
 private:
     NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
-    std::vector<TColumnShard::TCutHistoryRequest> CutHistoryRequests;
+    TString CutHistoryReport;
     TString RenderCompactionPage();
     TString RenderMainPage();
     TString RenderPortionsPage();
@@ -661,12 +661,8 @@ TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
     return html.Str();
 }
 
-bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
-    CutHistoryRequests.clear();
-    const auto page = HttpInfoEvent->Get()->Cgi().Get("page");
-    if (page != "cuthistory") {
-        return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
-    }
+bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, TString& report) {
+    report.clear();
     using T = Schema::CutHistoryRequests;
     NIceDb::TNiceDb db(txc.DB);
     auto row = db.Table<T>().Range().Select();
@@ -674,20 +670,33 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
         return false;
     }
     while (!row.EndOfSet()) {
-        auto& request = CutHistoryRequests.emplace_back();
-        request.TabletID = row.GetValue<T::TabletID>();
-        request.Channel = row.GetValue<T::Channel>();
-        request.FromGeneration = row.GetValue<T::FromGeneration>();
-        request.GroupID = row.GetValue<T::GroupID>();
-        request.Timestamp = TInstant::MicroSeconds(row.GetValue<T::TimestampUs>());
-        request.Recipient = row.GetValue<T::Recipient>();
-        request.ToGeneration = row.GetValue<T::ToGeneration>();
-        request.SendingGeneration = row.GetValue<T::SendingGeneration>();
+        NKikimrTxColumnShard::TCutHistoryRequest request;
+        if (row.HaveValue<T::RequestProto>()) {
+            Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
+        } else {
+            request.SetTabletID(row.GetValue<T::TabletID>());
+            request.SetChannel(row.GetValue<T::Channel>());
+            request.SetFromGeneration(row.GetValue<T::FromGeneration>());
+            request.SetGroupID(row.GetValue<T::GroupID>());
+            request.SetTimestampUs(row.GetValue<T::TimestampUs>());
+            ActorIdToProto(row.GetValue<T::Recipient>(), request.MutableRecipient());
+            request.SetToGeneration(row.GetValue<T::ToGeneration>());
+            request.SetSendingGeneration(row.GetValue<T::SendingGeneration>());
+        }
+        report += request.DebugString();
+        report += "\n";
         if (!row.Next()) {
             return false;
         }
     }
     return true;
+}
+
+bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
+    if (HttpInfoEvent->Get()->Cgi().Get("page") == "cuthistory") {
+        return FillCutHistoryMonitoringReport(txc, CutHistoryReport);
+    }
+    return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
 
 template <typename T>
@@ -836,17 +845,11 @@ TString TTxMonitoring::RenderCutHistoryPage() {
     html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
-            html << "Persisted CutHistory send attempts (latest " << TColumnShard::CutHistoryRequestLimit
+            html << "Persisted CutHistory request intents (latest " << TColumnShard::CutHistoryRequestLimit
                  << "; Hive confirmation is not tracked)";
         }
         PRE() {
-            for (const auto& request : CutHistoryRequests) {
-                html << TEscapeHtml(TStringBuilder()
-                                    << request.Timestamp << " recipient=" << request.Recipient << " toGeneration=" << request.ToGeneration
-                                    << " sendingGeneration=" << request.SendingGeneration << " TabletID: " << request.TabletID << " Channel: "
-                                    << request.Channel << " GroupID: " << request.GroupID << " FromGeneration: " << request.FromGeneration)
-                     << "\n";
-            }
+            html << TEscapeHtml(CutHistoryReport);
         }
     }
 

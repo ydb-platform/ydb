@@ -10,6 +10,7 @@
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
+#include "common/blob.h"
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
@@ -161,7 +162,6 @@ IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, 
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 
 struct TSettings {
-    static constexpr size_t CutHistoryPreparationBatchSize = 1024;
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
     static constexpr TDuration DefaultStatsReportInterval = TDuration::Seconds(10);
@@ -604,7 +604,7 @@ private:
         ui32 To = 0;
         ui32 Group = 0;
         ui64 BlobReferences = 0;
-        bool Sent = false;
+        bool Attempted = false;
     };
 
     struct TCutHistoryScan {
@@ -617,6 +617,8 @@ private:
         std::pair<ui64, ui64> PreparationCursor{ 0, 0 };
         std::optional<std::pair<ui64, ui64>> PreparationMaxKey;
         bool PreparationPending = false;
+        bool SavePending = false;
+        bool RetryDelivery = false;
         TInstant Started;
         std::optional<TInstant> Finished;
     };
@@ -624,22 +626,15 @@ private:
     std::optional<TCutHistoryScan> CutHistoryScan;
     static constexpr ui64 CutHistoryRequestLimit = 64;
 
-    struct TCutHistoryRequest {
-        ui64 TabletID = 0;
-        ui32 Channel = 0;
-        ui32 FromGeneration = 0;
-        ui32 GroupID = 0;
-        TInstant Timestamp;
-        TActorId Recipient;
-        ui32 ToGeneration = 0;
-        ui32 SendingGeneration = 0;
-    };
     class TTxPrepareCutHistory;
     class TTxSaveCutHistoryRequests;
     class TCutHistoryResultProcessor;
+    void ScheduleCutHistoryContinuation(const TActorContext& ctx);
+    static TCutHistoryInterval* FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id);
+    bool CanCutHistoryInterval(const TCutHistoryInterval& interval, const NOlap::TPendingGCBlobGenerations& pendingGenerations) const;
     void StartCutHistoryScan(const TActorContext& ctx);
     void AbortCutHistoryScan();
-    void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result, const NOlap::TVersionedIndex& versionedIndex);
+    void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result);
     void TryCutHistory(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvContinueCutHistory::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCutHistoryPortionsReady::TPtr& ev, const TActorContext& ctx);

@@ -2,6 +2,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -145,6 +146,160 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-doesnt-exist", Ydb::Type::UINT32, Ydb::StatusIds::SCHEME_ERROR);
 
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(TestUploadRowsDoesNotReturnUnavailableAfterCommittedWrite) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+
+        const auto tabletId = GetTableShards(server, sender, "/Root/table-1").at(0);
+        THolder<IEventHandle> blockedResponse;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>(
+            [&](TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
+                if (blockedResponse || ev->Get()->Record.GetStatus() !=
+                    static_cast<ui32>(NKikimrTxDataShard::TError::OK)) {
+                    return;
+                }
+
+                blockedResponse.Reset(ev.Release());
+            });
+
+        auto uploadSender = DoStartUploadRows(runtime, "/Root/table-1", {{1, 10}});
+        WaitFor(runtime, [&] { return bool(blockedResponse); }, "blocked upload rows response");
+        observer.Remove();
+
+        RebootTablet(runtime, tabletId, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table-1`"),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        DoWaitUploadRows(runtime, uploadSender, Ydb::StatusIds::UNDETERMINED);
+    }
+
+    Y_UNIT_TEST(TestUploadRowsReturnsUndeterminedAfterOneOfMultipleShardsCommitted) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+
+        std::optional<ui64> completedShardId;
+        TActorId uploadActor;
+        THolder<IEventHandle> blockedResponse;
+        auto responseObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>(
+            [&](TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(),
+                    static_cast<ui32>(NKikimrTxDataShard::TError::OK));
+
+                if (!completedShardId) {
+                    completedShardId = ev->Get()->Record.GetTabletID();
+                    uploadActor = ev->Recipient;
+                    return;
+                }
+
+                blockedResponse.Reset(ev.Release());
+            });
+
+        bool completedShardUnlinked = false;
+        auto unlinkObserver = runtime.AddObserver<TEvPipeCache::TEvUnlink>(
+            [&](TEvPipeCache::TEvUnlink::TPtr& ev) {
+                if (completedShardId && ev->Sender == uploadActor && ev->Get()->TabletId == *completedShardId) {
+                    completedShardUnlinked = true;
+                }
+            });
+
+        auto uploadSender = DoStartUploadRows(runtime, "/Root/table-1", {
+            {1, 10},
+            {Max<ui32>(), 20},
+        });
+        WaitFor(runtime, [&] { return bool(blockedResponse) && completedShardUnlinked; },
+            "one completed and one blocked upload rows response");
+        responseObserver.Remove();
+        unlinkObserver.Remove();
+
+        const auto disconnectedShardId = blockedResponse->Get<TEvDataShard::TEvUploadRowsResponse>()
+            ->Record.GetTabletID();
+        UNIT_ASSERT_VALUES_UNEQUAL(disconnectedShardId, *completedShardId);
+        RebootTablet(runtime, disconnectedShardId, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT COUNT(*) FROM `/Root/table-1`"),
+            "{ items { uint64_value: 2 } }");
+
+        DoWaitUploadRows(runtime, uploadSender, Ydb::StatusIds::UNDETERMINED);
+    }
+
+    Y_UNIT_TEST(TestUploadRowsReturnsUndeterminedAfterPartialSuccessAndOverload) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetChangesQueueItemsLimit(1);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Shards(2)
+            .Indexes({
+                TShardedTableOptions::TIndex{
+                    "by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync
+                }
+            })
+        );
+
+        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                blockedEnqueueRecords.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        DoUploadRows(runtime, "/Root/table-1", {{1, 10}});
+        UNIT_ASSERT(!blockedEnqueueRecords.empty());
+
+        THashSet<ui32> shardStatuses;
+        auto requestObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>(
+            [](TEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
+                ev->Get()->Record.ClearOverloadSubscribe();
+            });
+        auto responseObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>(
+            [&](TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
+                shardStatuses.insert(ev->Get()->Record.GetStatus());
+            });
+
+        DoUploadRows(runtime, "/Root/table-1", {
+            {1, 20},
+            {Max<ui32>(), 30},
+        }, NTxProxy::EUploadRowsMode::Normal, Ydb::StatusIds::UNDETERMINED);
+
+        UNIT_ASSERT(shardStatuses.contains(static_cast<ui32>(NKikimrTxDataShard::TError::OK)));
+        UNIT_ASSERT(shardStatuses.contains(static_cast<ui32>(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED)));
+
+        requestObserver.Remove();
+        responseObserver.Remove();
+        runtime.SetObserverFunc(prevObserver);
     }
 
     Y_UNIT_TEST(TestUploadRowsDropColumnRace) {

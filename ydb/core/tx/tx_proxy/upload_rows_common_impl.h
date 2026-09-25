@@ -141,6 +141,7 @@ private:
     TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
     bool IsIndexImplTable = false;
+    bool HasSuccessfulShardReply = false;
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     TUploadStatus Status;
@@ -1222,8 +1223,13 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
-            Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
+        const auto err = ev->Get()->NotDelivered ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNDETERMINED;
+        const auto errorMessage = ev->Get()->NotDelivered
+            ? Sprintf("Failed to deliver request to shard %" PRIu64, ev->Get()->TabletId)
+            : Sprintf("Request state is unknown after losing connection to shard %" PRIu64, ev->Get()->TabletId);
+
+        SetError(TUploadStatus(err, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+            errorMessage));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
         return ReplyIfDone(ctx);
@@ -1273,6 +1279,8 @@ private:
 
             SetError(
                 TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
+        } else {
+            HasSuccessfulShardReply = true;
         }
 
         // Notify the cache that we are done with the pipe
@@ -1298,18 +1306,37 @@ private:
         }
     }
 
-    void SetError(const TUploadStatus& status) {
-        if (Status.GetCode() != ::Ydb::StatusIds::SUCCESS) {
-            return;
+    void SetError(const TUploadStatus& s) {
+        switch (Status.GetCode()) {
+            //most strong errors.
+            case ::Ydb::StatusIds::UNDETERMINED:
+            case ::Ydb::StatusIds::INTERNAL_ERROR:
+                return;
+            default:
+                if (s.GetCode() == ::Ydb::StatusIds::UNDETERMINED ||
+                    s.GetCode() == ::Ydb::StatusIds::INTERNAL_ERROR ||
+                    Status.GetCode() == ::Ydb::StatusIds::SUCCESS) {
+                    Status = s;
+                } else {
+                    return;
+                }
         }
-
-        Status = status;
     }
 
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
             LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
             return;
+        }
+
+        // If we have success response from at least one shard we can't reply
+        // with retriable status
+        if (HasSuccessfulShardReply &&
+            (Status.GetCode() == Ydb::StatusIds::UNAVAILABLE ||
+             Status.GetCode() == Ydb::StatusIds::OVERLOADED)) {
+            SetError(TUploadStatus(Ydb::StatusIds::UNDETERMINED,
+                TStringBuilder() << "Some rows were successfully written before a retriable error occurred: "
+                                 << Status.GetErrorMessage().value_or(Status.GetCodeString())));
         }
 
         if (Status.GetErrorMessage()) {

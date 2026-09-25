@@ -1,7 +1,9 @@
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitBelowLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadActiveOneDeadInactiveMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit200_B
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestRandomizedPersistentMirror3dc
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk TBsDbStat.ChaoticParallelWrite_DbStat
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
@@ -40,6 +42,7 @@ ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploa
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column+UseStreamIndex+UseChannelsV2
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStreamIndex+UseChannelsV2
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
+ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
 ydb/core/kqp/ut/indexes KqpIndexes.PreSharding+Unique
 ydb/core/kqp/ut/indexes KqpIndexes.PreSharding-Unique
 ydb/core/kqp/ut/indexes KqpIndexes.PreShardingMultiCol
@@ -84,6 +87,7 @@ ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.DeleteAllByGeneratedPredicate
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated
@@ -93,6 +97,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.NotNullFailingCastRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NotNullJsonExistsRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NullableOptionalExprAccepted
 ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
+ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningGeneratedWithoutDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
@@ -117,6 +122,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningNoMatchDoesNotSynthesizeVirtual
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionDuplicateKeys
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionLiteralDefaultDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithGlobalUniqueIndex
 ydb/core/kqp/ut/scheme GeneratedVirtual.SyncAndUniqueIndexBuildsIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
@@ -293,6 +299,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWit
 ydb/core/persqueue/public/schema/ut SchemaOps.AddAndRemoveConsumerActors
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterAutoPartitioningAndCodecs
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterAutoPartitioningScaleUpAndDisable
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterCdcAllowsRetentionAndWriteLimits
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterConsumerAttributesAndCodecs
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterDlqMoveActionRequiresExistingMove
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServiceConsumerGuards
@@ -373,6 +380,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
 ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
+ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[PipeResets]
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
@@ -470,6 +478,7 @@ ydb/tests/compatibility/topics test_source_id_mapping.py.TestSourceIdMappingFede
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/workloads py3test.[test_statistics.py */*] chunk
 ydb/tests/compatibility/workloads test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/datashard/async_replication py3test.[*/*] chunk
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_drop_not_null
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Datetime64]
@@ -497,6 +506,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_lea
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk
+ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGaps
 ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGapsAutosplitTopic
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk

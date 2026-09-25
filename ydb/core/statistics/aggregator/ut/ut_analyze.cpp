@@ -1183,12 +1183,71 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         CheckTraversalSchedulerRate(runtime, tableInfo.SaTabletId);
     }
 
+    Y_UNIT_TEST_TWIN(AnalyzeAbsentFromSchemeShardSnapshot, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
+
+        // A new table is missing from SchemeShard snapshots until the next report.
+        // ANALYZE must still succeed.
+        bool omitted = false;
+        auto hideTable = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+            NKikimrStat::TSchemeShardStats statRecord;
+            if (!statRecord.ParseFromString(ev->Get()->Record.GetStats())) {
+                return;
+            }
+            NKikimrStat::TSchemeShardStats filtered;
+            if (statRecord.HasAreAllStatsFull()) {
+                filtered.SetAreAllStatsFull(statRecord.GetAreAllStatsFull());
+            }
+            bool omittedThisTable = false;
+            for (const auto& entry : statRecord.GetEntries()) {
+                if (TPathId::FromProto(entry.GetPathId()) == tableInfo.PathId) {
+                    omittedThisTable = true;
+                    continue;
+                }
+                *filtered.AddEntries() = entry;
+            }
+            if (!omittedThisTable) {
+                return;
+            }
+            TString stats;
+            UNIT_ASSERT(filtered.SerializeToString(&stats));
+            ev->Get()->Record.SetStats(stats);
+            omitted = true;
+        });
+        Y_UNUSED(hideTable);
+        runtime.WaitFor("SchemeShard stats without the analyzed table", [&]{ return omitted; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
     Y_UNIT_TEST_TWIN(DropTableNavigateError, ColumnShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
         const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
+
+        const std::pair<EStatType, TString> storedKeys[] = {
+            {EStatType::TABLE_SUMMARY, ""},
+            {EStatType::SIMPLE_COLUMN, "1"},
+            {EStatType::SIMPLE_COLUMN, "2"},
+            {EStatType::COUNT_MIN_SKETCH, "2"},
+        };
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId}, "whilePresent");
+        CheckCountMinSketch(runtime, tableInfo.PathId, {
+            {.Tag = 1, .Probes = std::nullopt},
+            {.Tag = 2, .Probes = {{{"1", ColumnTableRowsNumber / 10}, {"2", ColumnTableRowsNumber / 10}, {"10", 0}}}},
+        });
+        for (const auto& [statType, columnTags] : storedKeys) {
+            UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(
+                env, "Database", tableInfo.PathId, statType, columnTags), 1);
+        }
 
         DropTable(env, "Database", "Table");
 
@@ -1199,6 +1258,10 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(result.GetIssues(), issues);
         UNIT_ASSERT_C(issues.ToString().Contains("Could not find table"), issues.ToString());
+        for (const auto& [statType, columnTags] : storedKeys) {
+            UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(
+                env, "Database", tableInfo.PathId, statType, columnTags), 0);
+        }
 
         std::vector<TCountMinSketchProbes> expected = {
             { .Tag = 1, .Probes = std::nullopt },

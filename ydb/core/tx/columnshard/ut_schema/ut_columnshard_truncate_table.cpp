@@ -562,6 +562,77 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
+    // TTL must survive schema-only ALTER (e.g. ADD COLUMN) that does not carry TTL settings.
+    // Before the fix, AddVersionFromProto added nullopt for versions without TTL settings,
+    // so GetTableTtl(Max) resolved the latest version as no-TTL and tiering was lost after reboot.
+    Y_UNIT_TEST_DUO(TtlSurvivesSchemaOnlyAlter, Reboot) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        Y_UNUSED(PrepareTablet(runtime, pathId, testTable.Schema));
+
+        ui64 txId = 10;
+
+        // Step 1: Set TTL via ALTER.
+        const auto ttlDuration = TDuration::Seconds(3600);
+        auto specials = TTestSchema::TTableSpecials().SetTtl(ttlDuration);
+        specials.SetTtlColumn(TTestSchema::DefaultTtlColumn);
+        {
+            const auto alterBody =
+                TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/1, testTable.Schema, testTable.Pk, specials);
+            auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
+            PlanSchemaTx(runtime, sender, { planStep, txId });
+        }
+
+        auto& csController = *csControllerGuard.operator->();
+        const auto* shard = csController.GetShard();
+
+        // Verify TTL is set.
+        {
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(internalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+            UNIT_ASSERT(ttl.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+        }
+
+        // Step 2: Schema-only ALTER (ADD COLUMN) without TTL settings (carry-over).
+        {
+            auto schemaWithNewColumn = testTable.Schema;
+            schemaWithNewColumn.push_back(NArrow::NTest::TTestColumn("new_column", NScheme::TTypeInfo(NScheme::NTypeIds::Int32)));
+            const auto alterBody = TTestSchema::AlterTableTxBody(
+                pathId, /*standalone=*/true, /*version=*/2, schemaWithNewColumn, testTable.Pk, TTestSchema::TTableSpecials{});
+            auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
+            PlanSchemaTx(runtime, sender, { planStep, txId });
+        }
+
+        // Verify TTL is still active (not lost due to schema-only ALTER).
+        {
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(internalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+            UNIT_ASSERT(ttl.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+        }
+
+        // Step 3: Optionally restart the tablet to force InitFromDB reload.
+        // This is where the bug manifested: AddVersionFromProto added nullopt for version 2,
+        // so GetTableTtl(Max) resolved to no-TTL after reboot.
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+        shard = csController.GetShard();
+        const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+        UNIT_ASSERT(internalPathId);
+        const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+        UNIT_ASSERT(ttl.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(ttl->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+    }
+
     // ALTER after TRUNCATE must apply to the new generation. Pre-truncate time-travel on the old
     // generation stays intact.
     Y_UNIT_TEST(TruncateThenAlter) {

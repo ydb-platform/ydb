@@ -165,7 +165,7 @@ message StreamWriteMessage {
     message WriteRequest {
         repeated MessageData messages = 1;
 
-        EncodedBatch encoded_batch = 11;
+        WriteEncodedBatch encoded_batch = 11;
 
         oneof data_codec {
            // Codec that is used for data compression.
@@ -205,7 +205,7 @@ message StreamWriteMessage {
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
         }
 
-        message EncodedBatch {
+        message WriteEncodedBatch {
             int64 uncompressed_size = 1;
             bytes data = 2;
 
@@ -215,7 +215,6 @@ message StreamWriteMessage {
             int64 max_seq_no = 5;
 
             repeated string partition_keys_sample = 6;
-            OffsetsRange offsets = 7;
         }
     }
 
@@ -394,6 +393,11 @@ message StreamReadMessage {
         // However, the client must be prepared to receive messages encoded with a codec not included in this list.
         // In this case, reading the message should return an error.
         SupportedCodecs supported_codecs = 7;
+
+        // Allow the server to send all messages and batches, regardless of the compatibility list in supported_codecs.
+        // This may be needed for proxy services that can process messages without reading their content.
+        // For example, a proxy may read messages or batches from one topic and send them to another topic without modification."
+        bool AllowUnsupportedCodecs = 8;
     }
 
     // Handshake response.
@@ -455,7 +459,7 @@ message StreamReadMessage {
             // List of client messages.
             repeated MessageData message_data = 1;
 
-            repeated StreamWriteMessage.WriteRequest.EncodedBatch encoded_batch = 7; // may be message with metadata if need?
+            repeated ReadEncodedBatch encoded_batch = 7; // may be message with metadata if need?
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];
@@ -463,18 +467,24 @@ message StreamReadMessage {
             // Client metadata attached to write session, the same for all messages in batch.
             map<string, string> write_session_meta = 3;
 
-            oneof data_codec {
-                // Codec that is used for data compression.
-                // See enum Codec above for values.
-                int32 codec = 4;
-
-                // Codec that is used for encode full batch
-                // See enum MessageBatchCodec above for values.
-                int32 batch_codec = 6;
-            }
+            // Codec that is used for data compression.
+            // See enum Codec and MessagesBatchCodec above for values.
+            int32 codec = 4;
 
             // Persist timestamp on server for batch.
             google.protobuf.Timestamp written_at = 5;
+
+            message ReadEncodedBatch {
+                int64 uncompressed_size = 1;
+                bytes data = 2;
+
+                // Count of messages.
+                int64 messages_count = 3;
+                int64 min_seq_no = 4;
+                int64 max_seq_no = 5;
+
+                OffsetsRange offsets = 7;
+            }
         }
 
         // Representation of sequence of messages from one partition.

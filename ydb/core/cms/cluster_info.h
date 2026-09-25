@@ -297,7 +297,8 @@ public:
         TempLocks.push_back(std::move(lock));
     }
 
-    bool IsLocked(TErrorInfo &error, TDuration defaultRetryTime, TInstant no, TDuration durationw) const;
+    bool IsLocked(TErrorInfo &error, TDuration defaultRetryTime, TInstant now, TDuration duration) const;
+    bool IsLocked(TErrorInfo &error, TDuration defaultRetryTime, TInstant now, TDuration duration, i32 priority) const;
     bool IsDown(TErrorInfo &error, TInstant defaultDeadline) const;
 
     void RollbackLocks(ui64 point);

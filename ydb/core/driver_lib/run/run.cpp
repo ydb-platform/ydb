@@ -1567,6 +1567,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->Mon = Monitoring.Get();
     AppData->PollerThreads = PollerThreads;
     AppData->LocalScopeId = runConfig.ScopeId;
+    AppData->NbsEnabled = runConfig.AppConfig.HasNbsConfig()
+        && runConfig.AppConfig.GetNbsConfig().GetEnabled();
 
     // setup streaming config
     if (runConfig.AppConfig.GetGRpcConfig().HasStreamingConfig()) {

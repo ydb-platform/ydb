@@ -9,6 +9,7 @@ SRCS(
     cms.cpp
     cms.h
     cms_impl.h
+    cms_nbs2.cpp
     cms_state.h
     cms_tx_get_log_tail.cpp
     cms_tx_init_scheme.cpp
@@ -53,6 +54,8 @@ SRCS(
     log_formatter.h
     logger.cpp
     logger.h
+    nbs2_maintenance.cpp
+    nbs2_maintenance.h
     node_checkers.cpp
     node_checkers.h
     pdiskid.h
@@ -227,6 +230,10 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/mind/bscontroller
+    ydb/core/nbs/cloud/blockstore/libs/kikimr
+    ydb/core/nbs/cloud/blockstore/libs/service
+    ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/protos
+    ydb/core/nbs/cloud/storage/core/libs/common
     ydb/core/node_whiteboard
     ydb/core/protos
     ydb/core/protos/out

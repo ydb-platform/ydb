@@ -25,6 +25,8 @@
 #include <util/generic/stack.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
+#include <functional>
+
 namespace NKikimr::NCms {
 
 namespace TEvConsole = NConsole::TEvConsole;
@@ -46,6 +48,7 @@ public:
             EvStartCollecting,
             EvProcessQueue,
             EvPersistDDiskInfo,
+            EvNbs2MaintenanceResult,
 
             EvEnd
         };
@@ -80,6 +83,15 @@ public:
 
         struct TEvPersistDDiskInfo : public TEventLocal<TEvPersistDDiskInfo, EvPersistDDiskInfo> {
             NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult Record;
+        };
+
+        struct TEvNbs2MaintenanceResult : public TEventLocal<TEvNbs2MaintenanceResult, EvNbs2MaintenanceResult> {
+            // The recipient must match this against its pending attempt.
+            ui64 AttemptId = 0;
+            // ALLOW, DISALLOW_TEMP for DENY, or ERROR_TEMP for a failed check.
+            NKikimrCms::TStatus::ECode Status = NKikimrCms::TStatus::ERROR_TEMP;
+            TString Reason;
+            TVector<ui64> BlockingPartitionIds;
         };
     };
 
@@ -140,6 +152,21 @@ private:
             : Request(std::move(req))
             , ArrivedTime(arrivedTime)
         {}
+    };
+
+    using TNbs2MaintenanceContinuation = std::function<void(TAutoPtr<IEventHandle>&,
+        const TEvPrivate::TEvNbs2MaintenanceResult&, const TActorContext&)>;
+
+    struct TPendingNbs2MaintenanceCheck {
+        ui64 AttemptId = 0;
+        TActorId Checker;
+        TAutoPtr<IEventHandle> Request;
+        NKikimrCms::TPermissionRequest PermissionRequest;
+        TVector<ui32> NodeIds;
+        TString RequestId;
+        TMaybe<TRequestInfo> ScheduledRequest;
+        TMaybe<TString> MaintenanceTaskId;
+        TNbs2MaintenanceContinuation Continue;
     };
 
     ITransaction *CreateTxGetLogTail(TEvCms::TEvGetLogTailRequest::TPtr &ev);
@@ -261,9 +288,10 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             HFunc(TEvPrivate::TEvPersistDDiskInfo, Handle);
+            HFunc(TEvPrivate::TEvNbs2MaintenanceResult, Handle);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
-            HFunc(TEvCms::TEvManageRequestRequest, Handle);
+            HFunc(TEvCms::TEvManageRequestRequest, CheckAndEnqueueRequest);
             HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
@@ -332,12 +360,40 @@ private:
     void ProcessInitQueue(const TActorContext &ctx);
 
     void SubscribeForConfig(const TActorContext &ctx);
+    bool IsNbs2MaintenanceChecksEnabled(const TActorContext &ctx) const;
     void AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const;
+    TDuration GetPermissionDuration(const NKikimrCms::TPermissionRequest &request,
+        const NKikimrCms::TAction &action) const;
+    // Sorted, unique target and locked nodes after tenant expansion, before local checks.
+    // Does not validate actions; an empty batch does not imply a valid request.
+    bool CollectNbs2MaintenanceNodes(const NKikimrCms::TPermissionRequest &request,
+        TVector<ui32> &nodeIds,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
+    // Call before local checks for a dequeued request with NBS2 enabled and a non-empty batch.
+    // Do not mutate stored requests or add temporary locks; requestId is empty for create.
+    // The continuation must use live quotas and publish accepted locks before returning:
+    // the CMS queue resumes immediately afterwards.
+    void StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
+        const NKikimrCms::TPermissionRequest &permissionRequest, const TString &requestId,
+        TVector<ui32> nodeIds, TNbs2MaintenanceContinuation continuation);
+    bool IsNbs2MaintenanceRequestCurrent(const TPendingNbs2MaintenanceCheck &pending) const;
+    // Tablet shutdown: discard the continuation without resuming the queue.
+    void CancelNbs2MaintenanceCheck(const TActorContext &ctx);
+    TErrorInfo GetNbs2MaintenanceError(const TEvPrivate::TEvNbs2MaintenanceResult &result,
+        const TActorContext &ctx) const;
+    void ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
+        TInstant requestStartTime, const TActorContext &ctx,
+        const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
+    void ProcessCheckRequest(TEvCms::TEvCheckRequest::TPtr &ev,
+        TInstant requestStartTime, const TActorContext &ctx,
+        const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,
         const TString &requestId,
-        const TActorContext &ctx);
+        const TActorContext &ctx,
+        const TErrorInfo *precheckError = nullptr);
     bool IsActionHostValid(const NKikimrCms::TAction &action, TErrorInfo &error) const;
     bool ParseServices(const NKikimrCms::TAction &action, TServices &services, TErrorInfo &error) const;
 
@@ -429,16 +485,21 @@ private:
     void RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx);
     void GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const TActorContext &ctx);
     void RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
+    bool ValidateManualApprovalTargets(const NKikimrCms::TPermissionRequest &request, TErrorInfo &error) const;
     void ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
+    void ProcessManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev,
+        const TActorContext &ctx, const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
     void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
     void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx);
+    void CheckAndEnqueueRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvConditionalPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvNotification::TPtr &ev, const TActorContext &ctx);
     void ProcessQueue();
+    void ResumeQueue();
     void ProcessRequest(TAutoPtr<IEventHandle> &ev);
 
     void AddPermissionExtensions(const NKikimrCms::TAction &action, NKikimrCms::TPermission &perm) const;
@@ -456,6 +517,7 @@ private:
     bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     TString GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvNbs2MaintenanceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr &ev, const TActorContext &ctx);
@@ -506,6 +568,9 @@ private:
 
     TQueue<TRequestsQueueItem> Queue;
     TQueue<TRequestsQueueItem> NextQueue;
+
+    ui64 NextNbs2MaintenanceAttemptId = 0;
+    THolder<TPendingNbs2MaintenanceCheck> PendingNbs2MaintenanceCheck;
 
     static constexpr ui32 MaxDDiskInfoRequestsInFlight = 16;
     ui32 DDiskInfoRequestsInFlight = 0;

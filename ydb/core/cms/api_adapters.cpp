@@ -460,6 +460,13 @@ public:
             }
         }
 
+        const auto* appData = AppData();
+        if (appData->NbsEnabled && appData->FeatureFlags.GetEnableCmsNbs2MaintenanceChecks()
+            && !record.HasRequestId() && record.GetStatus().GetCode() == NKikimrCms::TStatus::DISALLOW_TEMP
+            && !record.GetStatus().GetReason().empty())
+        {
+            Warnings.push_back(record.GetStatus().GetReason());
+        }
         for (const auto& warning : Warnings) {
             auto& issue = *response->Record.AddIssues();
             issue.set_severity(NYql::TSeverityIds::S_WARNING);

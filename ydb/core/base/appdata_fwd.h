@@ -310,6 +310,9 @@ struct TAppData {
     bool BridgeModeEnabled = false;
     bool SuppressBridgeModeBootstrapperLogic = false; // for tests
 
+    // Whether NBS is enabled in the node's startup config.
+    bool NbsEnabled = false;
+
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
     TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TVector<TString> BootstrapAllowedSIDs;

@@ -62,7 +62,13 @@ bool IsSystemTablet(TTabletTypes::EType type) {
 bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
 {
-    if (State == RESTART && HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+    return IsLocked(error, defaultRetryTime, now, duration, PriorityToCheck);
+}
+
+bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
+                             TInstant now, TDuration duration, i32 priority) const
+{
+    if (State == RESTART && HasSameOrHigherPriorityLock(Locks, priority)) {
         Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
@@ -71,7 +77,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         return true;
     }
 
-    if (HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+    if (HasSameOrHigherPriorityLock(Locks, priority)) {
         Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has planned shutdown (permission %s owned by %s)",
@@ -95,7 +101,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         return true;
     }
 
-    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < PriorityToCheck) {
+    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < priority) {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has scheduled action %s owned by %s",
                                PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),

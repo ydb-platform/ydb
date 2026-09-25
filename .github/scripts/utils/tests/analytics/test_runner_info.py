@@ -91,7 +91,7 @@ class RunnerCacheTest(unittest.TestCase):
 
         def collect():
             calls["n"] += 1
-            return {"boot_time": 10, "cpu_count": 4, "mem_total_bytes": 8, "disk_total_bytes": 16}
+            return {"cpu_count": 4, "mem_total_bytes": 8, "disk_total_bytes": 16}
 
         first = load_or_collect_inventory(collect=collect)
         second = load_or_collect_inventory(collect=collect)
@@ -126,12 +126,10 @@ class LiveProcTest(unittest.TestCase):
         if not os.path.isfile("/proc/stat"):
             self.skipTest("not linux")
         inv = collect_inventory()
-        self.assertIn("boot_time", inv)
-        self.assertGreater(inv["boot_time"], 0)
         self.assertGreater(inv["cpu_count"], 0)
         self.assertGreater(inv["mem_total_bytes"], 0)
         self.assertGreater(inv["disk_total_bytes"], 0)
-        self.assertTrue(inv["disks"])
+        self.assertNotIn("disks", inv)
 
     def test_usage_is_fresh_snapshot(self):
         if not os.path.isfile("/proc/stat"):

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""GitHub CI wrapper around core.py: job/PR context, --runner/--usage, CI table.
+"""GitHub CI wrapper around core.py: job/PR columns, --runner/--usage, CI table.
 
     python3 .github/scripts/utils/analytics/ci_metrics.py start ydbd_cached_build \\
-        --source nightly_build --attr cache_mode=dist_cache --runner
+        --source nightly_build --label cache_mode=dist_cache --runner
     python3 .github/scripts/utils/analytics/ci_metrics.py send --conclusion success --usage
 """
 
@@ -13,16 +13,18 @@ import json
 import os
 import re
 import sys
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, List, Optional
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from runner_info import apply_runner_labels, pop_runner_options
 
 from core import (
-    Analytics as CoreAnalytics,
+    add_enrich_cli_args,
     add_track_cli_args as add_core_cli_args,
     _as_uint,
     _open_ydb_wrapper,
@@ -45,7 +47,6 @@ from core import (
     upsert_metrics as core_upsert_metrics,
 )
 
-BUILD_INFO_NAME = "build_info"
 DEFAULT_TABLE_PATH = "analytics/ci_metrics"
 TABLE_CONFIG_KEY = "ci_metrics"
 
@@ -76,60 +77,7 @@ PRIMARY_KEYS = ("event_ts", "date", "run_id", "github_job_id", "source", "name",
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
 )
-
-GITHUB_ENV_CONTEXT = (
-    ("GITHUB_ACTION", "github.action"),
-    ("GITHUB_ACTOR", "github.actor"),
-    ("GITHUB_BASE_REF", "github.base_ref"),
-    ("GITHUB_EVENT_NAME", "github.event_name"),
-    ("GITHUB_HEAD_REF", "github.head_ref"),
-    ("GITHUB_JOB", "github.job"),
-    ("GITHUB_REF", "github.ref"),
-    ("GITHUB_REF_NAME", "github.ref_name"),
-    ("GITHUB_REF_TYPE", "github.ref_type"),
-    ("GITHUB_REPOSITORY", "github.repository"),
-    ("GITHUB_REPOSITORY_ID", "github.repository_id"),
-    ("GITHUB_REPOSITORY_OWNER", "github.repository_owner"),
-    ("GITHUB_RUN_ATTEMPT", "github.run_attempt"),
-    ("GITHUB_RUN_ID", "github.run_id"),
-    ("GITHUB_RUN_NUMBER", "github.run_number"),
-    ("GITHUB_SHA", "github.sha"),
-    ("GITHUB_TRIGGERING_ACTOR", "github.triggering_actor"),
-    ("GITHUB_WORKFLOW", "github.workflow"),
-    ("GITHUB_WORKFLOW_REF", "github.workflow_ref"),
-    ("GITHUB_WORKFLOW_SHA", "github.workflow_sha"),
-    ("RUNNER_ARCH", "runner.arch"),
-    ("RUNNER_NAME", "runner.name"),
-    ("RUNNER_OS", "runner.os"),
-)
-GITHUB_EVENT_TOP_SCALARS = (
-    "number",
-    "action",
-    "ref",
-    "before",
-    "after",
-    "created",
-    "deleted",
-    "forced",
-    "compare",
-    "master_branch",
-    "base_ref",
-)
-GITHUB_ACTOR_KEYS = ("login", "id", "type", "html_url")
-GITHUB_REPO_KEYS = ("full_name", "name", "default_branch", "private", "fork", "html_url", "id")
-GITHUB_REF_KEYS = ("ref", "sha", "label")
-GITHUB_PULL_KEYS = (
-    "number",
-    "id",
-    "html_url",
-    "state",
-    "draft",
-    "merged",
-    "mergeable",
-    "mergeable_state",
-    "merge_commit_sha",
-)
-MAX_CONTEXT_STRING = 256
+RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
 
 def default_metrics_file() -> str:
@@ -163,37 +111,6 @@ def github_event_payload() -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _context_value(value: Any) -> Any:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return value
-    if isinstance(value, str):
-        text = value.strip()
-        if not text or len(text) > MAX_CONTEXT_STRING:
-            return None
-        return text
-    return None
-
-
-def _put_context(out: Dict[str, Any], key: str, value: Any) -> None:
-    resolved = _context_value(value)
-    if resolved is None:
-        return
-    out.setdefault(key, resolved)
-
-
-def _put_keys(out: Dict[str, Any], prefix: str, obj: Any, keys: Iterable[str]) -> None:
-    if not isinstance(obj, dict):
-        return
-    for key in keys:
-        _put_context(out, f"{prefix}.{key}", obj.get(key))
-
-
 def _as_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -219,64 +136,6 @@ def _event_pr_number(event: Dict[str, Any]) -> Optional[int]:
     return None
 
 
-def github_event_context(event: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    event = github_event_payload() if event is None else event
-    out: Dict[str, Any] = {}
-    if not event:
-        return out
-    for key in GITHUB_EVENT_TOP_SCALARS:
-        _put_context(out, f"github.event.{key}", event.get(key))
-    pull = _event_pull(event)
-    if pull:
-        _put_keys(out, "github.event.pull_request", pull, GITHUB_PULL_KEYS)
-        _put_keys(out, "github.event.pull_request.user", pull.get("user"), GITHUB_ACTOR_KEYS)
-        head = _as_dict(pull.get("head"))
-        base = _as_dict(pull.get("base"))
-        _put_keys(out, "github.event.pull_request.head", head, GITHUB_REF_KEYS)
-        _put_keys(out, "github.event.pull_request.head.repo", head.get("repo"), GITHUB_REPO_KEYS)
-        _put_keys(out, "github.event.pull_request.base", base, GITHUB_REF_KEYS)
-        _put_keys(out, "github.event.pull_request.base.repo", base.get("repo"), GITHUB_REPO_KEYS)
-        names = [
-            str(item.get("name"))
-            for item in (pull.get("labels") or [])
-            if isinstance(item, dict) and item.get("name")
-        ]
-        if names:
-            out.setdefault("github.event.pull_request.labels", names)
-    issue = _event_issue(event)
-    if issue:
-        _put_keys(out, "github.event.issue", issue, ("number", "id", "html_url", "state"))
-        if issue.get("pull_request"):
-            _put_context(out, "github.event.issue.pull_request", True)
-    _put_keys(out, "github.event.repository", event.get("repository"), GITHUB_REPO_KEYS)
-    _put_keys(out, "github.event.organization", event.get("organization"), ("login", "id"))
-    _put_keys(out, "github.event.sender", event.get("sender"), GITHUB_ACTOR_KEYS)
-    _put_keys(out, "github.event.head_commit", event.get("head_commit"), ("id", "tree_id"))
-    _put_keys(
-        out,
-        "github.event.workflow_run",
-        event.get("workflow_run"),
-        ("id", "name", "event", "status", "conclusion", "html_url", "head_sha", "head_branch", "run_attempt", "run_number"),
-    )
-    inputs = event.get("inputs")
-    if isinstance(inputs, dict):
-        for key, value in inputs.items():
-            _put_context(out, f"github.event.inputs.{key}", value)
-    return out
-
-
-def github_context_labels() -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    for env_key, dest_key in GITHUB_ENV_CONTEXT:
-        raw = os.environ.get(env_key)
-        if env_key.endswith("_ID") or env_key.endswith("_ATTEMPT") or env_key.endswith("_NUMBER"):
-            _put_context(out, dest_key, _as_uint(raw) if raw not in (None, "") else None)
-        else:
-            _put_context(out, dest_key, raw)
-    out.update(github_event_context())
-    return out
-
-
 def github_env_defaults() -> Dict[str, Any]:
     event = github_event_payload()
     pull = _event_pull(event)
@@ -285,15 +144,10 @@ def github_env_defaults() -> Dict[str, Any]:
     run_id = _as_uint(os.environ.get("GITHUB_RUN_ID"))
     repository = os.environ.get("GITHUB_REPOSITORY") or "ydb-platform/ydb"
     run_url = f"https://github.com/{repository}/actions/runs/{run_id}" if run_id is not None else None
-    job_name = (
-        os.environ.get("CI_JOB_TITLE")
-        or os.environ.get("ANALYTICS_JOB_NAME")
-        or os.environ.get("GITHUB_JOB")
-        or None
-    )
+    job_name = os.environ.get("CI_JOB_TITLE") or os.environ.get("GITHUB_JOB") or None
     return {
         "run_id": run_id,
-        "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")) or 0,
+        "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")),
         "workflow": os.environ.get("GITHUB_WORKFLOW") or None,
         "job_name": job_name,
         "event_name": os.environ.get("GITHUB_EVENT_NAME") or None,
@@ -305,7 +159,7 @@ def github_env_defaults() -> Dict[str, Any]:
             or None
         ),
         "build_preset": os.environ.get("BUILD_PRESET") or guess_build_preset(job_name),
-        "pr_number": _as_uint(os.environ.get("PR_NUMBER") or os.environ.get("GITHUB_PR_NUMBER")) or _event_pr_number(event),
+        "pr_number": _as_uint(os.environ.get("PR_NUMBER")) or _event_pr_number(event),
         "commit": (
             os.environ.get("ORIGINAL_HEAD")
             or (head.get("sha") if isinstance(head.get("sha"), str) else None)
@@ -317,91 +171,54 @@ def github_env_defaults() -> Dict[str, Any]:
     }
 
 
-def _iter_github_run_jobs(token: str, repo: str, run_id: str, *, per_page: int = 100, max_pages: int = 20):
-    headers = {
+def github_headers() -> Dict[str, str]:
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN environment variable is required")
+    return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    for page in range(1, max_pages + 1):
-        request = Request(
-            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page={per_page}&page={page}",
-            headers=headers,
-        )
-        with urlopen(request, timeout=10) as response:
-            payload = json.load(response)
-        jobs = payload.get("jobs") or []
-        for job in jobs:
-            yield job
-        if len(jobs) < per_page:
-            return
 
 
-def maybe_resolve_job_id() -> None:
-    if os.environ.get("GITHUB_NUMERIC_JOB_ID"):
-        return
-    token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    run_id = os.environ.get("GITHUB_RUN_ID")
-    if not token or not repo or not run_id:
-        return
-    try:
-        jobs = list(_iter_github_run_jobs(token, repo, run_id))
-    except (URLError, TimeoutError, json.JSONDecodeError, OSError):
-        return
-    preset = os.environ.get("BUILD_PRESET") or ""
-    hint = os.environ.get("CI_JOB_TITLE") or os.environ.get("GITHUB_JOB") or ""
-    for job in jobs:
-        name = str(job.get("name") or "")
-        job_id = job.get("id")
-        if job_id is None:
-            continue
-        padded = f" {name} "
-        if preset and (f" {preset} " in padded or name.endswith(f" {preset}") or name.split()[-1] == preset):
-            os.environ["GITHUB_NUMERIC_JOB_ID"] = str(job_id)
-            os.environ.setdefault("CI_JOB_TITLE", name)
-            return
-        if hint and hint in name:
-            os.environ["GITHUB_NUMERIC_JOB_ID"] = str(job_id)
-            os.environ.setdefault("CI_JOB_TITLE", name)
-            return
-
-
-def cicd_resource_attributes(ctx: Dict[str, Any]) -> Dict[str, Any]:
-    mapping = (
-        ("workflow", "cicd.pipeline.name"),
-        ("run_id", "cicd.pipeline.run.id"),
-        ("run_url", "cicd.pipeline.run.url"),
-        ("job_name", "cicd.pipeline.task.name"),
-        ("github_job_id", "cicd.pipeline.task.run.id"),
-        ("branch", "vcs.ref.head.name"),
-        ("commit", "vcs.ref.head.revision"),
-        ("build_preset", "cicd.pipeline.task.build_preset"),
-        ("pr_number", "vcs.pr.number"),
-    )
-    attrs: Dict[str, Any] = {}
-    for source_key, dest_key in mapping:
-        value = ctx.get(source_key)
-        if value in (None, "", 0):
-            continue
-        attrs[dest_key] = value
-    return attrs
+def github_get(url: str, params: Optional[Dict[str, Any]] = None, retries: int = 5, timeout: int = 60) -> Any:
+    query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+    full = f"{url}?{query}" if query else url
+    backoff = 2.0
+    last_error: Optional[BaseException] = None
+    for attempt in range(1, retries + 1):
+        try:
+            request = Request(full, headers=github_headers())
+            with urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            last_error = exc
+            snippet = ""
+            try:
+                snippet = exc.read()[:300].decode("utf-8", errors="replace")
+            except Exception:  # noqa: BLE001
+                snippet = str(exc)
+            if exc.code in RETRYABLE_STATUS and attempt < retries:
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                sleep_for = float(retry_after) if retry_after and str(retry_after).isdigit() else backoff
+                print(f"GitHub API {exc.code} for {url}, retry {attempt}/{retries} in {sleep_for:.0f}s")
+                time.sleep(sleep_for)
+                backoff = min(backoff * 2, 30)
+                continue
+            raise RuntimeError(f"GitHub API {exc.code} for {url}: {snippet}") from exc
+        except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            last_error = exc
+            if attempt >= retries:
+                break
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 30)
+    raise RuntimeError(f"GitHub API request failed for {url}: {last_error}")
 
 
 def attach_context(record: Dict[str, Any]) -> Dict[str, Any]:
-    maybe_resolve_job_id()
     ctx = github_env_defaults()
-    record = merge_defaults(record, {key: value for key, value in ctx.items() if value is not None})
-    labels = record.get("labels")
-    if not isinstance(labels, dict):
-        labels = {}
-    for key, value in cicd_resource_attributes(ctx).items():
-        labels.setdefault(key, value)
-    for key, value in github_context_labels().items():
-        labels.setdefault(key, value)
-    if labels:
-        record["labels"] = labels
-    return record
+    return merge_defaults(record, {key: value for key, value in ctx.items() if value is not None})
 
 
 def _apply_runner_flags(
@@ -422,13 +239,7 @@ def _apply_runner_flags(
 
 def _ci_enrich(runner: bool, usage: bool, file: Optional[str]) -> Any:
     def enrich(record: Dict[str, Any]) -> Dict[str, Any]:
-        record = _apply_runner_flags(record, runner=runner, usage=usage, file=file)
-        labels = record.get("labels") if isinstance(record.get("labels"), dict) else {}
-        if record.get("conclusion"):
-            labels.setdefault("cicd.pipeline.result", record["conclusion"])
-        if labels:
-            record["labels"] = labels
-        return record
+        return _apply_runner_flags(record, runner=runner, usage=usage, file=file)
 
     return enrich
 
@@ -562,7 +373,7 @@ def send(
     merged.update(extras)
     path = file or default_metrics_file()
     table_path = merged.pop("table_path", None)
-    info_name = merged.pop("info_name", None) or BUILD_INFO_NAME
+    merged.pop("info_name", None)
     merged.pop("flush", None)
     return core_send(
         name,
@@ -570,7 +381,6 @@ def send(
         file=path,
         attach=attach_context,
         enrich=_ci_enrich(runner, usage, path),
-        info_name=info_name,
         flush=flush_file,
         table_path=table_path,
     )
@@ -587,24 +397,6 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
         raise
     else:
         end(name, file=file, conclusion="success")
-
-
-class Analytics(CoreAnalytics):
-    def __init__(self, file: Optional[str] = None, source: Optional[str] = None):
-        super().__init__(
-            file=file,
-            source=source,
-            flush=flush_file,
-            start_fn=start,
-            end_fn=end,
-            track_fn=track,
-            send_fn=send,
-        )
-        self._enrich_fn = enrich
-
-    def enrich(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        kwargs = self._base_kwargs(kwargs)
-        return self._enrich_fn(name, properties, **kwargs)
 
 
 def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
@@ -800,7 +592,7 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
         "--runner",
         action="store_true",
         default=False,
-        help="Attach static runner inventory (boot/cpu/ram/disks); collected once and reused",
+        help="Attach static runner inventory (cpu/ram/disk); collected once and reused",
     )
     parser.add_argument(
         "--usage",
@@ -825,7 +617,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     add_track_cli_args(sub.add_parser("start", help="Open a span (auto start time + CI resource)"), kind_default="duration")
     add_track_cli_args(sub.add_parser("end", help="Close open span(s); duration is computed"))
     add_track_cli_args(sub.add_parser("track", help="Queue a completed event (no open span)"))
-    add_track_cli_args(sub.add_parser("enrich", help="Add labels to last unsent record; duration stays"))
+    add_enrich_cli_args(sub.add_parser("enrich", help="Add labels to last unsent record; duration stays"))
     send_p = sub.add_parser("send", help="End leftover spans and export the batch")
     add_track_cli_args(send_p)
     send_p.add_argument("--table-path", default=None)

@@ -120,10 +120,6 @@ jobs:
             --label cache_mode=dist_cache \
             --label build_target=ydb/apps/ydbd || true
         fi
-        python3 .github/scripts/utils/analytics/export_ya_nodes.py \
-          --evlog "${PUBLIC_DIR:-tmp/results}/try_*/ya_evlog.jsonl" \
-          --source nightly_build \
-          --label cache_mode=dist_cache || true
         python3 .github/scripts/utils/analytics/ci_metrics.py send || true
     - name: Setup s3cmd
       uses: ./.github/actions/s3cmd

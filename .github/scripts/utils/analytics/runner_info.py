@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runner inventory (cached) and per-event CPU/RAM/disk usage snapshots."""
+"""Runner inventory (cached) and a small CPU/RAM/disk usage snapshot."""
 
 from __future__ import annotations
 
@@ -7,31 +7,12 @@ import json
 import os
 import shutil
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 INVENTORY_LABEL = "runner.inventory"
 USAGE_LABEL = "runner.usage"
 CACHE_ENV = "CI_RUNNER_INFO_FILE"
 USAGE_CPU_SAMPLE_SEC = 0.05
-MAX_DISKS = 16
-SKIP_DISK_PREFIXES = ("loop", "ram", "dm-", "sr", "fd")
-REAL_FS_TYPES = frozenset(
-    {
-        "ext2",
-        "ext3",
-        "ext4",
-        "xfs",
-        "btrfs",
-        "overlay",
-        "overlay2",
-        "erofs",
-        "virtiofs",
-        "9p",
-        "nfs",
-        "nfs4",
-        "zfs",
-    }
-)
 TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
@@ -136,28 +117,16 @@ def apply_runner_labels(
 
 def _collect_inventory() -> Dict[str, Any]:
     out: Dict[str, Any] = {}
-    boot_time = _boot_time()
-    if boot_time is not None:
-        out["boot_time"] = boot_time
-    cpu_count = _cpu_count()
-    if cpu_count is not None:
-        out["cpu_count"] = cpu_count
-    cpu_model = _cpu_model()
-    if cpu_model:
-        out["cpu_model"] = cpu_model
+    cpu_count = os.cpu_count()
+    if cpu_count:
+        out["cpu_count"] = int(cpu_count)
     mem = _meminfo()
     total = mem.get("MemTotal")
     if total is not None:
         out["mem_total_bytes"] = total
-    disks = _physical_disks()
-    if disks:
-        out["disks"] = disks
-        out["disk_total_bytes"] = sum(int(item.get("size_bytes") or 0) for item in disks)
-    else:
-        root = _disk_usage("/")
-        if root is not None:
-            out["disk_total_bytes"] = root["total_bytes"]
-            out["disks"] = [{"name": "/", "size_bytes": root["total_bytes"]}]
+    root = _disk_usage("/")
+    if root is not None:
+        out["disk_total_bytes"] = root["total_bytes"]
     return out
 
 
@@ -166,11 +135,6 @@ def _collect_usage(*, sample_sec: float) -> Dict[str, Any]:
     cpu_pct = _cpu_pct(sample_sec)
     if cpu_pct is not None:
         out["cpu_pct"] = cpu_pct
-    loadavg = _loadavg()
-    if loadavg:
-        out["loadavg_1"] = loadavg[0]
-        out["loadavg_5"] = loadavg[1]
-        out["loadavg_15"] = loadavg[2]
     mem = _meminfo()
     total = mem.get("MemTotal")
     available = mem.get("MemAvailable")
@@ -183,63 +147,7 @@ def _collect_usage(*, sample_sec: float) -> Dict[str, Any]:
         out["disk_used_bytes"] = root["used_bytes"]
         out["disk_free_bytes"] = root["free_bytes"]
         out["disk_total_bytes"] = root["total_bytes"]
-    mounts = _mount_usage()
-    if mounts:
-        out["disks"] = mounts
     return out
-
-
-def _boot_time() -> Optional[int]:
-    try:
-        with open("/proc/stat", encoding="utf-8") as handle:
-            for line in handle:
-                if line.startswith("btime "):
-                    return int(line.split()[1])
-    except (OSError, ValueError, IndexError):
-        pass
-    try:
-        with open("/proc/uptime", encoding="utf-8") as handle:
-            uptime = float(handle.read().split()[0])
-        return int(time.time() - uptime)
-    except (OSError, ValueError, IndexError):
-        return None
-
-
-def _cpu_count() -> Optional[int]:
-    count = os.cpu_count()
-    if count:
-        return int(count)
-    try:
-        with open("/proc/cpuinfo", encoding="utf-8") as handle:
-            n = sum(1 for line in handle if line.startswith("processor"))
-    except OSError:
-        return None
-    return n or None
-
-
-def _cpu_model() -> Optional[str]:
-    try:
-        with open("/proc/cpuinfo", encoding="utf-8") as handle:
-            hardware = None
-            model = None
-            for line in handle:
-                if ":" not in line:
-                    continue
-                key, value = line.split(":", 1)
-                key = key.strip().lower()
-                value = value.strip()
-                if not value:
-                    continue
-                if key == "model name":
-                    return value[:256]
-                if key == "hardware" and hardware is None:
-                    hardware = value
-                if key == "model" and model is None:
-                    model = value
-    except OSError:
-        return None
-    text = hardware or model
-    return text[:256] if text else None
 
 
 def _meminfo() -> Dict[str, int]:
@@ -268,31 +176,6 @@ def _meminfo() -> Dict[str, int]:
     return out
 
 
-def _physical_disks() -> List[Dict[str, Any]]:
-    disks: List[Dict[str, Any]] = []
-    sys_block = "/sys/block"
-    try:
-        names = sorted(os.listdir(sys_block))
-    except OSError:
-        return disks
-    for name in names:
-        if name.startswith(SKIP_DISK_PREFIXES):
-            continue
-        size_path = os.path.join(sys_block, name, "size")
-        try:
-            with open(size_path, encoding="utf-8") as handle:
-                sectors = int(handle.read().strip() or "0")
-        except (OSError, ValueError):
-            continue
-        size_bytes = sectors * 512
-        if size_bytes <= 0:
-            continue
-        disks.append({"name": name, "size_bytes": size_bytes})
-        if len(disks) >= MAX_DISKS:
-            break
-    return disks
-
-
 def _disk_usage(path: str) -> Optional[Dict[str, int]]:
     try:
         usage = shutil.disk_usage(path)
@@ -303,45 +186,6 @@ def _disk_usage(path: str) -> Optional[Dict[str, int]]:
         "used_bytes": int(usage.used),
         "free_bytes": int(usage.free),
     }
-
-
-def _mount_usage() -> List[Dict[str, Any]]:
-    mounts: List[Dict[str, Any]] = []
-    seen = set()
-    try:
-        with open("/proc/mounts", encoding="utf-8") as handle:
-            lines = handle.readlines()
-    except OSError:
-        lines = []
-    candidates = [("/", None)]
-    for line in lines:
-        parts = line.split()
-        if len(parts) < 3:
-            continue
-        device, mountpoint, fstype = parts[0], parts[1], parts[2]
-        if fstype not in REAL_FS_TYPES:
-            continue
-        mountpoint = mountpoint.replace("\\040", " ")
-        candidates.append((mountpoint, device))
-    for mountpoint, device in candidates:
-        key = device or mountpoint
-        if key in seen:
-            continue
-        usage = _disk_usage(mountpoint)
-        if usage is None:
-            continue
-        seen.add(key)
-        mounts.append(
-            {
-                "mount": mountpoint,
-                "total_bytes": usage["total_bytes"],
-                "used_bytes": usage["used_bytes"],
-                "free_bytes": usage["free_bytes"],
-            }
-        )
-        if len(mounts) >= MAX_DISKS:
-            break
-    return mounts
 
 
 def _read_proc_stat() -> Optional[Tuple[float, float]]:
@@ -371,12 +215,3 @@ def _cpu_pct(sample_sec: float) -> Optional[float]:
     if total_delta <= 0:
         return 0.0
     return round(100.0 * (1.0 - idle_delta / total_delta), 2)
-
-
-def _loadavg() -> Optional[Tuple[float, float, float]]:
-    try:
-        with open("/proc/loadavg", encoding="utf-8") as handle:
-            parts = handle.read().split()
-        return float(parts[0]), float(parts[1]), float(parts[2])
-    except (OSError, ValueError, IndexError):
-        return None

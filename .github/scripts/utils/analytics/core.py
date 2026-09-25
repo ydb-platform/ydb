@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Reusable analytics client: start / end / track / send. No GitHub.
+"""JSONL buffer and YDB flush used by ci_metrics.py.
 
-Copy this file (stdlib + optional YDBWrapper) to Arcadia or an LLM pipeline.
-run_id comes from the record, --run-id, or $ANALYTICS_RUN_ID. CLI always exits 0.
-
-    python3 core.py start llm_call --source arcadia --run-id 42 --attr model=foo
-    python3 core.py send --conclusion success --json '{"tokens": 12}'
+    python3 ci_metrics.py start my_step --source ya_phase --label cache_mode=dist_cache
+    python3 ci_metrics.py send --conclusion success
 """
 
 from __future__ import annotations
@@ -33,7 +30,6 @@ DEFAULT_TABLE_PATH = "analytics/events"
 TABLE_CONFIG_KEY = "analytics_events"
 TTL_MINUTES = 180 * 24 * 60  # 180 days
 DEFAULT_KIND = "duration"
-INFO_SNAPSHOT_NAME = "info"
 KIND_UNITS = {
     "duration": "ms",
     "gauge": "",
@@ -41,18 +37,6 @@ KIND_UNITS = {
     "event": "",
     "info": "",
 }
-FAT_SNAPSHOT_KEYS = frozenset(
-    {
-        "components",
-        "modules",
-        "nodes",
-        "files",
-        "headers",
-        "payload",
-        "cpp_compilation_times",
-        "headers_compile_duration",
-    }
-)
 COLUMNS_SCHEMA = [
     ("date", "Date", False),
     ("event_ts", "Timestamp", False),
@@ -75,7 +59,7 @@ CREDENTIAL_ENVS = (
 
 
 def default_metrics_file() -> str:
-    return os.environ.get("ANALYTICS_FILE") or "analytics.jsonl"
+    return os.environ.get("CI_METRICS_FILE") or "ci_metrics.jsonl"
 
 
 def default_env_defaults() -> Dict[str, Any]:
@@ -775,16 +759,11 @@ def send(
     file: Optional[str] = None,
     attach: Optional[AttachFn] = None,
     enrich: Optional[EnrichFn] = None,
-    info_name: Optional[str] = None,
     flush: Optional[Callable[..., int]] = None,
     table_path: Optional[str] = None,
     **fields: Any,
 ) -> int:
-    """End leftover spans (or record a named instant event) and export the batch.
-
-    A fat snapshot in extras (`payload` / --json-file) is written as a sibling
-    info row, not folded into a duration span.
-    """
+    """End leftover spans (or record a named instant event) and export the batch."""
     path = file or default_metrics_file()
     extras = _record_kwargs(properties, None)
     extras.update({key: value for key, value in fields.items() if value is not None})
@@ -793,28 +772,13 @@ def send(
     extras.pop("info_name", None)
     extras.pop("flush", None)
     extras.pop("table_path", None)
-    snapshot = extras.pop("payload", None)
+    extras.pop("payload", None)
     pending = read_pending_spans(path)
-    span_source = _pending_source(pending, name)
     hook = {"attach": attach, "enrich": enrich}
     if name and not any(span.get("name") == name for span in pending):
-        if snapshot is not None:
-            extras["payload"] = snapshot
-            extras.setdefault("kind", "info")
         track(name, extras, file=path, **hook)
     else:
         end(name, extras, file=path, enrich=enrich)
-        if snapshot is not None:
-            snapshot_name = name if _is_info_name(name, extras.get("kind")) else (info_name or INFO_SNAPSHOT_NAME)
-            track(
-                snapshot_name,
-                {"payload": snapshot},
-                file=path,
-                kind="info",
-                source=extras.get("source") or span_source,
-                conclusion=extras.get("conclusion"),
-                **hook,
-            )
     flush_fn = flush or flush_file
     if table_path:
         return flush_fn(path, table_path=table_path)
@@ -832,77 +796,6 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
         raise
     else:
         end(name, file=file, conclusion="success")
-
-
-class Analytics:
-    """start / end / track / flush / send, with optional attach/enrich hooks."""
-
-    def __init__(
-        self,
-        file: Optional[str] = None,
-        source: Optional[str] = None,
-        *,
-        attach: Optional[AttachFn] = None,
-        enrich: Optional[EnrichFn] = None,
-        info_name: Optional[str] = None,
-        flush: Optional[Callable[..., int]] = None,
-        start_fn: Optional[Callable[..., Any]] = None,
-        end_fn: Optional[Callable[..., Any]] = None,
-        track_fn: Optional[Callable[..., Any]] = None,
-        send_fn: Optional[Callable[..., Any]] = None,
-    ):
-        self.file = file
-        self.source = source
-        self.attach = attach
-        self._enrich_hook = enrich
-        self.info_name = info_name
-        self.flush_fn = flush
-        self._start = start_fn or start
-        self._end = end_fn or end
-        self._track = track_fn or track
-        self._send = send_fn or send
-
-    def _base_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        if self.source and kwargs.get("source") is None:
-            kwargs["source"] = self.source
-        if self.file and kwargs.get("file") is None:
-            kwargs["file"] = self.file
-        return kwargs
-
-    def _record_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        kwargs = self._base_kwargs(kwargs)
-        if self.attach and kwargs.get("attach") is None:
-            kwargs["attach"] = self.attach
-        if self._enrich_hook and kwargs.get("enrich") is None:
-            kwargs["enrich"] = self._enrich_hook
-        return kwargs
-
-    def start(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
-        return self._start(name, properties, **self._record_kwargs(kwargs))
-
-    def end(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        kwargs = self._base_kwargs(kwargs)
-        if self._enrich_hook and kwargs.get("enrich") is None:
-            kwargs["enrich"] = self._enrich_hook
-        return self._end(name, properties, **kwargs)
-
-    def enrich(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        return enrich(name, properties, **self._base_kwargs(kwargs))
-
-    def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
-        self._track(name, properties, **self._record_kwargs(kwargs))
-
-    def flush(self) -> int:
-        flush_fn = self.flush_fn or flush_file
-        return flush_fn(self.file)
-
-    def send(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        kwargs = self._record_kwargs(kwargs)
-        if self.info_name and kwargs.get("info_name") is None:
-            kwargs["info_name"] = self.info_name
-        if self.flush_fn and kwargs.get("flush") is None:
-            kwargs["flush"] = self.flush_fn
-        return self._send(name, properties, **kwargs)
 
 
 def rows_from_jsonl(
@@ -1011,53 +904,6 @@ def flush_file(
         return 0
 
 
-def _is_fat_snapshot(parsed: Any) -> bool:
-    if isinstance(parsed, list):
-        return True
-    if not isinstance(parsed, dict):
-        return False
-    if any(key in parsed for key in FAT_SNAPSHOT_KEYS):
-        return True
-    for value in parsed.values():
-        if isinstance(value, list):
-            return True
-        if isinstance(value, dict) and any(isinstance(inner, (list, dict)) for inner in value.values()):
-            return True
-    return False
-
-
-def _is_info_name(name: Optional[str], kind: Optional[str]) -> bool:
-    if kind == "info":
-        return True
-    text = (name or "").strip()
-    return text == INFO_SNAPSHOT_NAME or text.endswith("_info")
-
-
-def _pending_source(pending: List[Dict[str, Any]], name: Optional[str]) -> Optional[str]:
-    if not pending:
-        return None
-    if name:
-        for span in reversed(pending):
-            if span.get("name") == name and span.get("source") not in (None, ""):
-                return str(span["source"])
-        return None
-    source = pending[-1].get("source")
-    return None if source in (None, "") else str(source)
-
-
-def _merge_json_property(properties: Dict[str, Any], parsed: Any) -> None:
-    if _is_fat_snapshot(parsed):
-        if isinstance(parsed, dict) and "payload" in parsed and len(parsed) == 1:
-            properties["payload"] = parsed["payload"]
-        else:
-            properties["payload"] = parsed
-        return
-    if isinstance(parsed, dict):
-        properties.update(parsed)
-        return
-    properties["payload"] = parsed
-
-
 def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     properties: Dict[str, Any] = {}
     raw_json = getattr(args, "json", None)
@@ -1067,18 +913,11 @@ def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
         except json.JSONDecodeError:
             properties["raw_json"] = raw_json
         else:
-            _merge_json_property(properties, parsed)
-    json_file = getattr(args, "json_file", None)
-    if json_file:
-        try:
-            with open(json_file, encoding="utf-8") as handle:
-                parsed = json.load(handle)
-        except (OSError, json.JSONDecodeError) as exc:
-            properties["json_file_error"] = str(exc)
-        else:
-            _merge_json_property(properties, parsed)
+            if isinstance(parsed, dict):
+                properties.update(parsed)
+            else:
+                properties["payload"] = parsed
     label_items = list(getattr(args, "label", None) or [])
-    label_items.extend(getattr(args, "attr", None) or [])
     properties.update(parse_labels(label_items, getattr(args, "extra", None)))
     run_id = getattr(args, "run_id", None)
     if run_id not in (None, ""):
@@ -1103,16 +942,13 @@ def resolve_track_value(args: argparse.Namespace) -> Optional[float]:
     duration_ms = getattr(args, "duration_ms", None)
     if duration_ms is not None:
         return duration_ms
-    duration_sec = getattr(args, "duration_sec", None)
-    if duration_sec is not None:
-        return duration_sec * 1000.0
     return None
 
 
 def resolve_track_kind(args: argparse.Namespace) -> Optional[str]:
     if args.kind:
         return args.kind
-    if getattr(args, "duration_ms", None) is not None or getattr(args, "duration_sec", None) is not None:
+    if getattr(args, "duration_ms", None) is not None:
         return "duration"
     return None
 
@@ -1146,7 +982,7 @@ def run_cli(
     if args.command == "start":
         if not name:
             print("Warning: start requires a span name", file=sys.stderr)
-            return 0
+            return 1
         start_fn(
             name,
             props,
@@ -1175,13 +1011,13 @@ def run_cli(
     if args.command == "enrich":
         if not name:
             print("Warning: enrich requires an event name", file=sys.stderr)
-            return 0
+            return 1
         enrich_fn(name, props, file=file, **extra)
         return 0
     if args.command == "track":
         if not name:
             print("Warning: track requires an event name (--name / positional)", file=sys.stderr)
-            return 0
+            return 1
         track_fn(
             name,
             props,
@@ -1210,7 +1046,6 @@ def run_cli(
             started_at=args.started_at,
             started_epoch=args.started_epoch,
             finished_epoch=args.finished_epoch,
-            info_name=getattr(args, "info_name", None),
             table_path=getattr(args, "table_path", None),
             **extra,
         )
@@ -1222,27 +1057,28 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("positional_name", nargs="?", default=None, help="Event/metric name")
     parser.add_argument("--name", default=None, help="Event/metric name")
     parser.add_argument("--json", default=None, help="Optional measurement JSON (merged with flags)")
-    parser.add_argument(
-        "--json-file",
-        default=None,
-        help="Path to a JSON snapshot (nested dump goes to labels.payload)",
-    )
     parser.add_argument("--kind", default=kind_default, choices=sorted(KIND_UNITS))
-    parser.add_argument("--source", default=None, help="Producer id, e.g. llm_eval / my_workflow")
+    parser.add_argument("--source", default=None, help="Producer id, e.g. nightly_build")
     parser.add_argument("--value", type=float, default=None)
     parser.add_argument("--duration-ms", type=float, default=None, help="Duration shortcut (kind=duration)")
-    parser.add_argument("--duration-sec", type=float, default=None, help="Duration in seconds (stored as ms)")
     parser.add_argument("--unit", default=None)
     parser.add_argument("--started-at", default=None, help="ISO-8601 timestamp")
     parser.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
     parser.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
     parser.add_argument("--conclusion", default=None)
     parser.add_argument("--error", default=None, help="Short error/status reason (labels.error)")
-    parser.add_argument("--label", action="append", default=[], help="key=value attribute")
-    parser.add_argument("--attr", action="append", default=[], help="Alias of --label (OTel attribute)")
-    parser.add_argument("--extra", default=None, help="JSON object merged into attributes")
-    parser.add_argument("--file", default=None, help="JSONL path (default: $ANALYTICS_FILE)")
-    parser.add_argument("--run-id", default=None, help="Analytics run id (or $ANALYTICS_RUN_ID)")
+    parser.add_argument("--label", action="append", default=[], help="key=value")
+    parser.add_argument("--extra", default=None, help="JSON object merged into labels")
+    parser.add_argument("--file", default=None, help="JSONL path")
+    parser.add_argument("--run-id", default=None, help="Run id (or $ANALYTICS_RUN_ID)")
+
+
+def add_enrich_cli_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("positional_name", nargs="?", default=None, help="Event name")
+    parser.add_argument("--name", default=None, help="Event name")
+    parser.add_argument("--label", action="append", default=[], help="key=value")
+    parser.add_argument("--error", default=None, help="Short error/status reason (labels.error)")
+    parser.add_argument("--file", default=None, help="JSONL path")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -1259,15 +1095,14 @@ def parse_args(argv=None) -> argparse.Namespace:
     add_track_cli_args(track_p)
 
     enrich_p = sub.add_parser("enrich", help="Add labels to last unsent record; duration stays")
-    add_track_cli_args(enrich_p)
+    add_enrich_cli_args(enrich_p)
 
     send_p = sub.add_parser("send", help="End leftover spans and export the batch")
     add_track_cli_args(send_p)
     send_p.add_argument("--table-path", default=None)
-    send_p.add_argument("--info-name", default=None, help="Sibling snapshot name (default: info)")
 
     flush_p = sub.add_parser("flush", help="Export completed events only")
-    flush_p.add_argument("--file", default=None, help="JSONL path (default: $ANALYTICS_FILE)")
+    flush_p.add_argument("--file", default=None, help="JSONL path")
     flush_p.add_argument("--table-path", default=None)
 
     return parser.parse_args(argv)

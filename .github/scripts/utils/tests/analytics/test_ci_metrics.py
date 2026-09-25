@@ -31,13 +31,10 @@ from core import (
     write_send_offset,
 )
 from ci_metrics import (
-    BUILD_INFO_NAME,
     DEFAULT_TABLE_PATH,
     PRIMARY_KEYS,
-    Analytics,
     attach_context,
     build_create_table_sql,
-    github_context_labels,
     github_env_defaults,
     guess_build_preset,
     main,
@@ -46,6 +43,7 @@ from ci_metrics import (
     rows_from_jsonl,
     start,
     end,
+    enrich,
     timed,
     track,
 )
@@ -321,12 +319,10 @@ class GithubEnvDefaultsTest(unittest.TestCase):
     def test_prefers_ci_job_title(self):
         old = {
             "CI_JOB_TITLE": os.environ.get("CI_JOB_TITLE"),
-            "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
             "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
         }
         try:
             os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
-            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
             os.environ["GITHUB_RUN_ID"] = "12345"
             defaults = github_env_defaults()
             self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo")
@@ -342,7 +338,6 @@ class GithubEnvDefaultsTest(unittest.TestCase):
         old = {key: os.environ.get(key) for key in (
             "GITHUB_EVENT_PATH",
             "PR_NUMBER",
-            "GITHUB_PR_NUMBER",
             "ORIGINAL_HEAD",
             "GITHUB_SHA",
             "BRANCH_NAME",
@@ -350,7 +345,6 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "GITHUB_REF_NAME",
             "BUILD_PRESET",
             "CI_JOB_TITLE",
-            "ANALYTICS_JOB_NAME",
             "GITHUB_JOB",
         )}
         try:
@@ -384,26 +378,20 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
-    def test_attaches_github_event_entities(self):
+    def test_event_path_fills_columns_not_labels(self):
         old = {key: os.environ.get(key) for key in (
             "GITHUB_EVENT_PATH",
             "GITHUB_EVENT_NAME",
             "GITHUB_WORKFLOW",
             "GITHUB_RUN_ID",
-            "GITHUB_RUN_ATTEMPT",
             "GITHUB_SHA",
-            "GITHUB_REF",
-            "GITHUB_REF_NAME",
-            "GITHUB_BASE_REF",
-            "GITHUB_HEAD_REF",
-            "GITHUB_JOB",
-            "GITHUB_REPOSITORY",
-            "GITHUB_ACTOR",
             "PR_NUMBER",
-            "GITHUB_PR_NUMBER",
             "ORIGINAL_HEAD",
             "BRANCH_NAME",
             "CI_JOB_TITLE",
+            "GITHUB_TOKEN",
+            "GITHUB_REPOSITORY",
+            "GITHUB_NUMERIC_JOB_ID",
         )}
         try:
             for key in old:
@@ -413,30 +401,12 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 with open(path, "w", encoding="utf-8") as handle:
                     json.dump(
                         {
-                            "action": "synchronize",
                             "number": 53660,
                             "pull_request": {
                                 "number": 53660,
-                                "html_url": "https://github.com/ydb-platform/ydb/pull/53660",
-                                "state": "open",
-                                "draft": False,
-                                "merged": False,
-                                "user": {"login": "naspirato"},
-                                "head": {
-                                    "ref": "cursor/ci-pr-check-observability-7839",
-                                    "sha": "abc123def",
-                                    "repo": {"full_name": "naspirato/ydb"},
-                                },
-                                "base": {
-                                    "ref": "main",
-                                    "sha": "def456",
-                                    "repo": {"full_name": "ydb-platform/ydb"},
-                                },
-                                "labels": [{"name": "ci"}],
-                                "body": "should-not-be-copied",
+                                "head": {"sha": "abc123def"},
+                                "base": {"ref": "main"},
                             },
-                            "repository": {"full_name": "ydb-platform/ydb", "default_branch": "main"},
-                            "sender": {"login": "naspirato"},
                         },
                         handle,
                     )
@@ -444,35 +414,33 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 os.environ["GITHUB_EVENT_NAME"] = "pull_request_target"
                 os.environ["GITHUB_WORKFLOW"] = "PR-check"
                 os.environ["GITHUB_RUN_ID"] = "99"
-                os.environ["GITHUB_RUN_ATTEMPT"] = "2"
-                os.environ["GITHUB_SHA"] = "mergecommit"
-                os.environ["GITHUB_REF"] = "refs/heads/main"
-                os.environ["GITHUB_JOB"] = "build_and_test"
-                os.environ["GITHUB_REPOSITORY"] = "ydb-platform/ydb"
-                os.environ["GITHUB_ACTOR"] = "naspirato"
-                labels = github_context_labels()
+                os.environ["CI_JOB_TITLE"] = "build_and_test"
                 record = attach_context({"name": "ya_make_try_1", "source": "ya_phase"})
-            self.assertEqual(labels["github.event_name"], "pull_request_target")
-            self.assertEqual(labels["github.event.number"], 53660)
-            self.assertEqual(labels["github.event.action"], "synchronize")
-            self.assertEqual(labels["github.event.pull_request.number"], 53660)
-            self.assertEqual(labels["github.event.pull_request.head.sha"], "abc123def")
-            self.assertEqual(labels["github.event.pull_request.base.ref"], "main")
-            self.assertEqual(labels["github.event.pull_request.labels"], ["ci"])
-            self.assertEqual(labels["github.workflow"], "PR-check")
-            self.assertEqual(labels["github.job"], "build_and_test")
-            self.assertEqual(labels["github.run_attempt"], 2)
-            self.assertNotIn("github.event.pull_request.body", labels)
             self.assertEqual(record["pr_number"], 53660)
             self.assertEqual(record["event_name"], "pull_request_target")
             self.assertEqual(record["commit"], "abc123def")
-            self.assertEqual(record["labels"]["github.event.number"], 53660)
+            self.assertEqual(record["workflow"], "PR-check")
+            labels = record.get("labels") or {}
+            self.assertNotIn("github.event.number", labels)
+            self.assertNotIn("cicd.pipeline.name", labels)
+            self.assertNotIn("github_job_id", record)
         finally:
             for key, value in old.items():
                 if value is None:
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+    def test_uses_numeric_job_id_from_env(self):
+        old = os.environ.get("GITHUB_NUMERIC_JOB_ID")
+        try:
+            os.environ["GITHUB_NUMERIC_JOB_ID"] = "778899"
+            self.assertEqual(github_env_defaults()["github_job_id"], 778899)
+        finally:
+            if old is None:
+                os.environ.pop("GITHUB_NUMERIC_JOB_ID", None)
+            else:
+                os.environ["GITHUB_NUMERIC_JOB_ID"] = old
 
 
 class ParseDatetimeTest(unittest.TestCase):
@@ -626,8 +594,8 @@ class TrackApiTest(unittest.TestCase):
                         path,
                         "--source",
                         "other_wf",
-                        "--duration-sec",
-                        "2.5",
+                        "--duration-ms",
+                        "2500",
                         "--conclusion",
                         "success",
                     ]
@@ -719,24 +687,22 @@ class TrackApiTest(unittest.TestCase):
             self.assertEqual(lines, [json.dumps({"name": "two"})])
             self.assertEqual(offset, len((first + second).encode("utf-8")))
 
-    def test_analytics_client_default_source(self):
+    def test_track_sets_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
-            analytics = Analytics(file=path, source="ya_phase")
-            analytics.track("graph_compare", {"value": 5, "conclusion": "success"})
+            track("graph_compare", {"value": 5, "conclusion": "success"}, file=path, source="ya_phase")
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["name"], "graph_compare")
             self.assertEqual(row["source"], "ya_phase")
             self.assertEqual(row["value"], 5.0)
 
-    def test_analytics_enrich_method(self):
+    def test_enrich_via_functions(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
-            analytics = Analytics(file=path, source="ya_phase")
-            analytics.start("ya_make", started_epoch="1000")
-            self.assertEqual(analytics.end("ya_make", conclusion="success", finished_epoch="1003"), 1)
-            self.assertEqual(analytics.enrich("ya_make", {"report_url": "https://s3.example/ya"}), 1)
+            start("ya_make", file=path, source="ya_phase", started_epoch="1000")
+            self.assertEqual(end("ya_make", file=path, conclusion="success", finished_epoch="1003"), 1)
+            self.assertEqual(enrich("ya_make", {"report_url": "https://s3.example/ya"}, file=path), 1)
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["value"], 3000.0)
@@ -767,7 +733,7 @@ class TrackApiTest(unittest.TestCase):
                             "nightly_build",
                             "--started-epoch",
                             "1000",
-                            "--attr",
+                            "--label",
                             "cache_mode=dist_cache",
                         ]
                     ),
@@ -802,162 +768,17 @@ class TrackApiTest(unittest.TestCase):
         finally:
             client.flush_file = original
 
-    def test_cli_build_info_json_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            snap = os.path.join(tmp, "modules.json")
-            with open(snap, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "components": [
-                            {"name": "ydb/apps/ydbd", "duration_ms": 12000},
-                            {"name": "ydb/core/tablet", "duration_ms": 800},
-                        ]
-                    },
-                    handle,
-                )
-            self.assertEqual(
-                main(
-                    [
-                        "track",
-                        BUILD_INFO_NAME,
-                        "--file",
-                        path,
-                        "--source",
-                        "nightly_build",
-                        "--json-file",
-                        snap,
-                    ]
-                ),
-                0,
-            )
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["name"], BUILD_INFO_NAME)
-            self.assertEqual(row["kind"], "info")
-            self.assertEqual(row["source"], "nightly_build")
-            self.assertNotIn("value", row)
-            self.assertEqual(row["labels"]["payload"]["components"][0]["name"], "ydb/apps/ydbd")
-
-    def test_send_after_start_writes_sibling_build_info(self):
-        sends = []
-
-        def fake_flush(path=None, table_path=None, defaults=None):
-            sends.append(path)
-            return 0
-
-        import ci_metrics as client
-
-        original = client.flush_file
-        client.flush_file = fake_flush
-        try:
-            with tempfile.TemporaryDirectory() as tmp:
-                path = os.path.join(tmp, "ci_metrics.jsonl")
-                snap = os.path.join(tmp, "modules.json")
-                with open(snap, "w", encoding="utf-8") as handle:
-                    json.dump({"nodes": [{"name": "a.cpp", "duration_ms": 10}]}, handle)
-                start("ydbd_clean_build", file=path, source="clean_build", started_epoch="1000")
-                self.assertEqual(
-                    main(
-                        [
-                            "send",
-                            "--file",
-                            path,
-                            "--conclusion",
-                            "success",
-                            "--finished-epoch",
-                            "1005",
-                            "--json-file",
-                            snap,
-                        ]
-                    ),
-                    0,
-                )
-                with open(path, encoding="utf-8") as handle:
-                    rows = [json.loads(line) for line in handle if line.strip()]
-                names = {row["name"]: row for row in rows}
-                self.assertEqual(names["ydbd_clean_build"]["kind"], "duration")
-                self.assertEqual(names["ydbd_clean_build"]["value"], 5000.0)
-                self.assertNotIn("payload", names["ydbd_clean_build"].get("labels") or {})
-                self.assertEqual(names[BUILD_INFO_NAME]["kind"], "info")
-                self.assertEqual(names[BUILD_INFO_NAME]["source"], "clean_build")
-                self.assertEqual(names[BUILD_INFO_NAME]["labels"]["payload"]["nodes"][0]["name"], "a.cpp")
-                self.assertEqual(sends, [path])
-        finally:
-            client.flush_file = original
-
     def test_track_does_not_end_open_spans(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             start("ydbd_cached_build", file=path, source="nightly_build")
-            track("ydb/foo.cpp", {"node_kind": "Compile"}, file=path, kind="duration", value=1, source="nightly_build")
+            track("ydbd_size", {"value": 1, "kind": "gauge"}, file=path, source="nightly_build")
             pending = read_pending_spans(path)
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0]["name"], "ydbd_cached_build")
             with open(path, encoding="utf-8") as handle:
                 rows = [json.loads(line) for line in handle if line.strip()]
-            self.assertEqual([row["name"] for row in rows], ["ydb/foo.cpp"])
-
-    def test_send_json_file_without_start(self):
-        sends = []
-
-        def fake_flush(path=None, table_path=None, defaults=None):
-            sends.append(path)
-            return 0
-
-        import ci_metrics as client
-
-        original = client.flush_file
-        client.flush_file = fake_flush
-        try:
-            with tempfile.TemporaryDirectory() as tmp:
-                path = os.path.join(tmp, "ci_metrics.jsonl")
-                snap = os.path.join(tmp, "modules.json")
-                with open(snap, "w", encoding="utf-8") as handle:
-                    json.dump({"modules": [{"name": "ydbd"}]}, handle)
-                self.assertEqual(
-                    main(["send", "--file", path, "--source", "other_wf", "--json-file", snap]),
-                    0,
-                )
-                with open(path, encoding="utf-8") as handle:
-                    row = json.loads(handle.readline())
-                self.assertEqual(row["name"], BUILD_INFO_NAME)
-                self.assertEqual(row["kind"], "info")
-                self.assertEqual(row["source"], "other_wf")
-                self.assertEqual(row["labels"]["payload"]["modules"][0]["name"], "ydbd")
-                self.assertEqual(sends, [path])
-        finally:
-            client.flush_file = original
-
-    def test_track_info_payload(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            analytics = Analytics(file=path, source="build_bloat")
-            analytics.track(
-                BUILD_INFO_NAME,
-                {"payload": {"cpp_compilation_times": [{"path": "a.cpp", "time_s": 1.5}]}},
-                kind="info",
-            )
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["kind"], "info")
-            self.assertEqual(row["labels"]["payload"]["cpp_compilation_times"][0]["path"], "a.cpp")
-
-    def test_cpp_json_file_nests_under_payload(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            snap = os.path.join(tmp, "output.json")
-            with open(snap, "w", encoding="utf-8") as handle:
-                json.dump({"total_compilation_time": 3.5, "cpp_compilation_times": [{"path": "a.cpp", "time_s": 2.0}]}, handle)
-            self.assertEqual(
-                main(["track", "build_info", "--file", path, "--source", "build_bloat", "--json-file", snap]),
-                0,
-            )
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["kind"], "info")
-            self.assertEqual(row["labels"]["payload"]["total_compilation_time"], 3.5)
-            self.assertNotIn("cpp_compilation_times", row["labels"])
+            self.assertEqual([row["name"] for row in rows], ["ydbd_size"])
 
 
 class ParseLabelsTest(unittest.TestCase):
@@ -1000,12 +821,9 @@ class RunnerFlagsTest(unittest.TestCase):
     def _inventory(self):
         self.inv_calls += 1
         return {
-            "boot_time": 1700000000,
             "cpu_count": 8,
-            "cpu_model": "Test CPU",
             "mem_total_bytes": 16 * 1024**3,
             "disk_total_bytes": 100 * 1024**3,
-            "disks": [{"name": "sda", "size_bytes": 100 * 1024**3}],
         }
 
     def _usage(self):
@@ -1034,7 +852,7 @@ class RunnerFlagsTest(unittest.TestCase):
         self.assertEqual(self.inv_calls, 1)
         first = read_pending_spans(self.metrics)[0]["labels"][INVENTORY_LABEL]
         self.assertEqual(first["cpu_count"], 8)
-        self.assertEqual(first["boot_time"], 1700000000)
+        self.assertEqual(first["disk_total_bytes"], 100 * 1024**3)
         self.assertTrue(os.path.isfile(self.cache))
         self.assertEqual(
             main(["track", "ydbd_size", "--file", self.metrics, "--kind", "gauge", "--value", "1", "--runner"]),

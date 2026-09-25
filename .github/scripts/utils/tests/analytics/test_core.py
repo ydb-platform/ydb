@@ -17,8 +17,6 @@ import tempfile
 import unittest
 
 from core import (
-    INFO_SNAPSHOT_NAME,
-    Analytics,
     attach_context,
     end,
     enrich,
@@ -73,7 +71,6 @@ class CoreLifecycleTest(unittest.TestCase):
         self.assertNotIn("workflow", record)
         labels = record.get("labels") or {}
         self.assertNotIn("github.sha", labels)
-        self.assertNotIn("cicd.pipeline.name", labels)
 
     def test_start_send_duration_and_info_snapshot(self):
         sends = []
@@ -102,7 +99,7 @@ class CoreLifecycleTest(unittest.TestCase):
                             "1000",
                             "--run-id",
                             "7",
-                            "--attr",
+                            "--label",
                             "model=foo",
                         ]
                     ),
@@ -121,8 +118,8 @@ class CoreLifecycleTest(unittest.TestCase):
                             "success",
                             "--finished-epoch",
                             "1003",
-                            "--json",
-                            json.dumps({"payload": {"tokens": 12, "prompt": "hi"}}),
+                            "--label",
+                            "tokens=12",
                         ]
                     ),
                     0,
@@ -133,17 +130,15 @@ class CoreLifecycleTest(unittest.TestCase):
                 self.assertEqual(names["llm_call"]["kind"], "duration")
                 self.assertEqual(names["llm_call"]["value"], 3000.0)
                 self.assertEqual(names["llm_call"]["source"], "arcadia")
-                self.assertEqual(names[INFO_SNAPSHOT_NAME]["kind"], "info")
-                self.assertEqual(names[INFO_SNAPSHOT_NAME]["labels"]["payload"]["tokens"], 12)
+                self.assertEqual(names["llm_call"]["labels"]["tokens"], "12")
                 self.assertEqual(sends, [path])
         finally:
             client.flush_file = original
 
-    def test_analytics_client_default_source(self):
+    def test_track_sets_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")
-            analytics = Analytics(file=path, source="llm_eval")
-            analytics.track("llm_call", {"value": 1, "kind": "count", "tokens": 3})
+            track("llm_call", {"value": 1, "kind": "count", "tokens": 3}, file=path, source="llm_eval")
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["name"], "llm_call")
@@ -202,13 +197,17 @@ class CoreLifecycleTest(unittest.TestCase):
             self.assertEqual(by_name["ya_make_try_1"]["labels"]["report_url"], "try1")
             self.assertNotIn("report_url", by_name["ya_make_try_2"]["labels"])
 
-    def test_analytics_enrich_method(self):
+    def test_start_without_name_returns_error(self):
+        self.assertEqual(main(["start"]), 1)
+        self.assertEqual(main(["track"]), 1)
+        self.assertEqual(main(["enrich"]), 1)
+
+    def test_enrich_via_functions(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")
-            analytics = Analytics(file=path, source="llm_eval")
-            analytics.start("llm_call", started_epoch="1000")
-            self.assertEqual(analytics.end("llm_call", conclusion="success", finished_epoch="1002"), 1)
-            self.assertEqual(analytics.enrich("llm_call", {"report_url": "https://s3.example/x"}), 1)
+            start("llm_call", file=path, source="llm_eval", started_epoch="1000")
+            self.assertEqual(end("llm_call", file=path, conclusion="success", finished_epoch="1002"), 1)
+            self.assertEqual(enrich("llm_call", {"report_url": "https://s3.example/x"}, file=path), 1)
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["value"], 2000.0)

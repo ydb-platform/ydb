@@ -84,7 +84,7 @@ Release date: February 12, 2026.
 #### Bug fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/24265) a bug in [Workload Manager](./dev/resource-consumption-management.md) that could cause CPU consumption by columnar tables to exceed the set limits.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/25112) a [problem](https://github.com/ydb-platform/ydb/issues/23858) that could cause tablet deletion to hang [](./concepts/glossary.md#tablet).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/25112) a [problem](https://github.com/ydb-platform/ydb/issues/23858) that could cause [tablet](./concepts/glossary.md#tablet) deletion to hang.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/25145) a [bug](https://github.com/ydb-platform/ydb/issues/20866) that caused an error when changing the table follower.
 * Fixed a number of bugs related to [changefeed](./concepts/glossary.md#changefeed):
   * [Fixed](https://github.com/ydb-platform/ydb/pull/25689) a [bug](https://github.com/ydb-platform/ydb/issues/25524) that could cause table import with a Utf8 key and enabled changefeed to fail.

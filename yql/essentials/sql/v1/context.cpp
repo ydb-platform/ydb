@@ -106,6 +106,7 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , Parsers(std::move(parsers))
     , ClusterMapping_(settings.ClusterMapping)
     , PathPrefix_(settings.PathPrefix)
+    , LocalPathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
     , SqlHints_(std::move(hints))
     , Settings(settings)
@@ -393,20 +394,23 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
         if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
-            ProviderPathPrefixes_[*arg] = value;
+            ProviderPathPrefixes_[*arg] = *arg == KikimrProviderName ? NormalizePath(value) : value;
             return true;
         }
 
         TString normalizedClusterName;
-        if (!GetClusterProvider(*arg, normalizedClusterName)) {
+        const auto provider = GetClusterProvider(*arg, normalizedClusterName);
+        if (!provider) {
             Error() << "Unknown cluster or provider: " << *arg;
             IncrementMonCounter("sql_errors", "BadPragmaValue");
             return false;
         }
 
-        ClusterPathPrefixes_[normalizedClusterName] = value;
+        ClusterPathPrefixes_[normalizedClusterName] = IsLocalCluster(*provider, TDeferredAtom(Pos(), normalizedClusterName))
+            ? NormalizePath(value) : value;
     } else {
         PathPrefix_ = value;
+        LocalPathPrefix_ = NormalizePath(value);
     }
 
     return true;
@@ -414,6 +418,9 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
     TStringBuf prefixPath = GetPrefixPath(service, cluster);
+    if (path.GetLiteral() && Settings.NormalizePath && IsLocalCluster(service, cluster)) {
+        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
+    }
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
     }
@@ -434,10 +441,23 @@ TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& 
         if (providerPrefix && !providerPrefix->empty()) {
             return *providerPrefix;
         } else if (!PathPrefix_.empty()) {
-            return PathPrefix_;
+            return IsLocalCluster(service, cluster) ? LocalPathPrefix_ : PathPrefix_;
         }
         return {};
     }
+}
+
+bool TContext::IsLocalCluster(const TString& service, const TDeferredAtom& cluster) const {
+    return service == KikimrProviderName && !IsDynamicCluster(cluster);
+}
+
+TString TContext::NormalizePath(TStringBuf path) const {
+    return Settings.NormalizePath && path.StartsWith('/') ? Settings.NormalizePath(path) : TString(path);
+}
+
+TString TContext::BuildTablePath(TStringBuf prefixPath, TStringBuf path) const {
+    // Prefixes from the request database have already been normalized at ingress.
+    return NYql::BuildTablePath(prefixPath, NormalizePath(path));
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {

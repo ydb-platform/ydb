@@ -177,12 +177,14 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
     KqpYqlSyntaxVersion = config.GetSqlVersion();
+    NormalizePath = config.NormalizePath;
     return *this;
 }
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = LangVer;
+    settings.NormalizePath = NormalizePath;
     settings.BackportMode = BackportMode;
 
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {

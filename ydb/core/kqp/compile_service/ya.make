@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/path_aliasing
     ydb/core/kqp/common
     ydb/core/kqp/common/simple
     ydb/core/kqp/counters

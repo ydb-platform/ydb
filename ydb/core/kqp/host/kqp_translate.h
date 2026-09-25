@@ -167,6 +167,7 @@ private:
     const NSQLTranslation::EBindingsMode BindingsMode;
 
     TString KqpTablePathPrefix = {};
+    std::function<TString(TStringBuf)> NormalizePath;
     bool IsEnableExternalDataSources = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;

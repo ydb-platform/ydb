@@ -173,6 +173,7 @@ public:
     }
 
     bool IsDynamicCluster(const TDeferredAtom& cluster) const;
+    bool IsLocalCluster(const TString& service, const TDeferredAtom& cluster) const;
     bool HasNonYtProvider(const ISource& source) const;
     bool UseUnordered(const ISource& source) const;
     bool UseUnordered(const TTableRef& table) const;
@@ -181,6 +182,8 @@ public:
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
+    TString NormalizePath(TStringBuf path) const;
+    TString BuildTablePath(TStringBuf prefixPath, TStringBuf path) const;
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
@@ -306,6 +309,7 @@ private:
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
     TString PathPrefix_;
+    TString LocalPathPrefix_;
     THashMap<TString, TString> ProviderPathPrefixes_;
     THashMap<TString, TString> ClusterPathPrefixes_;
     bool IntoHeading_ = true;

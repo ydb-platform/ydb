@@ -21,10 +21,12 @@ ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
+ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServiceConsumerGuards
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.LatestTopologySupersedesPrepare
 ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.CreateIndexedTableAndForceDropSimultaneously[PipeResets]
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk

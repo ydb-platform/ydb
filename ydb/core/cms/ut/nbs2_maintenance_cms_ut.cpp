@@ -5,6 +5,8 @@
 
 #include <util/generic/algorithm.h>
 
+#include <utility>
+
 namespace NKikimr::NCmsTest {
 namespace {
 
@@ -135,10 +137,9 @@ public:
     TAttempt WaitForCheck(size_t count, const TClient& client) {
         Await([&] { return State.Requests.size() >= count || HasResponse(client); },
             "CMS neither started the NBS2 check nor replied to the client");
-        // Manual approval remains RED until its handler calls
-        // StartNbs2MaintenanceCheck. Fail explicitly instead of waiting forever.
+        // Fail explicitly if the handler bypassed the NBS2 check.
         UNIT_ASSERT_VALUES_EQUAL_C(State.Requests.size(), count,
-            "CMS replied without starting the NBS2 check; wire the public handler to DBSController");
+            "CMS replied without starting the NBS2 check");
         UNIT_ASSERT_C(!HasResponse(client), "CMS must wait for DBSC before replying");
         const auto& request = State.Requests.back();
         UNIT_ASSERT_VALUES_EQUAL(State.Clients.size(), count);
@@ -237,11 +238,11 @@ public:
         Response<TEvCms::TEvSetConfigResponse>(client, TStatus::OK);
     }
 
-    TString SeedScheduled(ui32 nodeIndex, const TString& taskId) {
+    TString SeedScheduled(const NKikimrCms::TAction& action, const TString& taskId) {
         // Store a real task with a waiting action, but no permission. Creating
         // the fixture must not depend on the NBS2 integration under test.
         SetIntegration(false);
-        auto request = MakePermissionRequest(TRequestOptions(User, true, false, true), Shutdown(nodeIndex));
+        auto request = MakePermissionRequest(TRequestOptions(User, true, false, true), action);
         request->Record.SetMaintenanceTaskId(taskId);
         request->Record.SetMaxPermissionCount(0);
         request->Record.SetDuration(Duration.MicroSeconds());
@@ -251,6 +252,10 @@ public:
         UNIT_ASSERT(!response.GetRequestId().empty());
         SetIntegration(true);
         return response.GetRequestId();
+    }
+
+    TString SeedScheduled(ui32 nodeIndex, const TString& taskId) {
+        return SeedScheduled(Shutdown(nodeIndex), taskId);
     }
 
     void Restart() {
@@ -399,6 +404,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         for (const auto outcome : {EOutcome::Allow, EOutcome::Deny, EOutcome::Timeout}) {
             TCmsFixture fixture;
             const auto requestId = fixture.SeedScheduled(0, "manual-task");
+            const auto original = fixture.GetRequest(requestId);
             fixture.DisableMaintenance();
             const auto client = fixture.Approve(requestId);
             const auto attempt = fixture.WaitForCheck(1, client);
@@ -415,8 +421,23 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
                 const auto pending = fixture.GetRequest(requestId);
                 UNIT_ASSERT_VALUES_EQUAL(pending.RequestsSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).ActionsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(original.SerializeAsString(), pending.SerializeAsString());
+                if (outcome == EOutcome::Deny) {
+                    UNIT_ASSERT_C(response.GetStatus().GetReason().Contains("101"), response.ShortDebugString());
+                }
             }
             UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+        }
+        {
+            TCmsFixture fixture;
+            const auto requestId = fixture.SeedScheduled(0, "manual-legacy");
+            fixture.SetIntegration(false);
+            fixture.DisableMaintenance();
+            const auto response = fixture.Response<TEvCms::TEvManageRequestResponse>(
+                fixture.Approve(requestId), TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(response.ManuallyApprovedPermissionsSize(), 1);
+            fixture.Permissions(1);
+            UNIT_ASSERT(fixture.State.Requests.empty());
         }
         {
             TCmsFixture fixture;
@@ -433,6 +454,70 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
             UNIT_ASSERT_VALUES_EQUAL(nextResponse.PermissionsSize(), 1);
             fixture.Permissions(1);
             UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(ManualApprovalQueueAndTargets) {
+        {
+            TCmsFixture fixture;
+            const auto requestId = fixture.SeedScheduled(1, "queued-manual");
+            const auto first = fixture.Request(0);
+            const auto firstAttempt = fixture.WaitForCheck(1, first);
+
+            const auto manual = fixture.Approve(requestId);
+            fixture.Drain();
+            UNIT_ASSERT(!fixture.HasResponse(manual));
+            UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.GetRequest(requestId).GetRequests(0).ActionsSize(), 1);
+            fixture.Permissions(0);
+
+            fixture.Complete(firstAttempt, EOutcome::Allow);
+            fixture.Response<TEvCms::TEvPermissionResponse>(first, TStatus::ALLOW);
+            const auto manualAttempt = fixture.WaitForCheck(2, manual);
+            fixture.CheckNodes(1, {0, 1}); // Include the preceding request's new lock.
+            fixture.Permissions(1);
+
+            // REJECT remains available during the check. A late ALLOW must
+            // neither resurrect this request nor block the next queued one.
+            fixture.Reject(requestId);
+            const auto next = fixture.Request(2);
+            fixture.Complete(manualAttempt, EOutcome::Allow);
+            const auto rejected = fixture.Response<TEvCms::TEvManageRequestResponse>(manual, TStatus::ERROR_TEMP);
+            UNIT_ASSERT_VALUES_EQUAL(rejected.ManuallyApprovedPermissionsSize(), 0);
+            fixture.GetRequest(requestId, TStatus::WRONG_REQUEST);
+            fixture.Permissions(1);
+
+            const auto nextAttempt = fixture.WaitForCheck(3, next);
+            fixture.CheckNodes(2, {0, 2});
+            fixture.Complete(nextAttempt, EOutcome::Allow);
+            fixture.Response<TEvCms::TEvPermissionResponse>(next, TStatus::ALLOW);
+            fixture.Permissions(2);
+        }
+        {
+            TCmsFixture fixture;
+            using TAction = NKikimrCms::TAction;
+            const auto node = fixture.Env.GetNodeId(0);
+            const auto duration = fixture.Duration.MicroSeconds();
+            const TVector<std::pair<TAction, TStatus::ECode>> cases = {
+                {MakeAction(TAction::SHUTDOWN_HOST, "missing-host", duration), TStatus::NO_SUCH_HOST},
+                {MakeAction(TAction::RESTART_SERVICES, node, duration), TStatus::WRONG_REQUEST},
+                {MakeAction(TAction::RESTART_SERVICES, node, duration, "unknown-service"), TStatus::WRONG_REQUEST},
+                {MakeAction(TAction::RESTART_SERVICES, node, duration, "dynnode"), TStatus::NO_SUCH_SERVICE},
+            };
+            size_t index = 0;
+            for (const auto& [action, status] : cases) {
+                // Quota defers validation on initial create. Manual approval
+                // must not turn unresolved targets into an unchecked grant.
+                const auto requestId = fixture.SeedScheduled(action, "invalid-manual-" + ToString(++index));
+                const auto before = fixture.GetRequest(requestId);
+                const auto response = fixture.Response<TEvCms::TEvManageRequestResponse>(fixture.Approve(requestId), status);
+                UNIT_ASSERT_VALUES_EQUAL(response.ManuallyApprovedPermissionsSize(), 0);
+                const auto after = fixture.GetRequest(requestId);
+                UNIT_ASSERT_VALUES_EQUAL(before.SerializeAsString(), after.SerializeAsString());
+                fixture.Permissions(0);
+                UNIT_ASSERT(fixture.State.Requests.empty());
+                fixture.Reject(requestId);
+            }
         }
     }
 

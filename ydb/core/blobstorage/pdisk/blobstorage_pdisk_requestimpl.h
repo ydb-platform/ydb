@@ -194,6 +194,42 @@ public:
 };
 
 //
+// TCompactionBidder
+//
+class TCompactionBidder : public TRequestBase {
+public:
+    const NPDisk::TEvCompactionBidder::EKind Kind;
+    const ui32 BidderId;
+    const ui64 RoundId;
+    const bool HasCandidate;
+    const ui32 NeedChunks;
+    const ui32 FreeChunks;
+
+    TCompactionBidder(const NPDisk::TEvCompactionBidder &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::CompactionBidder, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Kind(ev.Kind)
+        , BidderId(ev.BidderId)
+        , RoundId(ev.RoundId)
+        , HasCandidate(ev.HasCandidate)
+        , NeedChunks(ev.NeedChunks)
+        , FreeChunks(ev.FreeChunks)
+    {}
+
+    std::unique_ptr<NPDisk::TEvCompactionBidder> ToEvent() const {
+        auto ev = std::make_unique<NPDisk::TEvCompactionBidder>(Kind, Owner, OwnerRound, BidderId);
+        ev->RoundId = RoundId;
+        ev->HasCandidate = HasCandidate;
+        ev->NeedChunks = NeedChunks;
+        ev->FreeChunks = FreeChunks;
+        return ev;
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestCompactionBidder;
+    }
+};
+
+//
 // TCheckSpace
 //
 class TCheckSpace : public TRequestBase {

@@ -543,6 +543,12 @@ public:
         return SharedQuota->GetHardLimit();
     }
 
+    // The colour of the chunk pool the owners share, before anybody's personal quota or static reserve.
+    TColor::E GetSharedPoolColor() const {
+        double occupancy;
+        return SharedQuota->EstimateSpaceColor(0, &occupancy);
+    }
+
     TColor::E GetPDiskCapacityAlert() const {
         double occupancy;
         TColor::E sharedColor = SharedQuota->EstimateSpaceColor(0, &occupancy);

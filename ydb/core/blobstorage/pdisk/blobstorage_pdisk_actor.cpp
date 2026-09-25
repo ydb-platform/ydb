@@ -1083,6 +1083,11 @@ public:
         PDisk->InputRequest(request);
     }
 
+    void Handle(NPDisk::TEvCompactionBidder::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TCompactionBidder>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
     void Handle(NPDisk::TEvChunkReserve::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender, ev->Cookie);
         PDisk->InputRequest(request);
@@ -1601,6 +1606,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, InitHandle);
             hFunc(NPDisk::TEvYardResize, InitHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, InitHandle);
+            IgnoreFunc(NPDisk::TEvCompactionBidder); // no owner is initialized yet
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1638,6 +1644,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, Handle);
             hFunc(NPDisk::TEvYardResize, Handle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, Handle);
+            hFunc(NPDisk::TEvCompactionBidder, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1678,6 +1685,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            IgnoreFunc(NPDisk::TEvCompactionBidder); // nothing is written to a PDisk in error
             hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);

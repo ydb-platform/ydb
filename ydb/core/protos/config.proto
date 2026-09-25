@@ -2269,6 +2269,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
+        optional uint64 CompactionAdmissionColor = 10 [(ControlOptions) = {
+            Description: "Space color (TPDiskSpaceColor value) of the shared chunk pool at which PDisk starts to admit "
+                         "level compactions one at a time (EnableVDiskPlannedCompaction). It stops one color below. "
+                         "0 admits them one at a time always",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 20 }];
     }
 
     message TBlobStorageControllerControls {

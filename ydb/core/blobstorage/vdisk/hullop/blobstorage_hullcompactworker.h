@@ -173,6 +173,15 @@ namespace NKikimr {
         ui32 PreReservedChunks = 0;
         bool OutgrewPreReservedChunks = false;
 
+        // A planned compaction (EnableVDiskPlannedCompaction) writes into the chunks reserved for it by its plan and
+        // takes none on its way: it places no data into new huge slots or heap stripes, and a record that does not fit
+        // what was reserved stops it (PlanExceeded). A worker made for planning never writes anything; it replays the
+        // job through the same decisions and counts the SSTs it would write (PlanQuantum).
+        bool Planned = false;
+        bool PlanExceeded = false;
+        std::optional<TSstSpaceModel<TKey, TMemRec>> PlanSst;
+        ui32 PlannedSsts = 0;
+
         // automaton state
         EState State = EState::Invalid;
 
@@ -412,6 +421,11 @@ namespace NKikimr {
                                 break;
 
                             case ETryProcessItemStatus::NeedMoreChunks:
+                                if (Planned) {
+                                    // the plan said this would not happen; the job has to be stopped
+                                    PlanExceeded = true;
+                                    return false;
+                                }
                                 // generate request for chunk reservation and try again
                                 if (auto msg = CheckForReservation()) {
                                     msgsForYard.push_back(std::move(msg));
@@ -592,17 +606,70 @@ namespace NKikimr {
         const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
 
-        // Chunks a Fresh segment reserved for its compaction before admitting its records (see TFreshData).
-        // From here on they are this compaction's own, exactly as if it had reserved them itself: the ones it
-        // writes are committed, the rest forgotten, and all of them forgotten should it abort.
+        // Chunks a Fresh segment reserved for its compaction before admitting its records (see TFreshData), or the
+        // ones a planned compaction reserved for its plan. From here on they are this compaction's own, exactly as if
+        // it had reserved them itself: the ones it writes are committed, the rest forgotten, and all of them
+        // forgotten should it abort.
         void AddPreReservedChunks(const TVector<TChunkIdx>& chunks) {
-            Y_VERIFY_S(IsFresh && AllocatedChunks.empty() && !ChunkReservePending, HullCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S((IsFresh || Planned) && AllocatedChunks.empty() && !ChunkReservePending,
+                HullCtx->VCtx->VDiskLogPrefix);
             ReservedChunks.insert(ReservedChunks.end(), chunks.begin(), chunks.end());
             AllocatedChunks.insert(AllocatedChunks.end(), chunks.begin(), chunks.end());
             PreReservedChunks = chunks.size();
         }
 
+        void SetPlanned() {
+            Y_VERIFY_S(!IsFresh && State == EState::Invalid, HullCtx->VCtx->VDiskLogPrefix);
+            Planned = true;
+        }
+
+        bool IsPlanExceeded() const {
+            return PlanExceeded;
+        }
+
+        // Planning: goes through up to `maxItems` more records exactly as MainCycle would, writing nothing, and returns
+        // true once all of them have been seen. Must be called on a worker of its own, prepared like the real one.
+        bool PlanQuantum(ui32 maxItems) {
+            Y_VERIFY_S(Planned && State == EState::GetNextItem, HullCtx->VCtx->VDiskLogPrefix);
+            for (ui32 i = 0; i < maxItems && It.Valid(); ++i) {
+                Key = It.GetCurKey();
+                Y_VERIFY_S(!PreviousKey || *PreviousKey < Key, HullCtx->VCtx->VDiskLogPrefix
+                    << "duplicate keys: " << PreviousKey->ToString() << " -> " << Key.ToString());
+                It.PutToMerger(&IndexMerger);
+                if (PreprocessItem()) {
+                    PlanItem();
+                }
+                FinishItem();
+            }
+            return !It.Valid();
+        }
+
+        // The chunks the job has to have reserved to write everything it plans: each SST starts its writer only with
+        // ChunksToUse of them at hand (TryProcessItem), so this is enough whatever each one ends up using.
+        ui32 GetPlannedChunks() const {
+            return PlannedSsts * ChunksToUse;
+        }
+
     private:
+        void PlanItem() {
+            Y_VERIFY_S(MemRec, HullCtx->VCtx->VDiskLogPrefix);
+            if constexpr (LogoBlobs) {
+                Y_VERIFY_S(IndexMerger.GetDataMerger().GetSlotsToAllocate().empty(), HullCtx->VCtx->VDiskLogPrefix);
+            }
+            // the same decision TryProcessItem and TWriter::PushIndexOnly make
+            if (PartitionKey && PreviousKey && *PreviousKey < *PartitionKey && Key <= *PartitionKey && PlanSst) {
+                PlanSst.reset();
+            }
+            const ui32 inplacedDataSize = MemRec->GetType() == TBlobType::DiskBlob ? MemRec->DataSize() : 0;
+            const ui32 numAddedOuts = LogoBlobs ? IndexMerger.GetDataMerger().GetSavedHugeBlobs().size() : 0;
+            if (!PlanSst || !PlanSst->Push(inplacedDataSize, numAddedOuts)) {
+                PlanSst.emplace(PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize, ChunksToUse);
+                ++PlannedSsts;
+                const bool fits = PlanSst->Push(inplacedDataSize, numAddedOuts);
+                Y_VERIFY_S(fits, HullCtx->VCtx->VDiskLogPrefix << " a record does not fit into an empty SST");
+            }
+        }
+
         void CollectRemovedHugeBlobs(const std::vector<TDiskPart>& hugeBlobs) {
             for (const TDiskPart& p : hugeBlobs) {
                 if (!p.Empty()) {
@@ -663,7 +730,9 @@ namespace NKikimr {
                         {"wholeDoNotKeep", wholeDoNotKeep});
                 }
 
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
+                // A planned compaction takes no new huge slots: what would go there stays in place, and the plan
+                // counts it; what is already huge only stays huge.
+                IndexMerger.Finish(!Planned && HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
             } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
                 // One merged record per tablet; Max generation is the deletion tombstone and must stay.
                 keep = NGc::TKeepStatus(true);
@@ -909,7 +978,8 @@ namespace NKikimr {
             if constexpr (LogoBlobs) {
                 return false;
             }
-            return UseStripeAllocator() && HullCtx->VCfg->HeapAllocatorMaxSstInBytes > 0;
+            // a stripe comes from the huge keeper, which is not what a planned compaction has reserved
+            return !Planned && UseStripeAllocator() && HullCtx->VCfg->HeapAllocatorMaxSstInBytes > 0;
         }
     };
 

@@ -1,8 +1,10 @@
 #include "pdisk_mock.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_compaction_arbiter.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_quota_record.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
@@ -447,6 +449,30 @@ class TPDiskMockActor : public TActorBootstrapped<TPDiskMockActor> {
     TImpl& Impl;
     const TString Prefix;
 
+    // Planned level compaction (EnableVDiskPlannedCompaction), exactly as a real PDisk arbitrates it.
+    struct TArbiterSpace : NPDisk::TCompactionArbiter::ISpace {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TPDiskMockActor& Self;
+
+        explicit TArbiterSpace(TPDiskMockActor& self)
+            : Self(self)
+        {}
+
+        TColor::E GetColor() const override {
+            return StatusFlagToSpaceColor(Self.GetStatusFlags());
+        }
+
+        bool Fits(NPDisk::TOwner /*owner*/, ui32 chunks) const override {
+            // the test Handle(TEvChunkReserve) applies
+            return Self.Impl.GetNumFreeChunks() >= chunks
+                && Self.EstimateAllocationColor(chunks) < TColor::BLACK;
+        }
+    };
+    std::unique_ptr<NPDisk::TCompactionArbiter> Arbiter;
+    ui32 ArbiterFreeChunks = Max<ui32>();
+    NPDisk::TStatusFlags ArbiterStatusFlags = 0;
+
 public:
     TPDiskMockActor(TPDiskMockState::TPtr state)
         : State(std::move(state)) // to keep ownership
@@ -461,8 +487,61 @@ public:
     }
 
     void Bootstrap() {
+        if (HasAppData() && AppData()->FeatureFlags.GetEnableVDiskPlannedCompaction()) {
+            Arbiter = std::make_unique<NPDisk::TCompactionArbiter>(NKikimrBlobStorage::TPDiskSpaceColor::YELLOW);
+        }
         Become(&TThis::StateNormal);
         ReportMetrics();
+    }
+
+    void SendArbiterOutbox(NPDisk::TCompactionArbiter::TOutbox& out) {
+        for (auto& msg : out) {
+            Send(msg.Recipient, msg.Event.release(), IEventHandle::FlagTrackDelivery);
+        }
+        out.clear();
+    }
+
+    void Handle(NPDisk::TEvCompactionBidder::TPtr ev) {
+        const auto *msg = ev->Get();
+        const auto it = Impl.Owners.find(msg->Owner);
+        if (!Arbiter || it == Impl.Owners.end() || it->second.Slain || it->second.OwnerRound != msg->OwnerRound) {
+            return;
+        }
+        NPDisk::TCompactionArbiter::TOutbox out;
+        Arbiter->Handle(*msg, ev->Sender, TArbiterSpace(*this), out);
+        SendArbiterOutbox(out);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr ev) {
+        if (Arbiter && ev->Get()->SourceType == NPDisk::TEvCompactionArbiter::EventType) {
+            NPDisk::TCompactionArbiter::TOutbox out;
+            Arbiter->DropActor(ev->Sender, TArbiterSpace(*this), out);
+            SendArbiterOutbox(out);
+        }
+    }
+
+    void DropCompactionBidders(ui8 ownerId) {
+        if (Arbiter) {
+            NPDisk::TCompactionArbiter::TOutbox out;
+            Arbiter->DropOwner(ownerId, TArbiterSpace(*this), out);
+            SendArbiterOutbox(out);
+        }
+    }
+
+    // After every event: tell the arbiter when the space it sees has changed.
+    void UpdateArbiter() {
+        if (!Arbiter) {
+            return;
+        }
+        const ui32 freeChunks = Impl.GetNumFreeChunks();
+        const NPDisk::TStatusFlags flags = GetStatusFlags();
+        if (freeChunks != ArbiterFreeChunks || flags != ArbiterStatusFlags) {
+            ArbiterFreeChunks = freeChunks;
+            ArbiterStatusFlags = flags;
+            NPDisk::TCompactionArbiter::TOutbox out;
+            Arbiter->OnSpaceChanged(TArbiterSpace(*this), out);
+            SendArbiterOutbox(out);
+        }
     }
 
     void ReportMetrics() {
@@ -527,6 +606,7 @@ public:
 
             // drop data from any reserved chunks and return them to free pool
             Impl.ResetOwnerReservedChunks(*owner);
+            DropCompactionBidders(ownerId);
 
             // fill in the response
             TVector<TChunkIdx> ownedChunks(owner->CommittedChunks.begin(), owner->CommittedChunks.end());
@@ -614,6 +694,7 @@ public:
                 owner.LogDataSize = 0;
                 owner.LastLsn = 0;
                 owner.StartingPoints.clear();
+                DropCompactionBidders(ownerId);
                 found = true;
                 break;
             }
@@ -1136,6 +1217,7 @@ public:
             owner.LogDataSize = 0;
             owner.LastLsn = 0;
             owner.StartingPoints.clear();
+            DropCompactionBidders(msg->Owner);
         }
 
         Send(ev->Sender, res.release());
@@ -1426,8 +1508,18 @@ public:
 
     void Ignore() {}
 
-    STRICT_STFUNC(StateNormal,
+    STFUNC(StateNormal) {
+        const bool poison = ev->GetTypeRewrite() == TEvents::TSystem::Poison;
+        StateNormalImpl(ev);
+        if (!poison) {
+            UpdateArbiter();
+        }
+    }
+
+    STRICT_STFUNC(StateNormalImpl,
         hFunc(NPDisk::TEvYardInit, Handle);
+        hFunc(NPDisk::TEvCompactionBidder, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NPDisk::TEvYardResize, Handle);
         hFunc(NPDisk::TEvLog, Handle);
         hFunc(NPDisk::TEvChunkForget, Handle);
@@ -1462,6 +1554,8 @@ public:
 
     STRICT_STFUNC(StateError,
         hFunc(NPDisk::TEvYardInit, ErrorHandle);
+        IgnoreFunc(NPDisk::TEvCompactionBidder);
+        IgnoreFunc(TEvents::TEvUndelivered);
         hFunc(NPDisk::TEvYardResize, ErrorHandle);
         hFunc(NPDisk::TEvCheckSpace, ErrorHandle);
         hFunc(NPDisk::TEvLog, ErrorHandle);

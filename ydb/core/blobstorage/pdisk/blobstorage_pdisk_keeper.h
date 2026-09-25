@@ -174,6 +174,10 @@ public:
         return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
     }
 
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetSharedPoolColor() const {
+        return ChunkTracker.GetSharedPoolColor();
+    }
+
     NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
         return ChunkTracker.GetPDiskCapacityAlert();
     }

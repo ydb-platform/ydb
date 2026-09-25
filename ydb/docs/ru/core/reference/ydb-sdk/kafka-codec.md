@@ -2,12 +2,11 @@
 
 Обычно каждое сообщение топика сжимается отдельно одним из [кодеков сообщений](../../concepts/datamodel/topic.md#message-codec). *Батчевый кодек* работает иначе: в единый бинарный блок кодируется целый пакет сообщений, который {{ ydb-short-name }} хранит и передаёт как есть. Сообщения извлекаются из такого блока либо клиентом (при чтении через [Topic API](topic.md)), либо сервером, если те же данные нужно выдать по одному сообщению.
 
-Батчевый кодек выбирается писателем и передаётся в поле `batch_codec` сообщения `StreamWriteMessage.WriteRequest`, а сам закодированный пакет — в `StreamWriteMessage.WriteRequest.EncodedBatch`. Список батчевых кодеков, разрешённых для топика, сервер возвращает в `StreamWriteMessage.InitResponse.supported_message_batch_codecs`. Доступные значения перечислены в enum `MessagesBatchCodec` в [ydb_topic.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_topic.proto).
+Батчевые кодеки живут в том же enum `Codec` в [ydb_topic.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_topic.proto), что и кодеки сообщений, и занимают диапазон значений от 20000 до 29999. Батчевый кодек выбирается писателем и передаётся в поле `codec` сообщения `StreamWriteMessage.WriteRequest`, а сам закодированный пакет — в `StreamWriteMessage.WriteRequest.encoded_batch` вместо обычного списка `messages`. Список кодеков, разрешённых для топика, сервер возвращает в `StreamWriteMessage.InitResponse.supported_codecs`.
 
 | Батчевый кодек | Описание |
 | --- | --- |
-| `MESSAGE_BATCH_CODEC_RAW` | Без батчевого кодирования: сообщения передаются обычным списком protobuf-сообщений, каждое сжато своим кодеком сообщения. |
-| `MESSAGE_BATCH_CODEC_KAFKA_BATCH` | Пакет закодирован как record batch Apache Kafka, см. [Kafka batch](#kafka-batch). |
+| `CODEC_BATCH_KAFKA` | Пакет закодирован как record batch Apache Kafka, см. [Kafka batch](#kafka-batch). |
 
 ## Kafka batch {#kafka-batch}
 
@@ -101,12 +100,12 @@ Value: byte[]
 | `attributes`, бит 3 (`timestampType`) | Соответствия нет, в `created_at` всегда время, переданное писателем. |
 | `attributes`, бит 4 (`isTransactional`) | Соответствия нет, [транзакции с топиками](../../concepts/datamodel/topic.md#topic-transactions) задаются полем `tx` в `StreamWriteMessage.WriteRequest`. |
 | `attributes`, бит 5 (`isControlBatch`) | Соответствия нет, control-пакеты не выдаются как сообщения топика. |
-| `lastOffsetDelta` | `EncodedBatch.messages_count - 1`. |
+| `lastOffsetDelta` | `WriteEncodedBatch.messages_count - 1`. |
 | `baseTimestamp` | `created_at` первого сообщения пакета. |
 | `maxTimestamp` | Наибольшее `created_at` среди сообщений пакета. |
 | `producerId`, `producerEpoch` | Соответствия нет, писатель идентифицируется полем `producer_id` сессии записи. Записывается значение `0`. |
-| `baseSequence` | `EncodedBatch.min_seq_no` — `seq_no` первого сообщения пакета. |
-| `recordsCount` | `EncodedBatch.messages_count`. |
+| `baseSequence` | `WriteEncodedBatch.min_seq_no` — `seq_no` первого сообщения пакета. |
+| `recordsCount` | `WriteEncodedBatch.messages_count`. |
 | `records` | Сами сообщения пакета. |
 
 Поля record:
@@ -116,7 +115,7 @@ Value: byte[]
 | `length`, `attributes` | Разметка бинарного формата, соответствия нет. |
 | `timestampDelta` | `created_at` = `baseTimestamp` + `timestampDelta`, в миллисекундах. |
 | `offsetDelta` | `offset` = `baseOffset` + `offsetDelta`. |
-| `key` | Ключ сообщения, `partition_key`. |
+| `key` | `message_group_id` — ключ сообщения. |
 | `value` | `data` — тело сообщения. |
 | `headers` | `metadata_items` — метаданные сообщения. |
 
@@ -135,7 +134,7 @@ Value: byte[]
 | 11 | `2025-01-01T00:00:00.150Z` (`1735689600150` мс) | `msg-2` | — |
 | 12 | `2025-01-01T00:00:00.400Z` (`1735689600400` мс) | `msg-3` | `k3` |
 
-С батчевым кодеком `MESSAGE_BATCH_CODEC_KAFKA_BATCH` и без сжатия тел сообщений это превращается в один record batch:
+С батчевым кодеком `CODEC_BATCH_KAFKA` и без сжатия тел сообщений это превращается в один record batch:
 
 ```text
 baseOffset            = 0                  // при записи игнорируется, будет назначен сервером
@@ -157,8 +156,8 @@ records:
 Сериализованный пакет передаётся в `StreamWriteMessage.WriteRequest`:
 
 ```text
-batch_codec = MESSAGE_BATCH_CODEC_KAFKA_BATCH
-batch_data:
+codec = CODEC_BATCH_KAFKA
+encoded_batch:
   data              = <сериализованный record batch>
   messages_count    = 3
   min_seq_no        = 10

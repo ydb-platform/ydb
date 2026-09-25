@@ -16,44 +16,44 @@ option java_package = "com.yandex.ydb.topic";
 
 option cc_enable_arenas = true;
 
-// The Codec and MessagesBatchCodec enums use continuous numbering, and their ranges must be kept in sync.
 enum Codec {
     CODEC_UNSPECIFIED = 0;
+
+    // Single-message codecs, from 1 to 9999.
+    // Each message is compressed on its own; the codec applies to the message body.
     CODEC_RAW = 1;
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
     reserved 5 to 9999;
-    // User-defined codecs from 10000 to 19999
+
+    // User-defined single-message codecs, from 10000 to 19999.
     CODEC_CUSTOM = 10000;
     CODEC_CUSTOM_MAX = 19999;
 
-    // Batch codecs from 20000 to 29999
-    reserved 20000 to 29999;
-    
-    // For future usage
-    reserved 30000 to max;
-}
+    // Batch codecs, from 20000 to 29999.
+    // The whole batch of messages is encoded into a single binary blob,
+    // which is stored and transferred as is.
 
-// The Codec and MessagesBatchCodec enums use continuous numbering, and their ranges must be kept in sync.
-enum MessagesBatchCodec {
-    MESSAGE_BATCH_CODEC_UNSPECIFIED = 0;
+    // Binary Apache Kafka record batch.
+    // See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
+    CODEC_BATCH_KAFKA = 20000;
 
-    // Single message codecs
-    reserved 1 to 19999;
+    // Example of a batch codec: the batch is a compressed Batch protobuf message.
+    // Added to show how the batch codec range is extended, not intended for real use.
+    CODEC_BATCH_TOPIC_COMPRESSED_EXAMPLE = 20001;
 
-    MESSAGE_BATCH_CODEC_KAFKA_BATCH = 20000;      // Binary kafka message batch. See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
-    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED_EXAMPLE = 20001; // Codec value + compressed usual topic batch protobuf. // Example for extend
+    reserved 20002 to 29999;
 
-    // For future usage
+    // Reserved for future usage.
     reserved 30000 to max;
 }
 
 // Description of supported codecs.
 message SupportedCodecs {
     // List of supported codecs.
-    // See enum Codec and MessagesBatchCodec above for values.
-    repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
+    // See enum Codec above for values.
+    repeated int32 codecs = 1 [(Ydb.value) = "[1; 29999]", (Ydb.size).le = 100];
 }
 
 // Represents range [start, end).
@@ -163,19 +163,17 @@ message StreamWriteMessage {
 
     // Represents portion of client messages.
     message WriteRequest {
+        // Exactly one of messages and encoded_batch must be filled, depending on codec.
+
+        // Client messages. Filled if codec is a single-message codec (including a custom one).
         repeated MessageData messages = 1;
 
+        // Messages encoded as a single blob. Filled if codec is a batch codec.
         WriteEncodedBatch encoded_batch = 11;
 
-        oneof data_codec {
-           // Codec that is used for data compression.
-           // See enum Codec above for values.
-           int32 codec = 2;
-
-           // Batch codec that is used for encode full messages batch.
-           // See enum MessageBatchCodec above for values.
-           int32 batch_codec = 10;
-        }
+        // Codec that is used to encode the data of this request.
+        // See enum Codec above for values.
+        int32 codec = 2;
 
         oneof write_context {
             TransactionIdentity tx = 3;
@@ -205,15 +203,21 @@ message StreamWriteMessage {
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
         }
 
+        // Batch of client messages, encoded with a batch codec.
         message WriteEncodedBatch {
+            // Total uncompressed size of the message bodies in this batch.
             int64 uncompressed_size = 1;
+            // Encoded batch body.
             bytes data = 2;
 
-            // Count of messages.
+            // Number of messages in the batch.
             int64 messages_count = 3;
+            // Sequence numbers of the first and the last messages of the batch, both inclusive.
             int64 min_seq_no = 4;
             int64 max_seq_no = 5;
 
+            // Sample of the partition keys used by the messages of the batch.
+            // The simplest way to fill it is to take the key of any single message of the batch.
             repeated string partition_keys_sample = 6;
         }
     }
@@ -388,16 +392,18 @@ message StreamReadMessage {
             google.protobuf.Timestamp read_from = 4;
         }
 
-        // Indicates message and batch encodings supported by the client.
-        // The server takes these settings into account and, when possible, re-encodes messages using one of the specified codecs.
-        // However, the client must be prepared to receive messages encoded with a codec not included in this list.
-        // In this case, reading the message should return an error.
+        // Codecs that the client is able to decode.
+        // The server sends data encoded only with the codecs from this list,
+        // re-encoding it when the stored data uses some other codec.
+        // New SDKs must fill this list.
+        // An empty list means the behavior of old SDKs: batch codecs are not accepted,
+        // all single-message codecs are accepted.
         SupportedCodecs supported_codecs = 7;
 
-        // Allow the server to send all messages and batches, regardless of the compatibility list in supported_codecs.
-        // This may be needed for proxy services that can process messages without reading their content.
-        // For example, a proxy may read messages or batches from one topic and send them to another topic without modification."
-        bool AllowUnsupportedCodecs = 8;
+        // Allow the server to send data encoded with any codec, ignoring supported_codecs.
+        // It is intended for proxies, which pass messages through without looking at their content:
+        // such a proxy may read messages and batches from one topic and write them to another one as is.
+        bool allow_unsupported_codecs = 8;
     }
 
     // Handshake response.
@@ -454,12 +460,13 @@ message StreamReadMessage {
 
         // Representation of sequence of client messages from one write session.
         message Batch {
-            // Filled exactly one of message_data or encoded_batches, it specified by codec or batch_codec.
+            // Exactly one of message_data and encoded_batches is filled, depending on codec.
 
-            // List of client messages.
+            // List of client messages. Filled if codec is a single-message codec (including a custom one).
             repeated MessageData message_data = 1;
 
-            repeated ReadEncodedBatch encoded_batch = 7; // may be message with metadata if need?
+            // Messages encoded as blobs. Filled if codec is a batch codec.
+            repeated ReadEncodedBatch encoded_batches = 7;
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];
@@ -467,23 +474,31 @@ message StreamReadMessage {
             // Client metadata attached to write session, the same for all messages in batch.
             map<string, string> write_session_meta = 3;
 
-            // Codec that is used for data compression.
-            // See enum Codec and MessagesBatchCodec above for values.
+            // Codec that is used to encode the data of this batch.
+            // See enum Codec above for values.
             int32 codec = 4;
 
             // Persist timestamp on server for batch.
             google.protobuf.Timestamp written_at = 5;
 
+            // Batch of client messages, encoded with a batch codec.
             message ReadEncodedBatch {
+                // Total uncompressed size of the message bodies in this batch.
                 int64 uncompressed_size = 1;
+
+                // Encoded batch body.
                 bytes data = 2;
 
-                // Count of messages.
+                // Number of messages in the batch.
                 int64 messages_count = 3;
+
+                // Sequence numbers of the first and the last messages of the batch, both inclusive.
                 int64 min_seq_no = 4;
                 int64 max_seq_no = 5;
 
-                OffsetsRange offsets = 7;
+                // Partition offsets occupied by the messages of the batch.
+                // Note that, unlike min_seq_no/max_seq_no, this range is half-open: offsets.end is exclusive.
+                OffsetsRange offsets = 6;
             }
         }
 

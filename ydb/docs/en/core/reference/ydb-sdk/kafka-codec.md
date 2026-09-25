@@ -2,12 +2,11 @@
 
 Usually every topic message is compressed separately with one of the [message codecs](../../concepts/datamodel/topic.md#message-codec). A *batch codec* works differently: a whole batch of messages is encoded into a single binary blob, which {{ ydb-short-name }} stores and transfers as is. Messages are extracted from such a blob either by the client (on read through the [Topic API](topic.md)) or by the server, when the same data has to be given out message by message.
 
-A batch codec is selected by the writer and is sent in the `batch_codec` field of `StreamWriteMessage.WriteRequest`; the encoded batch itself is sent in `StreamWriteMessage.WriteRequest.EncodedBatch`. The list of batch codecs allowed for a topic is returned by the server in `StreamWriteMessage.InitResponse.supported_message_batch_codecs`. The available values are listed in the `MessagesBatchCodec` enum of [ydb_topic.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_topic.proto).
+Batch codecs share the `Codec` enum of [ydb_topic.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_topic.proto) with the message codecs and occupy the value range from 20000 to 29999. A batch codec is selected by the writer and is sent in the `codec` field of `StreamWriteMessage.WriteRequest`; the encoded batch itself is sent in `StreamWriteMessage.WriteRequest.encoded_batch` instead of the usual `messages` list. The list of codecs allowed for a topic is returned by the server in `StreamWriteMessage.InitResponse.supported_codecs`.
 
 | Batch codec | Description |
 | --- | --- |
-| `MESSAGE_BATCH_CODEC_RAW` | No batch encoding: messages are passed as a regular list of protobuf messages, each one compressed with its own message codec. |
-| `MESSAGE_BATCH_CODEC_KAFKA_BATCH` | The batch is encoded as an Apache Kafka record batch, see [Kafka batch](#kafka-batch). |
+| `CODEC_BATCH_KAFKA` | The batch is encoded as an Apache Kafka record batch, see [Kafka batch](#kafka-batch). |
 
 ## Kafka batch {#kafka-batch}
 
@@ -101,12 +100,12 @@ Record batch fields:
 | `attributes`, bit 3 (`timestampType`) | No counterpart, `created_at` always holds the timestamp provided by the writer. |
 | `attributes`, bit 4 (`isTransactional`) | No counterpart, [topic transactions](../../concepts/datamodel/topic.md#topic-transactions) are expressed by the `tx` field of `StreamWriteMessage.WriteRequest`. |
 | `attributes`, bit 5 (`isControlBatch`) | No counterpart, control batches are not exposed as topic messages. |
-| `lastOffsetDelta` | `EncodedBatch.messages_count - 1`. |
+| `lastOffsetDelta` | `WriteEncodedBatch.messages_count - 1`. |
 | `baseTimestamp` | `created_at` of the first message of the batch. |
 | `maxTimestamp` | The largest `created_at` among the messages of the batch. |
 | `producerId`, `producerEpoch` | No counterpart, the writer is identified by the `producer_id` of the write session. Written as `0`. |
-| `baseSequence` | `EncodedBatch.min_seq_no` — the `seq_no` of the first message of the batch. |
-| `recordsCount` | `EncodedBatch.messages_count`. |
+| `baseSequence` | `WriteEncodedBatch.min_seq_no` — the `seq_no` of the first message of the batch. |
+| `recordsCount` | `WriteEncodedBatch.messages_count`. |
 | `records` | The messages of the batch themselves. |
 
 Record fields:
@@ -116,7 +115,7 @@ Record fields:
 | `length`, `attributes` | Framing of the binary format, no counterpart. |
 | `timestampDelta` | `created_at` = `baseTimestamp` + `timestampDelta`, in milliseconds. |
 | `offsetDelta` | `offset` = `baseOffset` + `offsetDelta`. |
-| `key` | Message key, `partition_key`. |
+| `key` | `message_group_id` — the message key. |
 | `value` | `data` — the message payload. |
 | `headers` | `metadata_items` — the message metadata. |
 
@@ -135,7 +134,7 @@ A writer sends three messages in one batch to a topic through a write session wi
 | 11 | `2025-01-01T00:00:00.150Z` (`1735689600150` ms) | `msg-2` | — |
 | 12 | `2025-01-01T00:00:00.400Z` (`1735689600400` ms) | `msg-3` | `k3` |
 
-With the `MESSAGE_BATCH_CODEC_KAFKA_BATCH` batch codec and no compression of the payloads, this turns into one record batch:
+With the `CODEC_BATCH_KAFKA` batch codec and no compression of the payloads, this turns into one record batch:
 
 ```text
 baseOffset            = 0                  // ignored on write, will be assigned by the server
@@ -157,8 +156,8 @@ records:
 The serialized batch is sent in `StreamWriteMessage.WriteRequest`:
 
 ```text
-batch_codec = MESSAGE_BATCH_CODEC_KAFKA_BATCH
-batch_data:
+codec = CODEC_BATCH_KAFKA
+encoded_batch:
   data              = <serialized record batch>
   messages_count    = 3
   min_seq_no        = 10

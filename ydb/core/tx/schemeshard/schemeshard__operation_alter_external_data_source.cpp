@@ -188,11 +188,7 @@ public:
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
         const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
-        if (!oldExternalDataSourceInfo) {
-            result->SetError(NKikimrScheme::StatusPathDoesNotExist, TStringBuilder()
-                << "External data source info not found for path " << dstPath.PathString());
-            return result;
-        }
+        AFL_ENSURE(oldExternalDataSourceInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
             externalDataSourceDescription,
             oldExternalDataSourceInfo->AlterVersion + 1

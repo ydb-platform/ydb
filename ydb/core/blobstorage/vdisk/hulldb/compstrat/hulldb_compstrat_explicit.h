@@ -50,6 +50,7 @@ namespace NKikimr::NHullComp {
                 } else if (sstIds.contains(iter.Get().SstPtr->AssignedSstId)) {
                     if (!levelOfInterest) {
                         Task->SetupAction(ActCompactSsts);
+                        Task->SelectStrategy = ESelectStrategy::Explicit;
                         levelOfInterest.emplace(level);
                         compact.TargetLevel = level;
                         if (!level) {

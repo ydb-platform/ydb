@@ -107,6 +107,11 @@ namespace NKikimr {
         , AddHeader(addHeader)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
+        , LsmCompactionRankGroups{{
+            {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::LogoBlobs)},
+            {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::Blocks)},
+            {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::Barriers)},
+        }}
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
     {}
 

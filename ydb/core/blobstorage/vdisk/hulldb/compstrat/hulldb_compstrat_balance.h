@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
+#include "hulldb_compstrat_ranks.h"
 #include "hulldb_compstrat_utils.h"
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 
@@ -118,12 +119,6 @@ namespace NKikimr {
                 : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts, isFullCompaction)
             {}
 
-            double CalculateRank() const {
-                const ui32 virtualLevel = 0;
-                double rank = Boundaries->GetRate(virtualLevel, SliceSnap.GetLevel0ChunksNum());
-                return rank;
-            }
-
             // find empty level to put compaction result to
             ui32 FindTargetLevel() const {
                 ui32 otherLevelsNum = SliceSnap.GetLevelXNumber();
@@ -227,66 +222,6 @@ namespace NKikimr {
                     bool &isFullCompaction)
                 : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts, isFullCompaction)
             {}
-
-            struct TRank {
-                double Rank = 0.0;
-                ui32 FreeLevels = 0;
-            };
-
-            TRank CalculateRank() const {
-                // total partially sorted levels
-                const ui32 totalPsl = Boundaries->SortedParts * 2;
-                ui32 otherLevelsNum = SliceSnap.GetLevelXNumber();
-                ui32 freeLevels = 0;
-                for (ui32 i = 0; i < totalPsl; i++) {
-                    if (i < otherLevelsNum) {
-                        const TSortedLevel &sl = SliceSnap.GetLevelXRef(i);
-                        freeLevels += !!sl.Empty();
-                    } else {
-                        freeLevels++;
-                    }
-                }
-
-                if (HullCtx->VCtx->ActorSystem) {
-                    LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: TBalancePartiallySortedLevels::CalculateRank: %s, "
-                                "freeLevels: %" PRIu32 ", totalPsl %" PRIu32,
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ToString().data(), freeLevels, totalPsl));
-                }
-
-                Y_ABORT_UNLESS(freeLevels <= totalPsl);
-                double rank = 0.0;
-                if (freeLevels == totalPsl) {
-                    rank = 0.0;
-                } else if (freeLevels == 0) {
-                    rank = 1000000.0;
-                } else {
-                    double step = 1.0 / totalPsl;
-                    rank = step * (totalPsl - freeLevels);
-                }
-
-                return {rank, freeLevels};
-            }
-
-            // Legend: n - no level, x - no data, D - has data
-            TString ToString() const {
-                ui32 otherLevelsNum = SliceSnap.GetLevelXNumber();
-                ui32 freeLevels = 0;
-                TStringStream str;
-                for (ui32 i = 0; i < Boundaries->SortedParts * 2; i++) {
-                    if (i < otherLevelsNum) {
-                        const TSortedLevel &sl = SliceSnap.GetLevelXRef(i);
-                        freeLevels += !!sl.Empty();
-                        str << (sl.Empty() ? "x " : "D ");
-                    } else {
-                        freeLevels++;
-                        str << "n ";
-                    }
-                }
-                return str.Str();
-            }
 
             void SelectSstsForCompaction(TKey *firstKeyToCover, TKey *lastKeyToCover) {
                 // vector of candidates to compact, we select thoses ssts with oldest lsns
@@ -406,16 +341,6 @@ namespace NKikimr {
                     bool &isFullCompaction)
                 : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts, isFullCompaction)
             {}
-
-            void CalculateRanks(std::vector<double> &ranks) {
-                Y_DEBUG_ABORT_UNLESS(ranks.size() == 2);
-                ui32 otherLevelsNum = SliceSnap.GetLevelXNumber();
-                for (ui32 i = Boundaries->SortedParts * 2; i < otherLevelsNum; i++) {
-                    ui32 virtualLevel = i - Boundaries->SortedParts * 2 + 2;
-                    double rank = Boundaries->GetRate(virtualLevel, SliceSnap.GetLevelXChunksNum(i));
-                    ranks.push_back(rank);
-                }
-            }
 
             void Compact(const ui32 virtualLevelToCompact) {
                 const ui32 srcLevel = virtualLevelToCompact - 2 + Boundaries->SortedParts * 2 + 1;
@@ -572,10 +497,12 @@ namespace NKikimr {
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TSelectorParams &params,
                     const TLevelIndexSnapshot &levelSnap,
-                    TTask *task)
+                    TTask *task,
+                    const TLevelRanks &ranks)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Ranks(ranks)
                 , RankThreshold(params.RankThreshold)
                 , FullCompactionAttrs(params.FullCompactionAttrs)
                 , Sublog({})
@@ -588,11 +515,13 @@ namespace NKikimr {
             {}
 
             EAction Select() {
-                TRanks ranks;
                 TInstant startTime(TAppData::TimeProvider->Now());
-                EAction action = BalanceLevelsTree(ranks);
+                EAction action = BalanceLevelsTree();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = Task->IsFullCompaction
+                        ? ESelectStrategy::BalanceFull
+                        : ESelectStrategy::BalanceLevel;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
@@ -603,7 +532,7 @@ namespace NKikimr {
                                 "%s: Balance: action# %s timeSpent# %s RankThreshold# %e ranks# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ActionToStr(action), (finishTime - startTime).ToString().data(),
-                                RankThreshold, ranks.ToString().data()));
+                                RankThreshold, Ranks.ToString().data()));
                 }
 
                 return action;
@@ -613,6 +542,7 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            const TLevelRanks &Ranks;
             const double RankThreshold;
             const std::optional<TFullCompactionAttrs> FullCompactionAttrs;
             TSublog<> Sublog;
@@ -620,45 +550,8 @@ namespace NKikimr {
             TBalancePartiallySortedLevels BalancePartiallySortedLevels;
             TBalanceLevelX BalanceLevelX;
 
-            struct TRanks : public std::vector<double> {
-                ui32 FreePartiallySortedLevelsNum = 0;
-                ui32 VirtualLevelToCompact = 0;
-
-                TRanks() {
-                    reserve(8);
-                }
-
-                TString ToString() const {
-                    TStringStream str;
-                    str  << "{VirtualLevelToCompact# " << VirtualLevelToCompact
-                    << " FreePartiallySortedLevelsNum# " << FreePartiallySortedLevelsNum
-                    << " Ranks# ";
-                    for (const auto &x : *this)
-                        str << " " << x;
-                    str << "}";
-                    return str.Str();
-                }
-            };
-
-            EAction BalanceLevelsTree(TRanks &ranks) {
-                // calculate ranks
-                ranks.push_back(BalanceLevel0.CalculateRank());
-                auto pslRank = BalancePartiallySortedLevels.CalculateRank();
-                ranks.push_back(pslRank.Rank);
-                ranks.FreePartiallySortedLevelsNum = pslRank.FreeLevels;
-                BalanceLevelX.CalculateRanks(ranks);
-
-                // find level to compact
-                Y_DEBUG_ABORT_UNLESS(!ranks.empty());
-                ranks.VirtualLevelToCompact = 0;
-                double maxRank = ranks[0];
-                for (ui32 i = 1; i < ranks.size(); i++) {
-                    if (ranks[i] > maxRank) {
-                        maxRank = ranks[i];
-                        ranks.VirtualLevelToCompact = i;
-                    }
-                }
-                Task->MaxRatio = maxRank;
+            EAction BalanceLevelsTree() {
+                const double maxRank = Ranks.GetMaxRank();
 
                 // fill in compaction task or do nothing
                 if (maxRank < RankThreshold) {
@@ -697,12 +590,12 @@ namespace NKikimr {
                 } else {
                     if (HullCtx->VCtx->ActorSystem) {
                         LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to compact, ranks# " << ranks.ToString());
+                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to compact, ranks# " << Ranks.ToString());
                     }
-                    switch (ranks.VirtualLevelToCompact) {
+                    switch (Ranks.VirtualLevelToCompact) {
                         case 0:     BalanceLevel0.Compact(); break;
                         case 1:     BalancePartiallySortedLevels.Compact(); break;
-                        default:    BalanceLevelX.Compact(ranks.VirtualLevelToCompact);
+                        default:    BalanceLevelX.Compact(Ranks.VirtualLevelToCompact);
                     }
                     return ActCompactSsts;
                 }

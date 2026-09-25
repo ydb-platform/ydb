@@ -34,6 +34,7 @@ namespace NKikimr {
                 // try to find what to delete
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::DelSst;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());

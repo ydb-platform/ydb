@@ -2,6 +2,7 @@
 
 #include "storage_settings.h"
 
+#include <ydb/core/fq/libs/checkpointing/checkpoint_provider_integration.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
@@ -15,6 +16,7 @@ std::unique_ptr<NActors::IActor> NewStorageProxy(
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    TCheckpointProviderIntegrations checkpointProviderIntegrations = {});
 
 } // namespace NFq

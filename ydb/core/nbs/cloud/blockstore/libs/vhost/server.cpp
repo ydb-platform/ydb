@@ -22,8 +22,10 @@
 
 #include <util/folder/path.h>
 #include <util/generic/map.h>
+#include <util/generic/scope.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
+#include <util/system/event.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 
@@ -105,6 +107,11 @@ struct TRequest
     NWilson::TSpan RootSpan;
 
     std::atomic_flag Completed = false;
+
+    // Signaled when the ProcessRequest call that linked this request
+    // returns. Stop waits on this so the endpoint is not destroyed while
+    // the executor is still inside that call.
+    TManualEvent ProcessRequestFinished;
 
     TRequest(
         ui64 requestId,
@@ -272,6 +279,7 @@ public:
         auto future = VhostDevice->Stop();
 
         auto cancelError = MakeError(E_CANCELLED, "Vhost endpoint is stopping");
+        TVector<TRequestPtr> requestsToWait;
         with_lock (RequestsLock) {
             TLog& Log = AppCtx.Log;
             STORAGE_INFO(
@@ -282,9 +290,17 @@ public:
             RequestsInFlight.ForEach(
                 [&](TRequest* request)
                 {
+                    requestsToWait.push_back(request);
                     CompleteRequest(*request, cancelError);
                     request->Unlink();
                 });
+        }
+
+        // Outside RequestsLock. The executor signals ProcessRequestFinished at
+        // the end of ProcessRequest and may still need the lock before
+        // that. Requests that already returned are signaled.
+        for (const auto& request: requestsToWait) {
+            request->ProcessRequestFinished.Wait();
         }
 
         if (deleteSocket) {
@@ -335,21 +351,30 @@ public:
     // a single device handler.
     void ProcessRequest(TVhostRequestPtr vhostRequest)
     {
+        // Holds the endpoint until this call returns. A request that is
+        // dequeued but not yet linked is invisible to Stop's wait.
+        auto self = shared_from_this();
+
         const auto requestType = vhostRequest->Type;
         auto request = RegisterRequest(std::move(vhostRequest));
         if (!request) {
             return;
         }
 
+        Y_DEFER
+        {
+            request->ProcessRequestFinished.Signal();
+        };
+
         switch (requestType) {
             case EBlockStoreRequest::WriteBlocks:
-                ProcessRequest<TWriteBlocksLocalMethod>(std::move(request));
+                ProcessRequest<TWriteBlocksLocalMethod>(request);
                 break;
             case EBlockStoreRequest::ReadBlocks:
-                ProcessRequest<TReadBlocksLocalMethod>(std::move(request));
+                ProcessRequest<TReadBlocksLocalMethod>(request);
                 break;
             case EBlockStoreRequest::ZeroBlocks:
-                ProcessRequest<TZeroBlocksMethod>(std::move(request));
+                ProcessRequest<TZeroBlocksMethod>(request);
                 break;
             default:
                 Y_ABORT(

@@ -22,8 +22,7 @@ using TActionState = Ydb::Maintenance::ActionState;
 
 constexpr ui64 PartitionId = 70001;
 
-// TCmsTestEnv boots the real CMS, with test whiteboard/cluster information.
-// Boot a real DBSC as well; observers only record their maintenance traffic.
+// Real CMS and DBSC with TCmsTestEnv's mocked cluster; observers only record traffic.
 class TRealDbsControllerEnv : public TCmsTestEnv {
 public:
     TRealDbsControllerEnv()
@@ -49,8 +48,7 @@ public:
     }
 
     void WaitForDbsController() {
-        // Bootstrap/reboot is asynchronous. A retrying pipe waits until the
-        // tablet is discoverable and accepts connections; ResolveTablet does not.
+        // Unlike ResolveTablet, a retrying pipe waits for asynchronous bootstrap/reboot.
         const auto edge = AllocateEdgeActor();
         const auto pipe = ConnectToPipe(MakeDbsControllerID(), edge, 0, GetPipeConfigWithRetries());
         const auto connected = GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(edge, TDuration::Seconds(30));
@@ -230,7 +228,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2RealDbsControllerTest) {
         UNIT_ASSERT_VALUES_EQUAL(stored.action_group_states(0).action_states(0).action_uid().action_id(), permission.GetId());
         env.CheckListPermissions("test-user", 1);
 
-        // Approval persists through the same transaction as ordinary grants.
+        // Manually approved permissions survive CMS restart.
         env.RestartCms();
         env.CheckActions(env.CheckMaintenanceTaskGet("manual-task", Ydb::StatusIds::SUCCESS), {1}, true);
         env.CheckListPermissions("test-user", 1);

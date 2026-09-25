@@ -388,10 +388,8 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
     for (const auto &entry : ClusterInfo->AllNodes()) {
         const auto &node = *entry.second;
         TErrorInfo lockError;
-        // An issued permission may already be in use, regardless of priority
-        // or the node's physical state. Keep own permissions on refresh too.
-        // For other restrictions reuse CMS time and scheduling rules without
-        // changing the snapshot's PriorityToCheck or simulating new locks.
+        // Issued permissions may be in use: include all, even this task's, regardless of priority.
+        // Check other restrictions with CMS time/priority rules without changing the snapshot.
         if (!node.Locks.empty()
             || node.IsLocked(lockError, State->Config.DefaultRetryTime, now, horizon, request.GetPriority()))
         {
@@ -419,8 +417,7 @@ void TCms::StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
     pending->RequestId = requestId;
     if (requestId) {
         if (const auto it = State->ScheduledRequests.find(requestId); it != State->ScheduledRequests.end()) {
-            // Keep the stored request separately: the effective request can
-            // override availability mode or priority for this attempt.
+            // Compare freshness against the stored request, not the priority-adjusted copy.
             pending->ScheduledRequest.ConstructInPlace(it->second);
         }
         if (const auto it = State->MaintenanceRequests.find(requestId); it != State->MaintenanceRequests.end()) {
@@ -598,8 +595,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     };
 
     if (precheckError) {
-        // DBSC rejects the whole batch. Keep all actions pending without
-        // running per-action checks or trying smaller subsets of nodes.
+        // DBSC rejects the whole batch: keep actions pending without per-action or subset checks.
         response.MutableStatus()->SetCode(precheckError->Code);
         response.MutableStatus()->SetReason(precheckError->Reason.GetMessage());
         response.SetDeadline(precheckError->Deadline.GetValue());
@@ -1895,9 +1891,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             ev, TStatus::WRONG_REQUEST, "Unknown request for manual approval", ctx);
     }
 
-    // Manual approval bypasses CheckAction. Scheduled actions may not have
-    // been validated yet (e.g. deferred by quota), so do not silently skip
-    // unresolved node targets when constructing the DBSC batch.
+    // Manual approval bypasses CheckAction; quota-deferred actions may still be unvalidated.
+    // Reject unresolved targets rather than silently omitting them from the DBSC batch.
     auto permissionRequest = it->second.Request;
     permissionRequest.SetPriority(Min<i32>());
     TErrorInfo error;
@@ -3046,7 +3041,6 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
         }
         if (!nodeIds.empty()) {
-            // Reuse the CMS budget for waiting on external cluster information.
             StartNbs2MaintenanceCheck(ev.Release(), rec, {}, std::move(nodeIds), State->Config.InfoCollectionTimeout,
                 [this, requestStartTime](TAutoPtr<IEventHandle> &request,
                     const TEvPrivate::TEvNbs2MaintenanceResult &result, const TActorContext &ctx)
@@ -3232,8 +3226,7 @@ void TCms::ProcessCheckRequest(TEvCms::TEvCheckRequest::TPtr &ev,
 
     auto &rec = ev->Get()->Record;
     TString user = rec.GetUser();
-    // Handle or IsNbs2MaintenanceRequestCurrent checked existence before
-    // this synchronous continuation. Only reacquire the current request here.
+    // Handle or IsNbs2MaintenanceRequestCurrent checked existence in this same event.
     auto &request = State->ScheduledRequests.at(rec.GetRequestId());
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     TRequestInfo scheduled;

@@ -364,21 +364,16 @@ private:
     void AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const;
     TDuration GetPermissionDuration(const NKikimrCms::TPermissionRequest &request,
         const NKikimrCms::TAction &action) const;
-    // Prepare a sorted, unique batch after tenant expansion and before local
-    // permission checks. Does not validate actions; an empty result does not
-    // imply that the request is valid.
+    // Sorted, unique target and locked nodes after tenant expansion, before local checks.
+    // Does not validate actions; an empty batch does not imply a valid request.
     bool CollectNbs2MaintenanceNodes(const NKikimrCms::TPermissionRequest &request,
         TVector<ui32> &nodeIds,
         TErrorInfo &error,
         const TActorContext &ctx) const;
-    // Called from a dequeued request, after tenant expansion and before any
-    // local permission checks or temporary changes to ClusterInfo. The caller
-    // checks the feature gate and collects a non-empty batch first.
-    // requestId is empty for create; refresh/manual approval pass the existing
-    // scheduled request id. Their effective request must not modify State.
-    // The continuation must finish local checks and publish accepted in-memory
-    // locks before returning, recalculating the quota from the live task.
-    // It must not defer processing to another event or use a saved quota.
+    // Call before local checks for a dequeued request with NBS2 enabled and a non-empty batch.
+    // Do not mutate stored requests or add temporary locks; requestId is empty for create.
+    // The continuation must use live quotas and publish accepted locks before returning:
+    // the CMS queue resumes immediately afterwards.
     void StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
         const NKikimrCms::TPermissionRequest &permissionRequest, const TString &requestId,
         TVector<ui32> nodeIds, TDuration timeout,

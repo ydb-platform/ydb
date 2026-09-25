@@ -30,8 +30,7 @@ from ydb.tests.library.harness.util import LogLevels
 
 # MakeDbsControllerID(): MakeTabletID(false, 0x2004), the default domain.
 DBSC_TABLET_ID = (1 << 56) | 0x2004
-# CMS derives task ownership from the authenticated gRPC user. Without an
-# explicit ticket, optional authentication can leave UserToken empty.
+# An explicit ticket supplies the UserToken CMS needs to identify the task owner.
 ADMIN_METADATA = (('x-ydb-auth-ticket', 'root@builtin'), ('x-ydb-database', '/Root'))
 
 
@@ -94,11 +93,9 @@ class TestCmsNbs2Maintenance(NbsTestBase):
         return groups
 
     def _seed_dbsc_map(self, tablet_id, groups):
-        """TEST-ONLY shortcut: write both DBSC indexes using its real persisted schema.
-
-        There is no partition publisher yet. This intentionally does NOT test
-        TEvUpdateDDiskMapRequest, publication retries or subsequent health updates.
-        DBSC reads these tables on each permission check, with no in-memory cache.
+        """Test-only seeding until partition publication is implemented.
+        Writes both DBSC indexes, read directly by maintenance checks without caching.
+        Bypasses TEvUpdateDDiskMapRequest, publication retries and health updates.
         """
         request = ExecuteTabletMiniKQLRequest(tablet_id=DBSC_TABLET_ID)
         updates = []
@@ -148,9 +145,8 @@ class TestCmsNbs2Maintenance(NbsTestBase):
 
     @staticmethod
     def _pick_nodes(groups):
-        # DDisk and PBuffer of a logical host need not be on the same node.
-        # Pick nodes each affecting at most one host per DBG, but two together
-        # affecting two DIFFERENT hosts in at least one DBG.
+        # DDisk/PBuffer may be on different nodes. Pick nodes affecting <=1 host per DBG
+        # individually, but two distinct hosts in at least one DBG together.
         affected = defaultdict(set)
         for index, group in groups.items():
             for host, disks in enumerate(group.DDiskIds):
@@ -176,8 +172,7 @@ class TestCmsNbs2Maintenance(NbsTestBase):
         request = maintenance.CreateMaintenanceTaskRequest()
         request.task_options.task_uid = uid
         request.task_options.description = 'NBS2 functional test with seeded DBSC map'
-        # Isolate NBS2 restrictions from VDisk/state-storage startup restrictions.
-        # FORCE must NOT bypass DBSC.
+        # FORCE bypasses VDisk/state-storage availability checks, but must still consult DBSC.
         request.task_options.availability_mode = maintenance.AVAILABILITY_MODE_FORCE
         request.task_options.dry_run = dry_run
         request.task_options.max_inflight_actions = max_inflight
@@ -185,8 +180,7 @@ class TestCmsNbs2Maintenance(NbsTestBase):
             lock = request.action_groups.add().actions.add().lock_action
             lock.scope.node_id = node
             lock.duration.seconds = 600
-        # Keep operation.issues: a denied dry-run has no persisted PENDING
-        # actions, and reports its denial reason as a top-level warning.
+        # Return the full response: dry-run denial is reported in operation.issues.
         return self.cms.CreateMaintenanceTask(request, metadata=ADMIN_METADATA, timeout=60)
 
     def _refresh(self, uid):

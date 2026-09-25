@@ -6,8 +6,7 @@
 
 namespace NKikimr::NCms {
 
-// Check one batch through DBSController and send TEvNbs2MaintenanceResult to
-// client.
+// Check one batch through DBSController; reply to client with TEvNbs2MaintenanceResult.
 IActor* CreateNbs2MaintenanceChecker(const TActorId& client, ui64 attemptId,
     TVector<ui32> nodeIds, TDuration timeout);
 

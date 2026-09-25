@@ -36,8 +36,7 @@ struct TClient {
     ui64 Cookie;
 };
 
-// Exercise the real CMS through its events. Only DBSC is substituted, and its
-// reply can be held while other client requests and transactions are processed.
+// Real CMS in TCmsTestEnv's mocked cluster; hold DBSC replies to test interleavings.
 class TCmsFixture {
 public:
     explicit TCmsFixture(ui32 vdisks = 1)
@@ -51,8 +50,7 @@ public:
             if (ev->GetTypeRewrite() == TEvTabletResolver::TEvForward::EventType
                 && ev->Get<TEvTabletResolver::TEvForward>()->TabletID == MakeDbsControllerID())
             {
-                // Keep the real resolver and the environment's whiteboard/BSC
-                // mocks intact: override discovery of DBSC only.
+                // Redirect only DBSC discovery; preserve the rest of TCmsTestEnv.
                 ev->Rewrite(ev->GetTypeRewrite(), Controller);
             }
             if (auto it = Responses.find(ev->GetRecipientRewrite()); it != Responses.end()) {
@@ -137,7 +135,6 @@ public:
     TAttempt WaitForCheck(size_t count, const TClient& client) {
         Await([&] { return State.Requests.size() >= count || HasResponse(client); },
             "CMS neither started the NBS2 check nor replied to the client");
-        // Fail explicitly if the handler bypassed the NBS2 check.
         UNIT_ASSERT_VALUES_EQUAL_C(State.Requests.size(), count,
             "CMS replied without starting the NBS2 check");
         UNIT_ASSERT_C(!HasResponse(client), "CMS must wait for DBSC before replying");
@@ -194,8 +191,7 @@ public:
 
     TClient Request(ui32 nodeIndex) {
         auto request = MakePermissionRequest(TRequestOptions(User), Shutdown(nodeIndex));
-        // Isolate the asynchronous NBS2 gate from VDisk availability checks.
-        // FORCE must not bypass DBSC, unlike the local failure model.
+        // FORCE bypasses VDisk availability checks, but must still consult DBSC.
         request->Record.SetAvailabilityMode(NKikimrCms::MODE_FORCE_RESTART);
         return Send(request.Release());
     }
@@ -239,8 +235,7 @@ public:
     }
 
     TString SeedScheduled(const NKikimrCms::TAction& action, const TString& taskId) {
-        // Store a real task with a waiting action, but no permission. Creating
-        // the fixture must not depend on the NBS2 integration under test.
+        // Seed a pending task without permissions or dependence on the NBS2 check under test.
         SetIntegration(false);
         auto request = MakePermissionRequest(TRequestOptions(User, true, false, true), action);
         request->Record.SetMaintenanceTaskId(taskId);
@@ -376,8 +371,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
                 UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).ActionsSize(), 1);
             }
 
-            // A discarded ALLOW must also release the queue, without a hidden
-            // second DBSC check for the outdated attempt.
+            // Discarding ALLOW must resume the queue without retrying the outdated check.
             const auto next = fixture.Request(2);
             const auto nextAttempt = fixture.WaitForCheck(2, next);
             fixture.Complete(nextAttempt, EOutcome::Allow);
@@ -536,8 +530,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         const auto queued = fixture.Request(2);
         fixture.Drain();
 
-        // Validate CMS guards, not just the checker's cookie filter. Correct
-        // attempt from a wrong sender and vice versa must both be ignored.
+        // Inject into CMS directly to check sender and attempt guards, bypassing the checker.
         fixture.InjectResult(fixture.Controller, secondAttempt.Id);
         fixture.InjectResult(secondAttempt.Checker, secondAttempt.Id + 1);
         fixture.InjectResult(firstAttempt.Checker, firstAttempt.Id);
@@ -562,8 +555,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         const auto next = fixture.Request(3);
         const auto nextAttempt = fixture.WaitForCheck(3, next);
         fixture.CheckNodes(2, {0, 3}); // Neither pending nor queued requests acquired locks.
-        // Attempt counters may restart along with CMS. Even a matching id must
-        // not let a result from the previous checker complete this request.
+        // Attempt IDs can repeat after restart; the old checker's sender must still be rejected.
         fixture.InjectResult(secondAttempt.Checker, nextAttempt.Id);
         UNIT_ASSERT(!fixture.HasResponse(next));
         fixture.Permissions(1);
@@ -899,8 +891,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
                 MakeActionGroup(MakeLockAction(fixture.Env.GetNodeId(0), fixture.Duration)),
                 MakeActionGroup(MakeLockAction(fixture.Env.GetNodeId(1), fixture.Duration)));
 
-            // Public API adapters reply with cookie 0; unlike direct CMS
-            // requests, they do not propagate the incoming event's cookie.
+            // Public API adapters do not propagate the request cookie; they reply with 0.
             const auto client = fixture.Send(request.Release(), 0);
             const auto attempt = fixture.WaitForCheck(1, client);
             fixture.CheckNodes(0, {0, 1, 2});
@@ -956,7 +947,7 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
                     fixture.User, NKikimrCms::TManageRequestRequest::LIST, false).Release());
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Response<TEvCms::TEvManageRequestResponse>(list, TStatus::OK).RequestsSize(), 0);
             } else {
-                checkActions(stored.GetResult()); // Waiting actions survive the response.
+                checkActions(stored.GetResult());
             }
             fixture.Drain();
             UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);

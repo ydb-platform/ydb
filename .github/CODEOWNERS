@@ -202,6 +202,7 @@
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage
+/ydb/library/actors/interconnect/rdma @ydb-platform/nb_dev
 /ydb/core/blobstorage @ydb-platform/blobstorage
 /ydb/core/mind/bscontroller @ydb-platform/blobstorage
 /ydb/library/pdisk_io @ydb-platform/blobstorage

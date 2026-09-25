@@ -62,14 +62,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         resourceManager.SetQueryMemoryLimit(memoryLimit);
-        // the limits below are tuned for the row dispatcher allocations alone: the memory arena would charge the
-        // prepaid memory of the query tasks to the same node total
-        resourceManager.SetEnableMemoryArena(false);
+        // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
+        // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
+        resourceManager.SetExecutionUnitMemory(100);
+        resourceManager.SetMemoryArenaMinFreeSize(0);
+        resourceManager.SetMemoryArenaMaxFreeSize(0);
         auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);
         queue->MutableLimit()->SetMemory(memoryLimit);
-        resourceManager.SetMkqlLightProgramMemoryLimit(1_MB);
-        resourceManager.SetMkqlHeavyProgramMemoryLimit(1_MB);
+        resourceManager.SetMkqlLightProgramMemoryLimit(128_KB);
+        resourceManager.SetMkqlHeavyProgramMemoryLimit(128_KB);
         resourceManager.SetChannelBufferSize(128_KB);
     }
 
@@ -101,6 +103,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
         constexpr ui64 memoryLimit = 8_MB;
         ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
         const auto pqGateway = SetupMockPqGateway();
@@ -132,6 +135,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnReadSessionCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
         ConfigureRowDispatcherMemoryLimit(*this, 12_MB);
         const auto pqGateway = SetupMockPqGateway();
         CreateRowDispatcherMemoryLimitTopics(*this);
@@ -149,6 +153,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnLargeMessage, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
         ConfigureRowDispatcherMemoryLimit(*this, 64_MB);
         CreateRowDispatcherMemoryLimitTopics(*this);
         ExecQuery(R"(

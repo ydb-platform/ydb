@@ -159,6 +159,7 @@ void TKeyValueState::Clear() {
     NextLogoBlobCookie = 1;
     Index.clear();
     RefCounts.clear();
+    StateBytes = {};
     CompletedVacuumGeneration = 0;
     CompletedVacuumTrashGeneration = 0;
 
@@ -459,6 +460,14 @@ void TKeyValueState::CountTrashDeleted(const TLogoBlobID& id) {
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }
 
+void TKeyValueState::PublishStateBytesCounters() {
+    TabletCounters->Simple()[COUNTER_MEMORY_STATE_BYTES].Set(StateBytes.Total());
+    TabletCounters->Simple()[COUNTER_MEMORY_INDEX_BYTES].Set(StateBytes.IndexBytes);
+    TabletCounters->Simple()[COUNTER_MEMORY_INLINE_DATA_BYTES].Set(StateBytes.InlineDataBytes);
+    TabletCounters->Simple()[COUNTER_MEMORY_REF_COUNTS_BYTES].Set(StateBytes.RefCountsBytes);
+    TabletCounters->Simple()[COUNTER_MEMORY_TRASH_BYTES].Set(StateBytes.TrashBytes);
+}
+
 void TKeyValueState::CountOverrun() {
     TabletCounters->Cumulative()[COUNTER_REQ_OVERRUN].Increment(1);
 }
@@ -537,15 +546,16 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
         }
         case EIT_KEYVALUE_1:
         {
-            TIndexRecord &record = Index[arbitraryPart];
             TString errorInfo;
             bool isOk = false;
-            EItemType headerItemType = TIndexRecord::ReadItemType(value);
-            if (headerItemType == EIT_KEYVALUE_1) {
-                isOk = record.Deserialize1(value, errorInfo);
-            } else {
-                isOk = record.Deserialize2(value, errorInfo);
-            }
+            const TIndexRecord& record = ModifyIndexRecord(arbitraryPart, [&](TIndexRecord& record) {
+                EItemType headerItemType = TIndexRecord::ReadItemType(value);
+                if (headerItemType == EIT_KEYVALUE_1) {
+                    isOk = record.Deserialize1(value, errorInfo);
+                } else {
+                    isOk = record.Deserialize2(value, errorInfo);
+                }
+            });
             if (!isOk) {
                 TStringStream str;
                 str << " Tablet# " << TabletId;
@@ -561,7 +571,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             }
             for (const TIndexRecord::TChainItem& item : record.Chain) {
                 if (!item.IsInline()) {
-                    const ui32 newRefCount = ++RefCounts[item.LogoBlobId];
+                    const ui32 newRefCount = ++GetOrCreateRefCount(item.LogoBlobId);
                     if (newRefCount == 1) {
                         CountWriteRecord(item.LogoBlobId);
                     }
@@ -575,7 +585,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             Y_ABORT_UNLESS(value.size() == 0);
             Y_ABORT_UNLESS(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
             const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data();
-            GetCurrentTrashBin().insert(trashKey->LogoBlobId);
+            InsertTrash(GetCurrentTrashBin(), trashKey->LogoBlobId);
             TotalTrashSize += trashKey->LogoBlobId.BlobSize();
             CountInitialTrashRecord(trashKey->LogoBlobId);
             break;
@@ -1001,7 +1011,7 @@ void TKeyValueState::DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool
         if (it->second != 1) { // just drop the reference, item kept alive
             --it->second;
         } else if (initial && !writesMade) { // this was just generated BlobId and no writes were possibly made
-            RefCounts.erase(it);
+            EraseRefCount(it);
         } else { // this item has to be removed inside tx by rotation to Trash -- it may have been written somehow
             return false;
         }
@@ -1009,6 +1019,7 @@ void TKeyValueState::DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool
     };
 
     refCountsIncr.erase(std::remove_if(refCountsIncr.begin(), refCountsIncr.end(), pred), refCountsIncr.end());
+    PublishStateBytesCounters();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1196,40 +1207,41 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
-    TIndexRecord& record = Index[request.Key];
-    Dereference(record, db);
-
-    record.Chain = {};
     ui32 storage_channel = 0;
-    if (request.Status == NKikimrProto::SCHEDULED) {
-        TRope inlineData = request.Data;
-        const size_t size = inlineData.size();
-        record.Chain.push_back(TIndexRecord::TChainItem(std::move(inlineData), 0));
-        CountWriteRecord(TLogoBlobID(0, 0, 0, 0, size, 0));
-        request.Status = NKikimrProto::OK;
-        storage_channel = InlineStorageChannelInPublicApi;
-    } else {
-        int channel = -1;
+    ModifyIndexRecord(request.Key, [&](TIndexRecord& record) {
+        Dereference(record, db);
 
-        ui64 offset = 0;
-        for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
-            record.Chain.push_back(TIndexRecord::TChainItem(logoBlobId, offset));
-            offset += logoBlobId.BlobSize();
-            CountWriteRecord(logoBlobId);
-            if (channel == -1) {
-                channel = logoBlobId.Channel();
-            } else {
-                // all blobs from the same write must be within the same channel
-                Y_ABORT_UNLESS(channel == (int)logoBlobId.Channel());
+        record.Chain = {};
+        if (request.Status == NKikimrProto::SCHEDULED) {
+            TRope inlineData = request.Data;
+            const size_t size = inlineData.size();
+            record.Chain.push_back(TIndexRecord::TChainItem(std::move(inlineData), 0));
+            CountWriteRecord(TLogoBlobID(0, 0, 0, 0, size, 0));
+            request.Status = NKikimrProto::OK;
+            storage_channel = InlineStorageChannelInPublicApi;
+        } else {
+            int channel = -1;
+
+            ui64 offset = 0;
+            for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
+                record.Chain.push_back(TIndexRecord::TChainItem(logoBlobId, offset));
+                offset += logoBlobId.BlobSize();
+                CountWriteRecord(logoBlobId);
+                if (channel == -1) {
+                    channel = logoBlobId.Channel();
+                } else {
+                    // all blobs from the same write must be within the same channel
+                    Y_ABORT_UNLESS(channel == (int)logoBlobId.Channel());
+                }
             }
+            storage_channel = channel + MainStorageChannelInPublicApi;
+
+            ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
         }
-        storage_channel = channel + MainStorageChannelInPublicApi;
 
-        ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
-    }
-
-    record.CreationUnixTime = request.CreationUnixTime;
-    UpdateKeyValue(request.Key, record, db);
+        record.CreationUnixTime = request.CreationUnixTime;
+        UpdateKeyValue(request.Key, record, db);
+    });
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1248,19 +1260,20 @@ void TKeyValueState::ProcessCmd(TIntermediate::TPatch &request,
         ISimpleDb &db, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 unixTime,
         TIntermediate* /*intermediate*/)
 {
-    TIndexRecord& record = Index[request.PatchedKey];
-    Dereference(record, db);
+    ModifyIndexRecord(request.PatchedKey, [&](TIndexRecord& record) {
+        Dereference(record, db);
 
-    record.Chain = {};
+        record.Chain = {};
 
-    record.Chain.push_back(TIndexRecord::TChainItem(request.PatchedBlobId, 0));
-    CountWriteRecord(request.PatchedBlobId); // TODO(kruall) change to CountPatchRecord
+        record.Chain.push_back(TIndexRecord::TChainItem(request.PatchedBlobId, 0));
+        CountWriteRecord(request.PatchedBlobId); // TODO(kruall) change to CountPatchRecord
+
+        record.CreationUnixTime = unixTime;
+        UpdateKeyValue(request.PatchedKey, record, db);
+    });
 
     ui32 storage_channel = request.PatchedBlobId.Channel() + MainStorageChannelInPublicApi;
     // ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
-
-    record.CreationUnixTime = unixTime;
-    UpdateKeyValue(request.PatchedKey, record, db);
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1285,7 +1298,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
         stat.DeleteBytes += it->second.GetFullValueSize();
         Dereference(it->second, db);
         EraseKey(it->first, db);
-        Index.erase(it);
+        EraseIndexRecord(it);
     });
 
     if (legacyResponse) {
@@ -1301,7 +1314,6 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
 {
     auto oldIter = Index.find(request.OldKey);
     Y_ABORT_UNLESS(oldIter != Index.end());
-    TIndexRecord& source = oldIter->second;
 
     // a rename onto itself changes nothing; the generic path would trash the value and erase the record
     if (request.OldKey == request.NewKey) {
@@ -1311,15 +1323,15 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
         return;
     }
 
-    TIndexRecord& dest = Index[request.NewKey];
-    Dereference(dest, db);
-    dest.Chain = std::move(source.Chain);
-    dest.CreationUnixTime = request.CreationUnixTime;
-
     EraseKey(oldIter->first, db);
-    Index.erase(oldIter);
+    TVector<TIndexRecord::TChainItem> chain = EraseIndexRecord(oldIter);
 
-    UpdateKeyValue(request.NewKey, dest, db);
+    ModifyIndexRecord(request.NewKey, [&](TIndexRecord& dest) {
+        Dereference(dest, db);
+        dest.Chain = std::move(chain);
+        dest.CreationUnixTime = request.CreationUnixTime;
+        UpdateKeyValue(request.NewKey, dest, db);
+    });
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1347,7 +1359,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
             if (item.IsInline()) {
                 inlineSize += item.GetSize();
             } else {
-                ++RefCounts[item.LogoBlobId];
+                ++GetOrCreateRefCount(item.LogoBlobId);
                 intermediate->RefCountsIncr.emplace_back(item.LogoBlobId, false);
             }
         }
@@ -1356,11 +1368,12 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
         }
 
         TString newKey = request.PrefixToAdd + it->first.substr(request.PrefixToRemove.size());
-        TIndexRecord& record = Index[newKey];
-        Dereference(record, db);
-        record.Chain = sourceRecord.Chain;
-        record.CreationUnixTime = sourceRecord.CreationUnixTime;
-        UpdateKeyValue(newKey, record, db);
+        ModifyIndexRecord(newKey, [&](TIndexRecord& record) {
+            Dereference(record, db);
+            record.Chain = sourceRecord.Chain;
+            record.CreationUnixTime = sourceRecord.CreationUnixTime;
+            UpdateKeyValue(newKey, record, db);
+        });
     }
 
     if (legacyResponse) {
@@ -1390,7 +1403,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
             } else {
                 const TLogoBlobID& id = chainItem.LogoBlobId;
                 chain.push_back(TIndexRecord::TChainItem(id, offset));
-                ++RefCounts[id];
+                ++GetOrCreateRefCount(id);
                 intermediate->RefCountsIncr.emplace_back(id, false);
             }
             offset += chainItem.GetSize();
@@ -1402,15 +1415,16 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
         if (!request.KeepInputs) {
             Dereference(input, db);
             EraseKey(it->first, db);
-            Index.erase(it);
+            EraseIndexRecord(it);
         }
     }
 
-    TIndexRecord& record = Index[request.OutputKey];
-    Dereference(record, db);
-    record.Chain = std::move(chain);
-    record.CreationUnixTime = unixTime;
-    UpdateKeyValue(request.OutputKey, record, db);
+    ModifyIndexRecord(request.OutputKey, [&](TIndexRecord& record) {
+        Dereference(record, db);
+        record.Chain = std::move(chain);
+        record.CreationUnixTime = unixTime;
+        UpdateKeyValue(request.OutputKey, record, db);
+    });
 
     if (legacyResponse) {
         legacyResponse->SetStatus(NKikimrProto::OK);
@@ -1544,7 +1558,7 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
                         YDB_LOG_WARN("Trimming",
                             {"keyValue", TabletId},
                             {"id", id});
-                        GetCurrentTrashBin().insert(id);
+                        InsertTrash(GetCurrentTrashBin(), id);
                         TotalTrashSize += id.BlobSize();
                         CountUncommittedTrashRecord(id);
                         THelpers::DbUpdateTrash(id, db);
@@ -1871,6 +1885,81 @@ bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, I
     return true;
 }
 
+TKeyValueState::TStateBytes TKeyValueState::GetIndexRecordBytes(const TString& key, const TIndexRecord& record) {
+    TStateBytes bytes;
+    bytes.IndexBytes = IndexNodeBytes + key.size() + record.Chain.size() * ChainItemBytes;
+    for (const TIndexRecord::TChainItem& item : record.Chain) {
+        if (item.IsInline()) {
+            bytes.InlineDataBytes += item.InlineData.size();
+        }
+    }
+    return bytes;
+}
+
+void TKeyValueState::SubtractStateBytes(ui64& total, ui64 bytes) {
+    Y_DEBUG_ABORT_UNLESS(total >= bytes);
+    if (total < bytes) {
+        TabletCounters->Cumulative()[COUNTER_MEMORY_STATE_BYTES_UNDERFLOWS].Increment(1);
+    }
+    total -= Min(total, bytes);
+}
+
+void TKeyValueState::AccountIndexRecord(const TString& key, const TIndexRecord& record) {
+    const TStateBytes bytes = GetIndexRecordBytes(key, record);
+    StateBytes.IndexBytes += bytes.IndexBytes;
+    StateBytes.InlineDataBytes += bytes.InlineDataBytes;
+}
+
+void TKeyValueState::UnaccountIndexRecord(const TString& key, const TIndexRecord& record) {
+    const TStateBytes bytes = GetIndexRecordBytes(key, record);
+    SubtractStateBytes(StateBytes.IndexBytes, bytes.IndexBytes);
+    SubtractStateBytes(StateBytes.InlineDataBytes, bytes.InlineDataBytes);
+}
+
+TVector<TIndexRecord::TChainItem> TKeyValueState::EraseIndexRecord(TIndex::iterator it) {
+    UnaccountIndexRecord(it->first, it->second);
+    TVector<TIndexRecord::TChainItem> chain = std::move(it->second.Chain);
+    Index.erase(it);
+    return chain;
+}
+
+ui32& TKeyValueState::GetOrCreateRefCount(const TLogoBlobID& id) {
+    const auto [it, inserted] = RefCounts.try_emplace(id, 0);
+    if (inserted) {
+        StateBytes.RefCountsBytes += RefCountNodeBytes;
+    }
+    return it->second;
+}
+
+void TKeyValueState::EraseRefCount(THashMap<TLogoBlobID, ui32>::iterator it) {
+    RefCounts.erase(it);
+    SubtractStateBytes(StateBytes.RefCountsBytes, RefCountNodeBytes);
+}
+
+void TKeyValueState::EraseTrash(TSet<TLogoBlobID>& trashBin, const TLogoBlobID& id) {
+    const size_t numErased = trashBin.erase(id);
+    Y_ABORT_UNLESS(numErased == 1);
+    SubtractStateBytes(StateBytes.TrashBytes, TrashNodeBytes);
+}
+
+void TKeyValueState::InsertTrash(TSet<TLogoBlobID>& trashBin, const TLogoBlobID& id) {
+    if (trashBin.insert(id).second) {
+        StateBytes.TrashBytes += TrashNodeBytes;
+    }
+}
+
+TKeyValueState::TStateBytes TKeyValueState::RecountStateBytes() const {
+    TStateBytes bytes;
+    for (const auto& [key, record] : Index) {
+        const TStateBytes recordBytes = GetIndexRecordBytes(key, record);
+        bytes.IndexBytes += recordBytes.IndexBytes;
+        bytes.InlineDataBytes += recordBytes.InlineDataBytes;
+    }
+    bytes.RefCountsBytes = RefCounts.size() * RefCountNodeBytes;
+    bytes.TrashBytes = GetTrashCount() * TrashNodeBytes;
+    return bytes;
+}
+
 void TKeyValueState::Dereference(const TIndexRecord& record, ISimpleDb& db) {
     ui32 inlineSize = 0;
     for (const TIndexRecord::TChainItem& item : record.Chain) {
@@ -1890,7 +1979,7 @@ void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, bool init
     Y_ABORT_UNLESS(it != RefCounts.end());
     --it->second;
     if (!it->second) {
-        RefCounts.erase(it);
+        EraseRefCount(it);
         db.AddTrash(id);
         TotalTrashSize += id.BlobSize();
         THelpers::DbUpdateTrash(id, db);
@@ -1903,10 +1992,13 @@ void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, bool init
 }
 
 void TKeyValueState::PushTrashBeingCommitted(TVector<TLogoBlobID>& trashBeingCommitted, const TActorContext& ctx) {
-    GetCurrentTrashBin().insert(trashBeingCommitted.begin(), trashBeingCommitted.end());
+    TSet<TLogoBlobID>& trashBin = GetCurrentTrashBin();
     for (const TLogoBlobID& id : trashBeingCommitted) {
+        InsertTrash(trashBin, id);
         CountTrashCommitted(id);
     }
+    // every state-changing transaction completes here, so the state size is published once per transaction
+    PublishStateBytesCounters();
     PrepareCollectIfNeeded(ctx);
 }
 
@@ -3478,7 +3570,7 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
         for (auto& logoBlobId : write.LogoBlobIds) {
             Y_ABORT_UNLESS(logoBlobId.TabletID() == 0);
             logoBlobId = AllocateLogoBlobId(logoBlobId.BlobSize(), logoBlobId.Channel(), intermediate->RequestUid);
-            ui32 newRefCount = ++RefCounts[logoBlobId];
+            ui32 newRefCount = ++GetOrCreateRefCount(logoBlobId);
             Y_ABORT_UNLESS(newRefCount == 1);
             intermediate->RefCountsIncr.emplace_back(logoBlobId, true);
         }
@@ -3487,7 +3579,7 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
     auto fixPatch = [&](TIntermediate::TPatch& patch) {
         Y_ABORT_UNLESS(patch.PatchedBlobId.TabletID() == 0);
         patch.PatchedBlobId = AllocatePatchedLogoBlobId(patch.PatchedBlobId.BlobSize(), patch.PatchedBlobId.Channel(), patch.OriginalBlobId, intermediate->RequestUid);
-        ui32 newRefCount = ++RefCounts[patch.PatchedBlobId];
+        ui32 newRefCount = ++GetOrCreateRefCount(patch.PatchedBlobId);
         Y_ABORT_UNLESS(newRefCount == 1);
         intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);
 
@@ -3511,6 +3603,8 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
             fixPatch(*patch);
         }
     }
+    // the new entries live until the storage request completes, publish them before the wait
+    PublishStateBytesCounters();
 
     ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info, tabletGeneration, this, GetLifetimeToken()));
 }

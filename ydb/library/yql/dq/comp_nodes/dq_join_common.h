@@ -1058,8 +1058,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 MKQL_ENSURE(!table->FutureGridProbeIndices.empty(),
                                             "missing current grid probe page index");
                                 table->PendingMatchWrites.push_back(
-                                    {.Write = SpillMatchBits(*Spiller_, *table->CurrentMatchBits,
-                                                            table->CurrentProbePack->NTuples),
+                                    {.Write = Spill(*Spiller_, *table->CurrentMatchBits),
                                      .GridProbeIndex = table->FutureGridProbeIndices.front()});
                             }
                             table->CurrentMatchBits.reset();
@@ -1104,8 +1103,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                     ExtractReadyFuture(std::move(*GetFrontOrNull(table->FutureMatchBits)));
                                 MKQL_ENSURE(buffer, "missing queued probe page match state");
                                 table->CurrentMatchBits = std::make_unique<TDynBitMap>();
-                                ParseMatchBits(std::move(*buffer), *table->CurrentMatchBits,
-                                               table->CurrentProbePack->NTuples);
+                                Parse(std::move(*buffer), *table->CurrentMatchBits);
+                                MKQL_ENSURE(table->CurrentMatchBits->Size() >=
+                                                static_cast<size_t>(table->CurrentProbePack->NTuples),
+                                            "probe page and match bitmap sizes differ");
                             }
                             table->ProbeResumeIndex = 0;
                         } else {

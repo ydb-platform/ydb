@@ -12,8 +12,15 @@ namespace NKikimr::NMiniKQL {
 
 
 NYql::TChunkedBuffer Serialize(TPackResult&& result);
+NYql::TChunkedBuffer Serialize(const TDynBitMap& bits);
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout);
+void Parse(NYql::TChunkedBuffer&& buffer, TDynBitMap& bits);
+
+template <typename T>
+NThreading::TFuture<ISpiller::TKey> Spill(ISpiller& spiller, T&& value) {
+    return spiller.Put(Serialize(std::forward<T>(value)));
+}
 
 struct BlobIdAndBucketIndex {
     bool IsReady() const {
@@ -53,17 +60,13 @@ inline ESpillResult Wait() {
     return ESpillResult::Spilling;
 }
 
-NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page);
-NThreading::TFuture<ISpiller::TKey> SpillMatchBits(ISpiller& spiller, const TDynBitMap& bits, size_t rows);
-void ParseMatchBits(NYql::TChunkedBuffer&& buffer, TDynBitMap& bits, size_t expectedRows);
-
 struct TSpillingPage {
     void StartSpilling(ISpiller& spiller) {
         if (ProbeMatchBits) {
-            MatchWrite = SpillMatchBits(spiller, *ProbeMatchBits, Page.NTuples);
+            MatchWrite = Spill(spiller, *ProbeMatchBits);
             ProbeMatchBits.reset();
         }
-        Write = SpillPage(spiller, std::move(Page));
+        Write = Spill(spiller, std::move(Page));
     }
 
     TPackResult Page;
@@ -168,7 +171,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                     while (bucket.IsSpilled() && !bucket.InMemoryPages().empty() && totalSpillingPages != 0) {
                         totalSpillingPages--;
                         SpillingPages_->push_back(
-                            {.BlobId = SpillPage(*Spiller_, *bucket.ReleaseAtMostOnePage()),
+                            {.BlobId = Spill(*Spiller_, *bucket.ReleaseAtMostOnePage()),
                              .BucketIndex = index});
                     }
                 }

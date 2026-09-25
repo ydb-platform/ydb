@@ -568,6 +568,7 @@ message TTableServiceConfig {
         optional uint64 IdlePingPeriodMs = 6 [default = 60000];
         optional uint64 IdleDestroyPeriodMs = 7 [default = 120000];
         optional uint64 LocalChannelColdInflightBytes = 9 [default = 524288];
+        optional uint64 UnboundWaitPeriodMs = 10 [default = 600000];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];

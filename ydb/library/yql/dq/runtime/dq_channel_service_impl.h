@@ -312,9 +312,14 @@ public:
     void AbortChannel(const TString& message);
     void AbortChannelByMemoryLimit(ui64 bytes);
     void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void HandleEarlyFinish(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    // all under FlowControlMutex
+    void DropSpilledData();
+    void DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
     // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
     // a descriptor auto-created by an early finish from the peer. It is assigned only once (nullptr to a
@@ -374,7 +379,13 @@ public:
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
 
-    std::queue<ui32> SpilledChunkBytes;
+    // a chunk in the storage and not loading yet, by blob id from TailBlobId + 1
+    struct TSpilledChunk {
+        ui32 Bytes;
+        bool Control; // a checkpoint or a finish, wanted by the peer after an early finish as well
+        bool Dropped = false; // skipped by the reload, the blob stays in the storage
+    };
+    std::deque<TSpilledChunk> SpilledChunks;
     ui64 HeadBlobId = 0;
     ui64 TailBlobId = 0;
     std::queue<TLoadingInfo> LoadingQueue;
@@ -403,6 +414,7 @@ public:
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finished = false;
     std::atomic<bool> FinishPushed = false;
+    std::atomic<bool> ConfirmFinishSent = false;
     std::atomic<bool> Leading = true;
     std::atomic<bool> PeerMemoryPressure = false; // last value reported by the peer (receiver) node
 
@@ -537,7 +549,8 @@ public:
     bool EarlyFinish();
     void Terminate();
     void AbortChannel(const TString& message);
-    void AbortChannelByMemoryLimit(ui64 bytes);
+    // the quota manager which rejected the allocation, the descriptor's own when not given
+    void AbortChannelByMemoryLimit(ui64 bytes, IMemoryQuotaManager::TPtr quotaManager = nullptr);
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -697,6 +710,7 @@ public:
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void HandlePoison();
     void HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev);
     void HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev);
@@ -711,6 +725,7 @@ public:
     void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
     void FailOutputs(const TString& reason);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
+    void SendAckOk(const TChannelInfo& info, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters();
@@ -720,6 +735,8 @@ public:
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    // the progress of every input descriptor once more, for a sender which may have missed it; under Mutex
+    void ResendUpdates();
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major, char logSymbol);
@@ -757,7 +774,6 @@ public:
     const ui64 MaxInflightMessages = 8192;
     mutable std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
     std::atomic<ui64> WaitersQueueSize = 0;
-    const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconciliation = 1;
     // when the Queue last moved: a pop, a push into an empty Queue, or the resend of a reconciliation.
     // Written under Mutex; atomic for the mon page. The age of the front is not the same thing: on a slow
@@ -783,12 +799,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesResent;
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionReconciliations;
     const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
+    const TDuration MaxReconciliationTimeout = TDuration::Seconds(60);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
     std::atomic<TInstant> LastPeerActivity;
     TInstant LastCleanup;
     std::atomic<bool> Terminating = false;
+    TString DropReason; // set by the service which drops the session, for the descriptors it still has
     std::atomic<bool> ResendAsked = false;
     std::deque<char> ReconciliationLog;
     TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
@@ -818,6 +836,8 @@ public:
     void ResumeChannelData();
     void PauseChannelAck();
     void ResumeChannelAck();
+    void PauseChannelUpdate();
+    void ResumeChannelUpdate();
     void SetLossProbability(double dataLossProbability, ui64 dataLossCount, double ackLossProbability, ui64 ackLossCount);
     bool ShouldLooseData();
     bool ShouldLooseAck();
@@ -827,6 +847,12 @@ public:
 
     std::atomic<bool> ChannelDataPaused;
     std::atomic<bool> ChannelAckPaused;
+    std::atomic<bool> ChannelUpdatePaused = false;
+    // Lose the next N updates / discoveries arriving at this session, as if the wire dropped them
+    std::atomic<ui64> DropUpdateCount = 0;
+    std::atomic<ui64> DropDiscoveryCount = 0;
+    // Skip the periodic cleanup, and with it the idle ping, the stuck queue ping and the idle destroy
+    std::atomic<bool> CleanupPaused = false;
     // Lose the data message with this SeqNo, 0 for none. Applied where the message would be delivered
     // rather than where it arrives, so one already pending can be named and the loss owes nothing to timing
     std::atomic<ui64> DropDataSeqNo = 0;
@@ -889,6 +915,8 @@ public:
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
     void FreeNodeSession(ui32 nodeId, NActors::TActorId sender);
+    // under Mutex
+    void DropNodeSession(std::unordered_map<ui32, std::shared_ptr<TNodeState>>::iterator it, const TString& reason);
 
     // unbound stubs
     std::shared_ptr<IChannelBuffer> GetUnboundBuffer(const TChannelFullInfo& info);
@@ -919,7 +947,6 @@ public:
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
     mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
-    const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<bool> CleanupScheduled = false;
 };
 
@@ -1337,7 +1364,18 @@ public:
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& ev);
 
+    // decrements the counter and tells whether this message is one of those to lose
+    static bool DropOne(std::atomic<ui64>& count) {
+        auto current = count.load();
+        while (current && !count.compare_exchange_weak(current, current - 1)) {
+        }
+        return current > 0;
+    }
+
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
+        if (DropOne(NodeState->DropDiscoveryCount)) {
+            return;
+        }
         NodeState->HandleDiscovery(ev);
     }
 
@@ -1390,6 +1428,13 @@ public:
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
+        if (DropOne(NodeState->DropUpdateCount)) {
+            return;
+        }
+        if (NodeState->ChannelUpdatePaused.load() || !PendingChannelUpdate.empty()) {
+            PendingChannelUpdate.emplace(ev.Release());
+            return;
+        }
         NodeState->HandleUpdate(ev);
     }
 
@@ -1402,7 +1447,9 @@ public:
     }
 
     void HandleCleanup() {
-        NodeState->HandleCleanup();
+        if (!NodeState->CleanupPaused.load()) {
+            NodeState->HandleCleanup();
+        }
     }
 
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
@@ -1433,11 +1480,18 @@ public:
                 PendingChannelAck.pop();
             }
         }
+        if (!NodeState->ChannelUpdatePaused.load()) {
+            while (!PendingChannelUpdate.empty()) {
+                NodeState->HandleUpdate(PendingChannelUpdate.front());
+                PendingChannelUpdate.pop();
+            }
+        }
     }
 
     std::shared_ptr<TDebugNodeState> NodeState;
     std::queue<TEvDqCompute::TEvChannelDataV2::TPtr> PendingChannelData;
     std::queue<TEvDqCompute::TEvChannelAckV2::TPtr> PendingChannelAck;
+    std::queue<TEvDqCompute::TEvChannelUpdateV2::TPtr> PendingChannelUpdate;
 };
 
 } // namespace NYql::NDq

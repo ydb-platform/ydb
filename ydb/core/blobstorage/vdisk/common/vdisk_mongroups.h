@@ -67,6 +67,26 @@ public:                                                                         
 
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TLsmCompactionRankGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TLsmCompactionRankGroup : public TBase {
+        public:
+            // Gauges are expressed in percent: a rank of 1.0 is reported as 100.
+            static constexpr ui64 RankScale = 100;
+
+            GROUP_CONSTRUCTOR(TLsmCompactionRankGroup)
+            {
+                COUNTER_INIT(Rank0, false);
+                COUNTER_INIT(Rank1_16, false);
+                Rank17Plus_ = GroupCounters->GetCounter("Rank17_", false);
+            }
+
+            COUNTER_DEF(Rank0);
+            COUNTER_DEF(Rank1_16);
+            COUNTER_DEF(Rank17Plus);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TLsmHullGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmHullGroup : public TBase {
@@ -998,9 +1018,11 @@ public:                                                                         
                 COUNTER_INIT(BlobsSqueeze, true);
 
                 COUNTER_INIT(BlocksPromoteSsts, true);
+                COUNTER_INIT(BlocksExplicit, true);
                 COUNTER_INIT(BlocksBalance, true);
 
                 COUNTER_INIT(BarriersPromoteSsts, true);
+                COUNTER_INIT(BarriersExplicit, true);
                 COUNTER_INIT(BarriersBalance, true);
             }
 
@@ -1014,9 +1036,11 @@ public:                                                                         
             COUNTER_DEF(BlobsSqueeze);
 
             COUNTER_DEF(BlocksPromoteSsts);
+            COUNTER_DEF(BlocksExplicit);
             COUNTER_DEF(BlocksBalance);
 
             COUNTER_DEF(BarriersPromoteSsts);
+            COUNTER_DEF(BarriersExplicit);
             COUNTER_DEF(BarriersBalance);
         };
 

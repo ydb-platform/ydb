@@ -19,6 +19,7 @@ feature_flags:
 | `enable_local_min_max_index`                             | [Локальный min_max-индекс](../../dev/min_max-skip-index.md) |
 | `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
+| `enable_backup_service`                                  | [Коллекции резервных копий](../../concepts/datamodel/backup-collection.md); в YDB 26.2 по умолчанию выключены |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
 | `enable_view_export`                                     | Поддержка представлений (`VIEW`) в операциях резервного копирования и восстановления |
 | `enable_export_auto_dropping`                            | Автоудаление временных директорий и таблиц при экспорте в S3 |

@@ -1,3 +1,8 @@
+# Binaryen emits C code inside string literals.
+- source_filter: "^contrib/restricted/binaryen"
+  includes:
+    - wasm-rt-impl.h
+
 - includes:
   # Valgrind PEERDIR and ADDINCL are added only in --valgrind builds,
   # but we should resolve headers anyway.

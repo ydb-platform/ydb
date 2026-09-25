@@ -574,6 +574,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString TransactionMode;
         TString Schema;
         TString Base64;
+        NJson::TJsonValue Parameters;
     };
 
     NJson::TJsonValue PostQuery(TKeepAliveHttpClient& httpClient, TPostQueryArguments args) {
@@ -596,12 +597,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
         if (args.Base64) {
             jsonRequest["base64"] = args.Base64;
         }
+        if (!args.Parameters.IsNull()) {
+            jsonRequest["parameters"] = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+            for (const auto& [name, param] : args.Parameters.GetMap()) {
+                jsonRequest["parameters"][name] = param;
+            }
+        }
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
         headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
-        UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << responseStream.ReadAll());
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
     }
 
@@ -2800,6 +2807,309 @@ Y_UNIT_TEST_SUITE(Viewer) {
             double expected = 311111111113.22222;
             UNIT_ASSERT_DOUBLES_EQUAL(parsed, expected, 0.00001);
         }
+    }
+
+    Y_UNIT_TEST(ParametrizedQueryInt64) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        // Create a table with some data
+        PostQuery(httpClient, {
+            .Query = "CREATE TABLE `/Root/TestParams` (Key Int64, Value String, PRIMARY KEY (Key));",
+            .Action = "execute-query"
+        });
+        PostQuery(httpClient, {
+            .Query = "INSERT INTO `/Root/TestParams` (Key, Value) VALUES (1, 'one'), (2, 'two'), (3, 'three');",
+            .Action = "execute-query"
+        });
+
+        // Query with a single Int64 parameter - use raw JSON to ensure proper serialization
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = VALID_TOKEN;
+        TString requestBody = R"json({
+            "database": "/Root",
+            "syntax": "yql_v1",
+            "stats": "none",
+            "base64": "false",
+            "query": "SELECT * FROM `/Root/TestParams` WHERE Key = $key;",
+            "action": "execute-query",
+            "parameters": {
+                "$key": {"type": {"type_id": "INT64"}, "value": {"int64_value": 2}}
+            }
+        })json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", requestBody, &responseStream, headers);
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << responseStream.ReadAll());
+        auto json = NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
+
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Key"].GetString(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Value"].GetString(), "two");
+    }
+
+    Y_UNIT_TEST(ParametrizedQueryUtf8) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        PostQuery(httpClient, {
+            .Query = "CREATE TABLE `/Root/TestParamsStr` (Key Uint64, Value String, PRIMARY KEY (Key));",
+            .Action = "execute-query"
+        });
+        PostQuery(httpClient, {
+            .Query = "INSERT INTO `/Root/TestParamsStr` (Key, Value) VALUES (1, 'apple'), (2, 'banana'), (3, 'cherry');",
+            .Action = "execute-query"
+        });
+
+        // Query with a single UTF8 (String) parameter
+        NJson::TJsonValue parameters;
+        parameters["$val"]["type"]["type_id"] = "UTF8";
+        parameters["$val"]["value"]["text_value"] = "banana";
+
+        auto json = PostQuery(httpClient, {
+            .Query = "SELECT * FROM `/Root/TestParamsStr` WHERE Value = $val;",
+            .Action = "execute-query",
+            .Base64 = "false",
+            .Parameters = parameters
+        });
+
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Key"].GetString(), "2");
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Value"].GetString(), "banana");
+    }
+
+    Y_UNIT_TEST(ParametrizedQueryMultipleParams) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        PostQuery(httpClient, {
+            .Query = "CREATE TABLE `/Root/TestMultiParams` (Key Uint64, Name String, Age Uint32, PRIMARY KEY (Key));",
+            .Action = "execute-query"
+        });
+        PostQuery(httpClient, {
+            .Query = "INSERT INTO `/Root/TestMultiParams` (Key, Name, Age) VALUES (1, 'Alice', 30), (2, 'Bob', 25), (3, 'Charlie', 35);",
+            .Action = "execute-query"
+        });
+
+        // Query with multiple parameters: Uint32 and UTF8
+        NJson::TJsonValue parameters;
+        parameters["$min_age"]["type"]["type_id"] = "UINT32";
+        parameters["$min_age"]["value"]["uint32_value"] = 30;
+        parameters["$name"]["type"]["type_id"] = "UTF8";
+        parameters["$name"]["value"]["text_value"] = "Alice";
+
+        auto json = PostQuery(httpClient, {
+            .Query = "SELECT * FROM `/Root/TestMultiParams` WHERE Age >= $min_age AND Name = $name;",
+            .Action = "execute-query",
+            .Base64 = "false",
+            .Parameters = parameters
+        });
+
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Name"].GetString(), "Alice");
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Age"].GetStringRobust(), "30");
+    }
+
+    Y_UNIT_TEST(ParametrizedQueryOptionalInt64) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        PostQuery(httpClient, {
+            .Query = "CREATE TABLE `/Root/TestOptParams` (Key Int64, Value String, PRIMARY KEY (Key));",
+            .Action = "execute-query"
+        });
+        PostQuery(httpClient, {
+            .Query = "INSERT INTO `/Root/TestOptParams` (Key, Value) VALUES (1, 'one'), (2, 'two'), (3, 'three');",
+            .Action = "execute-query"
+        });
+
+        // Query with an Optional<Int64> parameter (non-null value)
+        NJson::TJsonValue parameters;
+        parameters["$key"]["type"]["optional_type"]["item"]["type_id"] = "INT64";
+        parameters["$key"]["value"]["int64_value"] = 3;
+
+        auto json = PostQuery(httpClient, {
+            .Query = "SELECT * FROM `/Root/TestOptParams` WHERE Key = $key;",
+            .Action = "execute-query",
+            .Base64 = "false",
+            .Parameters = parameters
+        });
+
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Key"].GetString(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["Value"].GetString(), "three");
+    }
+
+    Y_UNIT_TEST(ParametrizedQueryBoolParam) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        // Query with a Bool parameter
+        NJson::TJsonValue parameters;
+        parameters["$flag"]["type"]["type_id"] = "BOOL";
+        parameters["$flag"]["value"]["bool_value"] = true;
+
+        auto json = PostQuery(httpClient, {
+            .Query = "SELECT $flag AS result;",
+            .Action = "execute-query",
+            .Base64 = "false",
+            .Parameters = parameters
+        });
+
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["result"].GetStringRobust(), "true");
+    }
+
+    Y_UNIT_TEST(ParametrizedQueryNullValue) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        // Query with an Optional<Int64> parameter (null value)
+        NJson::TJsonValue parameters;
+        parameters["$key"]["type"]["optional_type"]["item"]["type_id"] = "INT64";
+        parameters["$key"]["value"]["null_flag_value"] = "NULL_VALUE";
+
+        auto json = PostQuery(httpClient, {
+            .Query = "SELECT $key IS NULL AS is_null;",
+            .Action = "execute-query",
+            .Base64 = "false",
+            .Parameters = parameters
+        });
+
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
+        UNIT_ASSERT_VALUES_EQUAL(resultSets[0]["is_null"].GetStringRobust(), "true");
     }
 
     Y_UNIT_TEST(AuthorizeYdbTokenWithDatabaseAttributes) {

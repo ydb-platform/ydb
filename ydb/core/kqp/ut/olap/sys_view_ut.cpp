@@ -243,6 +243,28 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
     }
 
+    Y_UNIT_TEST(StatsSysViewChunksLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable");
+        for (ui64 i = 0; i < 50; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT *
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            LIMIT 1
+        )");
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+    }
+
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
         ui64 rawBytes1;
         ui64 bytes1;

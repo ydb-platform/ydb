@@ -22,6 +22,16 @@ message TChecksumState {
 
 message TS3DownloadState {
     optional bytes EncryptedDeserializerState = 1 [(Ydb.sensitive) = true]; // Contains secure key
+
+    // Parquet resume position. ProcessedBytes stays 0 until the whole file is
+    // imported, so progress is tracked in row groups; the persisted checksum
+    // state covers the first ChecksumOffset bytes of the object.
+    message TParquet {
+        optional uint32 CommittedRowGroups = 1;
+        optional uint64 ChecksumOffset = 2;
+        optional bool ChecksumComplete = 3;
+    }
+    optional TParquet Parquet = 2;
 }
 
 message TChangeMetadata {

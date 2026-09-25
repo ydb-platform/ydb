@@ -122,6 +122,8 @@ namespace NKikimr {
     XX(BlobDepotGC, 4002) \
     /* BlobDepot component writes copied/restored blobs during assimilation and decommit. */ \
     XX(BlobDepotPut, 4003) \
+    /* KeyValue component moves data to latest group in channel. */ \
+    XX(BlobDepotMoveData, 4004) \
     \
     /* KV: */ \
     \

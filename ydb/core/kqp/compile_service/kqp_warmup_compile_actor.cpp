@@ -1,13 +1,7 @@
 #include "kqp_warmup_compile_actor.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/tabletid.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/core/kqp/common/compilation/events.h>
-#include <ydb/core/kqp/common/compilation/warmup_metadata.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -117,8 +111,7 @@ TString BuildNodeIdInClause(const TVector<ui32>& nodeIds) {
 class TFetchCacheActor : public TQueryBase {
 public:
     TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds)
-        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, false, true,
-            NACLib::TSystemUsers::Warmup().SerializeAsString())
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
         , NodeIds(nodeIds)
@@ -203,8 +196,7 @@ private:
 class TFetchTruncatedCountActor : public TQueryBase {
 public:
     TFetchTruncatedCountActor(const TString& database, const TVector<ui32>& nodeIds)
-        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, false, true,
-            NACLib::TSystemUsers::Warmup().SerializeAsString())
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , NodeIds(nodeIds)
     {}
 
@@ -383,18 +375,8 @@ public:
             return;
         }
 
-        if (Database != CanonizePath(AppData()->DomainsInfo->GetDomain()->Name)) {
-            auto request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
-            request->Record.MutableRequest()->set_path(Database);
-            DatabaseTypeRequestInFlight = true;
-            Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(request.Release(), MakeConsoleID(), true),
-                IEventHandle::FlagTrackDelivery);
-            Become(&TThis::StateDatabaseType);
-            return;
-        }
-
-        StartWaitingTopology();
+        Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
+        Become(&TThis::StateWaitingTopology);
     }
 
     void ScheduleComplete() {
@@ -404,78 +386,11 @@ public:
     }
 
 private:
-    void StartWaitingTopology() {
-        Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
-        Become(&TThis::StateWaitingTopology);
-        if (PendingStartWarmup) {
-            Send(SelfId(), PendingStartWarmup.release());
-        }
-    }
-
-    void UnlinkDatabaseTypeRequest() {
-        if (DatabaseTypeRequestInFlight) {
-            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
-            DatabaseTypeRequestInFlight = false;
-        }
-    }
-
-    void PassAway() override {
-        UnlinkDatabaseTypeRequest();
-        TActorBootstrapped<TKqpCompileCacheWarmupActor>::PassAway();
-    }
-
-    void HandlePendingStartWarmup(TEvStartWarmup::TPtr& ev) {
-        PendingStartWarmup = std::make_unique<TEvStartWarmup>(
-            ev->Get()->DiscoveredNodesCount, std::move(ev->Get()->NodeIds));
-    }
-
     void SkipUnsupportedDatabase(const TString& reason) {
         YDB_LOG_NOTICE("Skipping compile cache warmup for unsupported database",
             {"database", Database},
             {"reason", reason});
         Complete(true, "Skipped: " + reason);
-    }
-
-    void HandleDatabaseType(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
-        UnlinkDatabaseTypeRequest();
-        const auto& operation = ev->Get()->Record.GetResponse().operation();
-        Ydb::Cms::GetDatabaseStatusResult status;
-        if (!operation.ready() || operation.status() != Ydb::StatusIds::SUCCESS
-            || !operation.result().UnpackTo(&status) || CanonizePath(status.path()) != CanonizePath(Database))
-        {
-            HandleDatabaseTypeUnavailable();
-            return;
-        }
-        if (status.has_serverless_resources()) {
-            SkipUnsupportedDatabase("Compile cache is not available for serverless databases");
-            return;
-        }
-        if (status.has_required_shared_resources()) {
-            SkipUnsupportedDatabase("Compile cache is not available for shared resource (serverless compute) databases");
-            return;
-        }
-        if (!status.has_required_resources()) {
-            HandleDatabaseTypeUnavailable();
-            return;
-        }
-        StartWaitingTopology();
-    }
-
-    void HandleDatabaseTypeUnavailable() {
-        YDB_LOG_WARN("Cannot determine database resource type, stopping compile cache warmup",
-            {"database", Database});
-        Complete(false, "Cannot determine database resource type for compile cache warmup");
-    }
-
-    STFUNC(StateDatabaseType) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, HandleDatabaseType);
-            hFunc(TEvStartWarmup, HandlePendingStartWarmup);
-            cFunc(TEvPipeCache::TEvDeliveryProblem::EventType, HandleDatabaseTypeUnavailable);
-            cFunc(TEvents::TEvUndelivered::EventType, HandleDatabaseTypeUnavailable);
-            cFunc(TEvPrivate::EvHardDeadline, HandleDatabaseTypeUnavailable);
-            cFunc(TEvents::TEvPoison::EventType, HandlePoison);
-        }
     }
 
     STFUNC(StateWaitingComplete) {
@@ -956,8 +871,6 @@ private:
     ui64 NextCookie = 0;
     ui32 PendingCompilations = 0;
     ui32 FetchAttempts = 0;
-    bool DatabaseTypeRequestInFlight = false;
-    std::unique_ptr<TEvStartWarmup> PendingStartWarmup;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
     ui32 MaxConcurrentCompilations = 1;

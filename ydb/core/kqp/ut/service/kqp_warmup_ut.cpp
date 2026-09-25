@@ -1,16 +1,13 @@
 #include <atomic>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/tabletid.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/compilation/warmup_metadata.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -576,13 +573,16 @@ namespace {
             VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
         }
 
-        Y_UNIT_TEST_TWIN(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins, LegacyMetadata) {
+        Y_UNIT_TEST_QUAD(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins, LegacyMetadata, SysViewSource) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.FillCache = false;
             params.FillImplicitParams = false;
             TTestLogStream logs;
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogStream(&logs));
+            auto settings = MakeWarmupTestSettings(params);
+            settings.SetLogStream(&logs);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpSysViewSourceRead(SysViewSource);
+            TKikimrRunner kikimr(settings);
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
             runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
             GrantPermissions(kikimr, "/Root/KeyValue", {"user0", "warmup-readers"}, true);
@@ -760,22 +760,22 @@ namespace {
             }
             UNIT_ASSERT(rows > 0);
 
-            Ydb::ResultSet adminResult;
-            ExecuteQueryWithToken(runtime, 0, NACLib::TUserToken("root@builtin", {}),
-                "SELECT Query, Metadata FROM `/Root/.sys/compile_cache_queries` WHERE UserSID = 'user1@builtin'",
-                &adminResult);
-            UNIT_ASSERT(adminResult.rows_size() > 0);
-            for (const auto& row : adminResult.rows()) {
-                UNIT_ASSERT_VALUES_EQUAL(row.items(0).text_value(), query);
-                UNIT_ASSERT(!TString(row.items(1).text_value()).Contains("user_group_sids"));
-                UNIT_ASSERT(!TString(row.items(1).text_value()).Contains("another-group@builtin"));
-            }
-
-            Ydb::ResultSet metadataResult;
-            ExecuteQueryWithToken(runtime, 0, NACLib::TSystemUsers::Metadata(),
-                "SELECT COUNT(*) FROM `/Root/.sys/compile_cache_queries` WHERE UserSID = 'user1@builtin'",
-                &metadataResult);
-            UNIT_ASSERT_VALUES_EQUAL(metadataResult.rows(0).items(0).uint64_value(), 0);
+            auto checkVisibility = [&](const NACLib::TUserToken& token, bool visible, bool groupsVisible) {
+                Ydb::ResultSet result;
+                ExecuteQueryWithToken(runtime, 0, token,
+                    "SELECT Query, Metadata FROM `/Root/.sys/compile_cache_queries` WHERE UserSID = 'user1@builtin'",
+                    &result);
+                UNIT_ASSERT_VALUES_EQUAL(result.rows_size(), visible ? 1 : 0);
+                if (visible) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.rows(0).items(0).text_value(), query);
+                    const TString metadata(result.rows(0).items(1).text_value());
+                    UNIT_ASSERT_VALUES_EQUAL(metadata.Contains("user_group_sids"), groupsVisible);
+                    UNIT_ASSERT_VALUES_EQUAL(metadata.Contains("another-group@builtin"), groupsVisible);
+                }
+            };
+            checkVisibility(NACLib::TSystemUsers::Metadata(), true, !LegacyMetadata);
+            checkVisibility(NACLib::TUserToken("root@builtin", {}), true, false);
+            checkVisibility(NACLib::TSystemUsers::Tmp(), false, false);
         }
 
         Y_UNIT_TEST_TWIN(WarmupSkipsOversizedGroupMetadata, ByteLimit) {
@@ -803,7 +803,7 @@ namespace {
             }
 
             const TString query = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 42u";
-            for (const auto& user : {"bounded", "oversized", "oversized-peer", "invalid-peer"}) {
+            for (const auto& user : {"bounded", "oversized", "oversized-peer"}) {
                 const TString sid = TString(user) + "@builtin";
                 const NACLib::TUserToken token(sid, TStringBuf(user) == "oversized" ? oversizedGroups : groups);
                 UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(runtime, 1, token, query), Ydb::StatusIds::SUCCESS);
@@ -834,9 +834,6 @@ namespace {
                                 metadata["user_group_sids"].AppendValue(group);
                             }
                             entry.SetMetaInfo(NJson::WriteJson(metadata, false));
-                        } else if (entry.GetUserSID() == "invalid-peer@builtin") {
-                            metadata["user_group_sids"].AppendValue(123);
-                            entry.SetMetaInfo(NJson::WriteJson(metadata, false));
                         }
                     }
                 });
@@ -861,15 +858,14 @@ namespace {
             auto complete = RunWarmup(env, config, config.HardDeadline, true);
             UNIT_ASSERT(complete);
             UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL(seenUsers.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(seenUsers.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(prepares, 1);
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 1);
-            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 3);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 2);
             const auto warmed = GetLocalCacheUserSids(runtime, 0, "/Root");
             UNIT_ASSERT(warmed.contains("bounded@builtin"));
             UNIT_ASSERT(!warmed.contains("oversized@builtin"));
             UNIT_ASSERT(!warmed.contains("oversized-peer@builtin"));
-            UNIT_ASSERT(!warmed.contains("invalid-peer@builtin"));
         }
 
         Y_UNIT_TEST(WarmupSoftDeadlineStopsNewQueriesButCompletesPending) {
@@ -919,50 +915,39 @@ namespace {
                 "Warmup should fail due to hard deadline: " << warmupComplete->Get()->Message);
         }
 
-        Y_UNIT_TEST(WarmupDatabaseTypeLookupHardDeadline) {
+        Y_UNIT_TEST(WarmupFetchHardDeadline) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.NodeCount = 1;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto edge = runtime.AllocateEdgeActor();
-            TKqpWarmupConfig config;
-            config.SoftDeadline = TDuration::MilliSeconds(100);
-            config.HardDeadline = TDuration::Seconds(1);
-            auto actor = runtime.Register(CreateKqpWarmupActor(config, "/Root/no-console-reply", "", {edge}));
-            ui32 typeRequests = 0;
+            auto env = PrepareWarmupTest(kikimr, params);
+            ui32 fetchRequests = 0;
             ui32 prepares = 0;
-            ui32 cacheReads = 0;
-            const auto typeObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
-                [&](TEvPipeCache::TEvForward::TPtr& event) {
-                    if (event->Sender == actor && event->Get()->TabletId == MakeConsoleID()) {
-                        ++typeRequests;
+            const auto observer = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
+                    prepares += event->Get()->Record.GetRequest().GetIsWarmupCompilation();
+                    const auto& token = event->Get()->GetUserToken();
+                    if (event->Get()->IsInternalCall() && token
+                        && token->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID())
+                    {
+                        ++fetchRequests;
                         event.Reset();
                     }
                 });
-            const auto prepareObserver = runtime.AddObserver<TEvKqp::TEvQueryRequest>(
-                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
-                    prepares += event->Get()->Record.GetRequest().GetIsWarmupCompilation();
-                });
-            const auto scanObserver = runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
-                [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr&) {
-                    ++cacheReads;
-                });
 
-            const auto start = runtime.GetCurrentTime();
-            TDispatchOptions opts;
-            opts.CustomFinalCondition = [&] { return typeRequests == 1; };
-            runtime.DispatchEvents(opts, TDuration::Seconds(1));
-            runtime.Send(new IEventHandle(actor, edge, new TEvStartWarmup(1, {runtime.GetNodeId(0)})));
-            auto complete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(edge, TDuration::Seconds(5));
+            TKqpWarmupConfig config;
+            config.SoftDeadline = TDuration::Seconds(1);
+            config.HardDeadline = TDuration::Seconds(1);
+            const auto start = env.Runtime.GetCurrentTime();
+            auto complete = RunWarmup(env, config, TDuration::Seconds(5), true);
             UNIT_ASSERT(complete);
             UNIT_ASSERT(!complete->Get()->Success);
-            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->Message,
-                "Cannot determine database resource type for compile cache warmup");
-            UNIT_ASSERT(runtime.GetCurrentTime() >= start + config.HardDeadline);
-            UNIT_ASSERT_VALUES_EQUAL(typeRequests, 1);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->Message, "Hard deadline exceeded");
+            UNIT_ASSERT(env.Runtime.GetCurrentTime() >= start + config.HardDeadline);
+            UNIT_ASSERT(fetchRequests > 0);
             UNIT_ASSERT_VALUES_EQUAL(prepares, 0);
-            UNIT_ASSERT_VALUES_EQUAL(cacheReads, 0);
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
         }
@@ -1366,7 +1351,7 @@ namespace {
                 "No entries should fail for empty database");
         }
 
-        Y_UNIT_TEST_TWIN(WarmupUnsupportedDatabaseDoesNotRetry, Shared) {
+        Y_UNIT_TEST(WarmupUnsupportedSysviewDoesNotRetry) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -1374,59 +1359,24 @@ namespace {
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-            const TString reason = Shared
-                ? "Compile cache is not available for shared resource (serverless compute) databases"
-                : "Compile cache is not available for serverless databases";
-            ui32 readRequests = 0;
-            ui32 prepareRequests = 0;
-            const auto compileObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+
+            ui32 fetches = 0;
+            ui32 prepares = 0;
+            const auto queryObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
                 [&](TEvKqp::TEvQueryRequest::TPtr& ev) {
-                    if (ev->Get()->Record.GetRequest().GetIsWarmupCompilation()) {
-                        ++prepareRequests;
+                    if (ev->Recipient != MakeKqpProxyID(env.Runtime.GetNodeId(env.NodeId))) {
+                        return;
                     }
+                    prepares += ev->Get()->GetIsWarmupCompilation();
+                    fetches += ev->Get()->GetQuery().Contains("/.sys/compile_cache_queries");
                 });
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-                    ++readRequests;
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
                     response->Record.SetNodeId(ev->Cookie);
                     response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
-                    NYql::TIssues issues;
-                    issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE, reason));
-                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
-                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
-                    ev.Reset();
-                });
-
-            TKqpWarmupConfig config;
-            config.SoftDeadline = TDuration::Seconds(5);
-            config.HardDeadline = TDuration::Seconds(10);
-            auto response = RunWarmup(env, config, TDuration::Seconds(11), true);
-            UNIT_ASSERT(response);
-            UNIT_ASSERT_C(response->Get()->Success, response->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Message, "Skipped: " + reason);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->EntriesLoaded, 0);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->EntriesFailed, 0);
-            UNIT_ASSERT_VALUES_EQUAL(prepareRequests, 0);
-            // The main fetch and the diagnostic count each make at most one read.
-            UNIT_ASSERT(readRequests > 0 && readRequests <= 2);
-        }
-
-        Y_UNIT_TEST(WarmupTenantMismatchUnavailable) {
-            TWarmupTestParams params;
-            params.UseRealThreads = false;
-            params.UserSids = {"user0"};
-            params.FillImplicitParams = false;
-
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-
-            const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
-                [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-                    response->Record.SetNodeId(ev->Cookie);
-                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                    NYql::TIssue issue("Compile cache is not available for this database");
+                    NYql::TIssue issue("Compile cache is not available for shared resource (serverless compute) databases");
+                    issue.SetCode(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE, NYql::TSeverityIds::S_ERROR);
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
@@ -1442,10 +1392,15 @@ namespace {
                 warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
 
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
-            UNIT_ASSERT_C(!warmupComplete->Get()->Success,
-                "Warmup should fail for serverless-like unavailable: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
-                "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Success, warmupComplete->Get()->Message);
+            UNIT_ASSERT_STRING_CONTAINS(warmupComplete->Get()->Message,
+                "Skipped: Compile cache is not available for shared resource (serverless compute) databases");
+            UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesLoaded, 0);
+            UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesFailed, 0);
+            env.Runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(prepares, 0);
+            // Main fetch and diagnostic count; neither should be retried.
+            UNIT_ASSERT_C(fetches > 0 && fetches <= 2, "Fetch requests: " << fetches);
         }
 
         Y_UNIT_TEST(WarmupUnavailableSysview) {

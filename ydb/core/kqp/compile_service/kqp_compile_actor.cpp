@@ -1,11 +1,11 @@
 #include "kqp_compile_service.h"
+#include "kqp_warmup_compile_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/common/compilation/warmup_metadata.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
@@ -688,7 +688,7 @@ private:
         meta["parameters"] = parameters;
         if (UserToken && !UserToken->GetUserSID().empty()) {
             const auto groupSids = UserToken->GetGroupSIDs();
-            // Null prohibits warmup; an absent field is reserved for legacy metadata.
+            // Null marks an oversized group set; a missing field means legacy metadata.
             NJson::TJsonValue groups(NJson::JSON_NULL);
             if (groupSids.size() <= MaxWarmupGroupSids) {
                 groups.SetType(NJson::JSON_ARRAY);

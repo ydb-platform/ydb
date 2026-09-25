@@ -8,8 +8,13 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/strbuf.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NKqp {
+
+inline constexpr size_t MaxWarmupGroupSids = 256;
+inline constexpr size_t MaxWarmupGroupSidsBytes = 16 * 1024;
 
 struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpEvents::EvWarmupComplete> {
     bool Success;

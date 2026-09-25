@@ -5,10 +5,6 @@
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/base/tabletid.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -183,22 +179,9 @@ public:
 
 private:
     void ProceedToScan() override {
-        if (!DatabaseTypeChecked) {
-            if (IsServerlessDatabase) {
-                ReplyUnsupportedDatabase("serverless");
-                return;
-            }
-
-            // The root domain is not a Console-managed tenant. Other domains
-            // may own shared resources even when IsServerless() is false.
-            if (TenantName != CanonizePath(AppData()->DomainsInfo->GetDomain()->Name)) {
-                auto request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
-                request->Record.MutableRequest()->set_path(TenantName);
-                SendThroughPipeCache(request.Release(), MakeConsoleID());
-                Become(&TCompileCacheQueriesScan::StateDatabaseType);
-                return;
-            }
-            DatabaseTypeChecked = true;
+        if (IsServerlessDatabase) {
+            ReplyUnsupportedDatabase("serverless");
+            return;
         }
 
         Become(&TCompileCacheQueriesScan::StateScan);
@@ -208,7 +191,7 @@ private:
             bool isDatabaseAdmin = AppData()->FeatureFlags.GetEnableDatabaseAdmin()
                 && IsDatabaseAdministrator(UserToken.Get(), DatabaseOwner);
             IsAdmin = isClusterAdmin || isDatabaseAdmin;
-            IsWarmupUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Warmup().GetUserSID();
+            IsMetadataUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID();
         }
 
         if (!MissingSchemaColumns.empty()) {
@@ -498,7 +481,7 @@ private:
             return false;
         }
 
-        if (!UserToken || IsAdmin || IsWarmupUser) {
+        if (!UserToken || IsAdmin || IsMetadataUser) {
             return true;
         }
 
@@ -513,54 +496,6 @@ private:
         ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, issues);
     }
 
-    void HandleDatabaseType(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
-        const auto& operation = ev->Get()->Record.GetResponse().operation();
-        Ydb::Cms::GetDatabaseStatusResult status;
-        if (!operation.ready() || operation.status() != Ydb::StatusIds::SUCCESS
-            || !operation.result().UnpackTo(&status) || CanonizePath(status.path()) != TenantName)
-        {
-            ReplyDatabaseTypeUnavailable();
-            return;
-        }
-        if (status.has_serverless_resources()) {
-            ReplyUnsupportedDatabase("serverless");
-            return;
-        }
-        if (status.has_required_shared_resources()) {
-            ReplyUnsupportedDatabase("shared resource (serverless compute)");
-            return;
-        }
-        if (!status.has_required_resources()) {
-            ReplyDatabaseTypeUnavailable();
-            return;
-        }
-
-        DatabaseTypeChecked = true;
-        ProceedToScan();
-    }
-
-    void ReplyDatabaseTypeUnavailable() {
-        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
-            "Cannot determine database resource type for compile cache access");
-    }
-
-    void HandleDatabaseTypeScanAck(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
-        AckReceived = true;
-        FreeSpace = ev->Get()->FreeSpace;
-    }
-
-    STFUNC(StateDatabaseType) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, HandleDatabaseType);
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleDatabaseTypeScanAck);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
-            cFunc(TEvPipeCache::TEvDeliveryProblem::EventType, ReplyDatabaseTypeUnavailable);
-            cFunc(TEvents::TEvUndelivered::EventType, ReplyDatabaseTypeUnavailable);
-            cFunc(TEvents::TEvWakeup::EventType, ReplyDatabaseTypeUnavailable);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-        }
-    }
-
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
@@ -570,7 +505,7 @@ private:
                 continue;
             }
 
-            if (!IsWarmupUser && entry.HasMetaInfo()) {
+            if (!IsMetadataUser && entry.HasMetaInfo()) {
                 NJson::TJsonValue metadata;
                 if (NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata, false) && metadata.IsMap()) {
                     metadata.EraseValue("user_group_sids");
@@ -631,7 +566,6 @@ private:
     bool QueryIdToInclusive = false;
 
     TString ContinuationToken;
-    bool DatabaseTypeChecked = false;
 
     bool PendingRequest = false;
     bool IsEmptyRange = false;
@@ -645,7 +579,7 @@ private:
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IsAdmin = false;
-    bool IsWarmupUser = false;
+    bool IsMetadataUser = false;
 
     static constexpr TDuration NodeRequestTimeout = TDuration::Seconds(10);
 

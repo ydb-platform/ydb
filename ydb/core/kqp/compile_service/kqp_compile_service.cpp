@@ -3,6 +3,8 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -12,7 +14,10 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_operation.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -234,6 +239,15 @@ private:
 };
 
 class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {
+    enum class EDatabaseType {
+        Unknown,
+        Dedicated,
+        Shared,
+        Serverless,
+    };
+
+    struct TEvCheckDatabaseType : TEventLocal<TEvCheckDatabaseType, TEvents::ES_PRIVATE> {};
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;
@@ -272,6 +286,12 @@ public:
         if (TableServiceConfig.GetCompileQueryCacheTTLSec()) {
             StartCheckQueriesTtlTimer();
         }
+        const auto& tenant = AppData()->TenantName;
+        if (tenant == CanonizePath(AppData()->DomainsInfo->GetDomain()->Name)) {
+            DatabaseType = EDatabaseType::Dedicated;
+        } else if (!tenant.empty()) {
+            CheckDatabaseType();
+        }
     }
 
 private:
@@ -289,6 +309,10 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleUndelivery);
 
             hFunc(TEvKqp::TEvListQueryCacheQueriesRequest, Handle);
+            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, HandleDatabaseType);
+            cFunc(TEvCheckDatabaseType::EventType, CheckDatabaseType);
+            case TEvPipeCache::TEvDeliveryProblem::EventType:
+                break; // The scheduled database type check retries failed requests.
 
             CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -298,14 +322,59 @@ private:
     }
 
 private:
+    void CheckDatabaseType() {
+        if (DatabaseType != EDatabaseType::Unknown) {
+            return;
+        }
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+        auto request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+        request->Record.MutableRequest()->set_path(AppData()->TenantName);
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(request.Release(), MakeConsoleID(), true),
+            IEventHandle::FlagTrackDelivery);
+
+        const auto delayMs = DatabaseTypeRetryDelay.MilliSeconds();
+        Schedule(TDuration::MilliSeconds(delayMs + AppData()->RandomProvider->GenRand() % delayMs),
+            new TEvCheckDatabaseType());
+        DatabaseTypeRetryDelay = Min(DatabaseTypeRetryDelay * 2, TDuration::Seconds(30));
+    }
+
+    void HandleDatabaseType(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
+        if (DatabaseType != EDatabaseType::Unknown) {
+            return;
+        }
+        const auto& operation = ev->Get()->Record.GetResponse().operation();
+        Ydb::Cms::GetDatabaseStatusResult status;
+        if (!operation.ready() || operation.status() != Ydb::StatusIds::SUCCESS
+            || !operation.result().UnpackTo(&status)
+            || CanonizePath(status.path()) != CanonizePath(AppData()->TenantName))
+        {
+            return;
+        }
+        if (status.has_serverless_resources()) {
+            DatabaseType = EDatabaseType::Serverless;
+        } else if (status.has_required_shared_resources()) {
+            DatabaseType = EDatabaseType::Shared;
+        } else if (status.has_required_resources()) {
+            DatabaseType = EDatabaseType::Dedicated;
+        } else {
+            return;
+        }
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+    }
+
+    void PassAway() override {
+        if (DatabaseType == EDatabaseType::Unknown) {
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+        }
+        TActorBootstrapped::PassAway();
+    }
+
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         YDB_LOG_INFO_CTX(*TlsActivationContext, "Subscribed for config changes");
     }
 
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-        auto snapshot = QueryCache->GetSnapshot();
-        YDB_LOG_DEBUG("Got query compile cache request",
-            {"snapshotSize", snapshot.size()});
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
 
@@ -322,6 +391,27 @@ private:
             return;
         }
 
+        if (DatabaseType != EDatabaseType::Dedicated) {
+            response->Record.SetNodeId(SelfId().NodeId());
+            NYql::TIssues issues;
+            if (DatabaseType == EDatabaseType::Unknown) {
+                response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                issues.AddIssue(NYql::TIssue("Compile cache database resource type is not known yet"));
+            } else {
+                response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE,
+                    TStringBuilder() << "Compile cache is not available for "
+                        << (DatabaseType == EDatabaseType::Shared ? "shared resource (serverless compute)" : "serverless")
+                        << " databases"));
+            }
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+            Send(ev->Sender, response.release());
+            return;
+        }
+
+        auto snapshot = QueryCache->GetSnapshot();
+        YDB_LOG_DEBUG("Got query compile cache request",
+            {"snapshotSize", snapshot.size()});
         if (snapshot.empty()) {
             response->Record.SetFinished(true);
             response->Record.SetNodeId(SelfId().NodeId());
@@ -402,6 +492,8 @@ private:
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
+            case TEvPipeCache::EvForward:
+                break;
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "Failed to deliver subscription request to config dispatcher");
                 break;
@@ -1031,6 +1123,8 @@ private:
 
 private:
     TKqpQueryCachePtr QueryCache;
+    EDatabaseType DatabaseType = EDatabaseType::Unknown;
+    TDuration DatabaseTypeRetryDelay = TDuration::Seconds(1);
 
     TTableServiceConfig TableServiceConfig;
     TQueryServiceConfig QueryServiceConfig;

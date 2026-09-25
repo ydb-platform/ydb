@@ -868,9 +868,4 @@ const NACLib::TUserToken& TSystemUsers::Tmp() {
     return GlobalTmpUser;
 }
 
-const NACLib::TUserToken& TSystemUsers::Warmup() {
-    static TUserToken token(BUILTIN_ACL_WARMUP, {});
-    return token;
-}
-
 }

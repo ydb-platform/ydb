@@ -39,6 +39,8 @@ Type `bloom_filter` works in both [row-based](../glossary.md#row-oriented-table)
 
 ## min_max index {#min-max-index}
 
+{% include [min_max_index_unavailable_26_2.md](../../yql/reference/syntax/_includes/min_max_index_unavailable_26_2.md) %}
+
 A min_max index is a special case of a [local index](../glossary.md#local-index) that stores the minimum and maximum value of one indexed column for each data fragment.
 
 When reading with a [special kind of filter](#min-max-index-predicates) on a column with a min_max index, {{ ydb-short-name }} first reads the minimum and maximum values stored for the fragment and checks whether the filter interval intersects this range. If the intervals do not intersect, the predicate is guaranteed to be false on all values of the fragment, so the fragment can be skipped. This is useful for range predicates and equality conditions (a special case of a range predicate) on columns with a small spread between the minimum and maximum values within stored fragments.

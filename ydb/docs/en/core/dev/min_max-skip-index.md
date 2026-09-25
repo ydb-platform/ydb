@@ -1,5 +1,7 @@
 # min_max index
 
+{% include [min_max_index_unavailable_26_2.md](../yql/reference/syntax/_includes/min_max_index_unavailable_26_2.md) %}
+
 min_max index is a [local index](../concepts/glossary.md#local-index) that speeds up scanning queries with a highly selective filter by skipping fragments. Unlike global [secondary indexes](../concepts/glossary.md#secondary-index), it acts as a read filter for the base table and reduces the amount of data that actually needs to be read.
 
 For each indexed data fragment, the min_max index stores the minimum and maximum value of one column. During query execution, {{ ydb-short-name }} evaluates the predicate on these two values. If the evaluation results show that the predicate will filter out all tuples of the fragment, the fragment is skipped.

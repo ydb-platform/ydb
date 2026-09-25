@@ -138,7 +138,10 @@ IActor* CreateHnswIndexBuildJob(
 class THnswIndexBuildUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
 protected:
     EExecutionStatus RunFailureStatus() const override {
-        return PageFault ? EExecutionStatus::Restart : EExecutionStatus::Executed;
+        if (PageFault) {
+            return EExecutionStatus::Restart;
+        }
+        return RetryScheduled ? EExecutionStatus::Continue : EExecutionStatus::Executed;
     }
 
     bool IsRelevant(TActiveTransaction* tx) const override {
@@ -152,7 +155,7 @@ protected:
     }
 
     bool IsWaiting(TOperation::TPtr op) const override {
-        return op->IsWaitingForAsyncJob();
+        return op->IsWaitingForAsyncJob() || op->IsWaitingForRestart();
     }
 
     void SetWaiting(TOperation::TPtr op) override {
@@ -161,10 +164,12 @@ protected:
 
     void ResetWaiting(TOperation::TPtr op) override {
         op->ResetWaitingForAsyncJobFlag();
+        op->ResetWaitingForRestartFlag();
     }
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         PageFault = false;
+        RetryScheduled = false;
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -194,9 +199,6 @@ protected:
         }
 
         const auto& settings = alter.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
-        if (!DataShard.GetHnswCacheMemoryLimit()) {
-            return false;
-        }
         if (settings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: unsupported vector type for localTid=" << table.LocalTid
@@ -204,9 +206,26 @@ protected:
             return false;
         }
 
+        if (!DataShard.GetHnswCacheMemoryLimit()) {
+            if (!DataShard.IsHnswCacheMemoryLimitKnown()) {
+                // Registration and the first controller grant are asynchronous.
+                // Completing here silently loses the eager build on new shards.
+                return ScheduleMemoryRetry(op, ctx);
+            }
+            // An explicit zero grant (or absent controller) disables caching.
+            return false;
+        }
+
         BaseVersion = TRowVersion(op->GetStep(), op->GetTxId());
         if (!DataShard.TryStartHnswIndexBuild(table.LocalTid, vectorColumnTag, settings, BaseVersion)) {
-            return false;
+            const auto token = DataShard.GetHnswBuildToken(table.LocalTid);
+            if (!DataShard.IsHnswBuildCurrent(table.LocalTid, token)
+                    && !DataShard.IsHnswIndexBuildObsolete(table.LocalTid)) {
+                // Eager finalization supersedes a previous lazy retry delay,
+                // including a below-threshold scan that disabled lazy builds.
+                DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Zero());
+            }
+            return ScheduleRetry(op, ctx);
         }
         BuildToken = DataShard.GetHnswBuildToken(table.LocalTid);
         DataShard.TrackHnswOpenTransactions(table.LocalTid, txc.DB);
@@ -224,9 +243,13 @@ protected:
         if (!memoryReservation) {
             DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Zero());
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
-                << " HNSW: cache memory budget exhausted for localTid=" << table.LocalTid);
-            return false;
+                << " HNSW: waiting for cache memory budget for localTid=" << table.LocalTid);
+            // The failed reservation reports demand to the controller. Allow
+            // it to grow this shard's share, but keep the index usable when
+            // the configured budget cannot accommodate the optional graph.
+            return ScheduleMemoryRetry(op, ctx);
         }
+        MemoryRetryCount = 0;
 
         if (keysAndVectors.empty()) {
             DataShard.SetHnswIndexBuilding(table.LocalTid, false);
@@ -267,6 +290,7 @@ protected:
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<THnswIndexBuildProduct*>(op->AsyncJobResult().Get());
+        bool retry = false;
         if (result->Index) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: eager build completed for localTid=" << LocalTid
@@ -274,6 +298,10 @@ protected:
             DataShard.SetHnswIndex(LocalTid, std::move(result->Index),
                 std::move(result->MemoryReservation), RowCountAtBuild,
                 VectorColumnTag, Settings, BaseVersion, BuildToken);
+            // A limit change can reject installation after construction. Such
+            // a successful build must not publish completion with no cache.
+            retry = !DataShard.GetHnswIndex(LocalTid, VectorColumnTag,
+                Settings, false, BaseVersion);
         } else {
             DataShard.SetHnswIndexBuilding(LocalTid, false);
             // A failed build only costs acceleration, not correctness: reads
@@ -290,7 +318,7 @@ protected:
         op->SetAsyncJobResult(nullptr);
         tx->SetAsyncJobActor(TActorId());
 
-        return true;
+        return !retry;
     }
 
     void Cancel(TActiveTransaction* tx, const TActorContext& ctx) override {
@@ -309,6 +337,32 @@ public:
     }
 
 private:
+    bool ScheduleMemoryRetry(TOperation::TPtr op, const TActorContext& ctx) {
+        if (MemoryWaitTxId != op->GetTxId()) {
+            MemoryWaitTxId = op->GetTxId();
+            MemoryRetryCount = 0;
+        }
+        // Controller limits are refreshed once a second. Admission must not
+        // hold a scheme operation forever when its graph cannot fit.
+        constexpr ui32 MaxMemoryRetries = 30;
+        if (MemoryRetryCount++ >= MaxMemoryRetries) {
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
+                << " HNSW: cache memory admission did not succeed after "
+                << MaxMemoryRetries << " retries, completing without eager cache");
+            return false;
+        }
+        return ScheduleRetry(op, ctx);
+    }
+
+    bool ScheduleRetry(TOperation::TPtr op, const TActorContext& ctx) {
+        RetryScheduled = true;
+        ScheduleRestart(op, ctx);
+        return false;
+    }
+
+    ui64 MemoryWaitTxId = 0;
+    ui32 MemoryRetryCount = 0;
+    bool RetryScheduled = false;
     ui32 LocalTid = 0;
     ui32 VectorColumnTag = 0;
     Ydb::Table::VectorIndexSettings Settings;

@@ -1293,7 +1293,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
-                if (affectedKinds.contains(kind)) {
+                if (affectedKinds.contains(kind) || affectedOpaqueKinds.contains(kind)) {
                     hasAffectedKinds = true;
                     break;
                 }
@@ -1323,6 +1323,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
             if (YamlConfigEnabled) {
                 UpdateYamlVersion(subscription);
+            } else {
+                subscription->UpdateInProcessYamlVersion = std::nullopt;
             }
 
             for (auto &[subscriber, updates] : subscription->Subscribers) {

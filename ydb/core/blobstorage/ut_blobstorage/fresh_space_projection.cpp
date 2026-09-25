@@ -708,7 +708,10 @@ namespace {
 
     void CheckFreshAbortReleasesChunks(bool restartBeforeRetry) {
         TFeatureFlags ff;
-        ff.SetEnableVDiskFreshSpaceProjection(true);
+        // Without chunk reservation: with it, Fresh compaction writes into chunks reserved while its records were
+        // admitted and never asks PDisk for any, so there would be no reservation to fail. The abort path is
+        // what a compaction reserving for itself relies on, as after a restart or with the feature off.
+        ff.SetEnableVDiskFreshSpaceProjection(false);
         ff.SetEnableVDiskHeapAllocator(false);
         TEnvironmentSetup env({
             .NodeCount = 1,
@@ -849,9 +852,190 @@ namespace {
         env.Runtime->FilterFunction = {};
     }
 
+    // With chunks reserved as writes are admitted, a Fresh compaction has all its output chunks before it starts
+    // and never has to ask PDisk for one. Puts reserve as ordinary data; compaction would reserve as housekeeping.
+    void CheckFreshCompactionWritesIntoReservedChunks() {
+        TFeatureFlags ff;
+        ff.SetEnableVDiskFreshSpaceProjection(true);
+        ff.SetEnableVDiskHeapAllocator(false);
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+                config.FreshBufSizeLogoBlobs = 256_MB;
+                config.LevelCompaction = false;
+            },
+            .FeatureFlags = ff,
+            .MinHugeBlobInBytes = 4_MB,
+            .PDiskChunkSize = 32_MB,
+        });
+        env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::NVME);
+        env.Sim(TDuration::Seconds(30));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto info = env.GetGroupInfo(groups.front());
+
+        ui32 admissionReserves = 0;
+        ui32 housekeepingReserves = 0;
+        std::vector<size_t> freshCompactionChunks;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvCutLog:
+                    // Keep the dataset together until the explicit fresh compaction request.
+                    return false;
+                case TEvBlobStorage::EvChunkReserve:
+                    ++(ev->Get<NPDisk::TEvChunkReserve>()->ForHousekeeping ? housekeepingReserves : admissionReserves);
+                    break;
+                case TEvBlobStorage::EvHullChange: {
+                    const auto* msg = ev->Get<THullChange<TKeyLogoBlob, TMemRecLogoBlob>>();
+                    if (msg->FreshCompaction && !msg->Aborted) {
+                        freshCompactionChunks.push_back(msg->CommitChunks.size());
+                    }
+                    break;
+                }
+            }
+            return true;
+        };
+
+        // Forty MiB of in-place data is more than one chunk: the Fresh segment rotates out as it reaches one SST,
+        // and the rest goes into the next segment.
+        const TString data = FastGenDataForLZ4(1_MB, 1);
+        for (ui32 step = 1; step <= 40; ++step) {
+            env.PutBlob(groups.front(), TLogoBlobID(1000, 1, step, 0, data.size(), 0), data);
+        }
+        UNIT_ASSERT_C(admissionReserves > 0, "puts were admitted without reserving chunks for Fresh");
+        UNIT_ASSERT_VALUES_EQUAL(housekeepingReserves, 0);
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(info->GetActorId(0), edge,
+            TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FRESH_ONLY)), 1);
+        auto result = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, true,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(result, "fresh compaction did not finish");
+        UNIT_ASSERT_VALUES_EQUAL_C(housekeepingReserves, 0,
+            "fresh compaction asked PDisk for chunks instead of using the ones reserved for it");
+        // Every segment compacted into exactly one SST: none left a second, nearly empty chunk behind.
+        UNIT_ASSERT_C(freshCompactionChunks.size() >= 2, "fresh compactions# " << freshCompactionChunks.size());
+        for (const size_t chunks : freshCompactionChunks) {
+            UNIT_ASSERT_VALUES_EQUAL(chunks, 1);
+        }
+
+        // What was written into the reserved chunks has to survive recovery.
+        env.Runtime->FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() != TEvBlobStorage::EvCutLog;
+        };
+        env.RestartNode(info->GetActorId(0).NodeId());
+        env.Sim(TDuration::Seconds(30));
+        for (ui32 step = 1; step <= 40; ++step) {
+            const TLogoBlobID id(1000, 1, step, 0, data.size(), 0);
+            const TActorId reader = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(1);
+            env.Runtime->WrapInActorContext(reader, [&] {
+                SendToBSProxy(reader, groups.front(), new TEvBlobStorage::TEvGet(id, 0, 0, deadline,
+                    NKikimrBlobStorage::EGetHandleClass::FastRead));
+            });
+            auto get = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(reader, true, deadline);
+            UNIT_ASSERT(get);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Buffer.ConvertToString(), data);
+        }
+        env.Runtime->FilterFunction = {};
+    }
+
+    // The records of a batch are replayed into Fresh one by one, and the batch stays in flight until the last of
+    // them is in. A rotation the first record allows must wait for the rest: otherwise they land in the new segment,
+    // which nothing was reserved for, and compacting it has to ask PDisk for chunks after all.
+    void CheckBatchLandsInOneSegment() {
+        TFeatureFlags ff;
+        ff.SetEnableVDiskFreshSpaceProjection(true);
+        ff.SetEnableVDiskHeapAllocator(false);
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+                // Cur swaps into Dreg on the put that takes it past 31/32 of this: the first item of the batch.
+                config.FreshBufSizeLogoBlobs = 4_MB;
+                config.FreshUseDreg = true;
+                config.LevelCompaction = false;
+            },
+            .FeatureFlags = ff,
+            .MinHugeBlobInBytes = 4_MB,
+            .PDiskChunkSize = 32_MB,
+        });
+        env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::NVME);
+        env.Sim(TDuration::Seconds(30));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto info = env.GetGroupInfo(groups.front());
+
+        ui32 housekeepingReserves = 0;
+        std::vector<size_t> freshCompactionChunks;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvCutLog:
+                    // Keep the dataset together until the explicit fresh compaction request.
+                    return false;
+                case TEvBlobStorage::EvChunkReserve:
+                    housekeepingReserves += ev->Get<NPDisk::TEvChunkReserve>()->ForHousekeeping;
+                    break;
+                case TEvBlobStorage::EvHullChange: {
+                    const auto* msg = ev->Get<THullChange<TKeyLogoBlob, TMemRecLogoBlob>>();
+                    if (msg->FreshCompaction && !msg->Aborted) {
+                        freshCompactionChunks.push_back(msg->CommitChunks.size());
+                    }
+                    break;
+                }
+            }
+            return true;
+        };
+
+        const TString data = FastGenDataForLZ4(1_MB, 1);
+        for (ui32 step = 1; step <= 3; ++step) {
+            env.PutBlob(groups.front(), TLogoBlobID(1000, 1, step, 0, data.size(), 0), data);
+        }
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(info->GetVDiskId(0), TInstant::Max(),
+            NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+        for (ui32 step = 4; step <= 7; ++step) {
+            multiPut->AddVPut(TLogoBlobID(1000, 1, step, 0, data.size(), 0, 1), TRcBuf(data), nullptr, false, false,
+                false, nullptr, {}, false);
+        }
+        env.Runtime->Send(new IEventHandle(info->GetActorId(0), edge, multiPut.release()), 1);
+        auto putResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT(putResult);
+        UNIT_ASSERT_VALUES_EQUAL(putResult->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(putResult->Get()->Record.ItemsSize(), 4);
+        for (const auto& item : putResult->Get()->Record.GetItems()) {
+            UNIT_ASSERT_VALUES_EQUAL(item.GetStatus(), NKikimrProto::OK);
+        }
+
+        env.Runtime->Send(new IEventHandle(info->GetActorId(0), edge,
+            TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FRESH_ONLY)), 1);
+        auto result = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, true,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(result, "fresh compaction did not finish");
+        UNIT_ASSERT_VALUES_EQUAL_C(housekeepingReserves, 0,
+            "part of the batch landed in a Fresh segment nothing was reserved for");
+        UNIT_ASSERT_VALUES_EQUAL(freshCompactionChunks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(freshCompactionChunks.front(), 1);
+        env.Runtime->FilterFunction = {};
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(VDiskFreshSpaceProjection) {
+
+    Y_UNIT_TEST(FreshCompactionWritesIntoReservedChunks) {
+        CheckFreshCompactionWritesIntoReservedChunks();
+    }
+
+    Y_UNIT_TEST(BatchLandsInOneSegment) {
+        CheckBatchLandsInOneSegment();
+    }
 
     Y_UNIT_TEST(FreshAbortReleasesChunksBeforeRetry) {
         CheckFreshAbortReleasesChunks(false);

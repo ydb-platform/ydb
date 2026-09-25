@@ -45,6 +45,15 @@ enum class EVChunkStatsDetail
     PerVChunk,
 };
 
+// Controls whether a DBG monitoring snapshot includes its VChunk state.
+enum class EDbgMonSnapshotDetail
+{
+    // Common DBG state only, used by pages that gather every DBG.
+    Summary,
+    // Includes every VChunk config, used by one DBG's detail page.
+    PerVChunk,
+};
+
 enum class ELatencyPercentile
 {
     P50,
@@ -94,10 +103,20 @@ struct TConnectionSnapshot
     bool PBufferConnected = false;
 };
 
+// One VChunk's state collected for a DBG detail page.
+struct TDbgVChunkSnapshot
+{
+    TVChunkConfig Config;
+    bool Touched = false;
+    ui64 FreshBytes = 0;
+    ui64 RottenBytes = 0;
+    ui64 PBufferBytes = 0;
+};
+
 struct TDbgSnapshot
 {
     size_t Index = 0;
-    size_t VChunkCount = 0;
+    TVector<TDbgVChunkSnapshot> VChunks;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
     TDDiskImbalance ConfiguredDDiskImbalance;

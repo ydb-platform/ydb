@@ -258,7 +258,7 @@ namespace NKikimr::NStorage {
         };
 
         struct TPDiskMapperSettings {
-            ui32 ExpectedSlotCount = 0;
+            std::optional<ui32> ExpectedSlotCount;
             ui32 SlotSizeInUnits = 0;
             ui64 SlotSizeInBytes = 0;
             ui32 MaxSlots = 0;
@@ -271,7 +271,9 @@ namespace NKikimr::NStorage {
         NBsController::TGroupMapper::TPlacementSnapshot placementSnapshot;
 
         auto applyPDiskConfig = [](TPDiskMapperSettings& settings, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
-            if (pdiskConfig.HasExpectedSlotCount()) {
+            // Treat a zero config count as unspecified, preserving the MaxSlots/default fallback.
+            // A present metrics count below overrides it, including an explicit zero.
+            if (pdiskConfig.GetExpectedSlotCount()) {
                 settings.ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
             }
             if (pdiskConfig.HasSlotSizeInUnits()) {
@@ -391,7 +393,8 @@ namespace NKikimr::NStorage {
                         const auto& m = *metrics;
                         pdiskState.Space = NBsController::TGroupMapper::CapturePDiskSpace(m);
                         auto& settings = pdiskMapperSettings[pdiskId];
-                        if (settings.SlotSizeInBytes && m.HasExpectedSlotCount()) {
+                        if (m.HasExpectedSlotCount()) {
+                            // A reported zero is a capacity limit, not a missing setting.
                             settings.ExpectedSlotCount = m.GetExpectedSlotCount();
                         }
                         if (m.HasSlotSizeInUnits()) {
@@ -568,7 +571,7 @@ namespace NKikimr::NStorage {
 
             ui32 expectedSlotCount = defaultMaxSlots;
             if (settings.ExpectedSlotCount) {
-                expectedSlotCount = settings.ExpectedSlotCount;
+                expectedSlotCount = *settings.ExpectedSlotCount;
             } else if (settings.SlotSizeInBytes) {
                 // Slot count for byte-sized slots is calculated by NodeWarden and arrives via PDisk config or
                 // metrics. Until then MaxSlots is its upper bound (ExpectedSlotCount = min(size/slot, MaxSlots)),

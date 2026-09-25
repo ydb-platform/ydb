@@ -167,13 +167,6 @@ TCountAndSize GetPBuffersUsage(const TVector<TDbgSnapshot>& dbgs)
     return result;
 }
 
-TString FormatDDiskImbalance(const TDDiskImbalance& imbalance)
-{
-    return TStringBuilder() << " need move " << imbalance.Moves << " of "
-                            << imbalance.TotalDDiskCount << " DDisks ("
-                            << imbalance.Percent << "%)";
-}
-
 // static
 TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
     const TVector<TDbgSnapshot>& dbgs,
@@ -421,29 +414,6 @@ void RenderDDiskBalanceStrategySelector(
     str << "</select></label></form>";
 }
 
-void RenderBalanceDDisksButton(
-    IOutputStream& str,
-    ui64 tabletId,
-    size_t from,
-    size_t to,
-    EDDiskBalanceStrategy strategy)
-{
-    str << " <form method='post' action='?TabletID=" << tabletId
-        << "&page=overview&action=balance&from=" << from << "&to=" << to
-        << "&strategy=" << DDiskBalanceStrategyParam(strategy)
-        << "' style='display:inline'>"
-           "<input type='hidden' name='TabletID' value='"
-        << tabletId
-        << "'/><input type='hidden' name='page' value='overview'/>"
-           "<input type='hidden' name='action' value='balance'/>"
-           "<input type='hidden' name='from' value='"
-        << from << "'/><input type='hidden' name='to' value='" << to
-        << "'/><input type='hidden' name='strategy' value='"
-        << DDiskBalanceStrategyParam(strategy)
-        << "'/><button type='submit' class='btn btn-default btn-xs'>"
-           "Balance</button></form>";
-}
-
 bool IsEmpty(const TDbgTableCell& cell)
 {
     return cell.DDiskStates.empty() && cell.PBufferCount == 0;
@@ -609,6 +579,7 @@ void RenderDbgConfigTable(
                                         RenderBalanceDDisksButton(
                                             str,
                                             tabletInfo.TabletId,
+                                            EMonPage::Overview,
                                             dbgId,
                                             dbgId + 1,
                                             strategy);
@@ -627,6 +598,7 @@ void RenderDbgConfigTable(
                         RenderBalanceDDisksButton(
                             str,
                             tabletInfo.TabletId,
+                            EMonPage::Overview,
                             from,
                             to,
                             strategy);

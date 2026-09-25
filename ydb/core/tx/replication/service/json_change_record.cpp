@@ -248,14 +248,16 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
     THashSet<TString> columns;
     TVector<std::pair<TString, TString>> orderedColumns;
     orderedColumns.reserve(table["columns"].GetMap().size());
-    for (const auto& [name, type] : table["columns"].GetMap()) {
-        if (name.empty() || !type.IsString() || type.GetString().empty()) {
+    for (const auto& [name, description] : table["columns"].GetMap()) {
+        if (name.empty() || !description.IsMap() || !description.Has("type")
+            || !description["type"].IsString() || description["type"].GetString().empty())
+        {
             error = "schema record has an invalid column";
             return false;
         }
 
         columns.insert(name);
-        orderedColumns.emplace_back(name, type.GetString());
+        orderedColumns.emplace_back(name, description["type"].GetString());
     }
 
     Sort(orderedColumns);

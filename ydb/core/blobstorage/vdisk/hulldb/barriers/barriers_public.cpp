@@ -30,6 +30,7 @@ namespace NKikimr {
         TBarriersDs::TBarriersDs(const TLevelIndexSettings &settings, std::shared_ptr<TRopeArena> arena)
             : TBase(settings, std::move(arena))
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
+            , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
                 TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
                 settings.HullCtx->VCtx->VDiskLogPrefix,
@@ -43,6 +44,7 @@ namespace NKikimr {
                 std::shared_ptr<TRopeArena> arena)
             : TBase(settings, pb, entryPointLsn, std::move(arena))
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
+            , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
                 TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
                 settings.HullCtx->VCtx->VDiskLogPrefix,
@@ -75,11 +77,15 @@ namespace NKikimr {
         }
 
         void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
-            MemView->MarkTabletDeleted(tabletId);
+            if (CollectByCompleteDeletionBlock) {
+                MemView->MarkTabletDeleted(tabletId);
+            }
         }
 
         void TBarriersDs::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
-            MemView->MarkTabletsDeleted(tabletIds);
+            if (CollectByCompleteDeletionBlock) {
+                MemView->MarkTabletsDeleted(tabletIds);
+            }
         }
 
         void TBarriersDs::UpdateMemView(const TBarriersSst &sst) {

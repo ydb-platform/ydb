@@ -4697,10 +4697,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UPSERT INTO `/Root/Table` (key, value, extra) VALUES (2, 20, 200);
         )");
 
+        WaitTxNotification(server, edgeActor, AsyncAlterDropColumn(server, "/Root", "Table", "extra"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (3, 30);
+        )");
+
         auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"update":{"value":10},"key":[1]})",
             R"({"tableChanges":"***","ts":"***"})",
             R"({"update":{"extra":200,"value":20},"key":[2]})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"update":{"value":30},"key":[3]})",
         });
 
         const auto& table = records[1]["tableChanges"][0]["table"];
@@ -4708,9 +4716,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetMap().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetMap().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetMap().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"]["type"].GetString(), "Uint32");
+
+        const auto& droppedTable = records[3]["tableChanges"][0]["table"];
+        UNIT_ASSERT(droppedTable["schemaVersion"].GetUInteger() > table["schemaVersion"].GetUInteger());
+        UNIT_ASSERT_VALUES_EQUAL(droppedTable["primaryKeyColumnNames"][0].GetString(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"].GetMap().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["key"].GetMap().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["value"].GetMap().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["key"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(droppedTable["columns"]["value"]["type"].GetString(), "Uint32");
     }
 
     Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {
@@ -4757,10 +4778,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(pk.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key1");
         UNIT_ASSERT_VALUES_EQUAL(pk[1].GetString(), "key2");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key1"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key2"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key1"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key2"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"]["type"].GetString(), "Uint32");
     }
 
     Y_UNIT_TEST(SchemaChangesMultipleShards) {
@@ -4833,9 +4855,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
         UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
-        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"]["type"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"]["type"].GetString(), "Uint32");
     }
 
 } // Cdc

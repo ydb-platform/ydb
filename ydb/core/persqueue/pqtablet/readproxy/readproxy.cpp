@@ -67,12 +67,23 @@ public:
 
 private:
     ui64 DirectReadLastOffset(const NKikimrClient::TCmdReadResult& readResult) const {
+        // Tablet LastOffset is the cursor after every offset the tablet walked,
+        // including a multipart message whose tail was not copied into the staged
+        // batch (YDBBUGS-822). The partition actor then sets ReadOffset = LastOffset + 1,
+        // so publishing that cursor skips the missing message on the next DirectRead.
         ui64 lastOffset = readResult.GetLastOffset();
         if (!TailClipped || !PreparedResponse) {
+            // Payload matches the tablet cursor: an incomplete tail was either glued
+            // by the follow-up read or was not present.
             return lastOffset;
         }
         const auto& staged = PreparedResponse->GetPartitionResponse().GetCmdReadResult();
         if (staged.ResultSize() == 0) {
+            // Nothing from this read was staged, so the next DirectRead must start
+            // again at readOffset. The published cursor is inclusive: the partition
+            // actor reads from LastOffset + 1, hence readOffset - 1.
+            // The dropped row may itself be a batch. Do not apply LogicalMessageCount
+            // here: that would skip the rest of the batch. Offset 0 has no predecessor.
             const ui64 readOffset = Request.GetPartitionRequest().GetCmdRead().GetOffset();
             if (readOffset > 0) {
                 return Min(lastOffset, readOffset - 1);
@@ -80,6 +91,9 @@ private:
             return lastOffset;
         }
         const auto& last = staged.GetResult(staged.ResultSize() - 1);
+        // A staged row can be a batch: Offset is its first message, LogicalMessageCount
+        // is how many it covers. Stop on the last message actually present.
+        // Min keeps the cursor from moving past the tablet.
         const ui64 logical = last.GetLogicalMessageCount() > 0 ? last.GetLogicalMessageCount() : 1;
         return Min(lastOffset, last.GetOffset() + logical - 1);
     }

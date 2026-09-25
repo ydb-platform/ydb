@@ -106,7 +106,7 @@ public:
 
                 TStringBuilder err;
                 NYql::NConnector::NApi::TExpression watermarkExprProto;
-                if (!NYql::SerializeWatermarkExpr(watermark, &watermarkExprProto, err)) {
+                if (!NYql::SerializeWatermarkExpr(ctx, watermark, &watermarkExprProto, err)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
                     return {};
                 }

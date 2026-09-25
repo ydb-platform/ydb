@@ -504,19 +504,36 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             : AlreadyDumped(std::move(base))
             , Pages(std::move(pages))
         {
+            const int pageCount = Pages.size();
+            StartNextBatch(*self.Spiller_);
+            self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", pageCount));
+        }
+
+        void StartNextBatch(ISpiller& spiller) {
+            MKQL_ENSURE(Futures.empty(), "previous spilling batch is not finished");
+            MKQL_ENSURE(!Pages.empty(), "no pages to spill");
+
+            const int batchSize = std::min<int>(Settings.SpillingPagesAtTime, Pages.size());
+            Futures.reserve(batchSize);
+            for (int index = 0; index < batchSize; ++index) {
+                auto page = *GetBackOrNull(Pages);
+                page.StartSpilling(spiller);
+                Futures.push_back(std::move(page));
+            }
+
             NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wg;
-            for (auto& page : Pages) {
+            for (auto& page : Futures) {
                 wg.Add(page.Write);
                 if (page.MatchWrite) {
                     wg.Add(*page.MatchWrite);
                 }
             }
             All = std::move(wg).Finish();
-            self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", Pages.size()));
         }
 
         DumpedBuckets AlreadyDumped;
         TMKQLVector<TSpillingPage> Pages;
+        TMKQLVector<TSpillingPage> Futures;
         NThreading::TFuture<void> All;
     };
 
@@ -824,7 +841,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                     }
                     for (auto& page : state.Spiller.GetState().InMemoryPages) {
-                        page.StartSpilling(*Spiller_);
                         pages.push_back(std::move(page));
                     }
                     state.Spiller.GetState().InMemoryPages.clear();
@@ -897,7 +913,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         } else if (auto* s = std::get_if<DumpRestOfPages>(&State_)) {
             DumpRestOfPages& state = *s;
             if (state.All.IsReady()) {
-                for (auto& page : state.Pages) {
+                for (auto& page : state.Futures) {
                     auto it = state.AlreadyDumped.find(page.BucketIndex);
                     MKQL_ENSURE(it != state.AlreadyDumped.end(), "bucket with this index is processed already");
                     const ISpiller::TKey key = ExtractReadyFuture(std::move(page.Write));
@@ -907,7 +923,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         it->second.ProbeMatchKeys.push_back(ExtractReadyFuture(std::move(*page.MatchWrite)));
                     }
                 }
-                State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
+                state.Futures.clear();
+                if (state.Pages.empty()) {
+                    State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
+                } else {
+                    state.StartNextBatch(*Spiller_);
+                }
 
             } else {
                 return WaitWhileSpilling();

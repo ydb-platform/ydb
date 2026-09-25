@@ -24,26 +24,6 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
-TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
-    if (prefixPath.empty()) {
-        return path.Build();
-    }
-
-    if (path.GetLiteral()) {
-        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
-    }
-
-    auto pathNode = path.Build();
-    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", {pathNode});
-    auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath));
-
-    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", {prefixNode, pathNode});
-
-    TDeferredAtom result;
-    MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
-    return result.Build();
-}
-
 using TPragmaField = bool TContext::*;
 
 // TODO(vityaman): register thsese names automatically using TABLE_ELEM macro.
@@ -108,8 +88,6 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     : Lexers(std::move(lexers))
     , Parsers(std::move(parsers))
     , ClusterMapping_(settings.ClusterMapping)
-    , PathPrefix_(settings.PathPrefix)
-    , LocalPathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
     , SqlHints_(std::move(hints))
     , Settings(settings)
@@ -397,40 +375,45 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
         if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
-            ProviderPathPrefixes_[*arg] = *arg == KikimrProviderName ? NormalizePath(value) : value;
+            ProviderPathPrefixes_[*arg] = value;
             return true;
         }
 
         TString normalizedClusterName;
-        const auto provider = GetClusterProvider(*arg, normalizedClusterName);
-        if (!provider) {
+        if (!GetClusterProvider(*arg, normalizedClusterName)) {
             Error() << "Unknown cluster or provider: " << *arg;
             IncrementMonCounter("sql_errors", "BadPragmaValue");
             return false;
         }
 
-        ClusterPathPrefixes_[normalizedClusterName] = IsLocalCluster(*provider, TDeferredAtom(Pos(), normalizedClusterName))
-            ? NormalizePath(value) : value;
+        ClusterPathPrefixes_[normalizedClusterName] = value;
     } else {
         PathPrefix_ = value;
-        LocalPathPrefix_ = NormalizePath(value);
     }
 
     return true;
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    TStringBuf prefixPath = GetPrefixPath(service, cluster);
-    if (path.GetLiteral() && Settings.NormalizePath && IsLocalCluster(service, cluster)) {
+    if (path.GetLiteral()) {
         return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(service, cluster, *path.GetLiteral()));
     }
-    if (prefixPath) {
-        return AddTablePathPrefix(*this, prefixPath, path);
+    const auto prefixPath = GetPrefixPath(service, cluster);
+    if (prefixPath.empty()) {
+        return path.Build();
     }
-    return path.Build();
+
+    auto pathNode = path.Build();
+    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", {pathNode});
+    auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), prefixPath);
+    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", {prefixNode, pathNode});
+
+    TDeferredAtom result;
+    MakeTableFromExpression(Pos(), *this, buildPathNode, result);
+    return result.Build();
 }
 
-TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
+TString TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
     if (IsDynamicCluster(cluster)) {
         return {};
     }
@@ -438,30 +421,26 @@ TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& 
                               ? ClusterPathPrefixes_.FindPtr(*cluster.GetLiteral())
                               : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
-        return *clusterPrefix;
-    } else {
-        auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
-        if (providerPrefix && !providerPrefix->empty()) {
-            return *providerPrefix;
-        } else if (!PathPrefix_.empty()) {
-            return IsLocalCluster(service, cluster) ? LocalPathPrefix_ : PathPrefix_;
-        }
-        return {};
+        return NormalizePath(service, cluster, *clusterPrefix);
     }
+    auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
+    if (providerPrefix && !providerPrefix->empty()) {
+        return NormalizePath(service, cluster, *providerPrefix);
+    }
+    return PathPrefix_ ? NormalizePath(service, cluster, *PathPrefix_) : Settings.PathPrefix;
 }
 
-bool TContext::IsLocalCluster(const TString& service, const TDeferredAtom& cluster) const {
-    return service == KikimrProviderName && !IsDynamicCluster(cluster);
-}
-
-TString TContext::NormalizePath(TStringBuf path) const {
-    return Settings.NormalizePath && path.StartsWith('/') ? Settings.NormalizePath(path) : TString(path);
+TString TContext::NormalizePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const {
+    if (Settings.NormalizePath && cluster.GetLiteral()) {
+        return Settings.NormalizePath(service, *cluster.GetLiteral(), path);
+    }
+    return TString(path);
 }
 
 TString TContext::BuildTablePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const {
     // Prefixes from the request database have already been normalized at ingress.
     return NYql::BuildTablePath(GetPrefixPath(service, cluster),
-        IsLocalCluster(service, cluster) ? NormalizePath(path) : TString(path));
+                                NormalizePath(service, cluster, path));
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {

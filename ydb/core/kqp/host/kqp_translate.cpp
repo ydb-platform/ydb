@@ -182,7 +182,11 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = LangVer;
-    settings.NormalizePath = NormalizePath;
+    if (NormalizePath) {
+        settings.NormalizePath = [normalize = NormalizePath, localCluster = Cluster](TStringBuf service, TStringBuf cluster, TStringBuf path) {
+            return service == NYql::KikimrProviderName && cluster == localCluster ? normalize(path) : TString(path);
+        };
+    }
     settings.BackportMode = BackportMode;
 
     settings.SyntaxVersion = 1;

@@ -90,7 +90,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
-        OperationsManager->OnTabletInit(*this, AppData(ctx)->TimeProvider->Now());
         SignalTabletActive(ctx);
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
@@ -332,15 +331,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
             {"event", "TEvPrivate::TEvPeriodicWakeup"},
             {"tabletId", TabletID()});
         SendWaitPlanStep(GetOutdatedStep());
-        const auto timeout = TDuration::Seconds(ColumnShardConfig->GetOrphanWriteLockTimeoutSeconds());
-        const auto recoveryGrace = TDuration::Seconds(ColumnShardConfig->GetOrphanWriteLockRecoveryGracePeriodSeconds());
-        for (const auto lockId : OperationsManager->GetExpiredWriteLocks(AppData(ctx)->TimeProvider->Now(), timeout, recoveryGrace)) {
-            YDB_LOG_WARN("",
-                {"event", "abort_orphan_write_lock"},
-                {"tabletId", TabletID()},
-                {"lockId", lockId});
-            TransactionToAbort(lockId);
-        }
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }

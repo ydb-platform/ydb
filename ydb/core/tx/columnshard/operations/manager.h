@@ -75,7 +75,6 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
 
     ui64 OperationsInProgress = 0;
-    YDB_READONLY(ui32, LockNodeId, 0);
 
     bool Subscribed = false;
     bool needsAborting = false;
@@ -125,13 +124,6 @@ public:
 
     void SetSubscribed() {
         Subscribed = true;
-    }
-
-    void SetLockNodeId(const ui32 lockNodeId) {
-        if (lockNodeId) {
-            AFL_VERIFY(!LockNodeId || LockNodeId == lockNodeId)("lock_id", GetLockId())("lock_node_id", LockNodeId)("new_lock_node_id", lockNodeId);
-            LockNodeId = lockNodeId;
-        }
     }
 
     bool IsSubscribed() const {
@@ -212,7 +204,6 @@ class TOperationsManager {
     THashMap<ui64, TLockFeatures> LockFeatures;
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
-    TInstant LocksRecoveryTime;
 
 public:
     void StopWriting(const TString& errorMessage) {
@@ -245,8 +236,6 @@ public:
     }
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
-    void OnTabletInit(TColumnShard& owner, TInstant now);
-    std::vector<ui64> GetExpiredWriteLocks(TInstant now, TDuration timeout, TDuration recoveryGrace) const;
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void SetOperationFinished(const TOperationWriteId writeId);

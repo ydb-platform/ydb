@@ -33,7 +33,6 @@ private:
 void TColumnShard::SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const {
     auto& lock = OperationsManager->GetLockVerified(lockId);
     if (!lock.IsSubscribed()) {
-        lock.SetLockNodeId(lockNodeId);
         lock.SetSubscribed();
         Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()),
             std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));

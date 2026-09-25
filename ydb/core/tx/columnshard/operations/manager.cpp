@@ -1,6 +1,5 @@
 #include "manager.h"
 
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
@@ -56,7 +55,6 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
 
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
-            it->second.SetLockNodeId(operation->GetLockNodeId());
             it->second.AddWriteOperation(operation);
             // all the operations are finished at the moment of transaction proposal (or later)
             it->second.OnWriteOperationFinished();
@@ -91,35 +89,6 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     }
 
     return true;
-}
-
-void TOperationsManager::OnTabletInit(TColumnShard& owner, const TInstant now) {
-    LocksRecoveryTime = now;
-    for (const auto& [lockId, lock] : LockFeatures) {
-        if (lock.GetLockNodeId() && !lock.IsTxIdAssigned()) {
-            owner.SubscribeLockIfNotAlready(lockId, lock.GetLockNodeId());
-        }
-    }
-}
-
-std::vector<ui64> TOperationsManager::GetExpiredWriteLocks(const TInstant now, const TDuration timeout, const TDuration recoveryGrace) const {
-    std::vector<ui64> result;
-    if (!timeout || now < LocksRecoveryTime || now - LocksRecoveryTime < recoveryGrace) {
-        return result;
-    }
-    for (const auto& [lockId, lock] : LockFeatures) {
-        if (lock.GetGeneration() || lock.GetLockNodeId() || lock.IsSubscribed() || lock.IsTxIdAssigned() || lock.NeedsAborting()) {
-            continue;
-        }
-        for (const auto& operation : lock.GetWriteOperations()) {
-            const auto createdAt = operation->GetCreatedAt();
-            if (now >= createdAt && now - createdAt >= timeout) {
-                result.push_back(lockId);
-                break;
-            }
-        }
-    }
-    return result;
 }
 
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
@@ -281,14 +250,12 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
     auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(
         pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType, isBulk);
-    auto& lock = GetLockVerified(lockId);
-    operation->SetLockNodeId(lock.GetLockNodeId());
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
         {"event", "register_operation"},
         {"operationId", operation->GetWriteId()},
         {"last", LastWriteId});
     AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
-    lock.AddWriteOperation(operation);
+    GetLockVerified(operation->GetLockId()).AddWriteOperation(operation);
     return operation;
 }
 

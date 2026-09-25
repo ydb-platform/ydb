@@ -374,7 +374,6 @@ message TInternalOperationData {
     optional bool WritePortions = 4;
     optional bool IsBulk = 5;
     optional uint64 SchemeShardLocalPathId = 6;
-    optional uint32 LockNodeId = 7;
 }
 
 // Sent by columnshard when some overload reason stopped being relevant

@@ -99,15 +99,11 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(true);
     proto.SetIsBulk(IsBulk());
-    if (LockNodeId) {
-        proto.SetLockNodeId(LockNodeId);
-    }
     PathId.InternalPathId.ToProto(proto);
     PathId.SchemeShardLocalPathId.ToProto(proto);
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
-    LockNodeId = proto.GetLockNodeId();
     for (auto&& writeId : proto.GetInternalWriteIds()) {
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }

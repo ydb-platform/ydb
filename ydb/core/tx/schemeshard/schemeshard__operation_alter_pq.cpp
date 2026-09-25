@@ -1129,7 +1129,7 @@ public:
         for (const auto& partition : alterData->PartitionsToAdd) {
             if (topic->Partitions.contains(partition.PartitionId) || !addedPartitionIds.insert(partition.PartitionId).second) {
                 errStr = TStringBuilder() << "Partition already exists: " << partition.PartitionId;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
         }

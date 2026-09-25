@@ -749,7 +749,6 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 auto& partition = *entry->AddPartitions();
 
                 Y_VERIFY_S(desc.TabletId, "Unassigned tabletId for partition: " << pqId);
-                Y_VERIFY_S(desc.Info, "Empty info for partition: " << pqId);
 
                 partition.SetPartitionId(pqId);
                 partition.SetTabletId(ui64(desc.TabletId));

@@ -1066,7 +1066,7 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
 }
 
 ui64 TQueryExecutionStats::EstimateCollectMem() {
-    ui64 result = CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats);
+    ui64 result = CollectCurrentQueryStats ? CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats) : 0;
     for (auto& [_, stageStat] : StageStats) {
         result += stageStat.EstimateMem();
     }
@@ -1165,9 +1165,7 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
         auto& queryTableStats = it->second;
         queryTableStats.ReadRows.SetNonZero(index, tableStat.GetReadRows());
-        CurrentTableReadBytes -= queryTableStats.ReadBytes.Sum;
         queryTableStats.ReadBytes.SetNonZero(index, tableStat.GetReadBytes());
-        CurrentTableReadBytes += queryTableStats.ReadBytes.Sum;
         queryTableStats.WriteRows.SetNonZero(index, tableStat.GetWriteRows());
         queryTableStats.WriteBytes.SetNonZero(index, tableStat.GetWriteBytes());
         queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
@@ -1217,7 +1215,6 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
         auto& queryTableStats = it->second;
         queryTableStats.StorageStats.ReadRows += tableStat.GetReadRows();
         queryTableStats.StorageStats.ReadBytes += tableStat.GetReadBytes();
-        CurrentTableReadBytes += tableStat.GetReadBytes();
         queryTableStats.StorageStats.WriteRows += tableStat.GetWriteRows();
         queryTableStats.StorageStats.WriteBytes += tableStat.GetWriteBytes();
         queryTableStats.StorageStats.EraseRows += tableStat.GetEraseRows();
@@ -1238,7 +1235,7 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
 void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
-    if (taskId) {
+    if (CollectCurrentQueryStats && taskId) {
         // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
         // FillStats then sends empty Tasks. Do not ENSURE — that would mask
         // the real failure issues from COMPUTE_STATE_FAILURE.

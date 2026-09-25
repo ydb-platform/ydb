@@ -1,6 +1,8 @@
 #include "builder.h"
 #include "program.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/program/execution.h>
@@ -156,6 +158,9 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     }
     if (!hasProjection) {
         return TConclusionStatus::Fail("program has no projections");
+    }
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableCsIndexReadMemoryTracking()) {
+        programBuilder.EnableIndexMemoryReserve();
     }
     auto programStatus = programBuilder.Finish();
     if (programStatus.IsFail()) {

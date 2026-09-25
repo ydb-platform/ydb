@@ -147,6 +147,7 @@ class TGraph {
 private:
     ui32 NextResourceId = 0;
     THashSet<ui32> FetchersMerged;
+    bool ReserveIndexMemory = false;
     const IColumnResolver& Resolver;
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
     THashMap<TResourceAddress, TGraphNode*> Producers;
@@ -230,6 +231,7 @@ public:
         std::vector<std::shared_ptr<IResourceProcessor>> Processors;
         const IColumnResolver& Resolver;
         bool Finished = false;
+        bool ReserveIndexMemory = false;
 
     public:
         TBuilder(const IColumnResolver& resolver)
@@ -241,10 +243,16 @@ public:
             Processors.emplace_back(processor);
         }
 
+        void EnableIndexMemoryReserve() {
+            AFL_VERIFY(!Finished);
+            ReserveIndexMemory = true;
+        }
+
         TConclusion<std::shared_ptr<NExecution::TCompiledGraph>> Finish() {
             AFL_VERIFY(!Finished);
             Finished = true;
             TGraph graph(std::move(Processors), Resolver);
+            graph.ReserveIndexMemory = ReserveIndexMemory;
             graph.Collapse();
             return graph.Compile();
         }

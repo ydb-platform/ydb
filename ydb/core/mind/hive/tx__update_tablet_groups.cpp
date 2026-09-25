@@ -42,6 +42,12 @@ public:
         return false;
     }
 
+    void NotifyCancel(const TLeaderTabletInfo* tablet) {
+        for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+            SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
+        }
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         SideEffects.Reset(Self->SelfId());
 
@@ -76,6 +82,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -86,6 +93,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -111,6 +119,7 @@ public:
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
                 tablet->State = ETabletState::ReadyToWork;
                 tablet->TryToBoot();
+                NotifyCancel(tablet);
                 return true;
             }
         }
@@ -277,6 +286,7 @@ public:
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute tablet not changed",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id});
+            NotifyCancel(tablet);
             if (hasEmptyChannel) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
@@ -291,9 +301,6 @@ public:
                         db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
-                }
-                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
-                    SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
                 }
                 newTabletState = ETabletState::ReadyToWork;
             }

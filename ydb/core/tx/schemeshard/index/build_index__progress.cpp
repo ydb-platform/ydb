@@ -451,6 +451,56 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
     return propose;
 }
 
+bool CheckSequences(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, bool shouldExist) {
+    for (const auto& col : buildInfo.BuildColumns) {
+        if (col.IsFromSequence()) {
+            auto seqPath = TPath::Init(buildInfo.TablePathId, ss).Dive(col.DefaultFromSequence);
+            if (shouldExist != (seqPath.IsResolved() && !seqPath.IsDeleted())) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static void AddDropSequencePropose(TSchemeShard* ss, const TIndexBuildInfo& buildInfo,
+    TEvSchemeShard::TEvModifySchemeTransaction& propose)
+{
+    auto tablePath = TPath::Init(buildInfo.TablePathId, ss);
+
+    for (const auto& colInfo : buildInfo.BuildColumns) {
+        if (!colInfo.IsFromSequence()) {
+            continue;
+        }
+        auto seqPath = TPath::Init(buildInfo.TablePathId, ss).Dive(colInfo.DefaultFromSequence);
+        if (!seqPath.IsResolved() || seqPath.IsDeleted()) {
+            continue;
+        }
+        // Drop the old sequence if it's left from a failed build attempt
+        auto& drop = *propose.Record.AddTransaction();
+        drop.SetOperationType(NKikimrSchemeOp::ESchemeOpDropSequence);
+        drop.SetInternal(true);
+        drop.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        drop.SetWorkingDir(tablePath.PathString());
+        drop.MutableDrop()->SetName(colInfo.DefaultFromSequence);
+    }
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateDropSequencePropose");
+    Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+    AddDropSequencePropose(ss, buildInfo, *propose);
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateDropSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -744,8 +794,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     auto* columnBuild = modifyScheme.MutableDropColumnBuild();
     columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
-
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
+
+    AddDropSequencePropose(ss, buildInfo, *propose);
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -2762,11 +2813,23 @@ public:
             if (buildInfo.CreateBuildSequenceTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.CreateBuildSequenceTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                if (!CheckSequences(Self, buildInfo, false)) {
+                    Send(Self->SelfId(), CreateDropSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                } else {
+                    Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                }
             } else if (!buildInfo.CreateBuildSequenceTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.CreateBuildSequenceTxId)));
             } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                buildInfo.CreateBuildSequenceTxId = {};
+                buildInfo.CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.CreateBuildSequenceTxDone = false;
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
+                if (CheckSequences(Self, buildInfo, true)) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                }
+                // If we just dropped previous sequences, re-allocate txID and recreate them
                 Progress(BuildId);
             }
             break;
@@ -2819,12 +2882,17 @@ public:
                 break;
             }
             auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdColumnBuildId);
-            if (child && (*child)->IsDone()) {
+            if (!child) {
+                NIceDb::TNiceDb db(txc.DB);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ true,
+                    buildInfo.RowIdColumnBuildId);
+                Progress(child->Id);
+            } else if ((*child)->IsDone()) {
                 ChangeState(BuildId, buildInfo.FulltextNeedsUniqueIndex
                     ? TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex
                     : TIndexBuildInfo::EState::Locking);
                 Progress(BuildId);
-            } else if (child && (*child)->IsCancelled()) {
+            } else if ((*child)->IsCancelled()) {
                 // The child rolled back its own column on failure; the parent never locked, so it just
                 // transitions to Rejected (nothing of its own to unlock or drop).
                 NIceDb::TNiceDb db(txc.DB);
@@ -2843,10 +2911,15 @@ public:
                 break;
             }
             auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdUniqueBuildId);
-            if (child && (*child)->IsDone()) {
+            if (!child) {
+                NIceDb::TNiceDb db(txc.DB);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ false,
+                    buildInfo.RowIdUniqueBuildId);
+                Progress(child->Id);
+            } else if ((*child)->IsDone()) {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
                 Progress(BuildId);
-            } else if (child && (*child)->IsCancelled()) {
+            } else if ((*child)->IsCancelled()) {
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexAddIssue(db, buildInfo,
                     TStringBuilder() << "Auto-provisioning of the '" << buildInfo.AutoUniqueIndexName
@@ -4510,21 +4583,14 @@ public:
             break;
         case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
             if (!buildInfo.RowIdColumnBuildId) {
-                // Use the freshly allocated tx-id as the child build id and spawn the column build.
                 buildInfo.RowIdColumnBuildId = TIndexBuildId(ui64(txId));
                 Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
-                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ true,
-                    buildInfo.RowIdColumnBuildId);
-                Progress(child->Id);
             }
             break;
         case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
             if (!buildInfo.RowIdUniqueBuildId) {
                 buildInfo.RowIdUniqueBuildId = TIndexBuildId(ui64(txId));
                 Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
-                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ false,
-                    buildInfo.RowIdUniqueBuildId);
-                Progress(child->Id);
             }
             break;
         case TIndexBuildInfo::EState::DropBuild:

@@ -3321,6 +3321,82 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(getGroup(tabletId), goodGroup);
     }
 
+    Y_UNIT_TEST(TestSpaceReassignTooSoonAfterHiveRestart) {
+        // After a Hive restart every tablet left in GroupAssignment state is reassigned by a single
+        // reassign actor, one tablet at a time. That actor waits for a notification per tablet, so a
+        // reassign that is silently dropped (here - a space reassign rejected as "too soon") used to
+        // block the whole queue and leave the remaining tablets in GroupAssignment forever.
+        static constexpr ui64 NUM_TABLETS = 3;
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            // every reassign following the first one is "too soon"
+            app.HiveConfig.SetMinPeriodBetweenReassign(3600);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::vector<ui64> tablets;
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+                MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+            tablets.push_back(tabletId);
+        }
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto getTabletInfo = [&runtime, sender, hiveTablet](ui64 tabletId) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tabletId,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
+            return response->Record.GetTablets(0);
+        };
+
+        // The first space reassign goes through and becomes the "last change" every following
+        // space reassign of these tablets is compared against.
+        for (ui64 tabletId : tablets) {
+            SendReassignTabletSpace(runtime, hiveTablet, tabletId, {}, 0);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        for (ui64 tabletId : tablets) {
+            const auto tablet = getTabletInfo(tabletId);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablet.GetState(), static_cast<ui32>(NHive::ETabletState::ReadyToWork), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablet.GetTabletChannels(0).GetHistory().size(), 2, tabletId);
+        }
+
+        {
+            // Hold group assignment back, so that the tablets are still in GroupAssignment state
+            // by the time Hive restarts.
+            TBlockEvents<TEvBlobStorage::TEvControllerSelectGroupsResult> blockGroups(runtime);
+            for (ui64 tabletId : tablets) {
+                SendReassignTabletSpace(runtime, hiveTablet, tabletId, {}, 0);
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            for (ui64 tabletId : tablets) {
+                UNIT_ASSERT_VALUES_EQUAL_C(getTabletInfo(tabletId).GetState(),
+                    static_cast<ui32>(NHive::ETabletState::GroupAssignment), tabletId);
+            }
+            blockGroups.Stop(); // the blocked results are dropped, Hive is about to die anyway
+        }
+
+        runtime.Register(CreateTabletKiller(hiveTablet));
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        for (ui64 tabletId : tablets) {
+            const auto tablet = getTabletInfo(tabletId);
+            // every reassign is rejected as "too soon", so no tablet gets a new group ...
+            UNIT_ASSERT_VALUES_EQUAL_C(tablet.GetTabletChannels(0).GetHistory().size(), 2, tabletId);
+            // ... but every tablet must still leave GroupAssignment
+            UNIT_ASSERT_VALUES_EQUAL_C(tablet.GetState(), static_cast<ui32>(NHive::ETabletState::ReadyToWork), tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+    }
+
     Y_UNIT_TEST(TestAsyncReassign) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true, 5);

@@ -14,6 +14,7 @@ ydb/core/blobstorage/ut_vdisk2 unittest.[*/*] chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/fq/libs/control_plane_proxy/ut unittest.sole chunk
+ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.CustomQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery01
@@ -64,6 +65,7 @@ ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublic
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
@@ -71,6 +73,7 @@ ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationRecoversAfterDataShardReb
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
+ydb/core/kqp/ut/service KqpWarmup.WarmupLoadsOtherUsersQueriesWithRestrictedAdmins+LegacyMetadata
 ydb/core/kqp/ut/service KqpWarmup.WarmupLoadsOtherUsersQueriesWithRestrictedAdmins-LegacyMetadata
 ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpReadYourWrites.InsertThenUpdateThenDeleteAfterCommit_Serializable+IsOlap
@@ -149,6 +152,7 @@ ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Int64
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Int8
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Utf8_LongValue
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Uuid
+ydb/core/transfer/ut/row_table Transfer_RowTable.ComplexKey
 ydb/core/transfer/ut/row_table Transfer_RowTable.DropColumn
 ydb/core/transfer/ut/row_table Transfer_RowTable.MessageField_Attributes
 ydb/core/transfer/ut/row_table Transfer_RowTable.MessageField_CreateTimestamp
@@ -180,6 +184,7 @@ ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/services/config/ut unittest.sole chunk
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV1
 ydb/services/keyvalue/ut unittest.sole chunk
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ConsumerCodecsMustCoverTopicCodecs
 ydb/services/persqueue_v1/actors/schema/pqv1/ut unittest.sole chunk
 ydb/tests/fq/http_api py3test.sole chunk
@@ -864,6 +869,7 @@ ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upl
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[4MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[512MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[64MB]
+ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[8MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeToolS3.test_s3_write_read
 ydb/tests/stress/log/tests py3test.sole chunk
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]

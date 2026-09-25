@@ -103,6 +103,32 @@ TLoggingTagList MakeReadTablePartitionRequestTags(
         .With("ArrowFallbackRowsetFormat", NProto::ERowsetFormat_Name(req.arrow_fallback_rowset_format()));
 }
 
+TLoggingTagList MakePartitionFileRequestTags(
+    const NProto::TReqPartitionFile& req)
+{
+    static constexpr int MaxLoggedRanges = 3;
+
+    return TLoggingTagList()
+        .With("Path", req.path())
+        .With("Ranges", MakeShrunkFormattableView(
+            req.ranges(),
+            [] (TStringBuilderBase* builder, const NProto::TReqPartitionFile::TFileReadRange& range) {
+                builder->AppendFormat("[%v, %v)",
+                    range.begin(),
+                    YT_OPTIONAL_FROM_PROTO(range, end));
+            },
+            MaxLoggedRanges))
+        .With("RangeCount", req.ranges_size())
+        .With("FetchCookieNodeDescriptors", req.fetch_cookie_node_descriptors());
+}
+
+TLoggingTagList MakeReadFilePartitionRequestTags(
+    const NProto::TReqReadFilePartition& req)
+{
+    return TLoggingTagList()
+        .With("CookieSize", req.cookie().size());
+}
+
 TLoggingTagList MakeStartDistributedWriteSessionRequestTags(
     const NYPath::TRichYPath& path)
 {

@@ -1389,6 +1389,46 @@ void FromProto(
 }
 
 void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie)
+{
+    auto cookieBytes = ConvertToYsonString(cookie);
+    *protoCookie = cookieBytes.ToString();
+}
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie)
+{
+    *cookie = ConvertTo<TFilePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition)
+{
+    ToProto(protoFilePartition->mutable_cookie(), filePartition.Cookie);
+    protoFilePartition->set_length(filePartition.Length);
+}
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition)
+{
+    FromProto(&filePartition->Cookie, protoFilePartition.cookie());
+    filePartition->Length = protoFilePartition.length();
+}
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile)
+{
+    FromProto(
+        &filePartitions->Partitions,
+        protoRspPartitionFile.partitions());
+}
+
+void ToProto(
     NProto::TRowBatchReadOptions* proto,
     const NQueueClient::TQueueRowBatchReadOptions& result)
 {

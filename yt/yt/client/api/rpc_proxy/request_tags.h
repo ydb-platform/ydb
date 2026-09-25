@@ -46,6 +46,12 @@ NLogging::TLoggingTagList MakePartitionTablesRequestTags(
 NLogging::TLoggingTagList MakeReadTablePartitionRequestTags(
     const NProto::TReqReadTablePartition& req);
 
+NLogging::TLoggingTagList MakePartitionFileRequestTags(
+    const NProto::TReqPartitionFile& req);
+
+NLogging::TLoggingTagList MakeReadFilePartitionRequestTags(
+    const NProto::TReqReadFilePartition& req);
+
 NLogging::TLoggingTagList MakeStartDistributedWriteSessionRequestTags(
     const NYPath::TRichYPath& path);
 

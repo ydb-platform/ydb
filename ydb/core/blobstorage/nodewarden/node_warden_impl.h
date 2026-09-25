@@ -267,6 +267,8 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxInProgressLocalRecoveryCount;
         TControlWrapper MaxInProgressLocalRecoveryPerPDiskCount;
         TControlWrapper MaxInProgressSyncCount;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
@@ -295,6 +297,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerBucketSize;
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
+        TControlWrapper EnableChecksumCalcAndValidationOnDsProxy;
 
         TControlWrapper EnableDeepScrubbing;
 

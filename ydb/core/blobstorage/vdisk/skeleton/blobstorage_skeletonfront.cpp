@@ -1698,7 +1698,8 @@ namespace NKikimr {
                 NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, TInstant /*now*/,
                 const std::optional<NBackpressure::TMessageId>& expectedMsgId = std::nullopt) {
             const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
-            auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(status);
+            auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(status,
+                Config->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
             auto& record = res->Record;
             SetRacingGroupInfo(ev->Get()->Record, record, GInfo);
             if (expectedMsgId) {
@@ -1709,7 +1710,7 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes = record.MutableCostSettings()->GetMinHugeBlobInBytes();
                 // We account header size here, since DSProxy doesn't know about it
                 // and can try to send smaller blobs (which VDisk would consider huge) in a MultiPut request.
-                ui32 onVDiskMinHugeBlobInBytes = minHugeBlobInBytes > TDiskBlob::HeaderSize ? (minHugeBlobInBytes - TDiskBlob::HeaderSize) : 0;
+                ui32 onVDiskMinHugeBlobInBytes = minHugeBlobInBytes > TDiskBlob::MaxHeaderSize ? (minHugeBlobInBytes - TDiskBlob::MaxHeaderSize) : 0;
                 record.MutableCostSettings()->SetMinHugeBlobInBytes(onVDiskMinHugeBlobInBytes);
             }
             ctx.Send(ev->Sender, res.release(), flags, ev->Cookie);

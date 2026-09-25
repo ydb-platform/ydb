@@ -39,10 +39,6 @@ enum Codec {
     // See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
     CODEC_BATCH_KAFKA = 20000;
 
-    // Example of a batch codec: the batch is a compressed Batch protobuf message.
-    // Added to show how the batch codec range is extended, not intended for real use.
-    CODEC_BATCH_TOPIC_COMPRESSED_EXAMPLE = 20001;
-
     reserved 20002 to 29999;
 
     // Reserved for future usage.
@@ -159,6 +155,9 @@ message StreamWriteMessage {
         // Client can only use compression codecs from this set to write messages to topic.
         // Otherwise session will be closed with BAD_REQUEST.
         SupportedCodecs supported_codecs = 4;
+
+        // Allows sending message batches to the server.
+        bool is_batching_supported = 5;
     }
 
     // Represents portion of client messages.
@@ -402,11 +401,6 @@ message StreamReadMessage {
         // and the server is unable to re-encode it into a supported codec,
         // the stream is closed with a non-retryable error.
         SupportedCodecs supported_codecs = 7;
-
-        // Allow the server to send data encoded with any codec, ignoring supported_codecs.
-        // It is intended for proxies, which pass messages through without looking at their content:
-        // such a proxy may read messages and batches from one topic and write them to another one as is.
-        bool allow_unsupported_codecs = 8;
     }
 
     // Handshake response.

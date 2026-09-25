@@ -32,6 +32,8 @@ struct IWebAssemblyCompartment
 
     //! Returns an opaque pointer to the function with name |name|.
     virtual void* GetFunction(const std::string& functionName) = 0;
+    //! Finds an export in the same module instance as an exported function.
+    virtual void* GetFunctionInSameModule(void* exportedFunction, const std::string& functionName) = 0;
     //! Returns an opaque pointer to the function with index |index|.
     virtual void* GetFunction(size_t index) = 0;
     //! Returns an opaque pointer to the execution context.

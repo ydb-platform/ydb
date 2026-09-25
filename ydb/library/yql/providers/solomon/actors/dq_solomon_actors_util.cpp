@@ -44,6 +44,7 @@ TMaybe<TInstant> ParseTimestamp(
     switch (scheme.GetDataTypeId()) {
         case NUdf::TDataType<NUdf::TDate>::Id:
         case NUdf::TDataType<NUdf::TTzDate>::Id:
+            return TInstant::Days(timestampValue.Get<ui16>());
         case NUdf::TDataType<NUdf::TDatetime>::Id:
         case NUdf::TDataType<NUdf::TTzDatetime>::Id:
             return TInstant::Seconds(timestampValue.Get<ui32>());

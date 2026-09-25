@@ -30,7 +30,7 @@ TEntityIdentity BuildEntityIdentity(EEntityType entityType, const NHttp::TUrlPar
 TCgiParameters BuildAdditionalRequestParameters(const NHttp::TUrlParameters& urlParameters) {
     TCgiParameters additionalRequestParams;
     for (const auto& [name, _] : urlParameters.Parameters) {
-        if (IsIdentityRequestParameter(name)) {
+        if (IsIdentityRequestParameter(name) || IsRequestControlParameter(name)) {
             continue;
         }
         additionalRequestParams.InsertUnescaped(name, urlParameters[name]);

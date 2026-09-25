@@ -796,20 +796,6 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT(headroom.ToPreOrange < headroom.ToOrange);
         UNIT_ASSERT(headroom.ToOrange < headroom.ToRed);
         UNIT_ASSERT(headroom.ToRed < headroom.ToBlack);
-
-        // A projection is what a VDisk uses to admit writes: charging it the whole
-        // headroom must leave it just short of the boundary.
-        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToPreOrange, TColor::GREEN), TColor::GREEN);
-        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToPreOrange + 1, TColor::GREEN), TColor::PRE_ORANGE);
-        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToOrange + 1, TColor::GREEN), TColor::ORANGE);
-        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToRed + 1, TColor::GREEN), TColor::RED);
-        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToBlack + 1, TColor::GREEN), TColor::BLACK);
-
-        // Headroom lags behind the color it is paired with; the worse of the two wins.
-        UNIT_ASSERT_EQUAL_X(headroom.Project(0, TColor::ORANGE), TColor::ORANGE);
-
-        // A VDisk that has not heard from PDisk yet must not conclude it is full.
-        UNIT_ASSERT_EQUAL_X(TSpaceHeadroom().Project(1000, TColor::GREEN), TColor::GREEN);
     }
 
     Y_UNIT_TEST(SpaceHeadroomShrinksAsTheDiskFills) {

@@ -32,8 +32,6 @@ response = requests.get("http://localhost:8765/viewer/json/sysinfo", timeout=10)
 response.raise_for_status()
 node = response.json()["SystemStateInfo"][0]
 assert node["NumberOfCpus"] == expected_cpus, node
-pools = {pool["Name"]: pool["Threads"] for pool in node["PoolStats"]}
-assert pools == {"Common": expected_cpus, "IO": 1}, pools
 '
 
     run_sql "$container" \

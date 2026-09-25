@@ -80,7 +80,7 @@ void TTablet::PromoteToCandidate(ui32 gen) {
     if (!UserTablet)
         UserTablet = SetupInfo->Apply(Info.Get(), SelfId());
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnPromoteToCandidate>(StateStorageInfo.KnownGeneration));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnPromoteToCandidate>(StateStorageInfo.KnownGeneration));
     }
 
     // todo: handle 'proxy not found' case
@@ -97,7 +97,7 @@ void TTablet::TabletBlockBlobStorage() {
     TActorId newActorId = Register(x);
 
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBlockBlobStorage>(newActorId, StateStorageInfo.KnownGeneration));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnTabletBlockBlobStorage>(newActorId, StateStorageInfo.KnownGeneration));
     }
 
     Become(&TThis::StateBlockBlobStorage);
@@ -105,10 +105,10 @@ void TTablet::TabletBlockBlobStorage() {
 }
 
 void TTablet::TabletRebuildGraph() {
-    THolder<NTracing::ITrace> newTrace;
+    std::unique_ptr<NTracing::ITrace> newTrace;
     NTracing::TTraceID rebuildGraphTraceID;
     if (IntrospectionTrace) {
-        newTrace = THolder<NTracing::ITrace>(IntrospectionTrace->CreateTrace(NTracing::ITrace::TypeReqRebuildHistoryGraph));
+        newTrace = std::unique_ptr<NTracing::ITrace>(IntrospectionTrace->CreateTrace(NTracing::ITrace::TypeReqRebuildHistoryGraph));
         rebuildGraphTraceID = newTrace->GetSelfID();
     }
 
@@ -117,7 +117,7 @@ void TTablet::TabletRebuildGraph() {
     );
 
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletRebuildGraph>(RebuildGraphRequest, rebuildGraphTraceID));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnTabletRebuildGraph>(RebuildGraphRequest, rebuildGraphTraceID));
     }
 
     Become(&TThis::StateRebuildGraph);
@@ -172,7 +172,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
     }
 
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnWriteZeroEntry>(snapshot, lastGeneration, confirmedStep, lastInGeneration));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnWriteZeroEntry>(snapshot, lastGeneration, confirmedStep, lastInGeneration));
     }
 
     // fill tail bitmask (beyond continuous confirmed range) (if any present)
@@ -572,7 +572,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev) {
         {"marker", "TSYS11"});
 
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnFollowerPromoteToLeader>(
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnFollowerPromoteToLeader>(
             msg->SuggestedGeneration
             , FollowerInfo.KnownLeaderID
             , FollowerStStGuardian));
@@ -889,7 +889,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
 
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(
-            MakeHolder<NTracing::TOnHandleStateStorageInfoResolve>(
+            std::make_unique<NTracing::TOnHandleStateStorageInfoResolve>(
                 StateStorageInfo.KnownGeneration
                 , StateStorageInfo.KnownStep
                 , StateStorageInfo.Signature.Size()));
@@ -945,7 +945,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
             StateStorageInfo.Update(msg);
 
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TOnHandleStateStorageInfoLock>(
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TOnHandleStateStorageInfoLock>(
                     StateStorageInfo.KnownGeneration
                     , StateStorageInfo.KnownStep
                     , StateStorageInfo.Signature.Size()));
@@ -1078,7 +1078,7 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
 
     TEvTabletBase::TEvRebuildGraphResult *msg = ev->Get();
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnRebuildGraphResult>(msg->Trace.Get()));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnRebuildGraphResult>(msg->Trace.Get()));
     }
     TIntrusivePtr<TEvTablet::TDependencyGraph> graph;
     switch (msg->Status) {
@@ -1719,7 +1719,7 @@ void TTablet::SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower,
         return;
 
     const ui64 tabletId = TabletID();
-    auto notify = MakeHolder<TEvTablet::TEvFollowerAuxUpdate>(tabletId, info.FollowerAttempt, info.StreamCounter);
+    auto notify = std::make_unique<TEvTablet::TEvFollowerAuxUpdate>(tabletId, info.FollowerAttempt, info.StreamCounter);
     notify->Record.SetAuxPayload(auxUpdate);
 
     SendViaSession(info.InterconnectSession, follower, notify.Release(), IEventHandle::FlagTrackDelivery, info.LastCookie);
@@ -1796,7 +1796,7 @@ void TTablet::ProgressFollowerQueue() {
             if (followerInfo.SyncState == EFollowerSyncState::Active
                 || followerInfo.SyncState == EFollowerSyncState::Pending && entry->IsSnapshot)
             {
-                auto notify = MakeHolder<TEvTablet::TEvFollowerUpdate>(TabletID(), followerInfo.FollowerAttempt, followerInfo.StreamCounter);
+                auto notify = std::make_unique<TEvTablet::TEvFollowerUpdate>(TabletID(), followerInfo.FollowerAttempt, followerInfo.StreamCounter);
                 auto &record = notify->Record;
 
                 record.SetGeneration(StateStorageInfo.KnownGeneration);
@@ -1869,7 +1869,7 @@ void TTablet::ProgressSendSyncCommit() {
         }
 
         TLogoBlobID entryId(TabletID(), StateStorageInfo.KnownGeneration, Graph.SyncCommit.SyncStep, 0, 0, 1);
-        THolder<NKikimrTabletBase::TTabletLogEntry> entry(new NKikimrTabletBase::TTabletLogEntry());
+        std::unique_ptr<NKikimrTabletBase::TTabletLogEntry> entry(new NKikimrTabletBase::TTabletLogEntry());
 
         entry->SetSnapshot(MakeGenStepPair(Graph.Snapshot.first, Graph.Snapshot.second));
         entry->SetConfirmed(Graph.Confirmed);
@@ -2169,7 +2169,7 @@ void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TStri
     const ui32 reportedGeneration = SuggestedGeneration ? SuggestedGeneration : StateStorageInfo.KnownGeneration;
 
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnCancelTablet>(
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnCancelTablet>(
             this->TabletID()
             , Info->TabletType
             , reason
@@ -2279,7 +2279,7 @@ void TTablet::Handle(TEvTablet::TEvTabletStateUnsubscribe::TPtr& ev) {
 }
 
 void TTablet::SendTabletStateUpdate(const TTabletStateSubscriber& subscriber, NKikimrTabletBase::TEvTabletStateUpdate::EState state) {
-    auto replyMsg = MakeHolder<TEvTablet::TEvTabletStateUpdate>(TabletID(), subscriber.SeqNo, state, UserTablet);
+    auto replyMsg = std::make_unique<TEvTablet::TEvTabletStateUpdate>(TabletID(), subscriber.SeqNo, state, UserTablet);
 
     SendViaSession(
         subscriber.InterconnectSession,
@@ -2376,7 +2376,7 @@ void TTablet::TabletStateUndelivered(const TActorId& actorId, ui64 cookie) {
 }
 
 void TTablet::SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie) {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, SelfId(), event, flags, cookie);
+    std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(target, SelfId(), event, flags, cookie);
 
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);
@@ -2397,7 +2397,7 @@ void TTablet::LockedInitializationPath() {
         StateStorageInfo.KnownStep = 0;
     }
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnLockedInitializationPath>(
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnLockedInitializationPath>(
             StateStorageInfo.KnownGeneration
             , StateStorageInfo.KnownStep
             , StateStorageInfo.Signature.Size()));
@@ -2428,7 +2428,7 @@ void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
     using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
     if (msg->Mode == EMode::WipeAllData) {
         // Write empty zero entry
-        THolder<NKikimrTabletBase::TTabletLogEntry> entry = MakeHolder<NKikimrTabletBase::TTabletLogEntry>();
+        std::unique_ptr<NKikimrTabletBase::TTabletLogEntry> entry = std::make_unique<NKikimrTabletBase::TTabletLogEntry>();
         entry->SetSnapshot(MakeGenStepPair(0, 0));
         entry->SetZeroConfirmed(MakeGenStepPair(0, 0));
         entry->SetZeroTailSz(0);
@@ -2571,7 +2571,7 @@ void TTablet::BootstrapFollower() {
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, false, StateStorageInfo.ProxyID));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnTabletBootstrap>(SuggestedGeneration, false, StateStorageInfo.ProxyID));
     }
 
     Become(&TThis::StateResolveLeader);
@@ -2590,7 +2590,7 @@ void TTablet::Bootstrap() {
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
-        IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));
+        IntrospectionTrace->Attach(std::make_unique<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));
     }
     // todo: handle "proxy unknown" case (normal timeouts are handled by proxy)
     PipeConnectAcceptor->Detach(SelfId());
@@ -2600,7 +2600,7 @@ void TTablet::Bootstrap() {
 }
 
 void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner, TMessageRelevanceWatcher relevance) {
-    THolder<NKikimrTabletBase::TTabletLogEntry> entry = MakeHolder<NKikimrTabletBase::TTabletLogEntry>();
+    std::unique_ptr<NKikimrTabletBase::TTabletLogEntry> entry = std::make_unique<NKikimrTabletBase::TTabletLogEntry>();
     entry->SetSnapshot(MakeGenStepPair(0, 0));
     entry->SetZeroConfirmed(MakeGenStepPair(0, 0));
     entry->SetZeroTailSz(0);

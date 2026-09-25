@@ -336,7 +336,7 @@ namespace NKikimr {
 
     IActor *CreateScrubActor(TScrubContext::TPtr scrubCtx, NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
             ui64 scrubEntrypointLsn) {
-        return new TActorCoro(MakeHolder<TScrubCoroImpl>(std::move(scrubCtx), std::move(scrubEntrypoint),
+        return new TActorCoro(std::make_unique<TScrubCoroImpl>(std::move(scrubCtx), std::move(scrubEntrypoint),
             scrubEntrypointLsn), NKikimrServices::TActivity::BS_SCRUB_ACTOR);
     }
 

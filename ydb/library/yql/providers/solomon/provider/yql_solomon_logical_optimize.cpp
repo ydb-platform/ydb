@@ -109,8 +109,8 @@ private:
 
 } // namespace
 
-THolder<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state) {
-    return MakeHolder<TSolomonLogicalOptProposalTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state) {
+    return std::make_unique<TSolomonLogicalOptProposalTransformer>(state);
 }
 
 } // namespace NYql

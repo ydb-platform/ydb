@@ -78,8 +78,8 @@ TAutoPtr<IEventHandle> GetClassifierUpdate(TServer& server, const TActorId sende
     return handle;
 }
 
-THolder<TTempFileHandle> CreateNetDataFile(const TString& content) {
-    auto netDataFile = MakeHolder<TTempFileHandle>();
+std::unique_ptr<TTempFileHandle> CreateNetDataFile(const TString& content) {
+    auto netDataFile = std::make_unique<TTempFileHandle>();
 
     netDataFile->Write(content.data(), content.size());
     netDataFile->FlushData();
@@ -938,8 +938,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     private:
         std::shared_ptr<grpc::Channel> Channel;
         std::unique_ptr<Service::Stub> Stub;
-        THolder<grpc::ClientContext> ControlContext;
-        THolder<grpc::ClientContext> DirectContext;
+        std::unique_ptr<grpc::ClientContext> ControlContext;
+        std::unique_ptr<grpc::ClientContext> DirectContext;
         NPersQueue::TTestServer* Server;
         TAtomicCounter ForgetReadsDone = 0;
 
@@ -949,7 +949,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TString SessionId;
 
         TDirectReadTestSetup(TPersQueueV1TestServer& server)
-            : DirectContext(MakeHolder<grpc::ClientContext>())
+            : DirectContext(std::make_unique<grpc::ClientContext>())
             , Server(server.Server.Get())
         {
             server.EnablePQLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PERSQUEUE });
@@ -985,7 +985,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         void InitControlSession(const TString& topic, ui64 readRequestBytes = 40_MB) {
             // Send InitRequest, get InitResponse, send ReadRequest.
 
-            ControlContext = MakeHolder<grpc::ClientContext>();
+            ControlContext = std::make_unique<grpc::ClientContext>();
             ControlStream = Stub->StreamRead(ControlContext.Get());
             UNIT_ASSERT(ControlStream);
 
@@ -1229,7 +1229,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             if (DirectStream) {
                 DirectStream->Finish();
                 DirectStream = nullptr;
-                DirectContext = MakeHolder<grpc::ClientContext>();
+                DirectContext = std::make_unique<grpc::ClientContext>();
             }
             DirectStream = Stub->StreamDirectRead(DirectContext.Get());
             UNIT_ASSERT(DirectStream);
@@ -1317,7 +1317,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     };
 
-    THolder<TEvPQ::TEvGetFullDirectReadData> RequestCacheData(TTestActorRuntime* runtime, TEvPQ::TEvGetFullDirectReadData* request) {
+    std::unique_ptr<TEvPQ::TEvGetFullDirectReadData> RequestCacheData(TTestActorRuntime* runtime, TEvPQ::TEvGetFullDirectReadData* request) {
         const auto& edgeId = runtime->AllocateEdgeActor();
         runtime->Send(NPQ::MakePQDReadCacheServiceActorId(), edgeId, request);
         auto resp = runtime->GrabEdgeEvent<TEvPQ::TEvGetFullDirectReadData>(TDuration::Seconds(10));
@@ -1337,7 +1337,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         setup.InitDirectSession("acc/topic1");
 
         // Without retrying the test is flaky as the cachedData might be empty.
-        THolder<TEvPQ::TEvGetFullDirectReadData> cachedData;
+        std::unique_ptr<TEvPQ::TEvGetFullDirectReadData> cachedData;
         while (true) {
             cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
             if (!cachedData->Data.empty()) {
@@ -2143,21 +2143,21 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     }
 
-    THolder<NPersQueue::TTestServer> SetupLbFederationServer() {
+    std::unique_ptr<NPersQueue::TTestServer> SetupLbFederationServer() {
         const TString dbRoot = "/Root/LbAccount";
         auto settings = PQSettings(0).SetDomainName("Root").SetNodeCount(1);
         settings.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
         settings.PQConfig.SetTestDatabaseRoot(dbRoot);
         settings.PQConfig.SetTopicsAreFirstClassCitizen(false);
 
-        auto server = MakeHolder<NPersQueue::TTestServer>(settings, true);
+        auto server = std::make_unique<NPersQueue::TTestServer>(settings, true);
         server->EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY });
         server->AnnoyingClient->MkDir("/Root", "LbAccount");
         server->AnnoyingClient->MkDir("/Root/LbAccount", "account");
         return server;
     }
 
-    THolder<NPersQueue::TTestServer> SetupLbFederationServerWithTopic(
+    std::unique_ptr<NPersQueue::TTestServer> SetupLbFederationServerWithTopic(
             const TString& shortTopicName, ui64 partsCount,
             const std::vector<TString>& consumers = {"user"})
     {
@@ -3471,7 +3471,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
         {
-            THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest({DEFAULT_TOPIC_NAME});
+            std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest({DEFAULT_TOPIC_NAME});
 
             NKikimrClient::TResponse response;
 
@@ -5607,7 +5607,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         msg = consumer->GetNextMessage();
         UNIT_ASSERT(!msg.Wait(TDuration::Seconds(1)));
 
-        THolder<IConsumer> consumer2;
+        std::unique_ptr<IConsumer> consumer2;
         do {
             std::tie(consumer2, ccResult) = CreateConsumer(pqLib, ss);
             Cerr << ccResult.Response << "\n";
@@ -5631,7 +5631,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.release().forceful_release() == true);
 
-        THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> response;
+        std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response;
         TActorId edge = server.CleverServer->GetRuntime()->AllocateEdgeActor();
 
         do {
@@ -5661,7 +5661,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         setup.CreateTopic("account/topic");
 
-        THolder<IProducer> producer = setup.StartProducer("account/topic", true);
+        std::unique_ptr<IProducer> producer = setup.StartProducer("account/topic", true);
 
         TString data = TString("12345") * 100;
         for (ui32 i = 0; i < 100; ++i) {
@@ -5708,7 +5708,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         setup.CreateTopic(topicPath);
         setup.CreateConsumer(consumerPath);
 
-        THolder<IProducer> producer = setup.StartProducer(topicPath, true);
+        std::unique_ptr<IProducer> producer = setup.StartProducer(topicPath, true);
 
         auto pqLib = TPQLib::WithCerrLogger();
 
@@ -5755,7 +5755,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         const TString consumerPath = "acc2/reader1"; // don't create kesus resources
         setup.CreateTopic(topicPath);
 
-        THolder<IProducer> producer = setup.StartProducer(topicPath, true);
+        std::unique_ptr<IProducer> producer = setup.StartProducer(topicPath, true);
 
         TPQLibSettings pqLibSettings({ .DefaultLogger = new TCerrLogger(DEBUG_LOG_LEVEL) });
         TPQLib PQLib(pqLibSettings);
@@ -7737,7 +7737,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         // accounting actor. The TMeteringSink sends TEvWriteMeteringJson to the
         // named metering service actor (YDB_METER), which is only registered when
         // SetMeteringFilePath is configured.
-        auto meteringFile = MakeHolder<TTempFileHandle>();
+        auto meteringFile = std::make_unique<TTempFileHandle>();
 
         TServerSettings serverSettings = PQSettings(0);
         serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
@@ -8369,12 +8369,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
-    THolder<NYdb::TDriver> SetupTestAndGetDriver(
+    std::unique_ptr<NYdb::TDriver> SetupTestAndGetDriver(
             NPersQueue::TTestServer& server, const TString& topicName, ui64 partsCount = 1
     ) {
         NYdb::TDriverConfig driverCfg;
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
-        auto driver = MakeHolder<NYdb::TDriver>(driverCfg);
+        auto driver = std::make_unique<NYdb::TDriver>(driverCfg);
 
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY});
         server.EnableLogs({ NKikimrServices::KQP_PROXY}, NActors::NLog::PRI_EMERG);

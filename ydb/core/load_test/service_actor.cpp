@@ -749,7 +749,7 @@ public:
 
         Y_ENSURE(UuidByTag.contains(msg->Tag), "Not found uuid corresponding for tag# " << msg->Tag);
         {
-            auto nodeFinishResponse = MakeHolder<TEvLoad::TEvNodeFinishResponse>();
+            auto nodeFinishResponse = std::make_unique<TEvLoad::TEvNodeFinishResponse>();
             TEvNodeFinishResponse& record = nodeFinishResponse->Record;
             const TString& uuid = UuidByTag.at(msg->Tag);
             record.SetUuid(uuid);
@@ -900,7 +900,7 @@ public:
         });
         for (const auto& id : dynNodesIds) {
             LOG_D("sending load request to: " << id);
-            auto msg = MakeHolder<TEvLoad::TEvLoadTestRequest>();
+            auto msg = std::make_unique<TEvLoad::TEvLoadTestRequest>();
             msg->Record = request;
             msg->Record.SetCookie(id);
             Send(MakeLoadServiceID(id), msg.Release());

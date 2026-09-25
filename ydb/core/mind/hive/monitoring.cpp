@@ -231,7 +231,7 @@ public:
 class TTxMonEvent_MemStateTablets : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     bool BadOnly = false;
     bool WaitingOnly = false;
     ui64 MaxCount = 0;
@@ -357,7 +357,7 @@ public:
 class TTxMonEvent_MemStateNodes : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     bool BadOnly = false;
     ui64 MaxCount = 0;
 
@@ -484,7 +484,7 @@ public:
 class TTxMonEvent_MemStateDomains : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     bool BadOnly = false;
     ui64 MaxCount = 0;
 
@@ -2858,7 +2858,7 @@ class TTxMonEvent_SetDown : public TTxSetDown, public TLoggedMonTransaction {
 public:
     TString Response;
     TString Status = THttpStatus::OK;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TTxSetDown(nodeId, down, hive, source)
@@ -2905,7 +2905,7 @@ public:
     const bool Freeze;
     TString Response;
     TString Status = THttpStatus::OK;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(hive)
@@ -2957,7 +2957,7 @@ public:
     const TNodeId NodeId;
     TString Response;
     TString Status = THttpStatus::OK;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_KickNode(const TActorId& source, TNodeId nodeId, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(hive)
@@ -3098,7 +3098,7 @@ public:
     ui64 MaxInFlight = 1;
     TString Response = "{}";
     TString Status = THttpStatus::OK;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_Rebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -3137,7 +3137,7 @@ public:
     TStorageBalancerSettings Settings;
     TString Response = "{}";
     TString Status = THttpStatus::OK;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_StorageRebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -3171,7 +3171,7 @@ class TTxMonEvent_RebalanceFromScratch : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     TString TenantName;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_RebalanceFromScratch(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -3800,7 +3800,7 @@ public:
 
 class TTxMonEvent_StopDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TSubDomainKey DomainId;
     bool Stop = true;
@@ -3955,7 +3955,7 @@ public:
 
 class TTxMonEvent_FindTablet : public TTransactionBase<THive> {
 public:
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletId TabletId = 0;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
@@ -4063,7 +4063,7 @@ public:
 
 class TTxMonEvent_TabletInfo : public TTransactionBase<THive> {
 public:
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletId TabletId = 0;
     NJson::TJsonValue Result;
@@ -4724,7 +4724,7 @@ public:
 class TTxMonEvent_Storage : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     bool Kinds = false;
 
     TTxMonEvent_Storage(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
@@ -4847,7 +4847,7 @@ public:
 class TTxMonEvent_Subactors : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     TMaybe<TSubActorId> SubActorToStop;
 
     TTxMonEvent_Subactors(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
@@ -4917,7 +4917,7 @@ public:
 class TTxMonEvent_ShrinkPool : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_ShrinkPool(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -4997,7 +4997,7 @@ public:
 class TTxMonEvent_OperationsLog : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
     ui64 MaxCount = 100;
 
     TTxMonEvent_OperationsLog(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -5064,7 +5064,7 @@ public:
 class TTxMonEvent_ManualOps : public TTransactionBase<THive> {
 public:
     const TActorId Source;
-    THolder<NMon::TEvRemoteHttpInfo> Event;
+    std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)

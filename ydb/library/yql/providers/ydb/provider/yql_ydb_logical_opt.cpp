@@ -81,8 +81,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateYdbLogicalOptProposalTransformer(TYdbState::TPtr state) {
-    return MakeHolder<TYdbLogicalOptProposalTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateYdbLogicalOptProposalTransformer(TYdbState::TPtr state) {
+    return std::make_unique<TYdbLogicalOptProposalTransformer>(state);
 }
 
 } // namespace NYql

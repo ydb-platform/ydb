@@ -15,7 +15,7 @@ void SendScanError(const ui64 tabletId, const TActorId& scanComputeActor, const 
         {"problem", problem},
         {"details", details});
 
-    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, tabletId);
+    auto ev = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(scanGen, tabletId);
     ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
     auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
         TStringBuilder() << "Table " << table << " (shard " << tabletId << ") scan failed, reason: " << problem << "/" << details);

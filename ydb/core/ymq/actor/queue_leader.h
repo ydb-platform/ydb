@@ -485,7 +485,7 @@ private:
         }
 
         TSqsEvents::TEvReceiveMessageBatch::TPtr Event;
-        THolder<TSqsEvents::TEvReceiveMessageBatchResponse> Answer;
+        std::unique_ptr<TSqsEvents::TEvReceiveMessageBatchResponse> Answer;
         std::vector<ui64> Shards;
         size_t CurrentShardIndex = 0;
         TInstant LockSendTs = TInstant::Zero();
@@ -509,8 +509,8 @@ private:
         TDeleteMessageBatchRequestProcessing(TSqsEvents::TEvDeleteMessageBatch::TPtr&& ev);
 
         TSqsEvents::TEvDeleteMessageBatch::TPtr Event;
-        THolder<TSqsEvents::TEvDeleteMessageBatchResponse> Answer;
-        std::vector<THolder<TInflyMessage>> InflyMessages;
+        std::unique_ptr<TSqsEvents::TEvDeleteMessageBatchResponse> Answer;
+        std::vector<std::unique_ptr<TInflyMessage>> InflyMessages;
         size_t AnswersGot = 0;
     };
 
@@ -518,7 +518,7 @@ private:
         TChangeMessageVisibilityBatchRequestProcessing(TSqsEvents::TEvChangeMessageVisibilityBatch::TPtr&& ev);
 
         TSqsEvents::TEvChangeMessageVisibilityBatch::TPtr Event;
-        THolder<TSqsEvents::TEvChangeMessageVisibilityBatchResponse> Answer;
+        std::unique_ptr<TSqsEvents::TEvChangeMessageVisibilityBatchResponse> Answer;
         TInflyMessages::TChangeVisibilityCandidates Candidates;
     };
 
@@ -526,7 +526,7 @@ private:
         TGetRuntimeQueueAttributesRequestProcessing(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr&& ev);
 
         TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr Event;
-        THolder<TSqsEvents::TEvGetRuntimeQueueAttributesResponse> Answer;
+        std::unique_ptr<TSqsEvents::TEvGetRuntimeQueueAttributesResponse> Answer;
         std::vector<bool> ShardProcessFlags;
         ui64 ShardsProcessed = 0;
     };

@@ -552,8 +552,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr state) {
-    return MakeHolder<TS3PhysicalOptProposalTransformer>(std::move(state));
+std::unique_ptr<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr state) {
+    return std::make_unique<TS3PhysicalOptProposalTransformer>(std::move(state));
 }
 
 } // namespace NYql

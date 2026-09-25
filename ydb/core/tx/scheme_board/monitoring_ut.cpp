@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
     void TestActorId(TTestContext& ctx, const TActorId& monitoring, const TActorId& sender,
             const TString& path, const TCgiParameters& params, const TString& expectedAnswer)
     {
-        auto request = MakeHolder<TMockMonRequest>(path, params);
+        auto request = std::make_unique<TMockMonRequest>(path, params);
         ctx.Send(monitoring, sender, new NMon::TEvHttpInfo(*request.Get()));
 
         auto ev = ctx.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
     }
 
     Y_UNIT_TEST(ValidActorId) {
-        auto context = MakeHolder<TTestContext>();
+        auto context = std::make_unique<TTestContext>();
         context->Initialize(TAppPrepare().Unwrap());
 
         const auto monitoring = CreateMonitoring(*context);
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
     }
 
     Y_UNIT_TEST(InvalidActorId) {
-        auto context = MakeHolder<TTestContext>();
+        auto context = std::make_unique<TTestContext>();
         context->Initialize(TAppPrepare().Unwrap());
 
         const auto monitoring = CreateMonitoring(*context);

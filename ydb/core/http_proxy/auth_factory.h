@@ -21,7 +21,7 @@ public:
         const THttpConfig& config,
         const NKikimrConfig::TGRpcConfig& grpcConfig) = 0;
 
-    virtual NActors::IActor* CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const = 0;
+    virtual NActors::IActor* CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const = 0;
 
     virtual ~IAuthFactory() = default;
 };
@@ -37,7 +37,7 @@ public:
         const THttpConfig& config,
         const NKikimrConfig::TGRpcConfig& grpcConfig) final;
 
-    NActors::IActor* CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const final;
+    NActors::IActor* CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const final;
 
     virtual void InitTenantDiscovery(NActors::TActorSystemSetup::TLocalServices&,
         const TAppData& appData,

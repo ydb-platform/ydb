@@ -62,7 +62,7 @@ public:
         }
     }
 
-    static void GenerateSvg(const THolder<TPlanGraphEntry> &planGraph, TOFStream &resultStream) {
+    static void GenerateSvg(const std::unique_ptr<TPlanGraphEntry> &planGraph, TOFStream &resultStream) {
         auto depth = planGraph->CalculateDepth(0);
 
         auto viewPortHeight = (2 * VERTICAL_OFFSET) + (static_cast<double>(depth) * (RECT_HEIGHT + 2 * INTER_ELEMENT_OFFSET));
@@ -144,7 +144,7 @@ private:
         return {fsPath};
     }
 
-    THolder<TPlanGraphEntry> ParsePlan(TJsonValue *plan) {
+    std::unique_ptr<TPlanGraphEntry> ParsePlan(TJsonValue *plan) {
         Y_ENSURE(plan);
         TJsonValue nodeType;
         if (!plan->GetValue("Node Type", &nodeType)) {
@@ -174,7 +174,7 @@ private:
 
         auto taskProfile = parseTasksProfile(plan->GetValueByPath("Stats", '/'));
 
-        auto planEntry = MakeHolder<TPlanGraphEntry>(stageDescription,
+        auto planEntry = std::make_unique<TPlanGraphEntry>(stageDescription,
                                                      stageId ? stageId->GetUIntegerSafe() : 0,
                                                      cpuUsage ? cpuUsage->GetUIntegerSafe() : 0,
                                                      outBytes ? outBytes->GetUIntegerSafe() : 0,
@@ -234,7 +234,7 @@ private:
 private:
     TString ResultFile;
 
-    TVector<THolder<TPlanGraphEntry>> PlanGraphs;
+    TVector<std::unique_ptr<TPlanGraphEntry>> PlanGraphs;
 };
 
 

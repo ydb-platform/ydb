@@ -23,7 +23,7 @@ struct TTestEndDecorator : TDecorator {
     TThreadParkPad* Pad;
     TAtomic* ActorsAlive;
 
-    TTestEndDecorator(THolder<IActor>&& actor, TThreadParkPad* pad, TAtomic* actorsAlive)
+    TTestEndDecorator(std::unique_ptr<IActor>&& actor, TThreadParkPad* pad, TAtomic* actorsAlive)
         : TDecorator(std::move(actor))
         , Pad(pad)
         , ActorsAlive(actorsAlive)
@@ -284,7 +284,7 @@ struct TActorBenchmark {
         TDuration DelayForScheduling = TDuration::MicroSeconds(1);
     };
 
-    static void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, bool hasSharedThread) {
+    static void AddBasicPool(std::unique_ptr<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, bool hasSharedThread) {
         TBasicExecutorPoolConfig basic;
         basic.PoolId = setup->GetExecutorsCount();
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
@@ -300,8 +300,8 @@ struct TActorBenchmark {
         setup->CpuManager.Basic.emplace_back(std::move(basic));
     }
 
-    static THolder<TActorSystemSetup> GetActorSystemSetup() {
-        auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    static std::unique_ptr<TActorSystemSetup> GetActorSystemSetup() {
+        auto setup = std::make_unique<NActors::TActorSystemSetup>();
         setup->NodeId = 1;
         setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0));
         return setup;
@@ -311,9 +311,9 @@ struct TActorBenchmark {
         Basic,
     };
 
-    static THolder<TActorSystemSetup> InitActorSystemSetup(EPoolType poolType, ui32 poolsCount, ui32 threads, bool activateEveryEvent) {
+    static std::unique_ptr<TActorSystemSetup> InitActorSystemSetup(EPoolType poolType, ui32 poolsCount, ui32 threads, bool activateEveryEvent) {
         if (poolType == EPoolType::Basic) {
-            THolder<TActorSystemSetup> setup = GetActorSystemSetup();
+            std::unique_ptr<TActorSystemSetup> setup = GetActorSystemSetup();
             for (ui32 i = 0; i < poolsCount; ++i) {
                 AddBasicPool(setup, threads, activateEveryEvent, 0);
             }
@@ -323,15 +323,15 @@ struct TActorBenchmark {
     }
 
     static double BenchSendReceive(bool allocation, NActors::TMailboxType::EType mType, EPoolType poolType, ESendingType sendingType) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false);
+        std::unique_ptr<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
         TThreadParkPad pad;
         TAtomic actorsAlive = 0;
         double elapsedTime = 0;
-        THolder<IActor> endActor{new TTestEndDecorator(
-            THolder(new TSendReceiveActor(
+        std::unique_ptr<IActor> endActor{new TTestEndDecorator(
+            std::unique_ptr<TSendReceiveActor>(new TSendReceiveActor(
                 TSendReceiveActorParams{
                     .OwnEvents=TSettings::TotalEventsAmountPerThread,
                     .OtherEvents=0,
@@ -353,7 +353,7 @@ struct TActorBenchmark {
     }
 
     static double BenchSendActivateReceive(ui32 poolsCount, ui32 threads, bool allocation, EPoolType poolType, ESendingType sendingType) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, poolsCount, threads, true);
+        std::unique_ptr<TActorSystemSetup> setup = InitActorSystemSetup(poolType, poolsCount, threads, true);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -372,9 +372,9 @@ struct TActorBenchmark {
             TMailboxType::HTSwap,
             followerPoolId
         );
-        THolder<IActor> leader{
+        std::unique_ptr<IActor> leader{
             new TTestEndDecorator(
-                THolder(new TActorBenchmark::TSendReceiveActor(
+                std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                     TSendReceiveActorParams{
                         .OwnEvents=eventsPerPair / 2,
                         .ElapsedTime=&elapsedTime,
@@ -396,7 +396,7 @@ struct TActorBenchmark {
     }
 
    static double BenchSendActivateReceiveWithMailboxNeighbours(ui32 MailboxNeighbourActors, EPoolType poolType, ESendingType sendingType) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false);
+        std::unique_ptr<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -416,9 +416,9 @@ struct TActorBenchmark {
             ),
             TMailboxType::HTSwap
         );
-        THolder<IActor> leader{
+        std::unique_ptr<IActor> leader{
             new TTestEndDecorator(
-                THolder(new TActorBenchmark::TSendReceiveActor(
+                std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                     TSendReceiveActorParams{
                         .OwnEvents=eventsPerPair / 2,
                         .ElapsedTime=&elapsedTime,
@@ -449,7 +449,7 @@ struct TActorBenchmark {
 
     static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType,
             TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1, bool enableWaker = false) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false);
+        std::unique_ptr<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false);
         setup->CpuManager.Basic.back().EnableWaker = enableWaker;
         TActorSystem actorSystem(setup);
         actorSystem.Start();
@@ -477,9 +477,9 @@ struct TActorBenchmark {
                 TMailboxType::HTSwap,
                 followerPoolId
             );
-            THolder<IActor> leader{
+            std::unique_ptr<IActor> leader{
                 new TTestEndDecorator(
-                    THolder(new TSendReceiveActor(TSendReceiveActorParams{
+                    std::unique_ptr<TSendReceiveActor>(new TSendReceiveActor(TSendReceiveActorParams{
                         .OwnEvents = eventsPerPair / 2,
                         .EndlessSending = bool(testDuration),
                         .Receivers={followerId},
@@ -525,7 +525,7 @@ struct TActorBenchmark {
     }
 
     static auto BenchStarContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType, TDuration testDuration = TDuration::Zero(), ui32 starMultiply=10) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, true);
+        std::unique_ptr<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, true);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -556,9 +556,9 @@ struct TActorBenchmark {
                 );
                 receivers.push_back(followerId);
             }
-            THolder<IActor> leader{
+            std::unique_ptr<IActor> leader{
                 new TTestEndDecorator(
-                    THolder(new TSendReceiveActor(TSendReceiveActorParams{
+                    std::unique_ptr<TSendReceiveActor>(new TSendReceiveActor(TSendReceiveActorParams{
                         .OwnEvents = eventsPerPair / 2,
                         .EndlessSending = bool(testDuration),
                         .Receivers=receivers,

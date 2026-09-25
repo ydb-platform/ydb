@@ -174,7 +174,7 @@ private:
             return;
         }
 
-        auto writeEv = MakeHolder<TEvPartitionWriter::TEvWriteRequest>(WriteCookie);
+        auto writeEv = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(WriteCookie);
         auto* request = writeEv->Record.MutablePartitionRequest();
         request->SetOwnerCookie(ev->Get()->GetResult().OwnerCookie);
         auto* cmdWrite = request->AddCmdWrite();
@@ -525,7 +525,7 @@ void TPQTabletFixture::SendToPipe(const TActorId& sender,
 
 void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
     THashSet<ui32> partitions;
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
@@ -618,7 +618,7 @@ NKikimrPQ::TEvProposeTransactionResult::EStatus TPQTabletFixture::WaitProposeTra
 
 void TPQTabletFixture::SendPlanStep(const TPlanStepParams& params)
 {
-    auto event = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+    auto event = std::make_unique<TEvTxProcessing::TEvPlanStep>();
     event->Record.SetStep(params.Step);
     for (ui64 txId : params.TxIds) {
         auto tx = event->Record.AddTransactions();
@@ -804,7 +804,7 @@ void TPQTabletFixture::WaitForNoReadSetAck(NHelpers::TPQTabletMock& tablet)
 
 void TPQTabletFixture::SendDropTablet(const TDropTabletParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvDropTablet>();
+    auto event = std::make_unique<TEvPersQueue::TEvDropTablet>();
     event->Record.SetTxId(params.TxId);
     event->Record.SetRequestedState(NKikimrPQ::EDropped);
 
@@ -959,7 +959,7 @@ TString TPQTabletFixture::WaitGetOwnershipResponse(const TGetOwnershipResponseMa
 
 void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
 
     if (params.Topic.Defined()) {
@@ -1019,7 +1019,7 @@ TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProdu
 
 void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId,
                                                 const ui64 seqNo, const TString& data, const ui64 cookie, const bool waitResponse) {
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(partitionId);
@@ -1101,7 +1101,7 @@ void TPQTabletFixture::SendDeferredPublicationWriteRequestWithoutWait(
 {
     EnsurePipeExist();
 
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(partitionId);
@@ -1159,7 +1159,7 @@ void TPQTabletFixture::SendAbortDeferredStagingRequest(
 {
     EnsurePipeExist();
 
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(partitionId);
@@ -1240,7 +1240,7 @@ void TPQTabletFixture::SendSupportivePartitionWrite(
 {
     EnsurePipeExist();
 
-    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto event = std::make_unique<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(partitionId);
@@ -1419,7 +1419,7 @@ void TPQTabletFixture::WaitForPQWriteState()
 
 void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionProposalParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
+    auto event = std::make_unique<TEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
 
     SendToPipe(Ctx->Edge,
                event.Release());
@@ -1991,7 +1991,7 @@ void TPQTabletFixture::SendAppSendRsRequest(const TAppSendReadSetParams& params)
 }
 
 void TPQTabletFixture::WaitForAppSendRsResponse(const TAppSendReadSetMatcher& matcher) {
-    THolder<NMon::TEvRemoteJsonInfoRes> handle = Ctx->Runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>();
+    std::unique_ptr<NMon::TEvRemoteJsonInfoRes> handle = Ctx->Runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>();
     UNIT_ASSERT(handle != nullptr);
     const TString& response = handle->Json;
     NJson::TJsonValue value;
@@ -3976,7 +3976,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
     ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
-    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    SendToPipe(Ctx->Edge, std::make_unique<TEvents::TEvWakeup>().Release());
 
     // wait till supportive partition for this kafka transaction is deleted
     WaitForExactSupportivePartitionsCount(0);
@@ -4002,7 +4002,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Del
     ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
-    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    SendToPipe(Ctx->Edge, std::make_unique<TEvents::TEvWakeup>().Release());
     TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
     bool seenEvent = false;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
@@ -4043,7 +4043,7 @@ Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_
     ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
-    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    SendToPipe(Ctx->Edge, std::make_unique<TEvents::TEvWakeup>().Release());
 
     // wait till supportive partition for this kafka transaction is deleted
     auto txInfo3 = WaitForExactTxWritesCount(1);
@@ -4077,7 +4077,7 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(
         Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() + testTimeAdvanceMs + 1));
     // trigger expired transactions cleanup
-    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    SendToPipe(Ctx->Edge, std::make_unique<TEvents::TEvWakeup>().Release());
 
     // wait till supportive partition for first kafka transaction is deleted
     WaitForExactSupportivePartitionsCount(1);
@@ -4483,7 +4483,7 @@ Y_UNIT_TEST_F(KafkaTxnRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) 
     TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
 
     for (ui32 i = 0; i < txCount; ++i) {
-        auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto event = std::make_unique<TEvPersQueue::TEvRequest>();
         auto* request = event->Record.MutablePartitionRequest();
         request->SetTopic("/topic");
         request->SetPartition(0);
@@ -5250,7 +5250,7 @@ void TPQTabletFixture::SendAcquireExclusiveLock()
 
 class TEvReadTestEventHandle: public NActors::IEventHandle {
 public:
-    TEvReadTestEventHandle(THolder<TEvPQ::TEvRead>&& event, const TActorId& sender)
+    TEvReadTestEventHandle(std::unique_ptr<TEvPQ::TEvRead>&& event, const TActorId& sender)
         : NActors::IEventHandle(TActorId{}, sender, event.Release())
     {}
 };
@@ -5258,7 +5258,7 @@ public:
 void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender) {
     EnsureReadQuoterExists();
 
-    auto request = MakeHolder<TEvPQ::TEvRead>(
+    auto request = std::make_unique<TEvPQ::TEvRead>(
         cookie,
         0, // offset
         99999, // lastOffset

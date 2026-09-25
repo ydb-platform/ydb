@@ -146,7 +146,7 @@ public:
 
         TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, TSchemeShard::EHiveSelection::IGNORE_TENANT);
 
-        auto event = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
+        auto event = std::make_unique<TEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
         context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, TPipeMessageId(0, 0), event.Release());
 
         return false;
@@ -249,13 +249,13 @@ class TDropExtSubdomain: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::DeleteExternalShards:
-            return MakeHolder<TDeleteExternalShards>(OperationId);
+            return std::make_unique<TDeleteExternalShards>(OperationId);
         case TTxState::DeletePrivateShards:
-            return MakeHolder<TDeleteSubdomainSystemShards>(OperationId);
+            return std::make_unique<TDeleteSubdomainSystemShards>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -266,7 +266,7 @@ public:
 
     virtual const char* Name() const override final { return "TDropExtSubdomain"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& drop = Transaction.GetDrop();
@@ -279,7 +279,7 @@ public:
             {"pathId", drop.GetId()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)

@@ -279,10 +279,10 @@ public:
     // Runtime algorithm entry points.
     virtual void CalcParameters(); // Recursively calculates all parameters for runtime algorithm.
 
-    virtual THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) = 0;
+    virtual std::unique_ptr<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) = 0;
 
-    THolder<TQuoterSession> CreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {
-        THolder<TQuoterSession> session = DoCreateSession(clientId, clientVersion);
+    std::unique_ptr<TQuoterSession> CreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {
+        std::unique_ptr<TQuoterSession> session = DoCreateSession(clientId, clientVersion);
         if (session) {
             Sessions[clientId] = session.Get(); // it is safe - we store it outside
             if (Counters.Sessions) {
@@ -436,9 +436,9 @@ private:
     NActors::TActorId Kesus;
     IBillSink::TPtr BillSink;
 
-    THashMap<ui64, THolder<TQuoterResourceTree>> ResourcesById;
+    THashMap<ui64, std::unique_ptr<TQuoterResourceTree>> ResourcesById;
     THashMap<TString, TQuoterResourceTree*> ResourcesByPath;
-    THashMap<TQuoterSessionId, THolder<TQuoterSession>> Sessions;
+    THashMap<TQuoterSessionId, std::unique_ptr<TQuoterSession>> Sessions;
     THashMap<NActors::TActorId, THashSet<TQuoterSessionId>> PipeServerIdToSession;
 
     TCounters Counters;

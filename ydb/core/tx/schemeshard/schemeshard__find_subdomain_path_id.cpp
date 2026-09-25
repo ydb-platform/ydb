@@ -26,7 +26,7 @@ public:
 
         auto it1 = Self->TabletIdToShardIdx.find(TTabletId(tabletId));
         if (it1 == Self->TabletIdToShardIdx.end()) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+            Result = std::make_unique<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
                 tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
             return true;
         }
@@ -34,7 +34,7 @@ public:
         auto shardIdx = it1->second;
         auto it2 = Self->ShardInfos.find(shardIdx);
         if (it2 == Self->ShardInfos.end()) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+            Result = std::make_unique<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
                 tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
             return true;
         }
@@ -42,13 +42,13 @@ public:
         auto& shardInfo = it2->second;
         auto path = TPath::Init(shardInfo.PathId, Self);
         if (!path) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+            Result = std::make_unique<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
                 tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::PATH_NOT_FOUND);
             return true;
         }
 
         auto domainPathId = path.GetPathIdForDomain();
-        Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+        Result = std::make_unique<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
             tabletId, domainPathId.OwnerId, domainPathId.LocalPathId);
         return true;
     }
@@ -60,7 +60,7 @@ public:
 
 private:
     TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr Ev;
-    THolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult> Result;
+    std::unique_ptr<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult> Result;
 };
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx) {

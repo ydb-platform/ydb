@@ -94,7 +94,7 @@ void CreatePartitionedTexts(NQuery::TQueryClient& db) {
 void UpdateKqpCompactFlag(TKikimrRunner& kikimr, bool enabled) {
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     const auto edge = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
     auto* config = request->Record.MutableConfig();
     auto* flags = config->MutableFeatureFlags();
     flags->SetEnableFulltextIndex(true);

@@ -258,7 +258,7 @@ template <typename TEvent>
     std::unique_ptr<TEvent> event,
     NWilson::TTraceId traceId)
 {
-    auto handle = MakeHolder<IEventHandle>(
+    auto handle = std::make_unique<IEventHandle>(
         recipient,
         entry.ReplyActorId,
         event.release(),

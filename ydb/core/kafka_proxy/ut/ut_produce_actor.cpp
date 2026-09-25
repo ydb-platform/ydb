@@ -46,7 +46,7 @@ namespace {
                     entry.TableId = {};
                     response->ResultSet.push_back(entry);
                 }
-                Send(ev->Sender, MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(response.release()));
+                Send(ev->Sender, std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(response.release()));
             }
 
             void Handle(TEvReplyTopicNotFound::TPtr&, const TActorContext&) {
@@ -148,7 +148,7 @@ namespace {
                     topicData.PartitionData.push_back(partitionData);
                 }
                 message->TopicData.push_back(topicData);
-                auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>(recordsBuffer, message));
+                auto event = std::make_unique<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>(recordsBuffer, message));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -165,8 +165,8 @@ namespace {
                 }
             }
 
-            THolder<TEvPersQueue::TEvResponse> CreateMissingSupPartitionErrorResponse(ui64 cookie) {
-                auto event = MakeHolder<TEvPersQueue::TEvResponse>();
+            std::unique_ptr<TEvPersQueue::TEvResponse> CreateMissingSupPartitionErrorResponse(ui64 cookie) {
+                auto event = std::make_unique<TEvPersQueue::TEvResponse>();
                 NKikimrClient::TResponse record;
                 record.SetErrorReason("expected test error");
                 record.SetErrorCode(::NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION);
@@ -201,17 +201,17 @@ namespace {
             }
 
             void SendWatchNotifyUpdated(NSchemeCache::TDescribeResult::TCPtr result) {
-                auto ev = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+                auto ev = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
                     0, TopicPath, TPathId{}, std::move(result));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, ev.Release()));
             }
 
             void SendWatchNotifyDeleted() {
-                auto ev = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyDeleted>(0, TopicPath, TPathId{});
+                auto ev = std::make_unique<TEvTxProxySchemeCache::TEvWatchNotifyDeleted>(0, TopicPath, TPathId{});
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, ev.Release()));
             }
 
-            THolder<NKafka::TEvKafka::TEvResponse> GrabProduceResponse() {
+            std::unique_ptr<NKafka::TEvKafka::TEvResponse> GrabProduceResponse() {
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
                 UNIT_ASSERT(response != nullptr);
                 return response;
@@ -380,7 +380,7 @@ namespace {
             NKikimrClient::TResponse record;
             record.SetErrorCode(::NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION);
             record.MutablePartitionResponse()->SetCookie(writes[0].Cookie);
-            auto ev = MakeHolder<TEvPartitionWriter::TEvWriteResponse>("", "", std::move(record));
+            auto ev = std::make_unique<TEvPartitionWriter::TEvWriteResponse>("", "", std::move(record));
             Ctx->Runtime->Send(new IEventHandle(writes[0].ProduceActor, Ctx->Edge, ev.Release()));
 
             auto response = GrabProduceResponse();
@@ -613,7 +613,7 @@ namespace {
 
             NKikimrClient::TResponse record;
             record.MutablePartitionResponse()->SetCookie(writes[0].Cookie);
-            auto ev = MakeHolder<TEvPartitionWriter::TEvWriteResponse>(
+            auto ev = std::make_unique<TEvPartitionWriter::TEvWriteResponse>(
                 "",
                 "",
                 TEvPartitionWriter::TEvWriteResponse::EErrorCode::InternalError,

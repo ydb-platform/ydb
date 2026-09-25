@@ -18,15 +18,15 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
     };
 
     Y_UNIT_TEST(TestResize) {
-        TPageMap<THolder<TPage>> map;
+        TPageMap<std::unique_ptr<TPage>> map;
         UNIT_ASSERT_VALUES_EQUAL(map.size(), 0u);
 
         map.resize(1024);
         UNIT_ASSERT_VALUES_EQUAL(map.size(), 1024u);
         UNIT_ASSERT_VALUES_EQUAL(map.used(), 0u);
 
-        UNIT_ASSERT(map.emplace(0, MakeHolder<TPage>(0)));
-        UNIT_ASSERT(map.emplace(1, MakeHolder<TPage>(1)));
+        UNIT_ASSERT(map.emplace(0, std::make_unique<TPage>(0)));
+        UNIT_ASSERT(map.emplace(1, std::make_unique<TPage>(1)));
         UNIT_ASSERT_VALUES_EQUAL(map.used(), 2u);
 
         for (ui32 id = 0; id < 2; ++id) {
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
         }
         for(ui32 id = 2; id < 1024; ++id) {
             UNIT_ASSERT(!map[id]);
-            UNIT_ASSERT(map.emplace(id, MakeHolder<TPage>(id)));
+            UNIT_ASSERT(map.emplace(id, std::make_unique<TPage>(id)));
         }
 
         map.resize(1024);
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
     }
 
     Y_UNIT_TEST(TestRandom) {
-        TPageMap<THolder<TPage>> map;
+        TPageMap<std::unique_ptr<TPage>> map;
         map.resize(1024 * 1024);
 
         TVector<ui32> pageIds(Reserve(map.size()));
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
         for (size_t i = 0; i < pageIds.size(); ++i) {
             const ui32 pageId = pageIds[i];
             //Cerr << "Emplacing page " << pageId << " at index " << i << Endl;
-            UNIT_ASSERT(map.emplace(pageId, MakeHolder<TPage>(pageId)));
+            UNIT_ASSERT(map.emplace(pageId, std::make_unique<TPage>(pageId)));
             UNIT_ASSERT(map[pageId]);
             UNIT_ASSERT_VALUES_EQUAL(map[pageId]->PageId, pageId);
 
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
                     "Missing expected page " << oldPageId << " at index " << oldIndex <<
                     " after emplacing page " << pageId << " at index " << i);
                 UNIT_ASSERT_VALUES_EQUAL(map[oldPageId]->PageId, oldPageId);
-                UNIT_ASSERT_C(!map.emplace(oldPageId, MakeHolder<TPage>(-1)),
+                UNIT_ASSERT_C(!map.emplace(oldPageId, std::make_unique<TPage>(-1)),
                     "Unexpected emplace of page " << oldPageId << " at index " << oldIndex <<
                     " after emplacing page " << pageId << " at index " << i);
             }

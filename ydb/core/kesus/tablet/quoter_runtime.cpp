@@ -25,7 +25,7 @@ public:
     }
 
     void CloseSession(ui64 resourceId, Ydb::StatusIds::StatusCode status, const TString& reason) override {
-        THolder<TEvKesus::TEvResourcesAllocated> ev = MakeHolder<TEvKesus::TEvResourcesAllocated>();
+        std::unique_ptr<TEvKesus::TEvResourcesAllocated> ev = std::make_unique<TEvKesus::TEvResourcesAllocated>();
         auto* info = ev->Record.AddResourcesInfo();
         info->SetResourceId(resourceId);
         TEvKesus::FillError(info->MutableStateNotification(), status, reason);
@@ -45,7 +45,7 @@ private:
 void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props) {
     TSendInfo& info = SendInfos[recipient];
     if (!info.Event) {
-        info.Event = MakeHolder<TEvKesus::TEvResourcesAllocated>();
+        info.Event = std::make_unique<TEvKesus::TEvResourcesAllocated>();
     }
     auto [indexIt, insertedNew] = info.ResIdIndex.try_emplace(resourceId, info.Event->Record.ResourcesInfoSize());
     NKikimrKesus::TEvResourcesAllocated::TResourceInfo* resInfo = nullptr;
@@ -68,7 +68,7 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId
 void TKesusTablet::TQuoterResourceSessionsAccumulator::Sync(const TActorId& recipient, ui64 resourceId, ui32 lastReportId, double amount) {
     TSendSyncInfo& info = SendSyncInfos[recipient];
     if (!info.Event) {
-        info.Event = MakeHolder<TEvKesus::TEvSyncResources>();
+        info.Event = std::make_unique<TEvKesus::TEvSyncResources>();
     }
     auto [indexIt, insertedNew] = info.ResIdIndex.try_emplace(resourceId, info.Event->Record.ResourcesInfoSize());
     NKikimrKesus::TEvSyncResources::TResourceInfo* resInfo = nullptr;
@@ -112,7 +112,7 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorConte
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
-    THolder<TEvKesus::TEvSubscribeOnResourcesResult> reply = MakeHolder<TEvKesus::TEvSubscribeOnResourcesResult>();
+    std::unique_ptr<TEvKesus::TEvSubscribeOnResourcesResult> reply = std::make_unique<TEvKesus::TEvSubscribeOnResourcesResult>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TActorId pipeServerId = ev->Recipient;
     const ui32 clientVersion = ev->Get()->Record.GetProtocolVersion();
@@ -167,7 +167,7 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
-    THolder<TEvKesus::TEvResourcesAllocated> errors;
+    std::unique_ptr<TEvKesus::TEvResourcesAllocated> errors;
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TInstant now = TActivationContext::Now();
     IResourceSink::TPtr sink = new TQuoterResourceSink(ev->Sender, this);
@@ -185,7 +185,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
             session->UpdateConsumptionState(resource.GetConsumeResource(), resource.GetAmount(), queue, now);
         } else {
             if (!errors) {
-                errors = MakeHolder<TEvKesus::TEvResourcesAllocated>();
+                errors = std::make_unique<TEvKesus::TEvResourcesAllocated>();
             }
             auto* notification = errors->Record.AddResourcesInfo();
             notification->SetResourceId(resource.GetResourceId());
@@ -207,7 +207,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
             {"ev", errors->Record});
         Send(ev->Sender, std::move(errors));
     }
-    auto ack = MakeHolder<TEvKesus::TEvUpdateConsumptionStateAck>();
+    auto ack = std::make_unique<TEvKesus::TEvUpdateConsumptionStateAck>();
     YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TEvUpdateConsumptionStateAck",
         {"tabletId", TabletID()},
         {"sender", ev->Sender},
@@ -224,7 +224,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
-    auto ack = MakeHolder<TEvKesus::TEvAccountResourcesAck>();
+    auto ack = std::make_unique<TEvKesus::TEvAccountResourcesAck>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TInstant now = TActivationContext::Now();
     TTickProcessorQueue queue;
@@ -260,7 +260,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvReportResources::TPtr& ev) {
-    auto ack = MakeHolder<TEvKesus::TEvReportResourcesAck>();
+    auto ack = std::make_unique<TEvKesus::TEvReportResourcesAck>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TInstant now = TActivationContext::Now();
     TTickProcessorQueue queue;
@@ -341,7 +341,7 @@ void TKesusTablet::HandleQuoterTick() {
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev) {
-    THolder<TEvKesus::TEvGetQuoterResourceCountersResult> reply = MakeHolder<TEvKesus::TEvGetQuoterResourceCountersResult>();
+    std::unique_ptr<TEvKesus::TEvGetQuoterResourceCountersResult> reply = std::make_unique<TEvKesus::TEvGetQuoterResourceCountersResult>();
     QuoterResources.FillCounters(reply->Record);
     YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TEvGetQuoterResourceCountersResult",
         {"tabletId", TabletID()},

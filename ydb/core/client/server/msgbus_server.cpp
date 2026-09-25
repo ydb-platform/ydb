@@ -17,7 +17,7 @@ public:
     virtual NBus::TBusMessage* ReleaseMessage() = 0;
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
     virtual TVector<TStringBuf> FindClientCert() const = 0;
-    virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
+    virtual std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
     virtual TString GetPeerName() const = 0;
 
     // If ticket parser authentication/authorization is already done, returns the internal token.
@@ -80,7 +80,7 @@ public:
         return std::move(ret);
     }
 
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+    std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 
     void SetFinishAction(std::function<void()>&& /*cb*/) override {
     }
@@ -90,7 +90,7 @@ class TBusMessageContext::TImplNoOpGrpc
     : public TBusMessageContext::TImpl
 {
     std::unique_ptr<NGRpcService::IRequestNoOpCtx> RequestContext;
-    THolder<NBus::TBusMessage> Message;
+    std::unique_ptr<NBus::TBusMessage> Message;
 
 public:
     TImplNoOpGrpc(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type)
@@ -190,7 +190,7 @@ public:
         return RequestContext->FindClientCert();
     };
 
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+    std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 
     TString GetPeerName() const override {
         return RequestContext->GetPeerName();
@@ -251,7 +251,7 @@ TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->Fi
 
 TString TBusMessageContext::GetPeerName() const { return Impl->GetPeerName(); }
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
+std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
     Y_ABORT_UNLESS(Impl);
     return Impl->CreateSessionIdentHolder();
 }
@@ -317,8 +317,8 @@ public:
     }
 };
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
+std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
+    return std::make_unique<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
 }
 
 class TMessageBusSessionIdentHolder::TImplNoOpGrpc
@@ -365,8 +365,8 @@ public:
     }
 };
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplNoOpGrpc::CreateSessionIdentHolder() {
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplNoOpGrpc>(this);
+std::unique_ptr<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplNoOpGrpc::CreateSessionIdentHolder() {
+    return std::make_unique<TMessageBusSessionIdentHolder::TImplNoOpGrpc>(this);
 }
 
 TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder()

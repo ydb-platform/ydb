@@ -488,7 +488,7 @@ private:
     std::atomic<ESeqNoStrategy> SeqNoStrategy = ESeqNoStrategy::NotInitialized;
     std::atomic<std::uint64_t> ReservedMemory = 0;
     TLockFreeQueue<TClientRequest> ClientRequests;
-    THolder<IThreadFactory::IThread> MainWorkerThread;
+    std::unique_ptr<IThreadFactory::IThread> MainWorkerThread;
     NYT::NThreading::TEventCount MainWorkerEvent;
 
     NThreading::TPromise<void> ClosePromise;

@@ -37,7 +37,7 @@ namespace NTabletFlatExecutor {
 
         using TResults = TDeque<TResult>;
 
-        TProdCompact(bool ok, ui32 step, THolder<NTable::TCompactionParams> params,
+        TProdCompact(bool ok, ui32 step, std::unique_ptr<NTable::TCompactionParams> params,
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels)
             : Success(ok)
@@ -54,7 +54,7 @@ namespace NTabletFlatExecutor {
         ui32 Step = Max<ui32>();
         TResults Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
-        THolder<NTable::TCompactionParams> Params;
+        std::unique_ptr<NTable::TCompactionParams> Params;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
     };
@@ -846,7 +846,7 @@ namespace NTabletFlatExecutor {
                 TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> resultingPageCollections;
                 for (auto& pageCollection : result.PageCollections) {
                     auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
-                    auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
+                    auto saveCompactedPages = std::make_unique<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
                     auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
                         auto pageId = loadedPage.PageId;
@@ -1104,7 +1104,7 @@ namespace NTabletFlatExecutor {
         TMessageRelevanceOwner RelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
         TAutoPtr<NUtil::ILogger> Logger;
         IDriver * Driver = nullptr;
-        THolder<TCompactCfg> Conf;
+        std::unique_ptr<TCompactCfg> Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
         TAutoPtr<TBundle> Bundle;
         TIntrusivePtr<TPartWriter> Writer;

@@ -88,13 +88,13 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     auto sender = Server->GetRuntime()->AllocateEdgeActor();
     Server->SetupRootStoragePools(sender);
 
-    Client = MakeHolder<Tests::TClient>(*Settings);
+    Client = std::make_unique<Tests::TClient>(*Settings);
 
-    Tenants = MakeHolder<Tests::TTenants>(Server);
+    Tenants = std::make_unique<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
-    Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+    Driver = std::make_unique<NYdb::TDriver>(DriverConfig);
 
     CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     CSController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
@@ -309,7 +309,7 @@ TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* 
 NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime, TActorId sender, const TString& path) {
     TAutoPtr<IEventHandle> handle;
 
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));

@@ -33,8 +33,8 @@ TString ToString(const Script& script);
             ForceFork_ = false;                                                             \
         }                                                                                  \
                                                                                            \
-        static THolder<NUnitTest::TBaseTestCase> Create(TString script, TString name) {    \
-            return ::MakeHolder<TTestCase##NAME>(std::move(script), std::move(name));      \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create(TString script, TString name) {    \
+            return ::std::make_unique<TTestCase##NAME>(std::move(script), std::move(name));      \
         }                                                                                  \
                                                                                            \
         void Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED) override {     \

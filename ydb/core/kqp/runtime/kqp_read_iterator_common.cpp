@@ -35,8 +35,8 @@ void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes) {
     SetDefaultReadAckSettings(settings.Ack);
 }
 
-THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings() {
-    auto result = MakeHolder<NKikimr::TEvDataShard::TEvRead>();
+std::unique_ptr<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings() {
+    auto result = std::make_unique<NKikimr::TEvDataShard::TEvRead>();
     auto ptr = Singleton<TEvReadDefaultSettings>()->Settings.AtomicLoad();
     result->Record.MergeFrom(ptr->Read);
     return result;
@@ -49,8 +49,8 @@ void SetDefaultReadSettings(const NKikimrTxDataShard::TEvRead& read) {
     Singleton<TEvReadDefaultSettings>()->Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
 }
 
-THolder<NKikimr::TEvDataShard::TEvReadAck> GetDefaultReadAckSettings() {
-    auto result = MakeHolder<NKikimr::TEvDataShard::TEvReadAck>();
+std::unique_ptr<NKikimr::TEvDataShard::TEvReadAck> GetDefaultReadAckSettings() {
+    auto result = std::make_unique<NKikimr::TEvDataShard::TEvReadAck>();
     auto ptr = Singleton<TEvReadDefaultSettings>()->Settings.AtomicLoad();
     result->Record.MergeFrom(ptr->Ack);
     return result;

@@ -116,7 +116,7 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
     Database = CanonizePath(NKikimr::NPQ::GetDatabaseFromConfig(pqConfig));
-    ConverterFactory = MakeHolder<NPersQueue::TTopicNamesConverterFactory>(
+    ConverterFactory = std::make_unique<NPersQueue::TTopicNamesConverterFactory>(
             pqConfig, LocalDC
     );
     StartTime = ctx.Now();
@@ -191,7 +191,7 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
-    THolder<TEvPQProxy::TEvWriteInit> event(ev->Release());
+    std::unique_ptr<TEvPQProxy::TEvWriteInit> event(ev->Release());
 
     if (State != ES_CREATED) {
         //answer error
@@ -751,7 +751,7 @@ void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, con
 void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     TWriteRequestBatchInfo::TPtr writeRequest = new TWriteRequestBatchInfo();
 
-    auto ev = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>(++NextRequestCookie);
+    auto ev = std::make_unique<NPQ::TEvPartitionWriter::TEvWriteRequest>(++NextRequestCookie);
     NKikimrClient::TPersQueueRequest& request = ev->Record;
 
     writeRequest->UserWriteRequests = std::move(Writes);
@@ -878,7 +878,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
         }
     }
 
-    THolder<TEvPQProxy::TEvWrite> event(ev->Release());
+    std::unique_ptr<TEvPQProxy::TEvWrite> event(ev->Release());
     Writes.push_back(std::move(event));
 
     ui64 diff = Writes.back()->Request.ByteSize();

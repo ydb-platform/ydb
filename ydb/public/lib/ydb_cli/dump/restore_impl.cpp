@@ -1963,16 +1963,16 @@ TRestoreSettings RestoreSettingsForTable(const TRestoreSettings& settings, const
 
 } // namespace
 
-THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
+std::unique_ptr<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         const TString& dbPath,
         const TRestoreSettings& settings,
         const TTableDescription& desc,
         ui32 partitionCount,
-        const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators)
+        const TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& accumulators)
 {
     const auto tableSettings = RestoreSettingsForTable(settings, desc);
 
-    THolder<NPrivate::IDataWriter> writer;
+    std::unique_ptr<NPrivate::IDataWriter> writer;
     switch (tableSettings.Mode_) {
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert: {
@@ -1992,7 +1992,7 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
 }
 
 TRestoreResult TRestoreClient::CreateDataAccumulators(
-        TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
+        TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& outAccumulators,
         const TString& dbPath,
         const TRestoreSettings& settings,
         const TTableDescription& desc,
@@ -2051,12 +2051,12 @@ TRestoreResult TRestoreClient::RestoreData(
             << ", falling back to BulkUpsert");
     }
 
-    TVector<THolder<NPrivate::IDataAccumulator>> accumulators;
+    TVector<std::unique_ptr<NPrivate::IDataAccumulator>> accumulators;
     if (auto res = CreateDataAccumulators(accumulators, dbPath, settings, desc, dataFilesCount); !res.IsSuccess()) {
         return res;
     }
 
-    THolder<NPrivate::IDataWriter> writer = CreateDataWriter(dbPath, settings, desc, partitionCount, accumulators);
+    std::unique_ptr<NPrivate::IDataWriter> writer = CreateDataWriter(dbPath, settings, desc, partitionCount, accumulators);
 
     TVector<TFuture<TRestoreResult>> accumulatorResults(Reserve(accumulators.size()));
     TThreadPool accumulatorWorkers(TThreadPool::TParams().SetBlocking(true));

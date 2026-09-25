@@ -523,7 +523,7 @@ private:
     void Cleanup(const TActorContext &ctx, bool isFinal) {
         Become(&TKqpWorkerActor::PerformCleanupState);
 
-        CleanupState.Reset(MakeHolder<TKqpCleanupState>());
+        CleanupState.Reset(std::make_unique<TKqpCleanupState>());
         CleanupState->Final = isFinal;
         CleanupState->Start = TInstant::Now();
 
@@ -554,7 +554,7 @@ private:
             auto lifeSpan = TInstant::Now() - CreationTime;
             Counters->ReportWorkerFinished(Settings.DbCounters, lifeSpan);
 
-            auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
+            auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
             closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
             closeEv->Record.MutableResponse()->SetSessionId(SessionId);
             closeEv->Record.MutableResponse()->SetClosed(true);
@@ -717,7 +717,7 @@ private:
 
         auto callback = [actorSystem, selfId, queryId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(queryId, finished);
+            auto processEv = std::make_unique<TEvKqp::TEvContinueProcess>(queryId, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 
@@ -733,14 +733,14 @@ private:
 
         auto callback = [actorSystem, selfId, queryId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(queryId, finished);
+            auto processEv = std::make_unique<TEvKqp::TEvContinueProcess>(queryId, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 
         CleanupState->AsyncResult->Continue().Apply(callback);
     }
 
-    bool Reply(THolder<TEvKqp::TEvQueryResponse>&& responseEv, const TActorContext &ctx) {
+    bool Reply(std::unique_ptr<TEvKqp::TEvQueryResponse>&& responseEv, const TActorContext &ctx) {
         Y_ABORT_UNLESS(QueryState);
 
         auto& record = responseEv->Record;
@@ -796,7 +796,7 @@ private:
         Y_ABORT_UNLESS(QueryState);
         auto& queryResult = QueryState->QueryResult;
 
-        auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>(QueryState->QueryResult.ProtobufArenaPtr);
+        auto responseEv = std::make_unique<TEvKqp::TEvQueryResponse>(QueryState->QueryResult.ProtobufArenaPtr);
         FillResponse(responseEv->Record);
 
         auto& record = responseEv->Record;
@@ -1024,7 +1024,7 @@ private:
 
     void MakeNewQueryState() {
         ++QueryId;
-        QueryState.Reset(MakeHolder<TKqpQueryState>());
+        QueryState.Reset(std::make_unique<TKqpQueryState>());
     }
 
     IKikimrQueryExecutor::TExecuteSettings CreateRollbackSettings() {
@@ -1071,7 +1071,7 @@ private:
         auto lifeSpan = TInstant::Now() - CreationTime;
         Counters->ReportWorkerFinished(Settings.DbCounters, lifeSpan);
 
-        auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
+        auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
         closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         closeEv->Record.MutableResponse()->SetSessionId(SessionId);
         closeEv->Record.MutableResponse()->SetClosed(true);
@@ -1094,8 +1094,8 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
     ui32 QueryId;
-    THolder<TKqpQueryState> QueryState;
-    THolder<TKqpCleanupState> CleanupState;
+    std::unique_ptr<TKqpQueryState> QueryState;
+    std::unique_ptr<TKqpCleanupState> CleanupState;
     std::optional<TSessionShutdownState> ShutdownState;
     TGUCSettings::TPtr GUCSettings;
 };

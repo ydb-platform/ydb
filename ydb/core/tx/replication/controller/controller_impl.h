@@ -30,7 +30,7 @@
 
 namespace NKikimr::NReplication::NController {
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
     ui64 writeTxId, const TVector<TString>& tables);
 
 class TController
@@ -276,7 +276,7 @@ private:
 
 private:
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
-    THolder<TTabletCountersBase> TabletCountersPtr;
+    std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
 
     TSysParams SysParams;

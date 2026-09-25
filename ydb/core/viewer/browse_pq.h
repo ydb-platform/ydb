@@ -42,7 +42,7 @@ protected:
     const TString PQ_ROOT_PATH;
     TSet<TString> Consumers;
     struct TTopicInfo : NKikimrViewer::TMetaTopicInfo {
-        TMap<i32, THolder<TEvPersQueue::TEvPartitionClientInfoResponse>> PartitionResults;
+        TMap<i32, std::unique_ptr<TEvPersQueue::TEvPartitionClientInfoResponse>> PartitionResults;
         TMap<i32, NKikimrViewer::TMetaTopicPartitionInfo> PartitionInfo;
     };
     TMap<TString, TTopicInfo> Topics;
@@ -101,7 +101,7 @@ public:
                 const auto& pbChildren(pbPathDescription.GetChildren());
                 for (const auto& pbChild : pbChildren) {
                     if (pbChild.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
-                        THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+                        std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
                         if (!BrowseContext.UserToken.empty()) {
                             request->Record.SetUserToken(BrowseContext.UserToken);
                         }
@@ -252,7 +252,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) override {
         // TODO: select correct TX proxy
-        THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+        std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
         if (!BrowseContext.UserToken.empty()) {
             request->Record.SetUserToken(BrowseContext.UserToken);
         }

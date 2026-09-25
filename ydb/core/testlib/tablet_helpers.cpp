@@ -735,7 +735,7 @@ namespace NKikimr {
         runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto bsConfigureRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(1);
@@ -1647,7 +1647,7 @@ namespace NKikimr {
             auto it = State->Tablets.find(key);
             Y_ABORT_UNLESS(it != State->Tablets.end());
 
-            THolder<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type));
+            std::unique_ptr<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type));
             ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie);
         }
 

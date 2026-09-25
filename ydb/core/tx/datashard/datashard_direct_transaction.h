@@ -13,7 +13,7 @@ namespace NDataShard {
 
 struct TDirectTxResult {
     TActorId Target;
-    THolder<IEventBase> Event;
+    std::unique_ptr<IEventBase> Event;
     ui64 Cookie;
 };
 
@@ -42,7 +42,7 @@ private:
     friend class TDirectOpUnit;
 
 private:
-    THolder<IDirectTx> Impl;
+    std::unique_ptr<IDirectTx> Impl;
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::Immediate | NTxDataShard::TTxFlags::GlobalWriter;
 };
 

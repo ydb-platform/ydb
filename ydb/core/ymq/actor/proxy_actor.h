@@ -19,7 +19,7 @@ class TProxyActor
     : public TActorBootstrapped<TProxyActor>
 {
 public:
-    TProxyActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb)
+    TProxyActor(const NKikimrClient::TSqsRequest& req, std::unique_ptr<IReplyCallback> cb)
         : RequestId_(req.GetRequestId())
         , Request_(req)
         , Cb_(std::move(cb))
@@ -59,7 +59,7 @@ private:
     TString QueueName_;
     TString UserName_;
     TString FolderId_;
-    THolder<IReplyCallback> Cb_;
+    std::unique_ptr<IReplyCallback> Cb_;
     bool ErrorResponse_ = false;
     TInstant StartTs_;
     TSchedulerCookieHolder TimeoutCookie_;

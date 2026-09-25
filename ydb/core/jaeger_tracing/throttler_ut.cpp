@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
         TThrottler throttler(60, init - 1, timeProvider);
 
         auto shouldStop = std::make_shared<std::atomic<bool>>(false);
-        TVector<THolder<TThread>> workers;
+        TVector<std::unique_ptr<TThread>> workers;
         Y_SCOPE_EXIT(shouldStop, &workers) {
             shouldStop->store(true);
 
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
         std::atomic<ui64> totalConsumed{0};
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i) {
-            workers.push_back(MakeHolder<TThread>([&]() {
+            workers.push_back(std::make_unique<TThread>([&]() {
                 while (!shouldStop->load(std::memory_order_relaxed)) {
                     if (!throttler.Throttle()) {
                         totalConsumed.fetch_add(1);

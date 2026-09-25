@@ -90,7 +90,7 @@ public:
     // Struct to temporarily hold messages that are about to receive
     class TReceiveCandidates {
         friend class TInflyMessages;
-        TReceiveCandidates(TIntrusivePtr<TInflyMessages> parent, THolder<TOffsetTree> messages);
+        TReceiveCandidates(TIntrusivePtr<TInflyMessages> parent, std::unique_ptr<TOffsetTree> messages);
 
     public:
         TReceiveCandidates() = default;
@@ -111,7 +111,7 @@ public:
 
         void SetVisibilityDeadlineAndReceiveCount(ui64 offset, TInstant visibilityDeadline, const ui32 receiveCount);
 
-        THolder<TInflyMessage> Delete(ui64 offset);
+        std::unique_ptr<TInflyMessage> Delete(ui64 offset);
         bool Has(ui64 offset) const;
 
         TOffsetTree::TIterator Begin() const {
@@ -124,7 +124,7 @@ public:
 
     private:
         TIntrusivePtr<TInflyMessages> Parent;
-        THolder<TOffsetTree> ReceivedMessages;
+        std::unique_ptr<TOffsetTree> ReceivedMessages;
     };
 
     class TChangeVisibilityCandidates {
@@ -148,20 +148,20 @@ public:
 
         bool Add(ui64 offset);
         void SetVisibilityDeadline(ui64 offset, TInstant visibilityDeadline);
-        THolder<TInflyMessage> Delete(ui64 offset);
+        std::unique_ptr<TInflyMessage> Delete(ui64 offset);
         bool Has(ui64 offset) const;
 
     private:
         TIntrusivePtr<TInflyMessages> Parent;
-        THolder<TOffsetTree> Messages;
+        std::unique_ptr<TOffsetTree> Messages;
     };
 
 public:
     TInflyMessages() = default;
     ~TInflyMessages();
 
-    void Add(THolder<TInflyMessage> msg);
-    THolder<TInflyMessage> Delete(ui64 offset);
+    void Add(std::unique_ptr<TInflyMessage> msg);
+    std::unique_ptr<TInflyMessage> Delete(ui64 offset);
     TReceiveCandidates Receive(size_t maxCount, TInstant now);
 
     size_t GetInflyCount(TInstant now) const {

@@ -331,7 +331,7 @@ void TConfigsManager::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
 
     YamlReadOnly = !rec.GetConfig().GetAllowEditYamlInUi();
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
@@ -363,7 +363,7 @@ void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
     PendingConfigModifications.ApplyTo(ConfigIndex);
 
     YDB_LOG_TRACE_CTX(ctx, "Send configs update to configs provider");
-    auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateConfigs>(PendingConfigModifications, ev);
+    auto req = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateConfigs>(PendingConfigModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
     PendingConfigModifications.Clear();
@@ -398,7 +398,7 @@ void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext 
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send subscriptions update to configs provider");
-    auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateSubscriptions>(PendingSubscriptionModifications, ev);
+    auto req = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateSubscriptions>(PendingSubscriptionModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
     PendingSubscriptionModifications.Clear();
@@ -863,7 +863,7 @@ void TConfigsManager::Handle(TEvConsole::TEvConfigureRequest::TPtr &ev, const TA
 
 void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto response = MakeHolder<TEvConsole::TEvListConfigValidatorsResponse>();
+    auto response = std::make_unique<TEvConsole::TEvListConfigValidatorsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     auto registry = TValidatorsRegistry::Instance();
@@ -963,12 +963,12 @@ void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, cons
 }
 
 void TConfigsManager::FailReplaceConfig(TActorId Sender, const TString& error, const TActorContext &ctx) {
-    auto resp = MakeHolder<TEvConsole::TEvGenericError>();
+    auto resp = std::make_unique<TEvConsole::TEvGenericError>();
     resp->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
     auto *issue = resp->Record.AddIssues();
     issue->set_severity(NYql::TSeverityIds::S_ERROR);
     issue->set_message(error);
-    auto response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, resp.Release());
+    auto response = std::make_unique<NActors::IEventHandle>(Sender, ctx.SelfID, resp.Release());
     ctx.Send(response.Release());
 }
 
@@ -979,7 +979,7 @@ void TConfigsManager::Handle(TEvConsole::TEvDropConfigRequest::TPtr &ev, const T
 
 void TConfigsManager::Handle(TEvConsole::TEvIsYamlReadOnlyRequest::TPtr &ev, const TActorContext &ctx)
 {
-    auto response = MakeHolder<TEvConsole::TEvIsYamlReadOnlyResponse>();
+    auto response = std::make_unique<TEvConsole::TEvIsYamlReadOnlyResponse>();
     response->Record.SetReadOnly(YamlReadOnly);
     ctx.Send(ev->Sender, response.Release());
 }
@@ -992,7 +992,7 @@ void TConfigsManager::Handle(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev, cons
 void TConfigsManager::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, const TActorContext &ctx)
 {
     if (!AppData()->FeatureFlags.GetEnableGetNodeLabels()) {
-        auto response = MakeHolder<TEvConsole::TEvDisabled>();
+        auto response = std::make_unique<TEvConsole::TEvDisabled>();
         ctx.Send(ev->Sender, response.Release());
     } else {
         ctx.Send(ev->Forward(MakeConfigsDispatcherID(ev->Get()->Record.GetRequest().node_id())));
@@ -1039,7 +1039,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
 
         auto resolved = NYamlConfig::Resolve(tree, namedLabels);
 
-        auto response = MakeHolder<TEvConsole::TEvResolveConfigResponse>();
+        auto response = std::make_unique<TEvConsole::TEvResolveConfigResponse>();
 
         TStringStream resolvedStr;
         resolvedStr << resolved.second;
@@ -1048,7 +1048,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
 
         ctx.Send(ev->Sender, response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = std::make_unique<TEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -1077,7 +1077,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
 
         auto resolved = NYamlConfig::ResolveAll(tree);
 
-        auto Response = MakeHolder<TEvConsole::TEvResolveAllConfigResponse>();
+        auto Response = std::make_unique<TEvConsole::TEvResolveAllConfigResponse>();
 
         auto convert = [] (const NYamlConfig::TLabel::EType& label) -> Ydb::DynamicConfig::YamlLabelExt::LabelType {
             switch(label) {
@@ -1142,7 +1142,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
 
         ctx.Send(ev->Sender, Response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = std::make_unique<TEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -1156,7 +1156,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
     auto &rec = ev->Get()->Record.GetRequest();
 
     try {
-        auto response = MakeHolder<TEvConsole::TEvAddVolatileConfigResponse>();
+        auto response = std::make_unique<TEvConsole::TEvAddVolatileConfigResponse>();
         auto cfg = rec.config();
         auto metadata = NYamlConfig::GetVolatileMetadata(cfg);
 
@@ -1206,7 +1206,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
 
             VolatileYamlConfigs.try_emplace(id, cfg);
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
+            auto resp = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
                 MainYamlConfig,
                 VolatileYamlConfigs);
             ctx.Send(ConfigsProvider, resp.Release());
@@ -1216,7 +1216,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
 
         ctx.Send(ev->Sender, response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = std::make_unique<TEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -1260,15 +1260,15 @@ void TConfigsManager::Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &e
             ythrow yexception() << "Incorrect id('s)";
         }
 
-        auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
+        auto resp = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
             MainYamlConfig,
             VolatileYamlConfigs);
         ctx.Send(ConfigsProvider, resp.Release());
 
-        auto response = MakeHolder<TEvConsole::TEvRemoveVolatileConfigResponse>();
+        auto response = std::make_unique<TEvConsole::TEvRemoveVolatileConfigResponse>();
         ctx.Send(ev->Sender, response.Release());
     } catch (const yexception& ex) {
-        auto response = MakeHolder<TEvConsole::TEvGenericError>();
+        auto response = std::make_unique<TEvConsole::TEvGenericError>();
         response->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);

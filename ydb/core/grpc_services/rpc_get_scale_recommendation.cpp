@@ -33,7 +33,7 @@ public:
     }
 
     void ResolveDatabase(const TString& databaseName) {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = databaseName;
 
         auto& entry = request->ResultSet.emplace_back();

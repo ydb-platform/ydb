@@ -273,7 +273,7 @@ int main(int argc, char** argv)
         // Configure
         int monPort = 8080;
         using TMonSrvc = NMonitoring::TMonService2;
-        THolder<TMonSrvc> MonSrvc;
+        std::unique_ptr<TMonSrvc> MonSrvc;
         NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
         opts.AddLongOption(0, "mon-port", "port of monitoring service")
                 .RequiredArgument("port")

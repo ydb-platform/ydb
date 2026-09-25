@@ -41,7 +41,7 @@ class TResolveUserTableState
 
 public:
     void ResolveUserTable() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->UserTableId, TNavigate::OpTable));
 
         AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
@@ -104,7 +104,7 @@ class TResolveTargetTableState
 
 public:
     void ResolveTargetTable() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->TargetTablePathId, TNavigate::OpTable));
 
         AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
@@ -180,7 +180,7 @@ private:
             keyColumnTypes[column.KeyOrder] = column.PType;
         }
 
-        AsDerived()->KeyDesc = MakeHolder<TKeyDesc>(
+        AsDerived()->KeyDesc = std::make_unique<TKeyDesc>(
             entry.TableId,
             AsDerived()->GetFullRange(keyColumnTypes.size()).ToTableRange(),
             TKeyDesc::ERowOperation::Update,
@@ -201,7 +201,7 @@ class TResolveKeysState
 
 public:
     void ResolveKeys() {
-        auto request = MakeHolder<TResolve>();
+        auto request = std::make_unique<TResolve>();
         request->ResultSet.emplace_back(std::move(AsDerived()->KeyDesc));
 
         AsDerived()->Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));

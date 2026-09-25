@@ -342,7 +342,7 @@ void TUserActionProcessorFixture::SendCreateSession(ui64 cookie,
                                                     ui32 generation,
                                                     ui32 step)
 {
-    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie,
+    auto event = std::make_unique<TEvPQ::TEvSetClientInfo>(cookie,
                                                      clientId,
                                                      0,
                                                      sessionId,
@@ -357,7 +357,7 @@ void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
                                                 ui64 offset,
                                                 const TString& sessionId)
 {
-    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie,
+    auto event = std::make_unique<TEvPQ::TEvSetClientInfo>(cookie,
                                                      clientId,
                                                      offset,
                                                      sessionId,
@@ -369,7 +369,7 @@ void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
 void TUserActionProcessorFixture::SendGetOffset(ui64 cookie,
                                                 const TString& clientId)
 {
-    auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie, clientId);
+    auto event = std::make_unique<TEvPQ::TEvGetClientOffset>(cookie, clientId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -452,7 +452,7 @@ void TUserActionProcessorFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& match
 
 void TUserActionProcessorFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(status);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -515,7 +515,7 @@ void TUserActionProcessorFixture::WaitDiskStatusRequest()
 
 void TUserActionProcessorFixture::SendDiskStatusResponse()
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto result = event->Record.AddGetStatusResult();
@@ -535,7 +535,7 @@ void TUserActionProcessorFixture::WaitMetaReadRequest()
 
 void TUserActionProcessorFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     //
@@ -581,7 +581,7 @@ void TUserActionProcessorFixture::WaitInfoRangeRequest()
 void TUserActionProcessorFixture::SendInfoRangeResponse(ui32 partition,
                                                         const TVector<TCreateConsumerParams>& consumers)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -627,7 +627,7 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
 {
     Y_ABORT_UNLESS(begin <= end);
 
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -648,7 +648,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
                                                                 bool immediate,
                                                                 ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
     auto* body = event->Record.MutableTxBody();
@@ -666,7 +666,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
 
 void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     //
     // Source
@@ -727,7 +727,7 @@ void TUserActionProcessorFixture::SendCalcPredicate(ui64 step,
                                                     ui64 begin,
                                                     ui64 end)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(step, txId);
+    auto event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(step, txId);
     event->AddOperation(consumer, begin, end);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -754,13 +754,13 @@ void TUserActionProcessorFixture::WaitCalcPredicateResult(const TCalcPredicateMa
 
 void TUserActionProcessorFixture::SendCommitTx(ui64 step, ui64 txId)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
+    auto event = std::make_unique<TEvPQ::TEvTxCommit>(step, txId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TUserActionProcessorFixture::SendRollbackTx(ui64 step, ui64 txId)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxRollback>(step, txId);
+    auto event = std::make_unique<TEvPQ::TEvTxRollback>(step, txId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -791,7 +791,7 @@ void TUserActionProcessorFixture::SendChangePartitionConfig(const TVector<TCreat
         config.AddReadRuleGenerations(c.Generation);
     }
 
-    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, config);
+    auto event = std::make_unique<TEvPQ::TEvChangePartitionConfig>(TopicConverter, config);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 

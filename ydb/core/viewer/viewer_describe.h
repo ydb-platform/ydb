@@ -75,11 +75,11 @@ public:
         NKikimrSchemeOp::TDescribePath options;
         FillParams(options);
         if (options.GetSchemeshardId()) {
-            THolder<TEvSchemeShard::TEvDescribeScheme> request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>();
+            std::unique_ptr<TEvSchemeShard::TEvDescribeScheme> request = std::make_unique<TEvSchemeShard::TEvDescribeScheme>();
             request->Record = options;
             SchemeShardResult = MakeRequestToTablet<TEvSchemeShard::TEvDescribeSchemeResult>(request->Record.GetSchemeshardId(), request.Release());
         } else {
-            THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            std::unique_ptr<TEvTxUserProxy::TEvNavigate> request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->CopyFrom(options);
             auto tokenObj = GetRequest().GetUserTokenObject();
             if (tokenObj) {

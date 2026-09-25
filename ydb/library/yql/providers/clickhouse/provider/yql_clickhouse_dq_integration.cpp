@@ -125,8 +125,8 @@ private:
 
 }
 
-THolder<IDqIntegration> CreateClickHouseDqIntegration(TClickHouseState::TPtr state) {
-    return MakeHolder<TClickHouseDqIntegration>(state);
+std::unique_ptr<IDqIntegration> CreateClickHouseDqIntegration(TClickHouseState::TPtr state) {
+    return std::make_unique<TClickHouseDqIntegration>(state);
 }
 
 }

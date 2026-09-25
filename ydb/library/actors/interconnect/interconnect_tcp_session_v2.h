@@ -50,7 +50,7 @@ namespace NActors {
         void Init(const TSessionParams& params) override;
         void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
         void Terminate(TDisconnectReason reason) override;
-        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
+        std::unique_ptr<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
         void StartHandshake() override;
         void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void CloseInputSession() override;

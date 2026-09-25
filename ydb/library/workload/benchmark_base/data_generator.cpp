@@ -83,7 +83,7 @@ class TWorkloadDataInitializerBase::TDataGenerator::TCsvFileBase: public TWorklo
 public:
     TCsvFileBase(TDataGenerator& owner, const TString& path, const TString& delimiter, const TString& foramt)
         : TFile(owner, path)
-        , Decompressor(OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path)))
+        , Decompressor(OpenOwnedMaybeCompressedInput(std::make_unique<TFileInput>(path)))
         , Header(JoinSeq(delimiter, owner.ColumnNames))
         , Foramt(foramt)
     {
@@ -161,7 +161,7 @@ public:
     }
 
 private:
-    THolder<IInputStream> Decompressor;
+    std::unique_ptr<IInputStream> Decompressor;
     TString Header;
     const TString& Foramt;
     ui64 ReadBytes = 0;

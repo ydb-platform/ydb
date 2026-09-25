@@ -14,8 +14,8 @@ class TCommonUploadOps {
     const bool BreakLocks;
     const bool CollectChanges;
 
-    THolder<TEvResponse> Result;
-    THolder<IDataShardChangeCollector> ChangeCollector;
+    std::unique_ptr<TEvResponse> Result;
+    std::unique_ptr<IDataShardChangeCollector> ChangeCollector;
 
 public:
     explicit TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges);
@@ -23,7 +23,7 @@ public:
 protected:
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& mvccVersion, ui64 globalTxId,
         absl::flat_hash_set<ui64>* volatileReadDependencies);
-    void GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie);
+    void GetResult(TDataShard* self, TActorId& target, std::unique_ptr<IEventBase>& event, ui64& cookie);
     const TEvRequest* GetRequest() const;
     TEvResponse* GetResult();
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;

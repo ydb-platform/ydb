@@ -19,7 +19,7 @@ class TVectorWorkloadParams final: public TWorkloadBaseParams {
     friend class TVectorWorkloadGenerator;
 public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    std::unique_ptr<IWorkloadQueryGenerator> CreateGenerator() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
     void Validate(const ECommandType commandType, int workloadType) override;

@@ -85,7 +85,7 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
 
     void Complete(const TActorContext &ctx) override {
         for (auto& actor : Self->WaitingResponse) {
-            THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
+            std::unique_ptr<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);
             res->Record.SetTxId(Self->TxId);
             res->Record.SetOrigin(Self->TabletID());

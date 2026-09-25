@@ -6,12 +6,12 @@
 
 namespace NKikimr::NReplication::NController {
 
-THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
+std::unique_ptr<TEvService::TEvRunWorker> MakeRunWorkerEv(
     const TReplication::TPtr replication,
     const TReplication::ITarget& target,
     ui64 workerId);
 
-THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
+std::unique_ptr<TEvService::TEvRunWorker> MakeRunWorkerEv(
     ui64 replicationId,
     ui64 targetId,
     const TReplication::ITarget::IConfig::TPtr& config,

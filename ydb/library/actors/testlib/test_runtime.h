@@ -541,12 +541,12 @@ namespace NActors {
         }
 
         template <typename TEvent>
-        THolder<TEvent> GrabEdgeEvent(TDuration simTimeout = TDuration::Max()) {
+        std::unique_ptr<TEvent> GrabEdgeEvent(TDuration simTimeout = TDuration::Max()) {
             TAutoPtr<IEventHandle> handle;
             std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
             GrabEdgeEventIf(handle, truth, simTimeout);
             if (handle) {
-                return THolder<TEvent>(handle->Release<TEvent>());
+                return std::unique_ptr<TEvent>(handle->Release<TEvent>());
             }
             return {};
         }
@@ -728,8 +728,8 @@ namespace NActors {
             return counters;
         }
 
-        THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
-        THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
+        std::unique_ptr<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
+        std::unique_ptr<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
         void StartActorSystem(ui32 nodeIndex, TNodeDataBase* node);
         virtual void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
             Y_UNUSED(setup, node);
@@ -747,7 +747,7 @@ namespace NActors {
     private:
         ui64 ScheduledCount;
         ui64 ScheduledLimit;
-        THolder<TTempDir> TmpDir;
+        std::unique_ptr<TTempDir> TmpDir;
         const TThread::TId MainThreadId;
 
     protected:
@@ -811,12 +811,12 @@ namespace NActors {
             TVector<std::pair<TActorId, TTestActorSetupCmd>> LocalServices;
             TMap<TActorId, IActor*> LocalServicesActors;
             TMap<IActor*, TActorId> ActorToActorId;
-            THolder<TMailboxTable> MailboxTable;
+            std::unique_ptr<TMailboxTable> MailboxTable;
             std::shared_ptr<void> AppData0;
-            THolder<TActorSystem> ActorSystem;
-            THolder<IExecutorPool> SchedulerPool;
+            std::unique_ptr<TActorSystem> ActorSystem;
+            std::unique_ptr<IExecutorPool> SchedulerPool;
             THashMap<ui32, IExecutorPool*> ExecutorPools;
-            THolder<TExecutorThread> ExecutorThread;
+            std::unique_ptr<TExecutorThread> ExecutorThread;
             std::unique_ptr<IHarmonizer> Harmonizer;
         };
 
@@ -846,7 +846,7 @@ namespace NActors {
         static bool AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev);
 
     protected:
-        THolder<INodeFactory> NodeFactory{new TDefaultNodeFactory};
+        std::unique_ptr<INodeFactory> NodeFactory{new TDefaultNodeFactory};
 
     private:
         void InitNode(TNodeDataBase* node, size_t idx);
@@ -957,10 +957,10 @@ namespace NActors {
         }
     };
 
-    using TReplyCheckerCreator = std::function<THolder<IReplyChecker>(void)>;
+    using TReplyCheckerCreator = std::function<std::unique_ptr<IReplyChecker>(void)>;
 
-    inline THolder<IReplyChecker> CreateNoneReplyChecker() {
-        return MakeHolder<TNoneReplyChecker>();
+    inline std::unique_ptr<IReplyChecker> CreateNoneReplyChecker() {
+        return std::make_unique<TNoneReplyChecker>();
     }
 
     TAutoPtr<IStrandingDecoratorFactory> CreateStrandingDecoratorFactory(TTestActorRuntimeBase* runtime,

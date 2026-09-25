@@ -112,7 +112,7 @@ public:
         , BucketRange(this->TableRange, bucketSize)
     {
         auto now = TAppData::TimeProvider->Now();
-        History = MakeHolder<TScanQueryHistory<TGreater>>(bucketCount, bucketSize, now);
+        History = std::make_unique<TScanQueryHistory<TGreater>>(bucketCount, bucketSize, now);
 
         ConvertKeyRange<NKikimrSysView::TEvGetQueryMetricsRequest, ui64, ui32>(Request, this->TableRange);
         Request.SetType(statsType);
@@ -176,7 +176,7 @@ private:
 
         this->UseProcessor = true;
 
-        auto request = MakeHolder<TEvSysView::TEvGetQueryMetricsRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetQueryMetricsRequest>();
         request->Record.CopyFrom(Request);
 
         this->SendThroughPipeCache(request.Release(), this->SysViewProcessorId);
@@ -282,7 +282,7 @@ private:
 
             auto sysViewServiceID = MakeSysViewServiceID(nodeId);
 
-            auto request = MakeHolder<TEvSysView::TEvGetQueryStats>();
+            auto request = std::make_unique<TEvSysView::TEvGetQueryStats>();
             request->Record.SetStatsType(StatsType);
             request->Record.SetStartBucket(std::max(History->GetStartBucket(), BucketRange.FromBucket));
             request->Record.SetTenantName(this->TenantName);
@@ -441,7 +441,7 @@ private:
             this->ReplyEmptyAndDie();
         }
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(this->ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(this->ScanId);
         batch->Finished = true;
 
         TEntry entry;
@@ -518,48 +518,48 @@ private:
     TVector<ui32> NodesToRequest;
     size_t RequestsInFly = 0;
 
-    THolder<TScanQueryHistory<TGreater>> History;
+    std::unique_ptr<TScanQueryHistory<TGreater>> History;
 
     bool OldScanStarted = false;
     bool UseProcessor = false;
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };
 
-THolder<NActors::IActor> CreateQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     switch (sysViewInfo.GetType()) {
     case ESysViewType::ETopQueriesByDurationOneMinute:
-        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByDurationOneHour:
-        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByReadBytesOneMinute:
-        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_READ_BYTES_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByReadBytesOneHour:
-        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_READ_BYTES_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByCpuTimeOneMinute:
-        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_CPU_TIME_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByCpuTimeOneHour:
-        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_CPU_TIME_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByRequestUnitsOneMinute:
-        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByRequestUnitsOneHour:
-        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        return std::make_unique<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     default:

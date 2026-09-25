@@ -110,8 +110,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateMoveIndexUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TMoveIndexUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateMoveIndexUnit(TDataShard& dataShard, TPipeline& pipeline) {
+    return std::unique_ptr<TMoveIndexUnit>(new TMoveIndexUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

@@ -21,7 +21,7 @@ namespace {
         TScopedAlloc Alloc;
         TTypeEnvironment TypeEnv;
         TMockDbSchemeResolver DbSchemeResolver;
-        TVector<THolder<TKeyDesc>> DescList;
+        TVector<std::unique_ptr<TKeyDesc>> DescList;
 
         TServices()
             : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))

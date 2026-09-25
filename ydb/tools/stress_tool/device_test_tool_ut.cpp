@@ -78,7 +78,7 @@ void ProbeTest(const TString &testDescription, bool expectResults,
     P testProto;
     NProtoBuf::TextFormat::ParseFromString(testDescription, &testProto);
 
-    THolder<NKikimr::TPerfTest> test(new T(config, testProto));
+    std::unique_ptr<NKikimr::TPerfTest> test(new T(config, testProto));
     TIntrusivePtr<NKikimr::IResultPrinter> printer;
     TPrinterStub* stub = nullptr;
     if (format) {

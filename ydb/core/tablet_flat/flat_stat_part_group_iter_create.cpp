@@ -4,13 +4,13 @@
 
 namespace NKikimr::NTable {
 
-THolder<IStatsPartGroupIter> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
+std::unique_ptr<IStatsPartGroupIter> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
     ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints)
 {
     if (groupId.Index < (groupId.IsHistoric() ? part->IndexPages.BTreeHistoric : part->IndexPages.BTreeGroups).size()) {
-        return MakeHolder<TStatsPartGroupBtreeIndexIter>(part, env, groupId, rowCountResolution, dataSizeResolution, splitPoints);
+        return std::make_unique<TStatsPartGroupBtreeIndexIter>(part, env, groupId, rowCountResolution, dataSizeResolution, splitPoints);
     } else {
-        return MakeHolder<TPartGroupFlatIndexIter>(part, env, groupId);
+        return std::make_unique<TPartGroupFlatIndexIter>(part, env, groupId);
     }
 }
 

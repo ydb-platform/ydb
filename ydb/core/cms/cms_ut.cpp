@@ -2316,7 +2316,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             cmsActorId = ev->Sender;
         }
 
-        THolder<IEventHandle> delayedClusterInfo;
+        std::unique_ptr<IEventHandle> delayedClusterInfo;
         env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->Recipient == cmsActorId && ev->GetTypeRewrite() == TCms::TEvPrivate::EvClusterInfo) {
                 delayedClusterInfo.Reset(ev.Release());
@@ -2414,7 +2414,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             cmsActorId = ev->Sender;
         }
 
-        THolder<IEventHandle> delayedClusterInfo;
+        std::unique_ptr<IEventHandle> delayedClusterInfo;
         env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TCms::TEvPrivate::EvClusterInfo) {
                 if (ev->Recipient == cmsActorId) {
@@ -2480,7 +2480,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         requestCaptured = false;
-        THolder<IEventHandle> delayedStartCollecting;
+        std::unique_ptr<IEventHandle> delayedStartCollecting;
         env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvCms::EvPermissionRequest) {
                 requestCaptured = true;

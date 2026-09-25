@@ -50,11 +50,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateDropPersistentSnapshotUnit(
+std::unique_ptr<TExecutionUnit> CreateDropPersistentSnapshotUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TDropPersistentSnapshotUnit(dataShard, pipeline));
+    return std::unique_ptr<TDropPersistentSnapshotUnit>(new TDropPersistentSnapshotUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

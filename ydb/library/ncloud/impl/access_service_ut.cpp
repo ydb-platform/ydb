@@ -55,7 +55,7 @@ struct TTestSetup : public NUnitTest::TBaseFixture {
     }
 
     NNebiusCloud::TEvAccessService::TEvAuthenticateResponse* Authenticate(const TString& iamToken, const TString& requestId = {}, TAutoPtr<IEventHandle>* eventHandle = nullptr) {
-        auto request = MakeHolder<NNebiusCloud::TEvAccessService::TEvAuthenticateRequest>();
+        auto request = std::make_unique<NNebiusCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->Request.set_iam_token(iamToken);
         request->RequestId = requestId;
         Runtime.Send(new IEventHandle(AccessServiceActorId, EdgeActor, request.Release()));
@@ -65,7 +65,7 @@ struct TTestSetup : public NUnitTest::TBaseFixture {
     }
 
     NNebiusCloud::TEvAccessService::TEvAuthorizeResponse* Authorize(const TString& iamToken, const TString& permission, const TString& pathId, const TString& requestId = {}, TAutoPtr<IEventHandle>* eventHandle = nullptr) {
-        auto request = MakeHolder<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>();
+        auto request = std::make_unique<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>();
         auto& check = (*request->Request.mutable_checks())[0];
         check.set_iam_token(iamToken);
         check.mutable_permission()->set_name(permission);

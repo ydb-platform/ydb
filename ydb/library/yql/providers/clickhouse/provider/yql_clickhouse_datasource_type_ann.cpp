@@ -119,8 +119,8 @@ private:
     TClickHouseState::TPtr State_;
 };
 
-THolder<TVisitorTransformerBase> CreateClickHouseDataSourceTypeAnnotationTransformer(TClickHouseState::TPtr state) {
-    return MakeHolder<TClickHouseDataSourceTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreateClickHouseDataSourceTypeAnnotationTransformer(TClickHouseState::TPtr state) {
+    return std::make_unique<TClickHouseDataSourceTypeAnnotationTransformer>(state);
 }
 
 } // namespace NYql

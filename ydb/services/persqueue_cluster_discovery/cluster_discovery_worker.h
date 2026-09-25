@@ -17,7 +17,7 @@ using namespace NGRpcService;
 using namespace NPQ::NClusterTracker;
 using namespace NCounters;
 
-IActor* CreateClusterDiscoveryWorker(THolder<NGRpcService::TEvDiscoverPQClustersRequest> ev,
+IActor* CreateClusterDiscoveryWorker(std::unique_ptr<NGRpcService::TEvDiscoverPQClustersRequest> ev,
                                      TLabeledAddressClassifier::TConstPtr datacenterClassifier,
                                      TLabeledAddressClassifier::TConstPtr cloudNetsClassifier,
                                      TClustersList::TConstPtr clustersList,

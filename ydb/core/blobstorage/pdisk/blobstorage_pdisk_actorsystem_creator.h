@@ -40,7 +40,7 @@ public:
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         AppData->IoContextFactory = IoContext.get();
 
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 3;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[3]);

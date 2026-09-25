@@ -403,13 +403,13 @@ namespace NActors {
 
             T ExtractReadyValue() {
                 Y_ABORT_UNLESS(!Ready.Empty(), "Task group has no finished tasks");
-                THolder<TTaskGroupTask<T>> task(Ready.PopFront());
+                std::unique_ptr<TTaskGroupTask<T>> task(Ready.PopFront());
                 return task->ExtractValue();
             }
 
             TTaskGroupResult<T> ExtractReadyResult() {
                 Y_ABORT_UNLESS(!Ready.Empty(), "Task group has no finished tasks");
-                THolder<TTaskGroupTask<T>> task(Ready.PopFront());
+                std::unique_ptr<TTaskGroupTask<T>> task(Ready.PopFront());
                 return task->ExtractResult();
             }
 

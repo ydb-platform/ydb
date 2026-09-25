@@ -389,7 +389,7 @@ public:
             std::nth_element(nodesIds.begin(), itPos, nodesIds.end());
             TNodeId nodeId = *itPos;
             Subscribers.insert(nodeId);
-            THolder<TEvViewer::TEvViewerRequest> sysRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
+            std::unique_ptr<TEvViewer::TEvViewerRequest> sysRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
             InitSystemStateRequest(*sysRequest->Record.MutableSystemRequest());
             sysRequest->Record.SetTimeout(Timeout.MilliSeconds() / 3);
             for (auto nodeId : nodesIds) {
@@ -398,7 +398,7 @@ public:
             OffloadedSystemStateResponse[nodeId] = MakeRequestViewer(nodeId, sysRequest.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
 
             if (Tablets) {
-                THolder<TEvViewer::TEvViewerRequest> tblRequest = MakeHolder<TEvViewer::TEvViewerRequest>();
+                std::unique_ptr<TEvViewer::TEvViewerRequest> tblRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
                 tblRequest->Record.MutableTabletRequest()->SetFormat("packed5");
                 tblRequest->Record.SetTimeout(Timeout.MilliSeconds() / 3);
                 for (auto nodeId : nodesIds) {

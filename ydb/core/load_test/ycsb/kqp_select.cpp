@@ -141,7 +141,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " sends event for session creation to proxy: " << KqpProxyId.ToString());
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Database);
         Send(KqpProxyId, ev.Release());
     }
@@ -153,7 +153,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
             << " sends session close query to proxy: " << KqpProxyId);
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(Session);
         ctx.Send(KqpProxyId, ev.Release());
     }

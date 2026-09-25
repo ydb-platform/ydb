@@ -20,11 +20,11 @@ using namespace NKikimr::NConveyorComposite;
 
 namespace NKikimr {
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(const ui32 threads, const ui32 pools) {
+std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(const ui32 threads, const ui32 pools) {
     Y_ABORT_UNLESS(threads > 0 && threads < 100);
     Y_ABORT_UNLESS(pools > 0 && pools < 10);
 
-    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    auto setup = std::make_unique<NActors::TActorSystemSetup>();
 
     setup->NodeId = 1;
 
@@ -145,7 +145,7 @@ public:
 
     void Execute() {
         const ui64 threadsCount = 64;
-        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        std::unique_ptr<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
 
         actorSystem.Start();

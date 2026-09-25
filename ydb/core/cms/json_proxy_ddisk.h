@@ -51,7 +51,7 @@ public:
         const auto& params = request.GetParams();
         switch (Mode) {
             case EMode::TabletList: {
-                auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
+                auto event = std::make_unique<TEvCms::TEvDDiskTabletListRequest>();
                 FillOffsetAndLimit(params, event->Record);
                 if (params.contains("filter")) {
                     event->Record.SetFilterTabletId(params.Get("filter"));
@@ -80,13 +80,13 @@ public:
                     Reply("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nfield 'tablet_id' is required", ctx);
                     return;
                 }
-                auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
+                auto event = std::make_unique<TEvCms::TEvDDiskInfoGetRequest>();
                 event->Record.SetTabletId(TabletId);
                 NTabletPipe::SendData(ctx, Pipe, event.Release());
                 break;
             }
             case EMode::DiskList: {
-                auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
+                auto event = std::make_unique<TEvCms::TEvDDiskDiskListRequest>();
                 FillOffsetAndLimit(params, event->Record);
                 if (params.contains("filter")) {
                     event->Record.SetFilterDiskId(params.Get("filter"));

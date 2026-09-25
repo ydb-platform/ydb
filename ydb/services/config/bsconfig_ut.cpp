@@ -151,7 +151,7 @@ public:
 
     NKikimr::Tests::TServerSettings::TPtr ServerSettings;
     NKikimr::Tests::TServer::TPtr Server_;
-    THolder<NKikimr::Tests::TTenants> Tenants_;
+    std::unique_ptr<NKikimr::Tests::TTenants> Tenants_;
     std::shared_ptr<grpc::Channel> Channel_;
 private:
     TPortManager PortManager;

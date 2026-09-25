@@ -85,15 +85,15 @@ class TCreateBackupCollection : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner, const TPathId& allocatedPathId) {
+    static void AddPathInSchemeShard(const std::unique_ptr<TProposeResponse>& result, TPath& dstPath, const TString& owner, const TPathId& allocatedPathId) {
         dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
@@ -112,7 +112,7 @@ class TCreateBackupCollection : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& desc = Transaction.GetCreateBackupCollection();
         const TString& name = desc.GetName();
@@ -122,7 +122,7 @@ public:
             {"path", rootPathStr + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                     static_cast<ui64>(OperationId.GetTxId()),
                                                     static_cast<ui64>(context.SS->SelfTabletId()));
 

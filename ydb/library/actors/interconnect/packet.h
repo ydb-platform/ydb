@@ -97,7 +97,7 @@ struct TEventDescr2 {
 struct TEventHolder : TNonCopyable {
     TEventData Descr;
     TActorId ForwardRecipient;
-    THolder<IEventBase> Event;
+    std::unique_ptr<IEventBase> Event;
     TIntrusivePtr<TEventSerializedData> Buffer;
     ui64 Serial;
     ui32 EventSerializedSize;

@@ -341,8 +341,8 @@ TKeyDesc::TKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes)
     , Partitioning(std::make_shared<TPartitioning>())
 {}
 
-THolder<TKeyDesc> TKeyDesc::CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes) {
-    return THolder<TKeyDesc>(new TKeyDesc(keyColumnTypes));
+std::unique_ptr<TKeyDesc> TKeyDesc::CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes) {
+    return std::unique_ptr<TKeyDesc>(new TKeyDesc(keyColumnTypes));
 }
 
 void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {

@@ -69,7 +69,7 @@ private:
 ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+    auto response = std::make_unique<TEvConsole::TEvConfigNotificationResponse>();
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
 
     return new TTxUpdateConfig(this, rec.GetConfig().GetCmsConfig(),

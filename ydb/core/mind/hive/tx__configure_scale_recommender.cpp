@@ -22,7 +22,7 @@ public:
             {"logPrefix", GetLogPrefix()});
         SideEffects.Reset(Self->SelfId());
 
-        auto response = MakeHolder<TEvHive::TEvConfigureScaleRecommenderReply>();
+        auto response = std::make_unique<TEvHive::TEvConfigureScaleRecommenderReply>();
 
         const auto& record = Request->Get()->Record;
         if (!record.HasDomainKey()) {

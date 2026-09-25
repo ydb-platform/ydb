@@ -101,7 +101,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             TString data = rowset.template GetValue<typename S::Data>();
 
             if (data) {
-                auto partition = MakeHolder<NKikimrSysView::TTopPartitionsInfo>();
+                auto partition = std::make_unique<NKikimrSysView::TTopPartitionsInfo>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD partition->ParseFromString(data);
 
                 switch ((NKikimrSysView::EStatsType)type) {
@@ -328,7 +328,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
                 TTopQuery query{queryHash, value, nodeId, {}};
                 if (stats) {
-                    query.Stats = MakeHolder<NKikimrSysView::TQueryStats>();
+                    query.Stats = std::make_unique<NKikimrSysView::TQueryStats>();
                     Y_PROTOBUF_SUPPRESS_NODISCARD query.Stats->ParseFromString(stats);
                 }
 

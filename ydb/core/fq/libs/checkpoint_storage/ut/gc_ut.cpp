@@ -141,10 +141,10 @@ class TGcTestBase: public NUnitTest::TTestBase {
     void InitTestServer() {
         MsgBusPort = PortManager.GetPort(2134);
         NKikimrProto::TAuthConfig authConfig;
-        ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
+        ServerSettings = std::make_unique<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->NodeCount = 1;
-        Server = MakeHolder<Tests::TServer>(*ServerSettings);
-        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+        Server = std::make_unique<Tests::TServer>(*ServerSettings);
+        Client = std::make_unique<Tests::TClient>(*ServerSettings);
         Server->GetRuntime()->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NActors::NLog::PRI_DEBUG);
         Client->InitRootScheme();
     }
@@ -198,7 +198,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
             type,
             0);
 
-        auto handle = MakeHolder<IEventHandle>(ActorGC, sender, request.release());
+        auto handle = std::make_unique<IEventHandle>(ActorGC, sender, request.release());
         GetRuntime()->Send(handle.Release());
     }
 
@@ -242,9 +242,9 @@ private:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;
-    THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
-    THolder<Tests::TClient> Client;
+    std::unique_ptr<Tests::TServerSettings> ServerSettings;
+    std::unique_ptr<Tests::TServer> Server;
+    std::unique_ptr<Tests::TClient> Client;
     NConfig::TCheckpointCoordinatorConfig Config;
 
     TCheckpointStoragePtr CheckpointStorage;

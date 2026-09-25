@@ -153,7 +153,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         RequestCookies ^= cookie;
 
         SendPutToGroup(ctx, x->GroupID, Info.Get(),
-            MakeHolder<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+            std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
                 .BlobId = id,
                 .Buffer = TRope(buffer),
                 .Deadline = TInstant::Max(),

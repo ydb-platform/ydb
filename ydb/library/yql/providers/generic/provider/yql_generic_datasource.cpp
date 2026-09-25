@@ -23,7 +23,7 @@ namespace NYql {
         public:
             TGenericDataSource(TGenericState::TPtr state)
                 : State_(state)
-                , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{GenericProviderName}))
+                , ConfigurationTransformer_(std::make_unique<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{GenericProviderName}))
                 , IODiscoveryTransformer_(CreateGenericIODiscoveryTransformer(State_))
                 , LoadMetaDataTransformer_(CreateGenericDescribeTableTransformer(State_))
                 , TypeAnnotationTransformer_(CreateGenericDataSourceTypeAnnotationTransformer(State_))
@@ -180,11 +180,11 @@ namespace NYql {
 
         private:
             const TGenericState::TPtr State_;
-            const THolder<IGraphTransformer> ConfigurationTransformer_;
-            const THolder<IGraphTransformer> IODiscoveryTransformer_;
-            const THolder<IGraphTransformer> LoadMetaDataTransformer_;
-            const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-            const THolder<IDqIntegration> DqIntegration_;
+            const std::unique_ptr<IGraphTransformer> ConfigurationTransformer_;
+            const std::unique_ptr<IGraphTransformer> IODiscoveryTransformer_;
+            const std::unique_ptr<IGraphTransformer> LoadMetaDataTransformer_;
+            const std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+            const std::unique_ptr<IDqIntegration> DqIntegration_;
         };
 
     } // namespace

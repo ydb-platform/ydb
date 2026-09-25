@@ -535,7 +535,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -555,7 +555,7 @@ public:
         );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
         if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,

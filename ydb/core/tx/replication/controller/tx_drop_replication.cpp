@@ -7,7 +7,7 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxDropReplication: public TTxBase {
     TEvController::TEvDropReplication::TPtr PubEv;
     TEvPrivate::TEvDropReplication::TPtr PrivEv;
-    THolder<IEventHandle> Result; // TEvController::TEvDropReplicationResult
+    std::unique_ptr<IEventHandle> Result; // TEvController::TEvDropReplicationResult
     TReplication::TPtr Replication;
     TVector<std::pair<ui64, ui64>> AlterersToStop;
 
@@ -52,11 +52,11 @@ public:
             YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
                 {"pathId", pathId});
 
-            auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
+            auto ev = std::make_unique<TEvController::TEvDropReplicationResult>();
             ev->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
             ev->Record.SetOrigin(Self->TabletID());
             ev->Record.SetStatus(NKikimrReplication::TEvDropReplicationResult::NOT_FOUND);
-            Result = MakeHolder<IEventHandle>(PubEv->Sender, ctx.SelfID, ev.Release());
+            Result = std::make_unique<IEventHandle>(PubEv->Sender, ctx.SelfID, ev.Release());
 
             return true;
         }
@@ -156,12 +156,12 @@ public:
         db.Table<Schema::Replications>().Key(rid).Delete();
 
         if (const auto& op = Replication->GetDropOp()) {
-            auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
+            auto ev = std::make_unique<TEvController::TEvDropReplicationResult>();
             ev->Record.MutableOperationId()->SetTxId(op->OperationId.first);
             ev->Record.MutableOperationId()->SetPartId(op->OperationId.second);
             ev->Record.SetOrigin(Self->TabletID());
             ev->Record.SetStatus(NKikimrReplication::TEvDropReplicationResult::SUCCESS);
-            Result = MakeHolder<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
+            Result = std::make_unique<IEventHandle>(op->Sender, ctx.SelfID, ev.Release());
         }
 
         Self->Remove(rid);

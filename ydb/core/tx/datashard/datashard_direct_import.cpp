@@ -5,14 +5,14 @@
 
 namespace NKikimr {
 
-// Out-of-line special members for the events that hold THolder<> of tablet_flat
+// Out-of-line special members for the events that hold std::unique_ptr<> of tablet_flat
 // types forward-declared in datashard.h (the complete type is needed to
 // construct or destroy the THolder members). TEvDataShard is a namespace in
 // NKikimr (not in NDataShard).
 namespace TEvDataShard {
 
     TEvS3DirectWriteBeginResult::TEvS3DirectWriteBeginResult(
-            ui64 txId, THolder<NTabletFlatExecutor::TDirectPartWriter> writer, ui32 step)
+            ui64 txId, std::unique_ptr<NTabletFlatExecutor::TDirectPartWriter> writer, ui32 step)
         : TxId(txId)
         , Success(true)
         , Step(step)
@@ -32,7 +32,7 @@ namespace TEvDataShard {
 
     TEvS3DirectWriteFinish::TEvS3DirectWriteFinish(
             ui64 txId, ui64 tableId,
-            THolder<NTabletFlatExecutor::TDirectPartResult> result,
+            std::unique_ptr<NTabletFlatExecutor::TDirectPartResult> result,
             const NDataShard::TS3Download& info)
         : TxId(txId)
         , TableId(tableId)
@@ -52,14 +52,14 @@ using namespace NTabletFlatExecutor;
 void TDataShard::Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
-    auto reply = [&](THolder<TEvDataShard::TEvS3DirectWriteBeginResult> result) {
+    auto reply = [&](std::unique_ptr<TEvDataShard::TEvS3DirectWriteBeginResult> result) {
         ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
     };
 
     const TTableId fullTableId(GetPathOwnerId(), msg->TableId);
     const ui64 localTableId = GetLocalTableId(fullTableId);
     if (localTableId == 0) {
-        return reply(MakeHolder<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId,
+        return reply(std::make_unique<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId,
             TStringBuilder() << "Unknown table id " << msg->TableId));
     }
 
@@ -67,12 +67,12 @@ void TDataShard::Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TAc
     // the direct-part unit test drives BeginWritePart directly from a handler.
     auto writer = Executor()->BeginWritePart(localTableId);
     if (!writer) {
-        return reply(MakeHolder<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId,
+        return reply(std::make_unique<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId,
             "BeginWritePart returned no writer"));
     }
 
     const ui32 step = writer->Step();
-    reply(MakeHolder<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId, std::move(writer), step));
+    reply(std::make_unique<TEvDataShard::TEvS3DirectWriteBeginResult>(msg->TxId, std::move(writer), step));
 }
 
 void TDataShard::Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx) {

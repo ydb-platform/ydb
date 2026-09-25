@@ -79,7 +79,7 @@ void DoTestCase(const TReplTestSettings& settings) {
     for (auto& [nodeId, detainedEv] : detainedMsgs) {
         TActorId edge = env.Runtime->AllocateEdgeActor(nodeId);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
         perfConfig.SetPDiskType(PDiskTypeToPDiskType(env.Settings.DiskType));
         perfConfig.SetMinHugeBlobSizeInBytes(settings.MinHugeBlobSizeInRepl);

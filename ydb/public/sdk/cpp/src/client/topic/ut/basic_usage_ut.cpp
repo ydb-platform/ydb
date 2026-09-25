@@ -206,7 +206,7 @@ void WriteBinaryProducerIdWithDirectTabletWrite(TTopicSdkTestSetup& setup,
     TString serializedData = SerializeDataChunk(1, payload);
 
     // Build the write request manually to have full control over the SourceId field
-    THolder<NKikimr::TEvPersQueue::TEvRequest> request;
+    std::unique_ptr<NKikimr::TEvPersQueue::TEvRequest> request;
     request.Reset(new NKikimr::TEvPersQueue::TEvRequest);
     auto req = request->Record.MutablePartitionRequest();
     req->SetPartition(0);

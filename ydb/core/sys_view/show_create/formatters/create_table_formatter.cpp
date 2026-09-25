@@ -272,8 +272,8 @@ private:
 };
 
 TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc,
-        bool temporary, const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
-        const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
+        bool temporary, const THashMap<TString, std::unique_ptr<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
+        const THashMap<TPathId, std::unique_ptr<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -1204,7 +1204,7 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
 }
 
 void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
-        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId) {
+        const THashMap<TString, std::unique_ptr<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId) {
     Stream << "ALTER TABLE ";
     EscapeName(tablePath, Stream);
     Stream << "\n\t";
@@ -1330,7 +1330,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     Stream << ");";
 }
 
-void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
+void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, std::unique_ptr<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
     auto it = sequences.find(TPathId::FromProto(sequence.GetPathId()));
     if (it == sequences.end() || !it->second) {
         ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected sequence path id");

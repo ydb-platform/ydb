@@ -117,7 +117,7 @@ struct TDynamicConfig : public TThrRefBase {
     using TPendingCacheMissesQueue = TIntrusiveHeap<TCacheMiss, TCacheMiss::THeapIndexByDeadline, TCacheMiss::TCompareByDeadline>;
     TPendingCacheMissesQueue PendingCacheMisses;
     // Used to know who owns CacheMiss memory - ActorSystem or DynamicNameservice
-    std::unordered_map<TCacheMiss*, THolder<TCacheMiss>> CacheMissHolders;
+    std::unordered_map<TCacheMiss*, std::unique_ptr<TCacheMiss>> CacheMissHolders;
 };
 
 class TListNodesCache : public TSimpleRefCount<TListNodesCache> {

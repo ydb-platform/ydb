@@ -10,7 +10,7 @@ namespace NKikimr::NSchemeShard::NResourcePool {
 
 TPath::TChecker IsParentPathValid(const TPath& parentPath);
 
-bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath);
+bool IsParentPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& parentPath);
 
 bool Validate(const NKikimrSchemeOp::TResourcePoolDescription& description, TString& errorStr);
 
@@ -18,11 +18,11 @@ TResourcePoolInfo::TPtr CreateResourcePool(const NKikimrSchemeOp::TResourcePoolD
 
 TResourcePoolInfo::TPtr ModifyResourcePool(const NKikimrSchemeOp::TResourcePoolDescription& description, const TResourcePoolInfo::TPtr oldResourcePoolInfo);
 
-bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const THolder<TProposeResponse>& result, const TOperationContext& context);
+bool IsApplyIfChecksPassed(const TTxTransaction& transaction, const std::unique_ptr<TProposeResponse>& result, const TOperationContext& context);
 
-bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description);
+bool IsDescriptionValid(const std::unique_ptr<TProposeResponse>& result, const NKikimrSchemeOp::TResourcePoolDescription& description);
 
-bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info);
+bool IsResourcePoolInfoValid(const std::unique_ptr<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info);
 
 TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType);
 

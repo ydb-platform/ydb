@@ -167,11 +167,11 @@ namespace NActors {
         const ui32 NodeId;
 
     private:
-        THolder<TCpuManager> CpuManager;
+        std::unique_ptr<TCpuManager> CpuManager;
         const ui32 ExecutorPoolCount;
 
         TAutoPtr<ISchedulerThread> Scheduler;
-        THolder<TServiceMap> ServiceMap;
+        std::unique_ptr<TServiceMap> ServiceMap;
 
         const ui32 InterconnectCount;
         TArrayHolder<TActorId> Interconnect;
@@ -180,14 +180,14 @@ namespace NActors {
         volatile ui64 CurrentMonotonic;
         volatile ui64 CurrentIDCounter;
 
-        THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
+        std::unique_ptr<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
 
         mutable IRcBufAllocator* RcBufAllocator;
 
         friend class TExecutorThread;
 
-        THolder<TActorSystemSetup> SystemSetup;
+        std::unique_ptr<TActorSystemSetup> SystemSetup;
         TActorId DefSelfID;
         void* AppData0;
         TIntrusivePtr<NLog::TSettings> LoggerSettings0;
@@ -203,7 +203,7 @@ namespace NActors {
 
         std::deque<std::function<void()>> DeferredPreStop;
     public:
-        TActorSystem(THolder<TActorSystemSetup>& setup, void* appData = nullptr,
+        TActorSystem(std::unique_ptr<TActorSystemSetup>& setup, void* appData = nullptr,
                      TIntrusivePtr<NLog::TSettings> loggerSettings = TIntrusivePtr<NLog::TSettings>(nullptr));
         ~TActorSystem();
 
@@ -279,22 +279,22 @@ namespace NActors {
          */
         template <typename T>
         [[nodiscard]]
-        NThreading::TFuture<THolder<T>> Ask(TActorId recipient, THolder<IEventBase> event, TDuration timeout = TDuration::Max()) {
+        NThreading::TFuture<std::unique_ptr<T>> Ask(TActorId recipient, std::unique_ptr<IEventBase> event, TDuration timeout = TDuration::Max()) {
             if constexpr (std::is_same_v<T, IEventBase>) {
                 return AskGeneric(Nothing(), recipient, std::move(event), timeout);
             } else {
                 return AskGeneric(T::EventType, recipient, std::move(event), timeout)
-                    .Apply([](const NThreading::TFuture<THolder<IEventBase>>& ev) {
-                        return THolder<T>(static_cast<T*>(const_cast<THolder<IEventBase>&>(ev.GetValueSync()).Release()));  // =(
+                    .Apply([](const NThreading::TFuture<std::unique_ptr<IEventBase>>& ev) {
+                        return std::unique_ptr<T>(static_cast<T*>(const_cast<std::unique_ptr<IEventBase>&>(ev.GetValueSync()).Release()));  // =(
                     });
             }
         }
 
         [[nodiscard]]
-        NThreading::TFuture<THolder<IEventBase>> AskGeneric(
+        NThreading::TFuture<std::unique_ptr<IEventBase>> AskGeneric(
             TMaybe<ui32> expectedEventType,
             TActorId recipient,
-            THolder<IEventBase> event,
+            std::unique_ptr<IEventBase> event,
             TDuration timeout);
 
         ui64 AllocateIDSpace(ui64 count);

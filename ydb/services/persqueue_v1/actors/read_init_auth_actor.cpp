@@ -91,7 +91,7 @@ void TReadInitAndAuthActor::CloseSession(const TString& errorReason, const Ydb::
 }
 
 void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, const TString& path) {
-    auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Path = NKikimr::SplitPath(path);
     entry.SyncVersion = true;

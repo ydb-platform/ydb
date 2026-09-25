@@ -16,7 +16,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvLogin::TPtr Request;
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
-    THolder<TEvSchemeShard::TEvLoginResult> Result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
+    std::unique_ptr<TEvSchemeShard::TEvLoginResult> Result = std::make_unique<TEvSchemeShard::TEvLoginResult>();
 
     TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
         : TRwTxBase(self)

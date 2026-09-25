@@ -91,7 +91,7 @@ class TSysLogReader : public TThrRefBase {
     std::shared_ptr<TPDiskCtx> PCtx;
     const TReqId ReqId;
 
-    THolder<TEvReadLogResult> Result;
+    std::unique_ptr<TEvReadLogResult> Result;
 
     TVector<ui64> BadOffsets;
 

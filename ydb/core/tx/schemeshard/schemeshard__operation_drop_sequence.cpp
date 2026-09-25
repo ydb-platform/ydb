@@ -90,7 +90,7 @@ public:
 
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvDropSequence>(pathId);
+            auto event = std::make_unique<NSequenceShard::TEvSequenceShard::TEvDropSequence>(pathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 
@@ -203,11 +203,11 @@ class TDropSequence: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
+            return std::make_unique<TDropParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -218,7 +218,7 @@ public:
 
     virtual const char* Name() const override final { return "TDropSequence"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& drop = Transaction.GetDrop();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -229,7 +229,7 @@ public:
             {"pathId", drop.GetId()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)

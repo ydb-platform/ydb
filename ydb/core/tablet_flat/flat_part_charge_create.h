@@ -5,6 +5,6 @@
 
 namespace NKikimr::NTable {
 
-THolder<ICharge> CreateCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory);
+std::unique_ptr<ICharge> CreateCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory);
 
 }

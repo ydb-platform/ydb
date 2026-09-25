@@ -279,14 +279,14 @@ TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString
     });
 }
 
-THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
+std::unique_ptr<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
     return runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>();
 }
 
 namespace {
 
 template <typename TEvent>
-THolder<TEvent> ExpectEdgeEvent(NActors::TTestActorRuntime& runtime, TDuration timeout, const char* name) {
+std::unique_ptr<TEvent> ExpectEdgeEvent(NActors::TTestActorRuntime& runtime, TDuration timeout, const char* name) {
     auto response = runtime.GrabEdgeEvent<TEvent>(timeout);
     UNIT_ASSERT_C(response, TStringBuilder() << name << " timed out after " << timeout);
     return response;
@@ -294,27 +294,27 @@ THolder<TEvent> ExpectEdgeEvent(NActors::TTestActorRuntime& runtime, TDuration t
 
 } // namespace
 
-THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return ExpectEdgeEvent<TEvReadResponse>(runtime, timeout, "GetReadResponse");
 }
 
-THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return ExpectEdgeEvent<TEvPurgeResponse>(runtime, timeout, "GetPurgeResponse");
 }
 
-THolder<TEvDescribeResponse> GetDescribeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<TEvDescribeResponse> GetDescribeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return ExpectEdgeEvent<TEvDescribeResponse>(runtime, timeout, "GetDescribeResponse");
 }
 
-THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return ExpectEdgeEvent<TEvWriteResponse>(runtime, timeout, "GetWriteResponse");
 }
 
-THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return ExpectEdgeEvent<TEvChangeResponse>(runtime, timeout, "GetChangeResponse");
 }
 
-THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+std::unique_ptr<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return ExpectEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(runtime, timeout, "GetDescriberResponse");
 }
 
@@ -398,7 +398,7 @@ ui64 GetPQRBTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& 
     return result->Topics[topic].Info->Description.GetBalancerTabletID();
 }
 
-THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::shared_ptr<TTopicSdkTestSetup>& setup,
+std::unique_ptr<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& database, const TString& topic, const TString& consumer, ui32 partitionId) {
     auto tabletId = GetTabletId(setup, database, topic, partitionId);
 

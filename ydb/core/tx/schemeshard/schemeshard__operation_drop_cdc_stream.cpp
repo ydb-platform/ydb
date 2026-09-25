@@ -94,9 +94,9 @@ private:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -105,7 +105,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetDrop();
         const auto& streamName = op.GetName();
@@ -114,7 +114,7 @@ public:
             {"stream", workingDir + "/" + streamName},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         const auto streamPath = op.HasId()
             ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)
@@ -314,20 +314,20 @@ private:
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
             if (DropSnapshot) {
-                return MakeHolder<TConfigurePartsAtTableDropSnapshot>(OperationId);
+                return std::make_unique<TConfigurePartsAtTableDropSnapshot>(OperationId);
             } else {
-                return MakeHolder<TConfigurePartsAtTable>(OperationId);
+                return std::make_unique<TConfigurePartsAtTable>(OperationId);
             }
         case TTxState::Propose:
             if (DropSnapshot) {
-                return MakeHolder<NCdcStreamState::TProposeAtTableDropSnapshot>(OperationId);
+                return std::make_unique<NCdcStreamState::TProposeAtTableDropSnapshot>(OperationId);
             } else {
-                return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
+                return std::make_unique<NCdcStreamState::TProposeAtTable>(OperationId);
             }
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -351,7 +351,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetDropCdcStream();
         const auto& tableName = op.GetTableName();
@@ -361,7 +361,7 @@ public:
             {"streams", StreamNames.size()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
         {

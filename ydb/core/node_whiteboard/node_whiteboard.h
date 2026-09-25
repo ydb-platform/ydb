@@ -460,7 +460,7 @@ struct TEvWhiteboard {
 
     struct TEvIntrospectionData : TEventLocal<TEvIntrospectionData, EvIntrospectionData> {
 
-        THolder<NTracing::ITrace> Trace;
+        std::unique_ptr<NTracing::ITrace> Trace;
         TTabletId TabletId;
 
         TEvIntrospectionData(TTabletId tabletId, NTracing::ITrace* trace)

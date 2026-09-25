@@ -19,7 +19,7 @@ namespace NActors {
         TArrayHolder<TExecutorThreadCtx> Threads;
         TUnorderedCache<ui32, 512, 4> ThreadQueue;
 
-        THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
+        std::unique_ptr<NSchedulerQueue::TQueueType> ScheduleQueue;
         TTicketLock ScheduleLock;
         IHarmonizer *Harmonizer = nullptr;
 

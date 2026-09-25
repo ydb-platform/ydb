@@ -684,7 +684,7 @@ namespace NTabletPipe {
         struct TEventParts {
             ui32 Type;
             TActorId Sender;
-            THolder<IEventBase> Event;
+            std::unique_ptr<IEventBase> Event;
             TIntrusivePtr<TEventSerializedData> Buffer;
             ui64 SeqNo;
 
@@ -719,7 +719,7 @@ namespace NTabletPipe {
                 }
             }
 
-            THolder<TEvTabletPipe::TEvPush> ToRemotePush(ui64 tabletId, ui64 cookie, bool supportsDataInPayload) {
+            std::unique_ptr<TEvTabletPipe::TEvPush> ToRemotePush(ui64 tabletId, ui64 cookie, bool supportsDataInPayload) {
                 if (!Buffer) {
                     Y_ABORT_UNLESS(Event, "Sending an empty event without a buffer");
                     TAllocChunkSerializer serializer;
@@ -727,7 +727,7 @@ namespace NTabletPipe {
                     Buffer = serializer.Release(Event->CreateSerializationInfo(false));
                 }
 
-                auto msg = MakeHolder<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,
+                auto msg = std::make_unique<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,
                     Buffer->GetSerializationInfo(), supportsDataInPayload);
 
                 if (SeqNo) {
@@ -747,19 +747,19 @@ namespace NTabletPipe {
                 switch (ev->GetTypeRewrite()) {
                     case TEvTabletPipe::EvMessage: {
                         // Send local self -> server message without conversions
-                        THolder<TEvTabletPipe::TEvMessage> msg(ev->Release<TEvTabletPipe::TEvMessage>().Release());
+                        std::unique_ptr<TEvTabletPipe::TEvMessage> msg(ev->Release<TEvTabletPipe::TEvMessage>().Release());
                         ctx.Send(new IEventHandle(ServerId, SelfId(), msg.Release(),
                                 IEventHandle::FlagTrackDelivery, ev->Cookie, nullptr, std::move(ev->TraceId)));
                         break;
                     }
                     case TEvTabletPipe::EvSend: {
                         // Repackage event in a self -> sender form with an original type
-                        THolder<IEventHandle> directEv;
+                        std::unique_ptr<IEventHandle> directEv;
                         if (ev->HasEvent()) {
-                            directEv = MakeHolder<IEventHandle>(ev->Sender, SelfId(), ev->ReleaseBase().Release(),
+                            directEv = std::make_unique<IEventHandle>(ev->Sender, SelfId(), ev->ReleaseBase().Release(),
                                     IEventHandle::FlagTrackDelivery, ev->Cookie, nullptr, std::move(ev->TraceId));
                         } else {
-                            directEv = MakeHolder<IEventHandle>(ev->Type, IEventHandle::FlagTrackDelivery,
+                            directEv = std::make_unique<IEventHandle>(ev->Type, IEventHandle::FlagTrackDelivery,
                                     ev->Sender, SelfId(), ev->ReleaseChainBuffer(), ev->Cookie, nullptr,
                                     std::move(ev->TraceId));
                         }
@@ -772,7 +772,7 @@ namespace NTabletPipe {
                         Y_UNREACHABLE();
                 }
             } else {
-                THolder<TEvTabletPipe::TEvPush> msg = TEventParts(ev).ToRemotePush(TabletId, ev->Cookie,
+                std::unique_ptr<TEvTabletPipe::TEvPush> msg = TEventParts(ev).ToRemotePush(TabletId, ev->Cookie,
                     SupportsDataInPayload);
 
                 // Send a remote self -> server message
@@ -839,14 +839,14 @@ namespace NTabletPipe {
         TActivationContext::Send(ev);
     }
 
-    void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie, NWilson::TTraceId traceId) {
+    void SendData(TActorId self, TActorId clientId, std::unique_ptr<IEventBase>&& payload, ui64 cookie, NWilson::TTraceId traceId) {
         SendData(self, clientId, payload.Release(), cookie, std::move(traceId));
     }
 
     void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase *payload, ui64 seqNo, ui64 cookie, NWilson::TTraceId traceId) {
-        auto event = MakeHolder<TEvTabletPipe::TEvMessage>(self, THolder<IEventBase>(payload));
+        auto event = std::make_unique<TEvTabletPipe::TEvMessage>(self, std::unique_ptr<IEventBase>(payload));
         event->SetSeqNo(seqNo);
-        auto ev = MakeHolder<IEventHandle>(clientId, self, event.Release(), 0, cookie, nullptr, std::move(traceId));
+        auto ev = std::make_unique<IEventHandle>(clientId, self, event.Release(), 0, cookie, nullptr, std::move(traceId));
         TActivationContext::Send(ev.Release());
     }
 

@@ -38,7 +38,7 @@ private:
     void ProcessEventWithFetcher(IEventHandle& /*ev*/, NFetcher::ISnapshotsFetcher::TPtr fetcher, TAction action) {
         auto it = Accessors.find(fetcher->GetComponentId());
         if (it == Accessors.end()) {
-            THolder<TExternalData> actor = MakeHolder<TExternalData>(Config, fetcher);
+            std::unique_ptr<TExternalData> actor = std::make_unique<TExternalData>(Config, fetcher);
             it = Accessors.emplace(fetcher->GetComponentId(), Register(actor.Release())).first;
         }
         action(it->second);

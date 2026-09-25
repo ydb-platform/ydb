@@ -526,7 +526,7 @@ void TMyMachine::Configure(const TMachinePb& cfg)
 
     // Update scheduler
     if (!NProtoBuf::IsEqual(oldSchedulerCfg, cfg.GetScheduler())) {
-        THolder<IScheduler> oldScheduler(Scheduler.Release());
+        std::unique_ptr<IScheduler> oldScheduler(Scheduler.Release());
         if (cfg.GetScheduler().HasFIFO()) {
             TFifo* fifo = new TFifo(MyShop);
             fifo->SetName(cfg.GetScheduler().GetFIFO().GetName());

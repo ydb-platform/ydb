@@ -354,7 +354,7 @@ TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     const TString& database,
     TActorSystem* actorSystem
 ) {
-    return THolder<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, database, actorSystem));
+    return std::unique_ptr<IGraphTransformer>(new TKqpColumnStatisticsRequester(config, typesCtx, tables, cluster, database, actorSystem));
 }
 
 } // end of NKikimr::NKqp

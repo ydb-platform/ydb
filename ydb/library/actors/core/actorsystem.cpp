@@ -159,7 +159,7 @@ namespace NActors {
         return buf;
     }
 
-    TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
+    TActorSystem::TActorSystem(std::unique_ptr<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
         , CpuManager(new TCpuManager(setup))
@@ -444,10 +444,10 @@ namespace NActors {
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }
 
-    NThreading::TFuture<THolder<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType,
-                                                                      TActorId recipient, THolder<IEventBase> event,
+    NThreading::TFuture<std::unique_ptr<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType,
+                                                                      TActorId recipient, std::unique_ptr<IEventBase> event,
                                                                       TDuration timeout) {
-        auto promise = NThreading::NewPromise<THolder<IEventBase>>();
+        auto promise = NThreading::NewPromise<std::unique_ptr<IEventBase>>();
         Register(MakeAskActor(expectedEventType, recipient, std::move(event), timeout, promise).Release());
         return promise.GetFuture();
     }

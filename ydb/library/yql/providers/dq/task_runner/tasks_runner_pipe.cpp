@@ -216,9 +216,9 @@ public:
         close(output[1]);
         close(error[1]);
 
-        Stdin = MakeHolder<TPipedOutput>(input[1]);
-        Stdout = MakeHolder<TPipedInput>(output[0]);
-        Stderr = MakeHolder<TPipedInput>(error[0]);
+        Stdin = std::make_unique<TPipedOutput>(input[1]);
+        Stdout = std::make_unique<TPipedInput>(output[0]);
+        Stderr = std::make_unique<TPipedInput>(error[0]);
         YQL_CLOG(DEBUG, ProviderDq) << "Forked child, pid: " << Pid;
         OnStarted();
 #endif
@@ -276,9 +276,9 @@ protected:
     const THashMap<TString, TString> Env;
     const TString WorkDir;
 
-    THolder<TPipedOutput> Stdin;
-    THolder<TPipedInput> Stdout;
-    THolder<TPipedInput> Stderr;
+    std::unique_ptr<TPipedOutput> Stdin;
+    std::unique_ptr<TPipedInput> Stdout;
+    std::unique_ptr<TPipedInput> Stderr;
     TVector<TString> EnvElems;
     TVector<char*> ExecArgs;
     TVector<char*> ExecEnv;
@@ -324,7 +324,7 @@ protected:
 struct TProcessHolder {
     explicit TProcessHolder(TPipeFactoryCountersPtr counters)
         : Counters(std::move(counters))
-        , Watcher(MakeHolder<TThread>([this] () { Watch(); }))
+        , Watcher(std::make_unique<TThread>([this] () { Watch(); }))
     {
         Running.test_and_set();
         Watcher->Start();
@@ -341,15 +341,15 @@ struct TProcessHolder {
         return Processes.size();
     }
 
-    void Put(const TString& key, THolder<TChildProcess>process) {
+    void Put(const TString& key, std::unique_ptr<TChildProcess>process) {
         TGuard<TMutex> lock(Mutex);
         Processes.emplace_back(key, std::move(process));
         UpdatePoolSize();
     }
 
-    THolder<TChildProcess> Acquire(const TString& key, TList<THolder<TChildProcess>>* stopList) {
+    std::unique_ptr<TChildProcess> Acquire(const TString& key, TList<std::unique_ptr<TChildProcess>>* stopList) {
         TGuard<TMutex> lock(Mutex);
-        THolder<TChildProcess> result;
+        std::unique_ptr<TChildProcess> result;
         while (!Processes.empty()) {
             auto first = std::move(Processes.front());
             Processes.pop_front();
@@ -365,7 +365,7 @@ struct TProcessHolder {
 
     void Watch() {
         while (Running.test()) {
-            TList<THolder<TChildProcess>> stopList;
+            TList<std::unique_ptr<TChildProcess>> stopList;
             {
                 TGuard<TMutex> lock(Mutex);
                 auto it = Processes.begin();
@@ -394,11 +394,11 @@ struct TProcessHolder {
     }
 
     const TPipeFactoryCountersPtr Counters;
-    THolder<TThread> Watcher;
+    std::unique_ptr<TThread> Watcher;
     std::atomic_flag Running;
 
     TMutex Mutex;
-    TList<std::pair<TString, THolder<TChildProcess>>> Processes;
+    TList<std::pair<TString, std::unique_ptr<TChildProcess>>> Processes;
 };
 
 struct TPortoSettings {
@@ -1435,7 +1435,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
-        THolder<TChildProcess>&& command,
+        std::unique_ptr<TChildProcess>&& command,
         ui64 stageId,
         const TString& traceId)
         : TraceId(traceId)
@@ -1446,7 +1446,7 @@ public:
         , AllocatedHolder(std::make_optional<TAllocatedHolder>(*Alloc, "TDqTaskRunnerProxy"))
         , Running(true)
         , Command(std::move(command))
-        , StderrReader(MakeHolder<TThread>([this] () { ReadStderr(); }))
+        , StderrReader(std::make_unique<TThread>([this] () { ReadStderr(); }))
         , Output(Command->GetStdin())
         , Input(Command->GetStdout())
         , TaskId(Task.GetId())
@@ -1775,8 +1775,8 @@ private:
     std::atomic<bool> Running;
     int Code = -1;
     TString Stderr;
-    THolder<TChildProcess> Command;
-    THolder<TThread> StderrReader;
+    std::unique_ptr<TChildProcess> Command;
+    std::unique_ptr<TThread> StderrReader;
     IOutputStream& Output;
     IInputStream& Input;
 
@@ -1795,7 +1795,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
-        THolder<TChildProcess>&& command,
+        std::unique_ptr<TChildProcess>&& command,
         ui64 stageId,
         const TString& traceId)
         : Delegate(new TTaskRunner(alloc, task, std::move(filesHolder), std::move(command), stageId, traceId))
@@ -2060,10 +2060,10 @@ class TPipeFactory: public IProxyFactory {
     };
 
     struct TStopJob: public TTaskScheduler::ITask {
-        TList<THolder<TChildProcess>> StopList;
+        TList<std::unique_ptr<TChildProcess>> StopList;
         const TPipeFactoryCountersPtr Counters;
 
-        TStopJob(TList<THolder<TChildProcess>>&& stopList, TPipeFactoryCountersPtr counters)
+        TStopJob(TList<std::unique_ptr<TChildProcess>>&& stopList, TPipeFactoryCountersPtr counters)
             : StopList(std::move(stopList))
             , Counters(std::move(counters))
         { }
@@ -2129,7 +2129,7 @@ public:
     }
 
 private:
-    THolder<TChildProcess> StartOne(const TString& exePath, const TPortoSettings& portoSettings) {
+    std::unique_ptr<TChildProcess> StartOne(const TString& exePath, const TPortoSettings& portoSettings) {
         return CreateChildProcess(PortoCtlPath, FileCache->GetDir(), exePath, Args, Env, ContainerId++, portoSettings, Counters);
     }
 
@@ -2151,7 +2151,7 @@ private:
         Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TJob>(promise), TInstant()));
     }
 
-    void StopJobs(TList<THolder<TChildProcess>>&& stopList) {
+    void StopJobs(TList<std::unique_ptr<TChildProcess>>&& stopList) {
         *Counters->ProcessesPendingStop += stopList.size();
         Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TStopJob>(std::move(stopList), Counters), TInstant()));
     }
@@ -2221,7 +2221,7 @@ private:
     }
 
     template<typename T, typename S>
-    THolder<TChildProcess> GetExecutorForTask(const T& files, const S& settings) {
+    std::unique_ptr<TChildProcess> GetExecutorForTask(const T& files, const S& settings) {
         TString executorId;
         TPortoSettings portoSettings = PortoSettings;
 
@@ -2254,8 +2254,8 @@ private:
         }
 
         auto key = GetKey(exePath, portoSettings);
-        TList<THolder<TChildProcess>> stopList;
-        THolder<TChildProcess> result = ProcessHolder.Acquire(key, &stopList);
+        TList<std::unique_ptr<TChildProcess>> stopList;
+        std::unique_ptr<TChildProcess> result = ProcessHolder.Acquire(key, &stopList);
         if (!result) {
             result = StartOne(exePath, portoSettings);
         }
@@ -2264,7 +2264,7 @@ private:
         return result;
     }
 
-    static THolder<TChildProcess> CreateChildProcess(
+    static std::unique_ptr<TChildProcess> CreateChildProcess(
         const TString& portoCtlPath,
         const TString& cacheDir,
         const TString& exePath,
@@ -2274,11 +2274,11 @@ private:
         const TPortoSettings& portoSettings,
         const TPipeFactoryCountersPtr& counters)
     {
-        THolder<TChildProcess> command;
+        std::unique_ptr<TChildProcess> command;
         if (portoSettings.Enable) {
-            command = MakeHolder<TPortoProcess>(portoCtlPath, exePath, args, env, cacheDir + "/Slot-" + ToString(containerId), portoSettings, counters);
+            command = std::make_unique<TPortoProcess>(portoCtlPath, exePath, args, env, cacheDir + "/Slot-" + ToString(containerId), portoSettings, counters);
         } else {
-            command = MakeHolder<TChildProcess>(exePath, args, env, cacheDir + "/Slot-" + ToString(containerId));
+            command = std::make_unique<TChildProcess>(exePath, args, env, cacheDir + "/Slot-" + ToString(containerId));
         }
         YQL_CLOG(DEBUG, ProviderDq) << "Executing " << exePath;
         for (const auto& arg: args) {

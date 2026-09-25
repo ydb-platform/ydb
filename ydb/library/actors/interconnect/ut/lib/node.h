@@ -25,7 +25,7 @@
 using namespace NActors;
 
 class TNode {
-    THolder<TActorSystem> ActorSystem;
+    std::unique_ptr<TActorSystem> ActorSystem;
     TString CaPath;
     TInterconnectProxyCommon::TPtr Common;
 
@@ -194,7 +194,7 @@ public:
                     TMailboxType::ReadAsFilled, interconnectPoolId));
         }
 
-        auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
+        auto sp = std::make_unique<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
         ActorSystem->Start();
         // The v2 io_uring engine (shared, off-actor, with its own reaper threads) was created above and

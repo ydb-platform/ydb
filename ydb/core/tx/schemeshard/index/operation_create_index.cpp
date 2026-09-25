@@ -83,9 +83,9 @@ class TCreateTableIndex: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -95,7 +95,7 @@ public:
     virtual const char* Name() const override final { return "TCreateTableIndex"; }
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -110,7 +110,7 @@ public:
             {"transaction", Transaction.ShortDebugString()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasCreateTableIndex()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "CreateTableIndex is not present");

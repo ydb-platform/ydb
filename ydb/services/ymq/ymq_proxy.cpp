@@ -169,7 +169,7 @@ namespace NKikimr::NYmq::V1 {
 
     protected:
         virtual TRequest* GetRequest(TSqsRequest&) = 0;
-        virtual THolder<TReplyCallback> CreateReplyCallback() = 0;
+        virtual std::unique_ptr<TReplyCallback> CreateReplyCallback() = 0;
 
     private:
         const TString FolderId;
@@ -189,8 +189,8 @@ namespace NKikimr::NYmq::V1 {
         using TBase::TBaseRpcRequestActor;
 
     protected:
-        THolder<TReplyCallback> CreateReplyCallback() {
-            return MakeHolder<TReplyCallback>(TBase::Request_);
+        std::unique_ptr<TReplyCallback> CreateReplyCallback() {
+            return std::make_unique<TReplyCallback>(TBase::Request_);
         }
     };
 
@@ -427,12 +427,12 @@ namespace NKikimr::NYmq::V1 {
         }
 
     private:
-        THolder<TReceiveMessageReplyCallback> CreateReplyCallback() override {
+        std::unique_ptr<TReceiveMessageReplyCallback> CreateReplyCallback() override {
             TVector<TString> attributesNames;
             for (const auto& attributeName : GetProtoRequest()->Getattribute_names()) {
                 attributesNames.push_back(attributeName);
             }
-            return MakeHolder<TReceiveMessageReplyCallback>(Request_, std::move(attributesNames));
+            return std::make_unique<TReceiveMessageReplyCallback>(Request_, std::move(attributesNames));
         }
     };
 
@@ -539,12 +539,12 @@ namespace NKikimr::NYmq::V1 {
             return result;
         }
 
-        THolder<TGetQueueAttributesReplyCallback> CreateReplyCallback() override {
+        std::unique_ptr<TGetQueueAttributesReplyCallback> CreateReplyCallback() override {
             TVector<TString> attributes;
             for (auto& attribute : GetProtoRequest()->Getattribute_names()) {
                 attributes.push_back(attribute);
             }
-            return MakeHolder<TGetQueueAttributesReplyCallback>(Request_, std::move(attributes));
+            return std::make_unique<TGetQueueAttributesReplyCallback>(Request_, std::move(attributes));
         }
     };
 
@@ -1011,8 +1011,8 @@ namespace NKikimr::NYmq::V1 {
             return result;
         }
 
-        THolder<TListQueueTagsReplyCallback> CreateReplyCallback() override {
-            return MakeHolder<TListQueueTagsReplyCallback>(Request_);
+        std::unique_ptr<TListQueueTagsReplyCallback> CreateReplyCallback() override {
+            return std::make_unique<TListQueueTagsReplyCallback>(Request_);
         }
     };
 
@@ -1059,8 +1059,8 @@ namespace NKikimr::NYmq::V1 {
             return result;
         }
 
-        THolder<TTagQueueReplyCallback> CreateReplyCallback() override {
-            return MakeHolder<TTagQueueReplyCallback>(Request_);
+        std::unique_ptr<TTagQueueReplyCallback> CreateReplyCallback() override {
+            return std::make_unique<TTagQueueReplyCallback>(Request_);
         }
     };
 
@@ -1105,8 +1105,8 @@ namespace NKikimr::NYmq::V1 {
             return result;
         }
 
-        THolder<TUntagQueueReplyCallback> CreateReplyCallback() override {
-            return MakeHolder<TUntagQueueReplyCallback>(Request_);
+        std::unique_ptr<TUntagQueueReplyCallback> CreateReplyCallback() override {
+            return std::make_unique<TUntagQueueReplyCallback>(Request_);
         }
     };
 

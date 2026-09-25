@@ -124,8 +124,8 @@ private:
 };
 }
 
-THolder<IGraphTransformer> CreateClickHouseIODiscoveryTransformer(TClickHouseState::TPtr state) {
-    return THolder(new TClickHouseIODiscoveryTransformer(std::move(state)));
+std::unique_ptr<IGraphTransformer> CreateClickHouseIODiscoveryTransformer(TClickHouseState::TPtr state) {
+    return std::unique_ptr<TClickHouseIODiscoveryTransformer>(new TClickHouseIODiscoveryTransformer(std::move(state)));
 }
 
 }

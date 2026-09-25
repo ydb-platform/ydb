@@ -832,7 +832,7 @@ public:
 
     void Complete(const TActorContext& ctx) {
         if (!ShouldSkip) {
-            auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+            auto copy = std::make_unique<TEvDataShard::TEvBuildIndexProgressResponse>();
             copy->Record = Ev->Get()->Record;
             Self->PendingBuildIndexFinalResponses[BuildId] = std::move(copy);
             Self->SendPendingBuildIndexFinalResponses(ctx);
@@ -871,7 +871,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvBuildIndexProgressResponse>();
         FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting secondary index build scan",

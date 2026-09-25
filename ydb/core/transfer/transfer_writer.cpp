@@ -55,7 +55,7 @@ private:
             {"worker", Worker});
         Become(&TThis::StateGetTableScheme);
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = Database;
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));

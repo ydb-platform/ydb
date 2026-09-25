@@ -216,7 +216,7 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
         );
     }
 
-    auto response = MakeHolder<TEvResponse>();
+    auto response = std::make_unique<TEvResponse>();
     setStatusFunc(*response);
     response->Record.SetTabletID(self->TabletID());
     response->Record.SetErrorDescription(rejectDescription);

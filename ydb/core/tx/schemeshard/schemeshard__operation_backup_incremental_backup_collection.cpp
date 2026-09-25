@@ -52,9 +52,9 @@ class TCreateLongIncrementalBackupOp : public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TEmptyPropose>(OperationId);
+            return std::make_unique<TEmptyPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId, TPathElement::EPathState::EPathStateNoChanges);
+            return std::make_unique<TDone>(OperationId, TPathElement::EPathState::EPathStateNoChanges);
         default:
             return nullptr;
         }
@@ -63,13 +63,13 @@ class TCreateLongIncrementalBackupOp : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& streamPathIds = Transaction.GetCreateLongIncrementalBackupOp().GetStreamPathIds();
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         const ui64 id = static_cast<ui64>(OperationId.GetTxId());
         if (context.SS->IncrementalBackups.contains(id)) {

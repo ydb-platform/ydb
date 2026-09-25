@@ -87,7 +87,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
         userInfo.HasReadRule = true;
 
         if (userInfo.ReadRuleGeneration != consumer.GetGeneration()) {
-            THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+            std::unique_ptr<TEvPQ::TEvSetClientInfo> event = std::make_unique<TEvPQ::TEvSetClientInfo>(
                     0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, consumer.GetGeneration()
             );
             //
@@ -113,7 +113,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
         if (userInfo.NoConsumer) {
             continue;
         }
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        std::unique_ptr<TEvPQ::TEvSetClientInfo> event = std::make_unique<TEvPQ::TEvSetClientInfo>(
                 0, consumer, 0, "", 0, 0, 0, TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0
         );
         if (!ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.LabeledCounters) {
@@ -471,7 +471,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                 const TActorId& tablet,
                                                 const ui64 realReadOffset,
                                                 NKikimrClient::TCmdReadResult* readResult,
-                                                THolder<TEvPQ::TEvProxyResponse>& answer,
+                                                std::unique_ptr<TEvPQ::TEvProxyResponse>& answer,
                                                 bool& needStop,
                                                 ui32& cnt, ui32& size, ui32& lastBlobSize,
                                                 const TActorContext& ctx)
@@ -617,7 +617,7 @@ TReadAnswer TReadInfo::FormAnswer(
 ) {
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
-    auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination, IsInternal);
+    auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(destination, IsInternal);
     NKikimrClient::TResponse& res = *answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
     if (HasError(blobResponse)) {
@@ -625,7 +625,7 @@ TReadAnswer TReadInfo::FormAnswer(
         return TReadAnswer{
             .Size = blobResponse.Error.ErrorStr.size(),
             .ConsumedMessages = 0,
-            .Event = MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination),
+            .Event = std::make_unique<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination),
             .IsInternal = IsInternal,
             .ReplyTo = ReplyTo
         };
@@ -1106,7 +1106,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         ReadingForUserReadRuleGeneration}
     );
 
-    THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
+    std::unique_ptr<TEvPQ::TEvRead> event = std::make_unique<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
                                                                user, 0, MAX_BLOB_PART_SIZE * 2, false, 0, 0, "",
                                                                false, TActorId{});
 
@@ -1280,7 +1280,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     );
     PQ_ENSURE(res);
 
-    auto request = MakeHolder<TEvPQ::TEvBlobRequest>(cookie, Partition,
+    auto request = std::make_unique<TEvPQ::TEvBlobRequest>(cookie, Partition,
                                                      std::move(blobs));
 
     ctx.Send(BlobCache, request.Release());

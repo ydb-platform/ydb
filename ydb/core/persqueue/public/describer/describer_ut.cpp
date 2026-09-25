@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         return run;
     }
 
-    THolder<NDescriber::TEvDescribeTopicsResponse> WaitResponse(NActors::TTestActorRuntime& runtime) {
+    std::unique_ptr<NDescriber::TEvDescribeTopicsResponse> WaitResponse(NActors::TTestActorRuntime& runtime) {
         return runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>();
     }
 

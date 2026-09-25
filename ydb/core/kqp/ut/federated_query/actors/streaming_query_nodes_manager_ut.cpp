@@ -33,7 +33,7 @@ void InjectLookupFailure(TTestActorRuntime& runtime, TActorId target) {
 }
 
 void InjectReadyState(TTestActorRuntime& runtime, TActorId target, const TVector<ui32>& nodeIds) {
-    auto event = MakeHolder<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (ui64 taskId = 0; taskId < nodeIds.size(); ++taskId) {
         event->Tasks.push_back({
             .Id = taskId,

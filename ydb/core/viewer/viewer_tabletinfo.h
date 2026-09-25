@@ -126,8 +126,8 @@ public:
         }
     }
 
-    THolder<TEvWhiteboard::TEvTabletStateRequest> BuildRequest() override {
-        THolder<TEvWhiteboard::TEvTabletStateRequest> request = TBase::BuildRequest();
+    std::unique_ptr<TEvWhiteboard::TEvTabletStateRequest> BuildRequest() override {
+        std::unique_ptr<TEvWhiteboard::TEvTabletStateRequest> request = TBase::BuildRequest();
         if (!TBase::RequestSettings.FilterFields.empty()) {
             if (IsMatchesWildcard(TBase::RequestSettings.FilterFields, "(TabletId=*)")) {
                 TString strTabletId(TBase::RequestSettings.FilterFields.substr(10, TBase::RequestSettings.FilterFields.size() - 11));
@@ -200,7 +200,7 @@ public:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
+        std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
         if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             const auto& pathDescription = describeResult->GetRecord().GetPathDescription();
             for (auto shard : pathDescription.GetColumnTableDescription().GetSharding().GetColumnShards()) {

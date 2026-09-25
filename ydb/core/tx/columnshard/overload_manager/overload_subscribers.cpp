@@ -11,7 +11,7 @@ namespace {
 
 [[maybe_unused]] void SendViaSession(const TActorId& sessionId, const TActorId& target, const TActorId& src, IEventBase* event, ui32 flags = 0,
     ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie, nullptr, std::move(traceId));
+    std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(target, src, event, flags, cookie, nullptr, std::move(traceId));
 
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);

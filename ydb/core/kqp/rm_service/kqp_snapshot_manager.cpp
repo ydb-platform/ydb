@@ -68,7 +68,7 @@ private:
             Become(&TThis::StateAwaitAcquireResult);
         } else {
             AFL_ENSURE(ev->Get()->TableIds.empty());
-            auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto req = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
             req->Record.SetDatabaseName(Database);
             auto* createSnapshot = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
@@ -210,7 +210,7 @@ private:
     }
 
     void HandleRefreshTimeout(TEvents::TEvWakeup::TPtr&) {
-        auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto req = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
         req->Record.SetDatabaseName(Database);
         auto* refreshSnapshot = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
@@ -262,7 +262,7 @@ private:
 
 private:
     void SendDiscard() {
-        auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto req = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
         req->Record.SetDatabaseName(Database);
         auto* discardSnapshot = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();

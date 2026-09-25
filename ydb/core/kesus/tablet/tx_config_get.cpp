@@ -9,7 +9,7 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
     const TActorId Sender;
     const ui64 Cookie;
 
-    THolder<TEvKesus::TEvGetConfigResult> Reply;
+    std::unique_ptr<TEvKesus::TEvGetConfigResult> Reply;
 
     TTxConfigGet(TSelf* self, const TActorId& sender, ui64 cookie)
         : TTxBase(self)

@@ -20,7 +20,7 @@ inline void SendTopicSqsActionMetricsToPqrb(
         return;
     }
 
-    auto ev = MakeHolder<TEvPQ::TEvTopicSqsActionMetrics>();
+    auto ev = std::make_unique<TEvPQ::TEvTopicSqsActionMetrics>();
     ev->Record = metrics;
     NActors::TActivationContext::Send(
         MakePipePerNodeCacheID(false),

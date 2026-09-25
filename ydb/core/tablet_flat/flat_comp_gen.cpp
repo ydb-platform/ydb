@@ -436,8 +436,8 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
 
 TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         ui64 compactionId,
-        THolder<TCompactionParams> rawParams,
-        THolder<TCompactionResult> result)
+        std::unique_ptr<TCompactionParams> rawParams,
+        std::unique_ptr<TCompactionResult> result)
 {
     auto* params = CheckedCast<TGenCompactionParams*>(rawParams.Get());
     ui32 generation = params->Generation;
@@ -942,7 +942,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         }
 
         TExtraState extra;
-        auto params = MakeHolder<TGenCompactionParams>();
+        auto params = std::make_unique<TGenCompactionParams>();
         params->Table = Table;
         params->TaskId = taskId;
         params->Generation = generation;
@@ -984,7 +984,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         extra.InitFromPolicy(Policy->Generations[generation]);
     }
 
-    auto params = MakeHolder<TGenCompactionParams>();
+    auto params = std::make_unique<TGenCompactionParams>();
     params->Table = Table;
     params->TaskId = taskId;
     params->Generation = generation;
@@ -1245,7 +1245,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
             << ": task " << taskId << ", edge " << edge.Head << "/" << edge.TxStamp << ", generation " << generation;
     }
 
-    auto params = MakeHolder<TGenCompactionParams>();
+    auto params = std::make_unique<TGenCompactionParams>();
     params->Table = Table;
     params->TaskId = taskId;
     params->Edge = edge;

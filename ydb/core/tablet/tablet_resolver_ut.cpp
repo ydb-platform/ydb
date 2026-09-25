@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
     }
 
-    THolder<TEvTabletResolver::TEvForwardResult> DoResolveTablet(TTestBasicRuntime& runtime, ui64 tabletId) {
+    std::unique_ptr<TEvTabletResolver::TEvForwardResult> DoResolveTablet(TTestBasicRuntime& runtime, ui64 tabletId) {
         const TActorId edge = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(MakeTabletResolverID(), edge, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(edge);

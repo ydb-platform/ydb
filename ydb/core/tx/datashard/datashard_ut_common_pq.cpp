@@ -50,7 +50,7 @@ namespace NKikimr {
         cmd.SetReadTimestampMs(0);
         cmd.SetExternalOperation(true);
 
-        auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto req = std::make_unique<TEvPersQueue::TEvRequest>();
         req->Record = std::move(request);
         ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, path, partitionId), sender, req.Release());
 

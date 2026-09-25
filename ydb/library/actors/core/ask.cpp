@@ -20,9 +20,9 @@ namespace NActors {
             TAskActor(
                     TMaybe<ui32> expectedEventType,
                     TActorId recipient,
-                    THolder<IEventBase> event,
+                    std::unique_ptr<IEventBase> event,
                     TDuration timeout,
-                    const NThreading::TPromise<THolder<IEventBase>>& promise)
+                    const NThreading::TPromise<std::unique_ptr<IEventBase>>& promise)
                 : ExpectedEventType_(expectedEventType)
                 , Recipient_(recipient)
                 , Event_(std::move(event))
@@ -58,19 +58,19 @@ namespace NActors {
         public:
             TMaybe<ui32> ExpectedEventType_;
             TActorId Recipient_;
-            THolder<IEventBase> Event_;
+            std::unique_ptr<IEventBase> Event_;
             TDuration Timeout_;
-            NThreading::TPromise<THolder<IEventBase>> Promise_;
+            NThreading::TPromise<std::unique_ptr<IEventBase>> Promise_;
         };
     }
 
-    THolder<IActor> MakeAskActor(
+    std::unique_ptr<IActor> MakeAskActor(
             TMaybe<ui32> expectedEventType,
             TActorId recipient,
-            THolder<IEventBase> event,
+            std::unique_ptr<IEventBase> event,
             TDuration timeout,
-            const NThreading::TPromise<THolder<IEventBase>>& promise)
+            const NThreading::TPromise<std::unique_ptr<IEventBase>>& promise)
     {
-        return MakeHolder<TAskActor>(expectedEventType, std::move(recipient), std::move(event), timeout, promise);
+        return std::make_unique<TAskActor>(expectedEventType, std::move(recipient), std::move(event), timeout, promise);
     }
 }

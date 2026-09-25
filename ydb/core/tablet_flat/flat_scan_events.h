@@ -23,7 +23,7 @@ namespace NOps {
     struct TEvResult: public TEventLocal<TEvResult, ui32(EEv::Result)> {
         using EStatus = NTable::EStatus;
 
-        TEvResult(ui64 serial, EStatus abort, THolder<TScanSnapshot> snapshot,
+        TEvResult(ui64 serial, EStatus abort, std::unique_ptr<TScanSnapshot> snapshot,
                     TAutoPtr<IDestructable> result)
             : Serial(serial)
             , Status(abort)

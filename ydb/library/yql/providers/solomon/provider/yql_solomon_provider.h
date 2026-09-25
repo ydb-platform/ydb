@@ -28,9 +28,9 @@ public:
     TTypeAnnotationContext* Types = nullptr;
     IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     TSolomonConfiguration::TPtr Configuration = MakeIntrusive<TSolomonConfiguration>();
-    THolder<IDqIntegration> DqIntegration;
-    THolder<IYtflowIntegration> YtflowIntegration;
-    THolder<IYtflowOptimization> YtflowOptimization;
+    std::unique_ptr<IDqIntegration> DqIntegration;
+    std::unique_ptr<IYtflowIntegration> YtflowIntegration;
+    std::unique_ptr<IYtflowOptimization> YtflowOptimization;
     ui32 ExecutorPoolId = 0;
 };
 

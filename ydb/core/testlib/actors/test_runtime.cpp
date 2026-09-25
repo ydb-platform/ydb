@@ -47,7 +47,7 @@ namespace NActors {
 
     void TTestActorRuntime::Initialize() {
         SetScheduledEventFilter(&TTestActorRuntime::DefaultScheduledFilterFunc);
-        NodeFactory = MakeHolder<TNodeFactory>();
+        NodeFactory = std::make_unique<TNodeFactory>();
         InitNodes();
     }
 

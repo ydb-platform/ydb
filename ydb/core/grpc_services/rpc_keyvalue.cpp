@@ -700,7 +700,7 @@ protected:
 
     void SendNavigateRequest() {
         auto self = static_cast<TDerived*>(this);
-        auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = req->ResultSet.emplace_back();
         entry.Path = ::NKikimr::SplitPath(GetNormalizedPath());
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;

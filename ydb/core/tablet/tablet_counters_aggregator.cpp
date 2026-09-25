@@ -1022,7 +1022,7 @@ public:
 
         TTabletCountersForDb(::NMonitoring::TDynamicCounterPtr externalGroup,
             ::NMonitoring::TDynamicCounterPtr internalGroup,
-            THolder<TTabletCountersBase> executorCounters)
+            std::unique_ptr<TTabletCountersBase> executorCounters)
             : SolomonCounters(internalGroup)
             , ExecutorCounters(std::move(executorCounters))
         {
@@ -1121,7 +1121,7 @@ public:
 
     private:
         ::NMonitoring::TDynamicCounterPtr SolomonCounters;
-        THolder<TTabletCountersBase> ExecutorCounters;
+        std::unique_ptr<TTabletCountersBase> ExecutorCounters;
 
         TConcurrentRWHashMap<TTabletTypes::EType, TTabletCountersForTabletTypePtr, 16> CountersByTabletType;
 
@@ -1139,7 +1139,7 @@ public:
         {}
 
         void OnDatabaseRemoved(const TString& dbPath, TPathId pathId) override {
-            auto evRemove = MakeHolder<TEvTabletCounters::TEvRemoveDatabase>(dbPath, pathId);
+            auto evRemove = std::make_unique<TEvTabletCounters::TEvRemoveDatabase>(dbPath, pathId);
             auto aggregator = MakeTabletCountersAggregatorID(ActorSystem->NodeId, Follower);
             ActorSystem->Send(aggregator, evRemove.Release());
         }
@@ -1155,12 +1155,12 @@ private:
         auto dbCounters = MakeIntrusive<TTabletMon::TTabletCountersForDb>();
         CountersByPathId[pathId] = dbCounters;
 
-        auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
+        auto evRegister = std::make_unique<NSysView::TEvSysView::TEvRegisterDbCounters>(
             NKikimrSysView::TABLETS, pathId, dbCounters);
         ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()), evRegister.Release());
 
         if (DbWatcherActorId) {
-            auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(pathId);
+            auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(pathId);
             ctx.Send(DbWatcherActorId, evWatch.Release());
         }
 
@@ -1176,12 +1176,12 @@ private:
         auto dbCounters = MakeIntrusive<NPrivate::TDbLabeledCounters>();
         LabeledDbCounters[dbName] = dbCounters;
 
-        auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
+        auto evRegister = std::make_unique<NSysView::TEvSysView::TEvRegisterDbCounters>(
             NKikimrSysView::LABELED, dbName, dbCounters);
         ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()), evRegister.Release());
 
         if (DbWatcherActorId) {
-            auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(dbName);
+            auto evWatch = std::make_unique<NSysView::TEvSysView::TEvWatchDatabase>(dbName);
             ctx.Send(DbWatcherActorId, evWatch.Release());
         }
 
@@ -1234,7 +1234,7 @@ private:
         db.DatabasePathRequestedAt = now;
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
 
         if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
             request->DatabaseName = domain->Name;
@@ -1375,7 +1375,7 @@ private:
     bool IsFollower = false;
 
     typedef THashMap<TPathId, TIntrusivePtr<TTabletCountersForDb>> TCountersByPathId;
-    typedef TMap<TTabletTypes::EType, THolder<TTabletCountersBase>> TAppCountersByTabletType;
+    typedef TMap<TTabletTypes::EType, std::unique_ptr<TTabletCountersBase>> TAppCountersByTabletType;
     typedef THashMap<TString, TIntrusivePtr<NPrivate::TDbLabeledCounters>> TLabeledCountersByDbPath;
     typedef TMap<std::pair<TTabletTypes::EType, TString>, TAutoPtr<NPrivate::TAggregatedLabeledCounters>> TLabeledCountersByTabletTypeAndGroup;
     typedef THashMap<ui64, std::pair<TAutoPtr<TTabletCountersBase>, TAutoPtr<TTabletCountersBase>>> TQuietTabletCounters;
@@ -1401,7 +1401,7 @@ private:
 TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
     ::NMonitoring::TDynamicCounterPtr externalGroup,
     ::NMonitoring::TDynamicCounterPtr internalGroup,
-    THolder<TTabletCountersBase> executorCounters)
+    std::unique_ptr<TTabletCountersBase> executorCounters)
 {
     return MakeIntrusive<TTabletMon::TTabletCountersForDb>(
         externalGroup, internalGroup, std::move(executorCounters));
@@ -2181,13 +2181,13 @@ public:
 class TClusterLabeledCountersAggregatorActorV2 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2> {
 protected:
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2>;
-    THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> Response;
+    std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse> Response;
     TTabletLabeledCountersResponseContext ResponseContext;
     TActorId Initiator;
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    THashMap<ui32, THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
+    THashMap<ui32, std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     TString Group;
     ui32 NumWorkers;
     ui32 WorkerId;

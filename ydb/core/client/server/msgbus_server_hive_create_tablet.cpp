@@ -173,7 +173,7 @@ public:
         if (ResponsesReceived == Requests.size()) {
             switch (Status) {
                 case NKikimrProto::OK: {
-                    THolder<ResponseType> result(new ResponseType());
+                    std::unique_ptr<ResponseType> result(new ResponseType());
                     auto &rec = result->Record;
                     rec.SetStatus(MSTATUS_OK);
                     for (ui32 i = 0; i < Requests.size(); ++i) {
@@ -240,7 +240,7 @@ public:
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
         Y_UNUSED(ctx);
-        THolder<ResponseType> result(new ResponseType());
+        std::unique_ptr<ResponseType> result(new ResponseType());
         auto &rec = result->Record;
         rec.SetStatus(status);
         if (ErrorReason.size()) {
@@ -283,7 +283,7 @@ public:
                 const TRequest &cmd = Requests[i];
                 switch (cmd.Event) {
                     case TEvHive::EvCreateTablet: {
-                        THolder<TEvHive::TEvCreateTablet> x(new TEvHive::TEvCreateTablet(cmd.OwnerId,
+                        std::unique_ptr<TEvHive::TEvCreateTablet> x(new TEvHive::TEvCreateTablet(cmd.OwnerId,
                                                                                          cmd.OwnerIdx,
                                                                                          cmd.TabletType,
                                                                                          cmd.BindedChannels,
@@ -297,7 +297,7 @@ public:
                         break;
                     }
                     case TEvHive::EvLookupTablet: {
-                        THolder<TEvHive::TEvLookupTablet> x(new TEvHive::TEvLookupTablet(cmd.OwnerId, cmd.OwnerIdx));
+                        std::unique_ptr<TEvHive::TEvLookupTablet> x(new TEvHive::TEvLookupTablet(cmd.OwnerId, cmd.OwnerIdx));
                         NTabletPipe::SendData(ctx, PipeClient, x.Release(), i);
                         break;
                     }

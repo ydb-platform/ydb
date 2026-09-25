@@ -33,11 +33,11 @@ struct TLookupSettings {
 class TStreamLookupShardReadResult{
 public:
     ui64 ShardId;
-    THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+    std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
     size_t UnprocessedResultRow = 0;
     size_t CalculatedSize = 0;
 
-    TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc);
+    TStreamLookupShardReadResult(const ui64 shardId, std::unique_ptr<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc);
 
     TStreamLookupShardReadResult(TStreamLookupShardReadResult&& other)
         : ShardId(other.ShardId)
@@ -61,7 +61,7 @@ public:
 
 class TKqpStreamLookupWorker {
 public:
-    using TReadList = std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>>;
+    using TReadList = std::vector<std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>>>;
     using TPartitionInfo = TPartitioning::TCPtr;
 
     struct TReadResultStats {
@@ -103,7 +103,7 @@ public:
     virtual void AddInputRow(TConstArrayRef<TCell> inputRow) = 0;
     virtual void RebuildRequest(const ui64 shardId, const ui64& prevReadId, ui64& newReadId) = 0;
     virtual void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) = 0;
-    virtual std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() = 0;
+    virtual std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> PopNextRequest() = 0;
     virtual size_t ScheduledRequestsCount() = 0;
     virtual void AddResult(TStreamLookupShardReadResult result) = 0;
     virtual TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) = 0;

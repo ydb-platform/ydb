@@ -81,7 +81,7 @@ public:
     }
 
 protected:
-    THolder<TRequest> Request;
+    std::unique_ptr<TRequest> Request;
     // Note: Promise must be moved into Callback to avoid racing with
     // the destructor.
     NThreading::TPromise<TResult> Promise;

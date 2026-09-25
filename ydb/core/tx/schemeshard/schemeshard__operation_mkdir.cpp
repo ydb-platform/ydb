@@ -84,9 +84,9 @@ class TMkDir: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -97,7 +97,7 @@ public:
 
     virtual const char* Name() const override final { return "TMkDir"; }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -108,7 +108,7 @@ public:
             {"path", TStringBuilder() << parentPathStr << "/" << name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (Transaction.HasTempDirOwnerActorId() && !context.SS->EnableTempTables) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,

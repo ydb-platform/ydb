@@ -47,7 +47,7 @@ namespace NKikimr::NDataShard {
         }
 
         void StartNewRead() {
-            auto req = MakeHolder<TEvDataShard::TEvGetReplicationSourceOffsets>(++CurrentReadId, PathId);
+            auto req = std::make_unique<TEvDataShard::TEvGetReplicationSourceOffsets>(++CurrentReadId, PathId);
             req->Record.SetFromSourceId(NextSourceId);
             req->Record.SetFromSplitKeyId(NextSplitKeyId);
             Send(PipeCache, new TEvPipeCache::TEvForward(req.Release(), SrcTabletId, /* subscribe */ true));
@@ -55,7 +55,7 @@ namespace NKikimr::NDataShard {
         }
 
         void CancelRead(ui64 readId) {
-            auto req = MakeHolder<TEvDataShard::TEvReplicationSourceOffsetsCancel>(readId);
+            auto req = std::make_unique<TEvDataShard::TEvReplicationSourceOffsetsCancel>(readId);
             Send(PipeCache, new TEvPipeCache::TEvForward(req.Release(), SrcTabletId, /* subscribe */ false));
         }
 
@@ -114,7 +114,7 @@ namespace NKikimr::NDataShard {
         const ui64 SrcTabletId;
         const TPathId PathId;
         const TActorId PipeCache;
-        THolder<TEvPrivate::TEvReplicationSourceOffsets> Result;
+        std::unique_ptr<TEvPrivate::TEvReplicationSourceOffsets> Result;
         ui64 NextSourceId = 0;
         ui64 NextSplitKeyId = 0;
         ui64 CurrentReadId = 0;

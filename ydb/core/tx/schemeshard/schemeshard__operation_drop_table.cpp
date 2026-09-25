@@ -343,7 +343,7 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
-        THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
+        std::unique_ptr<TEvDataShard::TEvSchemaChangedResult> event = std::make_unique<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(OperationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event));
@@ -398,18 +398,18 @@ class TDropTable: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
+            return std::make_unique<TDropParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
+            return std::make_unique<TPropose>(OperationId, AfterPropose);
         case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            return std::make_unique<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeleteTableBarrier>(OperationId);
+            return std::make_unique<TDeleteTableBarrier>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
         case TTxState::ProposedDeleteParts:
-            return MakeHolder<TProposedDeletePart>(OperationId);
+            return std::make_unique<TProposedDeletePart>(OperationId);
         default:
             return nullptr;
         }
@@ -418,7 +418,7 @@ class TDropTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& drop = Transaction.GetDrop();
@@ -431,7 +431,7 @@ public:
             {"pathId", drop.GetId()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)

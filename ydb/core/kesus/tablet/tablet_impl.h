@@ -79,7 +79,7 @@ private:
     struct TDelayedEvent {
         const TActorId Recipient;
         const ui64 Cookie;
-        THolder<IEventBase> Event;
+        std::unique_ptr<IEventBase> Event;
 
         TDelayedEvent(const TActorId& recipient, ui64 cookie, IEventBase* event)
             : Recipient(recipient)
@@ -223,12 +223,12 @@ private:
         void SendAll(const TActorContext& ctx, ui64 tabletId);
 
         struct TSendInfo {
-            THolder<TEvKesus::TEvResourcesAllocated> Event;
+            std::unique_ptr<TEvKesus::TEvResourcesAllocated> Event;
             THashMap<ui64, size_t> ResIdIndex;
         };
 
         struct TSendSyncInfo {
-            THolder<TEvKesus::TEvSyncResources> Event;
+            std::unique_ptr<TEvKesus::TEvSyncResources> Event;
             THashMap<ui64, size_t> ResIdIndex;
         };
 
@@ -315,7 +315,7 @@ private:
     bool QuoterTickProcessingIsScheduled = false;
 
     // Counters support
-    THolder<TTabletCountersBase> TabletCountersPtr;
+    std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
 
     // Self check support

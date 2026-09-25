@@ -99,7 +99,7 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
 }
 
 void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
-    auto response = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(ev->Get()->Record);
+    auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(ev->Get()->Record);
     Send(ev->Sender, response.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
 }
 

@@ -542,7 +542,7 @@ void TAnalyzeActor::HandleNavigateResult() {
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
-        auto keyDesc = MakeHolder<TKeyDesc>(
+        auto keyDesc = std::make_unique<TKeyDesc>(
             PathId, range, TKeyDesc::ERowOperation::Unknown, KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
 
         auto resolveRequest = std::make_unique<NSchemeCache::TSchemeCacheRequest>();

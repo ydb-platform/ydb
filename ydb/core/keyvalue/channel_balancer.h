@@ -51,9 +51,9 @@ namespace NKikimr::NKeyValue {
         };
 
         struct TEvUpdateWeights : TEventLocal<TEvUpdateWeights, TEvKeyValue::EvUpdateWeights> {
-            THolder<TWeightManager> WeightManager;
+            std::unique_ptr<TWeightManager> WeightManager;
 
-            TEvUpdateWeights(THolder<TWeightManager>&& wm)
+            TEvUpdateWeights(std::unique_ptr<TWeightManager>&& wm)
                 : WeightManager(std::move(wm))
             {}
         };
@@ -170,7 +170,7 @@ namespace NKikimr::NKeyValue {
             for (TChannelInfo& info : ChannelInfo) {
                 weights.push_back(info.UpdateWeight(now));
             }
-            ctx.Send(ActorId, new TEvUpdateWeights(MakeHolder<TWeightManager>(std::move(weights))));
+            ctx.Send(ActorId, new TEvUpdateWeights(std::make_unique<TWeightManager>(std::move(weights))));
         }
     };
 

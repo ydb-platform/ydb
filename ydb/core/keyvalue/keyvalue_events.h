@@ -160,11 +160,11 @@ namespace TEvKeyValue {
     };
 
     struct TEvIntermediate : public TEventLocal<TEvIntermediate, EvIntermediate> {
-        THolder<NKeyValue::TIntermediate> Intermediate;
+        std::unique_ptr<NKeyValue::TIntermediate> Intermediate;
 
         TEvIntermediate() { }
 
-        TEvIntermediate(THolder<NKeyValue::TIntermediate>&& intermediate)
+        TEvIntermediate(std::unique_ptr<NKeyValue::TIntermediate>&& intermediate)
             : Intermediate(std::move(intermediate))
         {}
     };

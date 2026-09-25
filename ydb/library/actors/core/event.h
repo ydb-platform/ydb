@@ -188,13 +188,13 @@ namespace NActors {
         }
 
     private:
-        THolder<IEventBase> Event;
+        std::unique_ptr<IEventBase> Event;
         TIntrusivePtr<TEventSerializedData> Buffer;
 
         TActorId RewriteRecipient;
         ui32 RewriteType;
 
-        THolder<TOnNondelivery> OnNondeliveryHolder; // only for local events
+        std::unique_ptr<TOnNondelivery> OnNondeliveryHolder; // only for local events
 
     public:
         void Rewrite(ui32 typeRewrite, TActorId recipientRewrite) {
@@ -375,16 +375,8 @@ namespace NActors {
             return Forward(std::unique_ptr<IEventHandle>(ev.Release()), recipient).release();
         }
 
-        [[nodiscard]] static THolder<IEventHandle> Forward(THolder<IEventHandle>&& ev, TActorId recipient) {
-            return THolder(Forward(std::unique_ptr<IEventHandle>(ev.Release()), recipient).release());
-        }
-
         [[nodiscard]] static TAutoPtr<IEventHandle> ForwardOnNondelivery(TAutoPtr<IEventHandle>&& ev, ui32 reason, bool unsure = false) {
             return ForwardOnNondelivery(std::unique_ptr<IEventHandle>(ev.Release()), reason, unsure).release();
-        }
-
-        [[nodiscard]] static THolder<IEventHandle> ForwardOnNondelivery(THolder<IEventHandle>&& ev, ui32 reason, bool unsure = false) {
-            return THolder(ForwardOnNondelivery(std::unique_ptr<IEventHandle>(ev.Release()), reason, unsure).release());
         }
 
         template<typename T>
@@ -393,7 +385,7 @@ namespace NActors {
         }
 
         template<typename T>
-        static TAutoPtr<T> Release(THolder<IEventHandle>& ev) {
+        static TAutoPtr<T> Release(std::unique_ptr<IEventHandle>& ev) {
             return ev->Release<T>();
         }
     };

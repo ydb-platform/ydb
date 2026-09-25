@@ -42,7 +42,7 @@ namespace NSequenceProxy {
         void ReplyAndDie(Ydb::StatusIds::StatusCode status, NKikimrIssues::TIssuesIds::EIssueCode code, const TString& message) {
             NYql::TIssueManager issueManager;
             issueManager.RaiseIssue(MakeIssue(code, message));
-            auto res = MakeHolder<TEvPrivate::TEvAllocateResult>();
+            auto res = std::make_unique<TEvPrivate::TEvAllocateResult>();
             res->Status = status;
             res->Issues = issueManager.GetIssues();
             Send(Owner, res.Release(), 0, Cookie);
@@ -96,7 +96,7 @@ namespace NSequenceProxy {
                             << "Unexpected error from sequence shard " << TabletId);
             }
 
-            auto res = MakeHolder<TEvPrivate::TEvAllocateResult>();
+            auto res = std::make_unique<TEvPrivate::TEvAllocateResult>();
             res->Status = Ydb::StatusIds::SUCCESS;
             res->TabletId = TabletId;
             res->PathId = PathId;

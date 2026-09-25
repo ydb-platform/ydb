@@ -25,8 +25,8 @@ private:
     TClickHouseState::TPtr State_;
 };
 
-THolder<TExecTransformerBase> CreateClickHouseDataSinkExecTransformer(TClickHouseState::TPtr state) {
-    return THolder(new TClickHouseDataSinkExecTransformer(state));
+std::unique_ptr<TExecTransformerBase> CreateClickHouseDataSinkExecTransformer(TClickHouseState::TPtr state) {
+    return std::unique_ptr<TClickHouseDataSinkExecTransformer>(new TClickHouseDataSinkExecTransformer(state));
 }
 
 } // namespace NYql

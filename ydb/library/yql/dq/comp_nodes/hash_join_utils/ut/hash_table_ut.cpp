@@ -459,7 +459,7 @@ template <size_t Batch, typename... Args> class TBenchmark {
     ui32 PayloadSize_;
     const char *BenchName_;
 
-    THolder<TTupleLayout> Layout_;
+    std::unique_ptr<TTupleLayout> Layout_;
 
     std::vector<TConfig> Configs_;
 };

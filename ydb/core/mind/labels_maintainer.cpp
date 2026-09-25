@@ -350,7 +350,7 @@ private:
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
 
         YDB_LOG_TRACE_CTX(ctx, "TLabelsMaintainer::Handle TEvConsole::TEvConfigNotificationRequest: send config notification response",
             {"response", resp->Record.ShortDebugString()});

@@ -302,7 +302,7 @@ private:
         }
 
         // report success
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
         Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
 
@@ -314,7 +314,7 @@ private:
     }
 
     void SendClassifierUpdate(const TActorId recipient) {
-        auto ev = MakeHolder<TEvNetClassifier::TEvClassifierUpdate>();
+        auto ev = std::make_unique<TEvNetClassifier::TEvClassifierUpdate>();
         ev->Classifier = LabeledAddressClassifier;
         ev->NetDataUpdateTimestamp = NetDataUpdateTimestamp;
 

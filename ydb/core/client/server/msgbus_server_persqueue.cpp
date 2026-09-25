@@ -123,7 +123,7 @@ struct TTopicInfo {
     THashMap<ui32, ui64> PartitionToTablet;
     ui64 BalancerTabletId = 0;
 
-    THolder<NKikimrPQ::TReadSessionsInfoResponse> ReadSessionsInfo;
+    std::unique_ptr<NKikimrPQ::TReadSessionsInfoResponse> ReadSessionsInfo;
 
     NKikimrPQ::TPQTabletConfig Config;
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
@@ -376,7 +376,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     THashSet<TString> topics;
 
     while (!ChildrenToCreate.empty()) {
-        THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
+        std::unique_ptr<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
         const auto& name = perTopicInfo->Converter->GetClientsideName();
         if (name.empty()) {
@@ -394,7 +394,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
         YDB_LOG_TRACE_CTX(ctx, "CreateTopicSubactor for topic",
             {"name", name});
 
-        THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
+        std::unique_ptr<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
             const TActorId actorId = ctx.Register(childActor.Release());
             perTopicInfo->ActorId = actorId;
@@ -437,7 +437,7 @@ NKikimrClient::TResponse TPersQueueBaseRequestProcessor::MergeSubactorReplies() 
 }
 
 TPersQueueBaseRequestProcessor::TNodesInfo::TNodesInfo(
-        THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx
+        std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx
 )
     : NodesInfoReply(std::move(nodesInfoReply))
 {
@@ -917,7 +917,7 @@ public:
 
         auto jt = TopicInfo.find(it->second.Topic);
         Y_ABORT_UNLESS(jt != TopicInfo.end());
-        jt->second.ReadSessionsInfo = MakeHolder<NKikimrPQ::TReadSessionsInfoResponse>(std::move(response));
+        jt->second.ReadSessionsInfo = std::make_unique<NKikimrPQ::TReadSessionsInfoResponse>(std::move(response));
 
         AnswerIfCanForMeta(ctx);
     }
@@ -1106,7 +1106,7 @@ public:
                 tabletInfo.PipeClient = pipeClient;
                 PQClient.push_back(pipeClient);
 
-                THolder<TEvPersQueue::TEvGetReadSessionsInfo> ev(new TEvPersQueue::TEvGetReadSessionsInfo());
+                std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> ev(new TEvPersQueue::TEvGetReadSessionsInfo());
                 ev->Record.SetClientId(RequestProto.GetMetaRequest().GetCmdGetReadSessionsInfo().GetClientId());
                 NTabletPipe::SendData(ctx, pipeClient, ev.Release());
             }
@@ -1133,7 +1133,7 @@ public:
                     tabletInfo.PipeClient = pipeClient;
                     PQClient.push_back(pipeClient);
                     if (needAskOffset) {
-                        THolder<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
+                        std::unique_ptr<TEvPersQueue::TEvOffsets> ev(new TEvPersQueue::TEvOffsets());
                         TString clientId;
                         if (RequestProto.GetMetaRequest().HasCmdGetPartitionOffsets()
                             && RequestProto.GetMetaRequest().GetCmdGetPartitionOffsets().HasClientId())
@@ -1536,7 +1536,7 @@ public:
     virtual ~TMessageBusServerPersQueue() = default;
 
     void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) override {
-        THolder<TBusResponse> result(new TBusResponse());
+        std::unique_ptr<TBusResponse> result(new TBusResponse());
         result->Record.Swap(&record);
         YDB_LOG_INFO_CTX(ctx, "Proxy answer",
             {"requestId", TImplActor::RequestId});

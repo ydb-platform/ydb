@@ -34,7 +34,7 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& request = Request->Get()->Record;
 
-        auto response = MakeHolder<TEvExport::TEvForgetExportResponse>(request.GetTxId());
+        auto response = std::make_unique<TEvExport::TEvForgetExportResponse>(request.GetTxId());
         auto& forget = *response->Record.MutableResponse();
 
         auto it = Self->Exports.find(request.GetRequest().GetId());

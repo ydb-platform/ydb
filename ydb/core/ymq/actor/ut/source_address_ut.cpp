@@ -29,7 +29,7 @@ public:
     }
 
     TSourceAddressProbeActor(const NKikimrClient::TSqsRequest& request, TString expectedSourceAddress)
-        : TActionActor(request, EAction::CreateQueue, MakeHolder<TNoopReplyCallback>())
+        : TActionActor(request, EAction::CreateQueue, std::make_unique<TNoopReplyCallback>())
         , ExpectedSourceAddress_(std::move(expectedSourceAddress))
     {}
 
@@ -148,7 +148,7 @@ private:
     NActors::TTestActorRuntimeBase::EEventAction Observe(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             case TSqsEvents::EvGetConfiguration: {
-                auto configuration = MakeHolder<TSqsEvents::TEvConfiguration>();
+                auto configuration = std::make_unique<TSqsEvents::TEvConfiguration>();
                 configuration->UserExists = true;
                 configuration->QueueExists = true;
                 configuration->RootUrl = "http://localhost:8771";

@@ -144,7 +144,7 @@ public:
     TQueueTestRuntime(TFilterActor::TFilterFunc&& func) {
         Counters.Reset(new ::NMonitoring::TDynamicCounters);
 
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 3;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[3]);

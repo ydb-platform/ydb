@@ -136,7 +136,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         auto& self = *description.MutablePathDescription()->MutableSelf();
         self.SetPathVersion(TlsActivationContext->Now().GetValue());
 
-        auto describeSchemeResult = MakeHolder<TDescribeSchemeResult>();
+        auto describeSchemeResult = std::make_unique<TDescribeSchemeResult>();
         describeSchemeResult->Record.CopyFrom(description);
         Send(Populator, std::move(describeSchemeResult));
 
@@ -151,7 +151,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
 
         description.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
 
-        auto describeSchemeResult = MakeHolder<TDescribeSchemeResult>();
+        auto describeSchemeResult = std::make_unique<TDescribeSchemeResult>();
         describeSchemeResult->Record.CopyFrom(description);
         Send(Populator, std::move(describeSchemeResult));
 

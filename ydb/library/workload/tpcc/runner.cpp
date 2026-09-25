@@ -125,7 +125,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     : ConnectionConfig(connectionConfig)
     , Config(runConfig)
     , LogBackend(new TLogBackendWithCapture("cerr", runConfig.LogPriority, TUI_LOG_LINES))
-    , Log(std::make_shared<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
+    , Log(std::make_shared<TLog>(std::unique_ptr<TLogBackend>(static_cast<TLogBackend*>(LogBackend))))
 {
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;

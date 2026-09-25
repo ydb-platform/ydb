@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TKeyValueCollectorTest) {
 // Ch 3 Group 3     4       5       3
 class TContext {
     const ui32 NodeIndex = 0;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     TActorId CollectorId;
     TActorId TabletActorId;

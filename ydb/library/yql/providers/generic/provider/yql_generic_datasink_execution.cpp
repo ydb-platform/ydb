@@ -114,8 +114,8 @@ namespace NYql {
 
     } // namespace
 
-    THolder<TExecTransformerBase> CreateGenericDataSinkExecTransformer(TGenericState::TPtr state) {
-        return THolder(new TGenericDataSinkExecTransformer(state));
+    std::unique_ptr<TExecTransformerBase> CreateGenericDataSinkExecTransformer(TGenericState::TPtr state) {
+        return std::unique_ptr<TGenericDataSinkExecTransformer>(new TGenericDataSinkExecTransformer(state));
     }
 
 } // namespace NYql

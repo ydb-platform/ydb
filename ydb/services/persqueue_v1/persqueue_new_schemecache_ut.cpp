@@ -81,7 +81,7 @@ namespace NKikimr::NPersQueueTests {
                      .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
                      .SetDatabase("/Root");
 
-            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
+            auto ydbDriver = std::make_unique<NYdb::TDriver>(driverCfg);
 
 
             ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
@@ -108,8 +108,8 @@ namespace NKikimr::NPersQueueTests {
 
             server.AnnoyingClient->GrantConnect("user1@" BUILTIN_ACL_DOMAIN);
 
-            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
-            auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
+            auto ydbDriver = std::make_unique<NYdb::TDriver>(driverCfg);
+            auto persQueueClient = std::make_unique<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
 
             {
                 auto res = persQueueClient->AddReadRule("/Root/account2/topic2",
@@ -162,8 +162,8 @@ namespace NKikimr::NPersQueueTests {
                      .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
                      .SetDatabase("/Root");
 
-            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
-            auto persqueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
+            auto ydbDriver = std::make_unique<NYdb::TDriver>(driverCfg);
+            auto persqueueClient = std::make_unique<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
 
             // Topic was created in PrepareForGrpcNoDC
             const TString topic = "account2/topic2";
@@ -386,8 +386,8 @@ namespace NKikimr::NPersQueueTests {
                 Monitoring.RegisterCountersPage("counters", "Counters", Counters);
                 Monitoring.Start(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem());
 
-                auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
-                auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
+                auto ydbDriver = std::make_unique<NYdb::TDriver>(driverCfg);
+                auto persQueueClient = std::make_unique<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
 
                 {
                     auto res = persQueueClient->AddReadRule(fullTopicName,
@@ -455,7 +455,7 @@ namespace NKikimr::NPersQueueTests {
                     auto newDriverCfg = driverCfg;
                     newDriverCfg.SetAuthToken("user@builtin");
 
-                    ydbDriver = MakeHolder<NYdb::TDriver>(newDriverCfg);
+                    ydbDriver = std::make_unique<NYdb::TDriver>(newDriverCfg);
 
                     auto writer = CreateSimpleWriter(*ydbDriver, fullTopicName, "123", 1, {}, {}, {}, userAgent);
                     for (int i = 0; i < 4; ++i) {
@@ -586,8 +586,8 @@ namespace NKikimr::NPersQueueTests {
                     .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
                     .SetDatabase("/Root");
 
-                auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
-                auto client = MakeHolder<NYdb::NTopic::TTopicClient>(*ydbDriver);
+                auto ydbDriver = std::make_unique<NYdb::TDriver>(driverCfg);
+                auto client = std::make_unique<NYdb::NTopic::TTopicClient>(*ydbDriver);
 
                 {
                     auto res = client->AlterTopic(fullTopicName,
@@ -658,7 +658,7 @@ namespace NKikimr::NPersQueueTests {
                     auto newDriverCfg = driverCfg;
                     newDriverCfg.SetAuthToken("user@builtin");
 
-                    ydbDriver = MakeHolder<NYdb::TDriver>(newDriverCfg);
+                    ydbDriver = std::make_unique<NYdb::TDriver>(newDriverCfg);
 
                     auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
                     auto writer = topicClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()

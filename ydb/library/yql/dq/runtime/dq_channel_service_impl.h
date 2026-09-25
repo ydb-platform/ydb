@@ -710,7 +710,7 @@ public:
     // the reason is needed only where there is no peer to compare against, i.e. for the session teardown
     void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
     void FailOutputs(const TString& reason);
-    void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
+    void SendAck(std::unique_ptr<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters();
@@ -1213,7 +1213,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvServiceLookup::TPtr& ev) {
-        auto evReply = MakeHolder<TEvPrivate::TEvServiceReply>();
+        auto evReply = std::make_unique<TEvPrivate::TEvServiceReply>();
         evReply->Service = ChannelService;
         Send(ev->Sender, evReply.Release());
     }

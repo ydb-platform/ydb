@@ -62,7 +62,7 @@ public:
         return NKikimrServices::TActivity::MINIKQL_COMPILE_SERVICE;
     }
 
-    TMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver)
+    TMiniKQLCompileService(size_t compileInflightLimit, std::unique_ptr<NYql::IDbSchemeResolver>&& dbSchemeResolver)
         : COMPILE_INFLIGHT_LIMIT(compileInflightLimit)
         , DbSchemeResolver(std::move(dbSchemeResolver))
     {
@@ -166,7 +166,7 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TAlignedPagePoolCounters AllocPoolCounters;
     TActorId SchemeCache;
-    THolder<NYql::IDbSchemeResolver> DbSchemeResolver;
+    std::unique_ptr<NYql::IDbSchemeResolver> DbSchemeResolver;
 };
 
 
@@ -181,11 +181,11 @@ const TActorId& GetMiniKQLCompileServiceID() {
 }
 
 IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) {
-    THolder<NYql::IDbSchemeResolver> resolver;
+    std::unique_ptr<NYql::IDbSchemeResolver> resolver;
     return new TMiniKQLCompileService(compileInflightLimit, std::move(resolver));
 }
 
-IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver) {
+IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, std::unique_ptr<NYql::IDbSchemeResolver>&& dbSchemeResolver) {
     return new TMiniKQLCompileService(compileInflightLimit, std::move(dbSchemeResolver));
 }
 

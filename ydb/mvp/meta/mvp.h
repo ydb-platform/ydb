@@ -45,7 +45,7 @@ public:
     int Run();
     int Shutdown();
 
-    THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
+    std::unique_ptr<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
     void InitMeta();
     void RegisterMetaHandler(const NActors::TActorId& proxyId, const TString& path, NActors::TActorId handlerId, ui32 version = 1);
@@ -62,7 +62,7 @@ public:
     std::shared_ptr<TMetaCapabilities> MetaCapabilities = std::make_shared<TMetaCapabilities>();
     TMetaSettings MetaSettings;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
-    THolder<NActors::TActorSystemSetup> ActorSystemSetup;
+    std::unique_ptr<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;

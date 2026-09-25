@@ -115,7 +115,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         }
 
         if (!Parameters.empty() || InputParamStream) {
-            THolder<TParamsBuilder> paramBuilder;
+            std::unique_ptr<TParamsBuilder> paramBuilder;
             while (GetNextParams(driver, Script, paramBuilder, config.IsVerbose())) {
                 auto asyncResult = client.ExecuteYqlScript(
                         Script,

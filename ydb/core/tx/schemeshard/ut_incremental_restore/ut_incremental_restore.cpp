@@ -2483,7 +2483,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             });
 
         TActorId sender = runtime.AllocateEdgeActor();
-        auto req = MakeHolder<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+        auto req = std::make_unique<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
         auto& rec = req->Record;
         rec.SetOperationId(expectedOpId);
         rec.SetSubOpTxId(expectedSubOpTxId);
@@ -2552,7 +2552,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 });
 
             TActorId sender = runtime.AllocateEdgeActor();
-            auto req = MakeHolder<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
+            auto req = std::make_unique<NKikimr::TEvDataShard::TEvIncrementalRestoreSrcCreateRequest>();
             mutate(req->Record);
             ForwardToTablet(runtime, dsTabletId, sender, req.Release());
 
@@ -2678,7 +2678,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                            {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
 
         auto sendLock = [&](ui64 useTxId, NKikimrSchemeOp::EOperationType opType) {
-            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(useTxId, TTestTxConfig::SchemeShard);
+            auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(useTxId, TTestTxConfig::SchemeShard);
             auto& tx = *request->Record.AddTransaction();
             tx.SetOperationType(opType);
             tx.SetInternal(true);

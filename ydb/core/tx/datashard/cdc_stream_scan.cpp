@@ -181,7 +181,7 @@ class TDataShard::TTxCdcStreamScanProgress
     , protected TChangeRecordBodySerializer
 {
     TDataShard::TEvPrivate::TEvCdcStreamScanProgress::TPtr Request;
-    THolder<TDataShard::TEvPrivate::TEvCdcStreamScanContinue> Response;
+    std::unique_ptr<TDataShard::TEvPrivate::TEvCdcStreamScanContinue> Response;
     TVector<IDataShardChangeCollector::TChange> ChangeRecords;
     bool Reschedule = false;
 
@@ -370,7 +370,7 @@ public:
             Self->CdcStreamScanManager.PersistProgress(db, tablePathId, streamPathId, *info);
         }
 
-        Response = MakeHolder<TDataShard::TEvPrivate::TEvCdcStreamScanContinue>();
+        Response = std::make_unique<TDataShard::TEvPrivate::TEvCdcStreamScanContinue>();
         return true;
     }
 
@@ -432,7 +432,7 @@ class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, publ
     }
 
     void Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus status, const TString& error = {}) {
-        auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvCdcStreamScanResponse>();
 
         response->Record.SetTabletId(DataShard.TabletId);
         TablePathId.ToProto(response->Record.MutableTablePathId());
@@ -561,11 +561,11 @@ private:
 
 class TDataShard::TTxCdcStreamScanRun: public TTransactionBase<TDataShard> {
     TEvDataShard::TEvCdcStreamScanRequest::TPtr Request;
-    THolder<IEventHandle> Response; // response to sender or forward to scanner
+    std::unique_ptr<IEventHandle> Response; // response to sender or forward to scanner
 
     template <typename... Args>
-    THolder<IEventHandle> MakeResponse(const TActorContext& ctx, Args&&... args) const {
-        return MakeHolder<IEventHandle>(Request->Sender, ctx.SelfID, new TEvDataShard::TEvCdcStreamScanResponse(
+    std::unique_ptr<IEventHandle> MakeResponse(const TActorContext& ctx, Args&&... args) const {
+        return std::make_unique<IEventHandle>(Request->Sender, ctx.SelfID, new TEvDataShard::TEvCdcStreamScanResponse(
             Request->Get()->Record, Self->TabletID(), std::forward<Args>(args)...
         ));
     }
@@ -698,7 +698,7 @@ public:
         Y_ENSURE(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
 
         const ui64 localTxId = Self->NextTieBreakerIndex++;
-        auto scan = MakeHolder<TCdcStreamScan>(Self, Request->Sender, localTxId,
+        auto scan = std::make_unique<TCdcStreamScan>(Self, Request->Sender, localTxId,
             tablePathId, streamPathId, snapshotVersion, valueTags, info->LastKey, info->Stats, record.GetLimits());
         const ui64 scanId = Self->QueueScan(table->LocalTid, scan.Release(), localTxId,
             TScanOptions()

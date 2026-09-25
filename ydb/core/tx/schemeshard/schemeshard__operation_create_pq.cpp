@@ -233,7 +233,7 @@ void ApplySharding(TTxId txId,
     auto it = pqGroup->PartitionsToAdd.begin();
     for (ui32 pqId = 0; pqId < pqGroup->TotalGroupCount; ++pqId, ++it) {
         auto idx = ss->NextShardIdx(startShardIdx, pqId / pqGroup->MaxPartsPerTablet);
-        auto partition = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+        auto partition = std::make_unique<TTopicTabletInfo::TTopicPartitionInfo>();
         partition->PqId = it->PartitionId;
         partition->GroupId = it->GroupId;
         partition->KeyRange = it->KeyRange;
@@ -273,13 +273,13 @@ class TCreatePQ: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<NPQState::TConfigureParts>(OperationId);
+            return std::make_unique<NPQState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<NPQState::TPropose>(OperationId);
+            return std::make_unique<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -293,7 +293,7 @@ class TCreatePQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -307,7 +307,7 @@ public:
         );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {

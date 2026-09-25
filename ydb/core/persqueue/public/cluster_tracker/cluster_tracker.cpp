@@ -98,7 +98,7 @@ private:
     void SendClustersList(const TActorId& subscriberId) {
         YDB_LOG_DEBUG_CTX(Ctx(), "SendClustersList");
 
-        auto ev = MakeHolder<TEvClusterTracker::TEvClustersUpdate>();
+        auto ev = std::make_unique<TEvClusterTracker::TEvClustersUpdate>();
 
         ev->ClustersList = ClustersList;
         ev->ClustersListUpdateTimestamp = ClustersListUpdateTimestamp;
@@ -133,7 +133,7 @@ private:
         YDB_LOG_DEBUG_CTX(Ctx(), "SendGetClustersListResponse",
             {"senderId", senderId});
 
-        auto ev = MakeHolder<TEvClusterTracker::TEvGetClustersListResponse>();
+        auto ev = std::make_unique<TEvClusterTracker::TEvGetClustersListResponse>();
         ev->Success = success;
         ev->ClustersList = ClustersList;
 
@@ -162,7 +162,7 @@ private:
     }
 
     void SendDdl(const TString& query) {
-        auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto req = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
         req->Record.MutableRequest()->SetKeepSession(false);
@@ -172,7 +172,7 @@ private:
     }
 
     void SendDml(const TString& query) {
-        auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto req = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         req->Record.MutableRequest()->SetKeepSession(false);

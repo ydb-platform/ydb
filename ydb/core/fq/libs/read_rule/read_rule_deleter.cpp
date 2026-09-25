@@ -115,7 +115,7 @@ public:
     void Handle(TEvPrivate::TEvRemoveReadRuleStatus::TPtr& ev) {
         const NYdb::TStatus& status = ev->Get()->Status;
         if (status.IsSuccess() || status.GetStatus() == NYdb::EStatus::NOT_FOUND) {
-            Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(), 0, Index);
+            Send(Owner, std::make_unique<TEvPrivate::TEvSingleReadRuleDeleterResult>(), 0, Index);
             PassAway();
         } else {
             if (!RetryState) {
@@ -142,7 +142,7 @@ public:
                 {"status", status.GetStatus()},
                 {"after", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
-                Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
+                Send(Owner, std::make_unique<TEvPrivate::TEvSingleReadRuleDeleterResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
             } else {
                 Schedule(*nextRetryDelay, new NActors::TEvents::TEvWakeup());
@@ -253,7 +253,7 @@ public:
                 }
                 issues.AddIssue(std::move(mainIssue));
             }
-            Send(Owner, MakeHolder<TEvents::TEvDataStreamsReadRulesDeletionResult>(std::move(issues)));
+            Send(Owner, std::make_unique<TEvents::TEvDataStreamsReadRulesDeletionResult>(std::move(issues)));
             PassAway();
         }
     }

@@ -144,7 +144,7 @@ public:
             kesus->KesusShardIdx = shardIdx;
             kesus->KesusTabletId = tabletId;
 
-            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), kesus->Config, kesus->Version);
+            auto event = std::make_unique<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), kesus->Config, kesus->Version);
             event->Record.MutableConfig()->set_path(kesusPath.PathString()); // TODO: remove legacy field eventually
             event->Record.SetPath(kesusPath.PathString());
 
@@ -253,13 +253,13 @@ class TCreateKesus: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -268,7 +268,7 @@ class TCreateKesus: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -282,7 +282,7 @@ public:
         );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TString errStr;
         if (!ValidateConfig(config, status, errStr)) {

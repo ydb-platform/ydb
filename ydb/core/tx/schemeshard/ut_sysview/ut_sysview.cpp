@@ -23,7 +23,7 @@ namespace {
         const TVector<TExpectedResult> &expectedResults = {{NKikimrScheme::StatusAccepted}},
         const TApplyIf &applyIf = {})
     {
-        THolder<TEvTx> request(CreateSysViewRequest(txId, parentPath, scheme, applyIf));
+        std::unique_ptr<TEvTx> request(CreateSysViewRequest(txId, parentPath, scheme, applyIf));
         auto& record = request->Record;
         record.SetUserToken(userToken);
         record.SetOwner(owner);

@@ -128,7 +128,7 @@ private:
     TString FolderId_;
     TString ApiMethod_;
 
-    THolder<TAwsRequestSignV4> AwsSignature_;
+    std::unique_ptr<TAwsRequestSignV4> AwsSignature_;
 
     TMaybe<TBuffer> InputData;
     TString HttpMethod;
@@ -180,7 +180,7 @@ private:
     const NKikimrConfig::TSqsConfig Config;
     NActors::TActorSystem* ActorSystem_ = nullptr;
     TIntrusivePtr<THttpCounters> HttpCounters_; // http subsystem counters
-    THolder<TCloudAuthCounters> CloudAuthCounters_; // cloud_auth subsystem counters
+    std::unique_ptr<TCloudAuthCounters> CloudAuthCounters_; // cloud_auth subsystem counters
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_; // aggregated counters for user in core subsystem
     ui32 PoolId_ = 0;
 };

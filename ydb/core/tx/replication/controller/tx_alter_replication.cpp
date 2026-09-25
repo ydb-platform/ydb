@@ -29,7 +29,7 @@ bool HasRelevantTransferConfigChanges(
 
 class TController::TTxAlterReplication: public TTxBase {
     TEvController::TEvAlterReplication::TPtr Ev;
-    THolder<TEvController::TEvAlterReplicationResult> Result;
+    std::unique_ptr<TEvController::TEvAlterReplicationResult> Result;
     TReplication::TPtr Replication;
     bool ResetFailedSchemaBarriers = false;
     TVector<std::pair<ui64, ui64>> AlterersToStop;
@@ -187,7 +187,7 @@ public:
             {"ev", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
-        Result = MakeHolder<TEvController::TEvAlterReplicationResult>();
+        Result = std::make_unique<TEvController::TEvAlterReplicationResult>();
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
 

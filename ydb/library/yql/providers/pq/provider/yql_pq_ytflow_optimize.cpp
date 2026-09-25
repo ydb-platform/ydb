@@ -102,9 +102,9 @@ private:
 
 } // anonymous namespace
 
-THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state) {
+std::unique_ptr<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state) {
     YQL_ENSURE(state);
-    return MakeHolder<TPqYtflowOptimization>(state);
+    return std::make_unique<TPqYtflowOptimization>(state);
 }
 
 } // namespace NYql

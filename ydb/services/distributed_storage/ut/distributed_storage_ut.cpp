@@ -60,7 +60,7 @@ public:
         auto& runtime = *GetRuntime();
         const TActorId sender = runtime.AllocateEdgeActor();
 
-        auto readRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto readRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         readRequest->Record.MutableRequest()->AddCommand()->MutableReadHostConfig();
         runtime.SendToPipe(MakeBSControllerID(), sender, readRequest.Release());
 
@@ -82,7 +82,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(hostConfig.GetHostConfigId(), nodeId);
         hostConfig.AddDrive()->SetPath(TStringBuilder() << runtime.GetTempDir() << "pdisk_2.dat");
 
-        auto defineRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto defineRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         defineRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
         runtime.SendToPipe(MakeBSControllerID(), sender, defineRequest.Release());
 
@@ -98,7 +98,7 @@ private:
     TPortManager PortManager;
     Tests::TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TTenants> Tenants;
+    std::unique_ptr<Tests::TTenants> Tenants;
     std::shared_ptr<grpc::Channel> Channel;
 };
 

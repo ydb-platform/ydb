@@ -14,7 +14,7 @@ public:
     static constexpr const char *GetName() { return "TVSlotsScan"; }
 
     TEvSysView::TEvGetVSlotsRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetVSlotsRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetVSlotsRequest>();
         ConvertKeyRange<NKikimrSysView::TEvGetVSlotsRequest, ui32, ui32, ui32>(request->Record, TableRange);
         return request.Release();
     }
@@ -46,11 +46,11 @@ public:
     }
 };
 
-THolder<NActors::IActor> CreateVSlotsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateVSlotsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TVSlotsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TVSlotsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

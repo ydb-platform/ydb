@@ -30,7 +30,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         const auto& record = Request->Get()->Record;
         const auto& request = record.GetRequest();
 
-        auto response = MakeHolder<TEvResponse>();
+        auto response = std::make_unique<TEvResponse>();
         auto& resp = *response->Record.MutableResponse();
 
         const TPathId domainPathId = DomainPathId(record.GetDatabaseName());

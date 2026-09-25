@@ -158,7 +158,7 @@ public:
         }
 
         if (!FirstUpdateSent) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
             request->Record.MutableNode()->SetHost(FQDNHostName());
             request->Record.MutableNode()->SetTenant(Tenant);
@@ -350,7 +350,7 @@ private:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionRequest>();
+        auto request = std::make_unique<TEvConsole::TEvConfigSubscriptionRequest>();
 
         request->Record.SetGeneration(Generation = NextGeneration++);
         request->Record.MutableOptions()->SetNodeId(SelfId().NodeId());

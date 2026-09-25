@@ -22,7 +22,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         Ydb::StatusIds::StatusCode CheckForUnknownConsumers(TString& error) const;
     private:
         class TImpl;
-        THolder<TImpl> Impl_;
+        std::unique_ptr<TImpl> Impl_;
     };
 
 }

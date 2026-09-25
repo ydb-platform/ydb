@@ -70,10 +70,10 @@ void TStoreWriteUnit::Complete(TOperation::TPtr op,
     Pipeline.ProposeComplete(op, ctx);
 }
 
-THolder<TExecutionUnit> CreateStoreWriteUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateStoreWriteUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return MakeHolder<TStoreWriteUnit>(dataShard, pipeline);
+    return std::make_unique<TStoreWriteUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

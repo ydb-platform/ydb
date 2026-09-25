@@ -51,7 +51,7 @@ private:
         }
         DatabaseToPathId.emplace(database, TPathId());
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = database;
         request->ResultSet.push_back({});
 

@@ -1292,7 +1292,7 @@ TAutoPtr<TTableIter> TTable::Iterate(const TCelled& key, TTagsRef tags, IPages* 
 
         if (Flatten) {
             for (const auto& run : GetLevels()) {
-                auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+                auto iter = std::make_unique<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
                 if (iter->Seek(key, seek) != EReady::Gone)
                     dbIter->Push(std::move(iter));
@@ -1346,7 +1346,7 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
 
         if (Flatten) {
             for (const auto& run : GetLevels()) {
-                auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+                auto iter = std::make_unique<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
 
                 if (iter->SeekReverse(key, seek) != EReady::Gone)
                     dbIter->Push(std::move(iter));

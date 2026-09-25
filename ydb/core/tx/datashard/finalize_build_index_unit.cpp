@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TFinalizeBuildIndexUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
+    std::unique_ptr<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
     TFinalizeBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -99,11 +99,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateFinalizeBuildIndexUnit(
+std::unique_ptr<TExecutionUnit> CreateFinalizeBuildIndexUnit(
     TDataShard& dataShard,
     TPipeline& pipeline)
 {
-    return THolder(new TFinalizeBuildIndexUnit(dataShard, pipeline));
+    return std::unique_ptr<TFinalizeBuildIndexUnit>(new TFinalizeBuildIndexUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

@@ -44,7 +44,7 @@ public:
     using TCookieAllocator = NPageCollection::TCookieAllocator;
 
     struct TProd {
-        THolder<TChange> Change;
+        std::unique_ptr<TChange> Change;
         TVector<std::function<void()>> OnPersistent;
     };
 
@@ -320,12 +320,12 @@ private:
     void CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const;
 
 private:
-    const THolder<TDatabaseImpl> DatabaseImpl;
+    const std::unique_ptr<TDatabaseImpl> DatabaseImpl;
 
     bool NoMoreReadsFlag = false;
     bool NoMoreUnprechargedReadsFlag = false;
     IPages* Env = nullptr;
-    THolder<TChange> Change;
+    std::unique_ptr<TChange> Change;
     TAutoPtr<TAlter> Alter_;
     TAutoPtr<TAnnex> Annex;
     TAutoPtr<NRedo::TWriter> Redo;

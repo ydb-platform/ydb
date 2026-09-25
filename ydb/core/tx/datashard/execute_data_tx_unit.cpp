@@ -393,8 +393,8 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
 void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {
 }
 
-THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TExecuteDataTxUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
+    return std::unique_ptr<TExecuteDataTxUnit>(new TExecuteDataTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

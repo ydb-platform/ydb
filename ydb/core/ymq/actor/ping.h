@@ -11,7 +11,7 @@ class TPingActor
     : public TActorBootstrapped<TPingActor>
 {
 public:
-    TPingActor(THolder<IPingReplyCallback> cb, const TString& requestId)
+    TPingActor(std::unique_ptr<IPingReplyCallback> cb, const TString& requestId)
         : Callback_(std::move(cb))
         , RequestId_(requestId)
     {
@@ -28,7 +28,7 @@ public:
     }
 
 private:
-    THolder<IPingReplyCallback> Callback_;
+    std::unique_ptr<IPingReplyCallback> Callback_;
     const TString RequestId_;
 };
 

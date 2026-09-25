@@ -447,7 +447,7 @@ public:
         }
         FindMinMaxKeys();
         TTableRange range(MinKey, true, MaxKey, true, false);
-        auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns);
+        auto keyRange = std::make_unique<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = GetDatabase();

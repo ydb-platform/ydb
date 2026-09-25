@@ -31,7 +31,7 @@ enum class EQueryType {
 
 struct TTopicMetaRequest {
     TString Path;
-    THolder<NSchemeCache::TSchemeCacheNavigate> Response;
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Response;
     bool Success = false;
 };
 

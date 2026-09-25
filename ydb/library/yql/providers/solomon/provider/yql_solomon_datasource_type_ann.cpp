@@ -253,8 +253,8 @@ private:
     TSolomonState::TPtr State_;
 };
 
-THolder<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonDataSourceTypeAnnotationTransformer(state));
+std::unique_ptr<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state) {
+    return std::unique_ptr<TSolomonDataSourceTypeAnnotationTransformer>(new TSolomonDataSourceTypeAnnotationTransformer(state));
 }
 
 } // namespace NYql

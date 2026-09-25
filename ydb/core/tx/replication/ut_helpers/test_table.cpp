@@ -81,14 +81,14 @@ void TTestTableDescription::SerializeTo(NKikimrSchemeOp::TColumnTableDescription
     }
 }
 
-THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc) {
-    auto result = MakeHolder<NKikimrSchemeOp::TTableDescription>();
+std::unique_ptr<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc) {
+    auto result = std::make_unique<NKikimrSchemeOp::TTableDescription>();
     desc.SerializeTo(*result);
     return result;
 }
 
-THolder<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc) {
-    auto result = MakeHolder<NKikimrSchemeOp::TColumnTableDescription>();
+std::unique_ptr<NKikimrSchemeOp::TColumnTableDescription> MakeColumnTableDescription(const TTestTableDescription& desc) {
+    auto result = std::make_unique<NKikimrSchemeOp::TColumnTableDescription>();
     desc.SerializeTo(*result);
     return result;
 }

@@ -437,7 +437,7 @@ void SendConfigUpdate(TTestBasicRuntime& runtime,
     for (size_t i = 0; i < bootstrappers.size(); ++i) {
         auto nodeIdx = bootstrappers[i].NodeId() - runtime.GetNodeId(0);
         auto configDispatcher = runtime.AllocateEdgeActor(nodeIdx);
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(config);
         notification->Record.SetLocal(true);
         notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         FillDummyTabletChannels(updatedTablet->MutableInfo());
 
         auto configDispatcher = runtime.AllocateEdgeActor(0);
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
         notification->Record.SetLocal(true);
         notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         FillDummyTabletChannelsWithoutErasure(updatedTablet->MutableInfo());
 
         auto configDispatcher = runtime.AllocateEdgeActor(0);
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
         notification->Record.SetLocal(true);
         notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         FillDummyTabletChannelsWithoutErasure(invalidTablet->MutableInfo());
 
         auto configDispatcher = runtime.AllocateEdgeActor(0);
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
         notification->Record.SetLocal(true);
         notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         // send to configured bootstrapper on node 0
         {
             auto configDispatcher = runtime.AllocateEdgeActor(0);
-            auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
             notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
             notification->Record.SetLocal(true);
             notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
         // send to configured bootstrapper on node 1
         {
             auto configDispatcher = runtime.AllocateEdgeActor(1);
-            auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
             notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
             notification->Record.SetLocal(true);
             notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);

@@ -91,7 +91,7 @@ namespace NSequenceProxy {
 
         struct TPendingAllocation {
             ui64 Cache;
-            THolder<TEvPrivate::TEvAllocateResult> Result;
+            std::unique_ptr<TEvPrivate::TEvAllocateResult> Result;
         };
 
         // When requests attach to a specific path id are tracked here

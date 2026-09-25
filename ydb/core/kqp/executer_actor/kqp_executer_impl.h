@@ -153,7 +153,7 @@ public:
         , NewRboEnabled(executerConfig.TableServiceConfig.GetEnableNewRBO())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, useKqpTasksGraphV2)
         , ChannelService(channelService)
-        , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
+        , PartitionPruner(std::make_unique<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
         , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -453,7 +453,7 @@ protected:
                 continue;
             }
 
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
             request->Record.MutableDescribePath()->SetPath(stageInfo.Meta.TablePath);
             request->Record.MutableDescribePath()->MutableOptions()->SetReturnPartitionStats(true);
             this->Send(MakeTxProxyID(), request.Release());
@@ -542,7 +542,7 @@ protected:
         ui32 channelId, ui32 seqNo, bool finished)
     {
         auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
-        auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
+        auto streamEv = std::make_unique<TEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(seqNo);
         streamEv->Record.SetQueryResultIndex(resultIndex);
         streamEv->Record.SetChannelId(channelId);
@@ -746,7 +746,7 @@ protected:
             if (!trailingResults) {
                 SendStreamData(txResult, std::move(batches), channel.Id, computeData.Proto.GetSeqNo(), channelData.GetFinished());
             } else {
-                auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
+                auto ackEv = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
                 ackEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 ackEv->Record.SetChannelId(channel.Id);
                 ackEv->Record.SetFreeSpace(50_MB);
@@ -802,7 +802,7 @@ protected:
             {"recipient", ev->Sender},
             {"traceId", TraceId()});
 
-        auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
+        auto ackEv = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
         ackEv->Record.SetSeqNo(record.GetSeqNo());
         ackEv->Record.SetChannelId(channel.Id);
         ackEv->Record.SetFreeSpace(50_MB);
@@ -888,7 +888,7 @@ protected:
             {"recipient", channelComputeActorId},
             {"traceId", TraceId()});
 
-        auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
+        auto ackEv = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
         ackEv->Record.SetSeqNo(seqNo);
         ackEv->Record.SetChannelId(channelId);
         ackEv->Record.SetFreeSpace(freeSpace);
@@ -927,14 +927,14 @@ protected:
                 ) {
                     NYql::TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");
-                    auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);
+                    auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);
                     this->Send(this->SelfId(), abortEv.Release());
                 }
 
                 if (Request.ProgressStatsPeriod) {
                     auto now = TInstant::Now();
                     if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
-                        auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                        auto progress = std::make_unique<TEvKqpExecuter::TEvExecuterProgress>();
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
@@ -1189,14 +1189,14 @@ protected:
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
             //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
+            auto addDatabaseEvent = std::make_unique<NScheduler::TEvAddDatabase>(databaseId);
             this->Send(schedulerServiceId, addDatabaseEvent.Release());
 
             // TODO: replace with more precise pool events.
-            auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
+            auto addPoolEvent = std::make_unique<NScheduler::TEvAddPool>(databaseId, poolId);
             this->Send(schedulerServiceId, addPoolEvent.Release());
 
-            auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+            auto addQueryEvent = std::make_unique<NScheduler::TEvAddQuery>();
             addQueryEvent->DatabaseId = databaseId;
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = TxId;
@@ -1312,7 +1312,7 @@ protected:
 
     void InvalidateNode(ui64 node) {
         for (auto tablet : TasksGraph.GetMeta().ShardsOnNode[node]) {
-            auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
+            auto ev = std::make_unique<TEvPipeCache::TEvForcePipeReconnect>(tablet);
             this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
     }
@@ -1709,7 +1709,7 @@ protected:
                     {"taskId", task.Id},
                     {"traceId", TraceId()});
 
-                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
+                auto ev = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
                 YDB_LOG_INFO_COMP(NKikimrServices::KQP_EXECUTER, "Task does not have the CA id yet or is already complete",
@@ -1849,7 +1849,7 @@ protected:
 
         // TEvAbortExecution can come from ComputeActor or SessionActor/PartitionedExecuterActor (== Target).
         if (!isTargetSender) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
+            auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }
 
@@ -2034,7 +2034,7 @@ protected:
         this->Send(Target, ResponseEv.release());
 
         if (IsSchedulable()) {
-            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+            auto removeQueryEvent = std::make_unique<NScheduler::TEvRemoveQuery>();
             removeQueryEvent->QueryId = TxId;
             this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
         }
@@ -2283,7 +2283,7 @@ protected:
 protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    THolder<TPartitionPruner> PartitionPruner;
+    std::unique_ptr<TPartitionPruner> PartitionPruner;
     bool EnableWatermarks = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

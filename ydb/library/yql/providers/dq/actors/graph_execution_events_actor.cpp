@@ -97,7 +97,7 @@ private:
         if (msg) {
             sync.SetErrorMessage(msg);
         }
-        Send(replyTo, MakeHolder<NDqs::TEvGraphExecutionEvent>(sync));
+        Send(replyTo, std::make_unique<NDqs::TEvGraphExecutionEvent>(sync));
     }
 
     template <class TPayload>
@@ -105,7 +105,7 @@ private:
         NYql::NDqProto::TGraphExecutionEvent sync;
         sync.SetEventType(NDqProto::EGraphExecutionEventType::SYNC);
         sync.MutableMessage()->PackFrom(resp);
-        Send(replyTo, MakeHolder<NDqs::TEvGraphExecutionEvent>(sync));
+        Send(replyTo, std::make_unique<NDqs::TEvGraphExecutionEvent>(sync));
     }
 
     void OnFail(NActors::TActorId replyTo) {
@@ -126,7 +126,7 @@ private:
 
     void OnFullResult(NActors::TActorId replyTo, const NDqProto::TGraphExecutionEvent::TFullResultDescriptor& payload) {
         YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__;
-        THolder<IDqFullResultWriter> writer;
+        std::unique_ptr<IDqFullResultWriter> writer;
         for (const auto& preprocessor: TaskPreprocessors) {
             writer = preprocessor->CreateFullResultWriter();
             if (writer) {

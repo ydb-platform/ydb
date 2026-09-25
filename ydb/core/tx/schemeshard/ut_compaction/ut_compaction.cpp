@@ -34,7 +34,7 @@ std::pair<TTableInfoMap, ui64> GetTables(
     ui64 tabletId)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    auto request = std::make_unique<TEvDataShard::TEvGetInfoRequest>();
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TTableInfoMap result;
@@ -222,8 +222,8 @@ void CreateIndexedTableWithData(
     }
 }
 
-THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+std::unique_ptr<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     // little hacks to simplify life
     auto* compactionConfig = request->Record.MutableConfig()->MutableCompactionConfig();
@@ -357,7 +357,7 @@ TCompactionStats GetCompactionStats(
 {
     auto sender = runtime.AllocateEdgeActor();
 
-    auto request = MakeHolder<TEvDataShard::TEvGetCompactTableStats>(ownerId, userTable.GetPathId());
+    auto request = std::make_unique<TEvDataShard::TEvGetCompactTableStats>(ownerId, userTable.GetPathId());
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;

@@ -378,7 +378,7 @@ public:
         YDB_LOG_DEBUG("Tasks graph after BuildAllTasks",
             {"tasksGraphDump", Graph->DumpToString()});
 
-        auto reply = MakeHolder<TEvBuildTasksDone>();
+        auto reply = std::make_unique<TEvBuildTasksDone>();
         reply->Result.StageIdBases = Graph->GetStageIdBases();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {
             reply->Result.TasksPerStage[stageId] = static_cast<ui32>(stageInfo.Tasks.size());
@@ -603,7 +603,7 @@ private:
     }
 
     void ReplyError(const NActors::TActorContext& ctx, TString msg) {
-        auto reply = MakeHolder<TEvBuildTasksDone>();
+        auto reply = std::make_unique<TEvBuildTasksDone>();
         reply->ErrorMessage = std::move(msg);
         ctx.Send(Owner, reply.Release());
         Die(ctx);

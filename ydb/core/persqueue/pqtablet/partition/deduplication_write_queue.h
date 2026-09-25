@@ -10,7 +10,7 @@ namespace NKikimr::NPQ {
     struct TCreateDeduplicationWriteQueueActorResult {
         size_t RecentPartitionsCount = 0;
         TInstant DisableTimestamp;
-        THolder<NActors::IActor> Actor;
+        std::unique_ptr<NActors::IActor> Actor;
     };
 
     TCreateDeduplicationWriteQueueActorResult CreateDeduplicationWriteQueueActor(

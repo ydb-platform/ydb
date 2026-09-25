@@ -33,7 +33,7 @@ public:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
         const TEvInterconnect::TEvNodesInfo& nodesInfo = *ev->Get();
-        THolder<TBusResponse> response(new TBusResponse());
+        std::unique_ptr<TBusResponse> response(new TBusResponse());
         TVector<TVector<TEvInterconnect::TNodeInfo>::const_iterator> items;
         if (ResolveRequest.GetResolveLocalNode() || ResolveRequest.GetHost() == ".") {
             ui32 localNodeId = SelfId().NodeId();

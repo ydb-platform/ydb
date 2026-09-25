@@ -174,8 +174,8 @@ void TStoragePoolInfo::Invalidate() {
     LastUpdate = TInstant();
 }
 
-THolder<TEvControllerSelectGroups::TGroupParameters> TStoragePoolInfo::BuildRefreshRequest() const {
-    THolder<TEvControllerSelectGroups::TGroupParameters> params = MakeHolder<TEvControllerSelectGroups::TGroupParameters>();
+std::unique_ptr<TEvControllerSelectGroups::TGroupParameters> TStoragePoolInfo::BuildRefreshRequest() const {
+    std::unique_ptr<TEvControllerSelectGroups::TGroupParameters> params = std::make_unique<TEvControllerSelectGroups::TGroupParameters>();
     params->MutableStoragePoolSpecifier()->SetName(Name);
     return params;
 }

@@ -132,11 +132,11 @@ protected:
     };
 
     struct TTxRequest : public NTabletFlatExecutor::ITransaction {
-        THolder<TIntermediate> Intermediate;
+        std::unique_ptr<TIntermediate> Intermediate;
         TKeyValueFlat *Self;
         TVector<TLogoBlobID> TrashBeingCommitted;
 
-        TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat, NWilson::TTraceId &&traceId)
+        TTxRequest(std::unique_ptr<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat, NWilson::TTraceId &&traceId)
             : NTabletFlatExecutor::ITransaction(std::move(traceId))
             , Intermediate(std::move(intermediate))
             , Self(keyValueFlat)
@@ -217,11 +217,11 @@ protected:
     };
 
     struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {
-        const THolder<NMon::TEvRemoteHttpInfo> Event;
+        const std::unique_ptr<NMon::TEvRemoteHttpInfo> Event;
         const TActorId RespondTo;
         TKeyValueFlat *Self;
 
-        TTxMonitoring(THolder<NMon::TEvRemoteHttpInfo> event, const TActorId &respondTo, TKeyValueFlat *keyValue)
+        TTxMonitoring(std::unique_ptr<NMon::TEvRemoteHttpInfo> event, const TActorId &respondTo, TKeyValueFlat *keyValue)
             : Event(std::move(event))
             , RespondTo(respondTo)
             , Self(keyValue)
@@ -230,7 +230,7 @@ protected:
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             Y_UNUSED(txc);
             TStringStream str;
-            THolder<IEventBase> response;
+            std::unique_ptr<IEventBase> response;
             TCgiParameters params(Event->Cgi());
             if (params.Has("section")) {
                 const TString section = params.Get("section");
@@ -241,10 +241,10 @@ protected:
                     json["Error"] = "invalid json parameter value";
                 }
                 NJson::WriteJson(&str, &json);
-                response = MakeHolder<NMon::TEvRemoteJsonInfoRes>(str.Str());
+                response = std::make_unique<NMon::TEvRemoteJsonInfoRes>(str.Str());
             } else {
                 Self->State.RenderHTMLPage(str);
-                response = MakeHolder<NMon::TEvRemoteHttpInfoRes>(str.Str());
+                response = std::make_unique<NMon::TEvRemoteHttpInfoRes>(str.Str());
             }
             ctx.Send(RespondTo, response.Release());
             return true;

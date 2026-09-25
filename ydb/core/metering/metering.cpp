@@ -21,9 +21,9 @@ class TMeteringWriteActor final
     : public TActor<TMeteringWriteActor>
 {
 private:
-    const THolder<TLogBackend> MeteringFile;
+    const std::unique_ptr<TLogBackend> MeteringFile;
 public:
-    TMeteringWriteActor(THolder<TLogBackend> meteringFile)
+    TMeteringWriteActor(std::unique_ptr<TLogBackend> meteringFile)
         : TActor(&TThis::StateWork)
           , MeteringFile(std::move(meteringFile))
     {
@@ -96,15 +96,15 @@ void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-THolder<NActors::IActor> CreateMeteringWriter(THolder<TLogBackend> meteringFile)
+std::unique_ptr<NActors::IActor> CreateMeteringWriter(std::unique_ptr<TLogBackend> meteringFile)
 {
-    return MakeHolder<TMeteringWriteActor>(std::move(meteringFile));
+    return std::make_unique<TMeteringWriteActor>(std::move(meteringFile));
 }
 
 
 void SendMeteringJson(const NActors::TActorContext &ctx, TString message)
 {
-    auto request = MakeHolder<TEvMetering::TEvWriteMeteringJson>(std::move(message));
+    auto request = std::make_unique<TEvMetering::TEvWriteMeteringJson>(std::move(message));
     ctx.Send(
         MakeMeteringServiceID(),
         request.Release());

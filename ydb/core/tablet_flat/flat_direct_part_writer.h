@@ -238,14 +238,14 @@ namespace NTabletFlatExecutor {
          * called only once IsComplete() is true. The returned result carries the
          * reserved Step so the commit can release the GC barrier.
          */
-        THolder<TDirectPartResult> ExtractResult(const TActorContext &ctx)
+        std::unique_ptr<TDirectPartResult> ExtractResult(const TActorContext &ctx)
         {
             Y_ENSURE(!Failed, "ExtractResult on a failed writer");
             Y_ENSURE(IsComplete(), "ExtractResult before the writer is complete");
             Y_ENSURE(!Consumed, "ExtractResult called twice");
             Consumed = true;
 
-            auto result = MakeHolder<TDirectPartResult>();
+            auto result = std::make_unique<TDirectPartResult>();
             result->Step = Mask_.Step();
             result->YellowMoveChannels = std::move(YellowMoveChannels);
             result->YellowStopChannels = std::move(YellowStopChannels);
@@ -256,7 +256,7 @@ namespace NTabletFlatExecutor {
                 TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> pageCollections;
                 for (auto& pageCollection : res.PageCollections) {
                     auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
-                    auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
+                    auto saveCompactedPages = std::make_unique<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
                     auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList]
                         (NPageCollection::TLoadedPage& loadedPage, bool sticky) {

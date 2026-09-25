@@ -63,7 +63,7 @@ private:
     size_t Index_ = 0;
 };
 
-THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, TCallable*& sourceNode, TLayout& layout) {
+std::unique_ptr<IComputationGraph> BuildGraph(TDqSetup<false>& setup, TCallable*& sourceNode, TLayout& layout) {
     auto& pb = setup.GetDqProgramBuilder();
 
     auto stringType = pb.NewDataType(NUdf::EDataSlot::String);

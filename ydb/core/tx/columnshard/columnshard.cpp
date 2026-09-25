@@ -216,7 +216,7 @@ void TColumnShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TP
         {"has_node_portions_count_limit", ColumnShardConfig->HasNodePortionsCountLimit()},
         {"node_portions_count_limit", ColumnShardConfig->HasNodePortionsCountLimit() ? ColumnShardConfig->GetNodePortionsCountLimit() : 0});
 
-    auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+    auto responseEv = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
     Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 }
 

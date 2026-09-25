@@ -118,7 +118,7 @@ public:
     bool NeedsAbort() const { return Step_ != Max<ui32>() && State_ != EState::HandedOff; }
 
     // Hand over the reserved writer (received in TEvS3DirectWriteBeginResult).
-    void SetWriter(THolder<TDirectPartWriter> writer, ui32 step) {
+    void SetWriter(std::unique_ptr<TDirectPartWriter> writer, ui32 step) {
         Y_ENSURE(State_ == EState::Pending);
         Writer = std::move(writer);
         Step_ = step;
@@ -162,7 +162,7 @@ public:
     }
 
     // Build the final part(s). Valid only once Complete; moves to HandedOff.
-    THolder<TDirectPartResult> ExtractResult(const TActorContext& ctx) {
+    std::unique_ptr<TDirectPartResult> ExtractResult(const TActorContext& ctx) {
         Y_ENSURE(State_ == EState::Complete, "ExtractResult before the part is complete");
         auto result = Writer->ExtractResult(ctx);
         Writer.Reset();
@@ -171,7 +171,7 @@ public:
     }
 
 private:
-    THolder<TDirectPartWriter> Writer;
+    std::unique_ptr<TDirectPartWriter> Writer;
     ui32 Step_ = Max<ui32>();
     EState State_ = EState::Pending;
     TVector<ui32> ValueColumnIds;
@@ -434,7 +434,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         TEncryptionDeserializerController(
                 NBackup::TEncryptionKey key,
                 NBackup::TEncryptionIV expectedIV,
-                THolder<IReadController> deserializedDataController,
+                std::unique_ptr<IReadController> deserializedDataController,
                 ui64 readBatchSize)
             : Deserializer(std::move(key), std::move(expectedIV))
             , ConfirmedDeserializerState(Deserializer.GetState())
@@ -572,7 +572,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         TMaybe<TString> FeedError;
         NBackup::TEncryptedFileDeserializer Deserializer;
         TString ConfirmedDeserializerState;
-        THolder<IReadController> DataController;
+        std::unique_ptr<IReadController> DataController;
         const ui64 ReadBatchSize;
     };
 
@@ -779,7 +779,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
-        THolder<IReadController> reader;
+        std::unique_ptr<IReadController> reader;
         switch (CompressionCodec) {
         case NBackupRestoreTraits::ECompressionCodec::None:
             reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
@@ -798,7 +798,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 0 /* already combined */,
                 Settings.Shard
             );
-            Reader = MakeHolder<TEncryptionDeserializerController>(
+            Reader = std::make_unique<TEncryptionDeserializerController>(
                 *Settings.EncryptionSettings.Key,
                 expectedIV,
                 std::move(reader),
@@ -1479,7 +1479,7 @@ public:
         }
 
         if (DirectPartImportEnabled) {
-            DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
+            DirectImport = std::make_unique<TDirectImportWriter>(TableInfo, Scheme);
         }
 
         AllocateResource();
@@ -1556,7 +1556,7 @@ private:
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;
-    THolder<IReadController> Reader;
+    std::unique_ptr<IReadController> Reader;
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;
@@ -1566,7 +1566,7 @@ private:
     TCounters Counters;
 
     const bool DirectPartImportEnabled;
-    THolder<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
+    std::unique_ptr<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
     bool DownloadInterrupted = false; // current Process() pass ended (finish/error)
 
 }; // TS3Downloader

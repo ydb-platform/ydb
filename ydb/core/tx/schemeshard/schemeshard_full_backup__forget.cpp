@@ -49,7 +49,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvBackup::TEvForgetFullBackupResponse>(record.GetTxId());
+        Response = std::make_unique<TEvBackup::TEvForgetFullBackupResponse>(record.GetTxId());
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -107,7 +107,7 @@ public:
 private:
     TSideEffects SideEffects;
     TEvBackup::TEvForgetFullBackupRequest::TPtr Request;
-    THolder<TEvBackup::TEvForgetFullBackupResponse> Response;
+    std::unique_ptr<TEvBackup::TEvForgetFullBackupResponse> Response;
 };
 
 ITransaction* TSchemeShard::CreateTxForgetFullBackup(TEvBackup::TEvForgetFullBackupRequest::TPtr& ev) {

@@ -647,7 +647,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     void DumpMonPage(auto asyncCA, auto hook) {
         TMockHttpRequest request;
         {
-            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
+            auto evHttpInfo = std::make_unique<NActors::NMon::TEvHttpInfo>(request);
             ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
         }
         {
@@ -671,7 +671,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 dqOutputChannel->Finish();
             }
 
-            auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+            auto evInputChannelData = std::make_unique<TEvDqCompute::TEvChannelData>();
             evInputChannelData->Record.SetSeqNo(++*seqNo);
             auto& chData = *evInputChannelData->Record.MutableChannelData();
             auto channelId = dqOutputChannel->GetChannelId();
@@ -702,7 +702,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     void SendFinish(const auto& asyncCA, auto dqOutputChannel, auto* seqNo) {
-        auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+        auto evInputChannelData = std::make_unique<TEvDqCompute::TEvChannelData>();
         evInputChannelData->Record.SetSeqNo(++*seqNo);
         auto& chData = *evInputChannelData->Record.MutableChannelData();
         auto channelId = dqOutputChannel->GetChannelId();

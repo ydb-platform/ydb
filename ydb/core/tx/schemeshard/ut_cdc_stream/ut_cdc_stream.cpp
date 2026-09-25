@@ -1545,7 +1545,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> blockedBuildIndexRequest;
+        std::unique_ptr<IEventHandle> blockedBuildIndexRequest;
         auto blockBuildIndexRequest = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
             blockedBuildIndexRequest.Reset(ev.Release());
         });
@@ -1841,7 +1841,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        THolder<IEventHandle> blockedScanRequest;
+        std::unique_ptr<IEventHandle> blockedScanRequest;
         auto blockScanRequest = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>(
             [&](TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
                 blockedScanRequest.Reset(ev.Release());
@@ -1872,7 +1872,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         });
         blockScanRequest.Remove();
 
-        THolder<IEventHandle> blockedAlterStream;
+        std::unique_ptr<IEventHandle> blockedAlterStream;
         auto blockAlterStream = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
             [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
                 if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {

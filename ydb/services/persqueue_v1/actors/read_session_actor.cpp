@@ -742,7 +742,7 @@ void TReadSessionActor<Protocol>::NotifyChildren(const TPartitionActorInfo& part
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadSessionStatus::TPtr& ev, const TActorContext& ctx) {
-    auto result = MakeHolder<TEvPQProxy::TEvReadSessionStatusResponse>();
+    auto result = std::make_unique<TEvPQProxy::TEvReadSessionStatusResponse>();
 
     for (const auto& [_, info] : Partitions) {
         auto part = result->Record.AddPartition();
@@ -1213,7 +1213,7 @@ bool TReadSessionActor<Protocol>::SendLockPartitionToSelf(ui32 partitionId, TStr
         CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no partition " << partitionId << " in topic " << topicName, ctx);
         return false;
     }
-    THolder<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
+    std::unique_ptr<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
     res->Record.SetSession(Session);
     res->Record.SetPartition(partitionId);
     res->Record.SetTopic(topicName);
@@ -1232,7 +1232,7 @@ void TReadSessionActor<Protocol>::RegisterSession(const TString& topic, const TA
     LOG_I("Register session",
         {"topic", topic});
 
-    auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
+    auto request = std::make_unique<TEvPersQueue::TEvRegisterReadSession>();
 
     auto& req = request->Record;
     req.SetSession(Session);
@@ -1646,7 +1646,7 @@ void TReadSessionActor<Protocol>::InformBalancerAboutRelease(typename TPartition
     AFL_ENSURE(jt != Topics.end());
     const auto& topicInfo = jt->second;
 
-    auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+    auto request = std::make_unique<TEvPersQueue::TEvPartitionReleased>();
 
     auto& req = request->Record;
     req.SetSession(Session);
@@ -2275,7 +2275,7 @@ void TReadSessionActor<Protocol>::ProcessReads(const TActorContext& ctx) {
                 return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
             }
 
-            auto ev = MakeHolder<TEvPQProxy::TEvRead>(guid, ccount, csize, maxLag, readTimestampMs);
+            auto ev = std::make_unique<TEvPQProxy::TEvRead>(guid, ccount, csize, maxLag, readTimestampMs);
 
             LOG_D("Performing read request ms",
                 {"guid", ev->Guid},

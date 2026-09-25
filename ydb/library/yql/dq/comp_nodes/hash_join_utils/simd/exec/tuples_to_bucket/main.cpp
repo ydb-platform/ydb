@@ -132,8 +132,8 @@ struct TPerfomancer {
     };
 
     template<typename TTraits>
-    THolder<TWrapWorker> Create() const {
-        return MakeHolder<TWorker<TTraits>>();
+    std::unique_ptr<TWrapWorker> Create() const {
+        return std::make_unique<TWorker<TTraits>>();
     };
 };
 

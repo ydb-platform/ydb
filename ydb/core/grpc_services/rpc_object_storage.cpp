@@ -42,7 +42,7 @@ private:
     std::unique_ptr<IRequestNoOpCtx> GrpcRequest;
     const Ydb::ObjectStorage::ListingRequest* Request;
     std::optional<NKikimrTxDataShard::TObjectStorageListingContinuationToken> ContinuationToken;
-    THolder<const NACLib::TUserToken> UserToken;
+    std::unique_ptr<const NACLib::TUserToken> UserToken;
     ui32 MaxKeys;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
@@ -73,7 +73,7 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TObjectStorageListingRequestGrpc(std::unique_ptr<IRequestNoOpCtx> request, TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
+    TObjectStorageListingRequestGrpc(std::unique_ptr<IRequestNoOpCtx> request, TActorId schemeCache, std::unique_ptr<const NACLib::TUserToken>&& userToken)
         : GrpcRequest(std::move(request))
         , Request(TEvObjectStorageListingRequest::GetProtoRequest(GrpcRequest.get()))
         , UserToken(std::move(userToken))
@@ -551,7 +551,7 @@ private:
     void MakeShardRequest(ui32 idx, const NActors::TActorContext& ctx) {
         ui64 shardId = KeyRange->GetPartitions()[idx].ShardId;
 
-        THolder<TEvDataShard::TEvObjectStorageListingRequest> ev(new TEvDataShard::TEvObjectStorageListingRequest());
+        std::unique_ptr<TEvDataShard::TEvObjectStorageListingRequest> ev(new TEvDataShard::TEvObjectStorageListingRequest());
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
         ev->Record.SetSerializedKeyPrefix(PrefixColumns.GetBuffer());
         ev->Record.SetPathColumnPrefix(Request->Getpath_column_prefix());
@@ -853,7 +853,7 @@ private:
 
 IActor* CreateGrpcObjectStorageListingHandler(std::unique_ptr<IRequestNoOpCtx> request) {
     TActorId schemeCache = MakeSchemeCacheID();
-    auto token = THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetSerializedToken()) : nullptr);
+    auto token = std::unique_ptr<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetSerializedToken()) : nullptr);
     return new TObjectStorageListingRequestGrpc(std::move(request), schemeCache, std::move(token));
 }
 

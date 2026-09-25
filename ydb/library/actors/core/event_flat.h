@@ -1647,7 +1647,7 @@ namespace NActors {
 
         template <class TScheme = typename TVersions::TLatestScheme>
         static TEv* MakeEvent() {
-            THolder<TEv> holder = MakeHolder();
+            std::unique_ptr<TEv> holder = MakeHolder();
             holder->template InitializeAsVersion<TScheme>();
             return holder.Release();
         }
@@ -1656,7 +1656,7 @@ namespace NActors {
             Y_ENSURE(input, "Flat event buffer is null");
             if (!input->GetSize()) {
                 Y_ENSURE(HasEmptyVersion, "Flat event payload is empty");
-                THolder<TEv> holder = MakeHolder();
+                std::unique_ptr<TEv> holder = MakeHolder();
                 holder->InitializeAsNoData();
                 return holder.Release();
             }
@@ -1673,7 +1673,7 @@ namespace NActors {
                     ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
                     Y_ENSURE(size, "Flat event header is missing");
 
-                    THolder<TEv> holder = MakeHolder();
+                    std::unique_ptr<TEv> holder = MakeHolder();
                     holder->AssignHeaderStorage(iter, size);
                     holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
 
@@ -1687,7 +1687,7 @@ namespace NActors {
                     return holder.Release();
                 }
 
-                THolder<TEv> holder = MakeHolder();
+                std::unique_ptr<TEv> holder = MakeHolder();
                 const TRope& wire = input->GetRope();
                 const ui8 version = ReadWireVersion(wire);
                 holder->Version = version;
@@ -1922,8 +1922,8 @@ namespace NActors {
             return count * sizeof(TValue);
         }
 
-        static THolder<TEv> MakeHolder() {
-            return THolder<TEv>(new TEv());
+        static std::unique_ptr<TEv> MakeHolder() {
+            return std::unique_ptr<TEv>(new TEv());
         }
 
         static ui8 ValidateHeaderStorage(const char* header, size_t size) {

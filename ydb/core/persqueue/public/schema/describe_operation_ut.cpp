@@ -317,7 +317,7 @@ private:
     TTestDescribeStrategyOptions Options;
 };
 
-THolder<TEvDescribeOperationResponse> RunDescribeOperation(
+std::unique_ptr<TEvDescribeOperationResponse> RunDescribeOperation(
     NActors::TTestActorRuntime& runtime,
     TDescribeOperationSettings settings,
     std::unique_ptr<IDescribeStrategy> strategy,
@@ -330,7 +330,7 @@ THolder<TEvDescribeOperationResponse> RunDescribeOperation(
     runtime.DispatchEvents();
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, waitTimeout);
     UNIT_ASSERT(handle);
-    return THolder(handle->Release());
+    return std::unique_ptr<TEvDescribeOperationResponse>(handle->Release().Release());
 }
 
 TDescribeOperationSettings MakeSettings(
@@ -565,7 +565,7 @@ Y_UNIT_TEST(TimesOutWhenLocationStuck) {
 
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(handle);
-    auto response = THolder(handle->Release());
+    auto response = std::unique_ptr<TEvDescribeOperationResponse>(handle->Release().Release());
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::TIMEOUT);
     UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "Describe request timed out");
 }
@@ -590,7 +590,7 @@ Y_UNIT_TEST(PoisonRepliesCancelled) {
 
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(handle);
-    auto response = THolder(handle->Release());
+    auto response = std::unique_ptr<TEvDescribeOperationResponse>(handle->Release().Release());
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::CANCELLED);
 }
 

@@ -223,7 +223,7 @@ private:
         auto& infoMap = QuotaInfoMap[subjectType];
 
         if (subjectId.empty()) { // Just reply with defaults
-            auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
+            auto response = std::make_unique<TEvQuotaService::TQuotaGetResponse>();
             response->SubjectType = subjectType;
             for (auto& it : infoMap) {
                 response->Quotas.emplace(it.first, TQuotaUsage(it.second.DefaultLimit));
@@ -348,7 +348,7 @@ private:
         }
 
         if (!pended) {
-            auto response = MakeHolder<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
+            auto response = std::make_unique<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
             for (auto it : cache.UsageMap) {
                 response->Limits.emplace(it.first, it.second.Usage.Limit.Value);
             }
@@ -386,7 +386,7 @@ private:
 
         if (cache.PendingLimit.size() == 0) {
             if (cache.PendingLimitRequest != NActors::TActorId{}) {
-                auto response = MakeHolder<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
+                auto response = std::make_unique<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
                 for (auto it : cache.UsageMap) {
                     response->Limits.emplace(it.first, it.second.Usage.Limit.Value);
                 }
@@ -486,7 +486,7 @@ private:
     }
 
     void SendQuota(NActors::TActorId receivedId, ui64 cookie, const TString& subjectType, const TString& subjectId, TQuotaCache& cache) {
-        auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
+        auto response = std::make_unique<TEvQuotaService::TQuotaGetResponse>();
         response->SubjectType = subjectType;
         response->SubjectId = subjectId;
         for (auto it : cache.UsageMap) {
@@ -831,7 +831,7 @@ private:
             TString metricName = params.Get("metric_name");
             TString metricValue = params.Get("metric_value");
 
-            auto request = MakeHolder<TEvQuotaService::TQuotaSetRequest>(subjectType, subjectId);
+            auto request = std::make_unique<TEvQuotaService::TQuotaSetRequest>(subjectType, subjectId);
             request->Limits.emplace(metricName, FromStringWithDefault(metricValue, 0));
 
             Send(SelfId(), request.Release());
@@ -845,7 +845,7 @@ private:
                 subjectType = "cloud";
             }
 
-            auto request = MakeHolder<TEvQuotaService::TQuotaGetRequest>(subjectType, subjectId);
+            auto request = std::make_unique<TEvQuotaService::TQuotaGetRequest>(subjectType, subjectId);
 
             Send(SelfId(), request.Release());
 

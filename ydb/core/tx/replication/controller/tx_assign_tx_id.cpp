@@ -11,7 +11,7 @@ class TController::TTxAssignTxId: public TTxBase {
     static constexpr ui64 MaxOpenTxIds = 5;
     static constexpr ui64 MinAllocatedTxIds = 3;
 
-    THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
+    THashMap<ui32, std::unique_ptr<TEvService::TEvTxIdResult>> Result;
     bool TxIdsExhausted = false;
 
     struct TTxId {

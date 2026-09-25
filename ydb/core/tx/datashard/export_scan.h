@@ -99,7 +99,7 @@ namespace NExportScan {
 
 class IBuffer {
 public:
-    using TPtr = THolder<IBuffer>;
+    using TPtr = std::unique_ptr<IBuffer>;
 
     struct TStats {
         ui64 Rows = 0;

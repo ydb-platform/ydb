@@ -19,7 +19,7 @@ inline NActors::TActorId MakeAuditServiceID() {
     return NActors::TActorId(0, TStringBuf("YDB_AUDIT"));
 }
 
-using TAuditLogBackends = TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>>;
+using TAuditLogBackends = TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<std::unique_ptr<TLogBackend>>>;
 
 std::unique_ptr<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends);
 

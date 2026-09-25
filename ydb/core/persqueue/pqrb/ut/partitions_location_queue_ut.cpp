@@ -11,7 +11,7 @@ Y_UNIT_TEST(AnswerAfterPipesBecomeReady) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
 
-    TVector<THolder<IEventHandle>> delayedConnects;
+    TVector<std::unique_ptr<IEventHandle>> delayedConnects;
     tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (auto* msg = ev->CastAsLocal<TEvTabletPipe::TEvClientConnected>()) {
             if (msg->TabletId == tc.TabletId && msg->Status == NKikimrProto::OK) {
@@ -159,7 +159,7 @@ Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
 
     const ui64 deadTabletId = MakeTabletID(false, 999);
 
-    TVector<THolder<IEventHandle>> delayedConnects;
+    TVector<std::unique_ptr<IEventHandle>> delayedConnects;
     tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (auto* msg = ev->CastAsLocal<TEvTabletPipe::TEvClientConnected>()) {
             if (msg->TabletId == tc.TabletId && msg->Status == NKikimrProto::OK) {

@@ -38,13 +38,13 @@ class TAlterBlockStoreVolume: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<NBSVState::TConfigureParts>(OperationId);
+            return std::make_unique<NBSVState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<NBSVState::TPropose>(OperationId);
+            return std::make_unique<NBSVState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -390,7 +390,7 @@ public:
         return true;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterBlockStoreVolume();
@@ -405,7 +405,7 @@ public:
             {"pathId", pathId},
         );
 
-        auto result = MakeHolder<TProposeResponse>(
+        auto result = std::make_unique<TProposeResponse>(
             NKikimrScheme::StatusAccepted,
             ui64(OperationId.GetTxId()),
             ui64(ssId)

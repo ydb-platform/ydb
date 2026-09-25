@@ -20,7 +20,7 @@ struct TTestSetup {
     auto* GetRuntime() {
         return Context.Runtime.Get();
     }
-    THolder<TEvPQ::TEvGetFullDirectReadData> SendRequest(TEvPQ::TEvGetFullDirectReadData* request, bool status = true) {
+    std::unique_ptr<TEvPQ::TEvGetFullDirectReadData> SendRequest(TEvPQ::TEvGetFullDirectReadData* request, bool status = true) {
         GetRuntime()->Send(ProxyId, Context.Edge, request);
         auto resp = GetRuntime()->GrabEdgeEvent<TEvPQ::TEvGetFullDirectReadData>();
         UNIT_ASSERT(resp);

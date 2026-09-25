@@ -43,7 +43,7 @@ protected:
         )");
     }
 
-    TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
+    TNavigate::TEntry TestNavigateImpl(std::unique_ptr<TNavigate> request, TNavigate::EStatus expectedStatus,
         const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired, ui64 cookie = 0);
 
     TNavigate::TEntry TestNavigate(const TString& path, TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok,
@@ -69,7 +69,7 @@ protected:
 
 }; // TCacheTestBasic
 
-TNavigate::TEntry TCacheTestBase::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
+TNavigate::TEntry TCacheTestBase::TestNavigateImpl(std::unique_ptr<TNavigate> request, TNavigate::EStatus expectedStatus,
     const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired, ui64 cookie)
 {
     auto& entry = request->ResultSet.back();
@@ -97,7 +97,7 @@ TNavigate::TEntry TCacheTestBase::TestNavigateImpl(THolder<TNavigate> request, T
 TNavigate::TEntry TCacheTestBase::TestNavigate(const TString& path, TNavigate::EStatus expectedStatus,
     const TString& sid, TNavigate::EOp op, bool showPrivatePath,  bool redirectRequired, bool syncVersion)
 {
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     request->ResultSet.push_back({});
     auto& entry = request->ResultSet.back();
 
@@ -111,7 +111,7 @@ TNavigate::TEntry TCacheTestBase::TestNavigate(const TString& path, TNavigate::E
 TNavigate::TEntry TCacheTestBase::TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
     const TString& expectedPath, const TString& sid, TNavigate::EOp op, bool showPrivatePath)
 {
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     request->ResultSet.push_back({});
     auto& entry = request->ResultSet.back();
 
@@ -124,9 +124,9 @@ TNavigate::TEntry TCacheTestBase::TestNavigateByTableId(const TTableId& tableId,
 }
 
 TResolve::TEntry TCacheTestBase::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) {
-    auto request = MakeHolder<TResolve>();
+    auto request = std::make_unique<TResolve>();
 
-    auto keyDesc = MakeHolder<TKeyDesc>(
+    auto keyDesc = std::make_unique<TKeyDesc>(
         tableId,
         TTableRange({}),
         TKeyDesc::ERowOperation::Unknown,
@@ -354,7 +354,7 @@ void TCacheTest::Recreate() {
 }
 
 void TCacheTest::RacyCreateAndSync() {
-    THolder<IEventHandle> delayedSyncRequest;
+    std::unique_ptr<IEventHandle> delayedSyncRequest;
     auto prevObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
         case TSchemeBoardEvents::EvSyncRequest:
@@ -370,7 +370,7 @@ void TCacheTest::RacyCreateAndSync() {
     entry.SyncVersion = true;
     entry.Operation = TNavigate::OpPath;
 
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     request->ResultSet.push_back(entry);
 
     const TActorId edge = Context->AllocateEdgeActor();
@@ -408,7 +408,7 @@ void TCacheTest::RacyRecreateAndSync() {
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, RootSchemeshardTabletId));
     TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true, true);
 
-    THolder<IEventHandle> delayedSyncRequest;
+    std::unique_ptr<IEventHandle> delayedSyncRequest;
     auto prevObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
         case TSchemeBoardEvents::EvSyncRequest:
@@ -424,7 +424,7 @@ void TCacheTest::RacyRecreateAndSync() {
     entry.SyncVersion = true;
     entry.Operation = TNavigate::OpPath;
 
-    auto request = MakeHolder<TNavigate>();
+    auto request = std::make_unique<TNavigate>();
     request->ResultSet.push_back(entry);
 
     const TActorId edge = Context->AllocateEdgeActor();
@@ -1020,7 +1020,7 @@ void TCacheTest::PathBelongsToDomain() {
     for (const auto requestType : requestTypes) {
         // Domain - Domain root path - ok
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1039,7 +1039,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Domain - Regular path within domain - ok
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1058,7 +1058,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Domain - Subdomain1 root path - ok
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1077,7 +1077,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Domain - Regular path within subdomain1 - error
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1092,7 +1092,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Subdomain1 - Domain root path - error
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root/SubDomain1";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1107,7 +1107,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Subdomain1 - Regular path within domain - error
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root/SubDomain1";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1122,7 +1122,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Subdomain1 - Subdomain1 root path - ok
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root/SubDomain1";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1137,7 +1137,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Subdomain1 - Regular path within subdomain1 - ok
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root/SubDomain1";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1156,7 +1156,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Subdomain1 - Subdomain2 root path - error
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root/SubDomain1";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1171,7 +1171,7 @@ void TCacheTest::PathBelongsToDomain() {
 
         // Subdomain1 - Regular path within subdomain2 - error
         {
-            auto request = MakeHolder<TNavigate>();
+            auto request = std::make_unique<TNavigate>();
             request->DatabaseName = "/Root/SubDomain1";
             auto& entry = request->ResultSet.emplace_back();
             if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
@@ -1195,7 +1195,7 @@ void TCacheTest::CookiesArePreserved() {
     ui64 cookie = 1;
     // first request will run db resolver
     for (int i = 0; i < 2; ++i) {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = "/Root/SubDomain";
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath("/Root/SubDomain/DirA");

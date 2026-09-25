@@ -80,8 +80,8 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
 }
 
 
-THolder<IWorkloadQueryGenerator> TClickbenchWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TClickbenchWorkloadGenerator>(*this);
+std::unique_ptr<IWorkloadQueryGenerator> TClickbenchWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TClickbenchWorkloadGenerator>(*this);
 }
 
 TWorkloadDataInitializer::TList TClickbenchWorkloadParams::CreateDataInitializers() const {

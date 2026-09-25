@@ -158,8 +158,8 @@ private:
 
 }
 
-THolder<IDqIntegration> CreateYdbDqIntegration(TYdbState::TPtr state) {
-    return MakeHolder<TYdbDqIntegration>(state);
+std::unique_ptr<IDqIntegration> CreateYdbDqIntegration(TYdbState::TPtr state) {
+    return std::make_unique<TYdbDqIntegration>(state);
 }
 
 }

@@ -283,7 +283,7 @@ public:
     void Boot(TEvTablet::TEvBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
     void Restored(TEvTablet::TEvRestored::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
     void FollowerBoot(TEvTablet::TEvFBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
-    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody>) override { Y_TABLET_ERROR("Not supported"); }
+    void FollowerUpdate(std::unique_ptr<TEvTablet::TFUpdateBody>) override { Y_TABLET_ERROR("Not supported"); }
     void FollowerAuxUpdate(TString) override { Y_TABLET_ERROR("Not supported"); }
     void FollowerAttached(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void FollowerDetached(ui32) override { Y_TABLET_ERROR("Not supported"); }
@@ -307,7 +307,7 @@ public:
     ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
-    THolder<TDirectPartWriter> BeginWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    std::unique_ptr<TDirectPartWriter> BeginWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void ReleaseWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
@@ -326,7 +326,7 @@ public:
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
     void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
     void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
-    void AttachPart(ui32, THolder<TDirectPartResult>) override { Y_TABLET_ERROR("Not supported"); }
+    void AttachPart(ui32, std::unique_ptr<TDirectPartResult>) override { Y_TABLET_ERROR("Not supported"); }
     void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
@@ -1149,7 +1149,7 @@ public:
                     YDB_LOG_DEBUG("Processing snapshot file",
                         {"path", CurrentFilePath});
                     try {
-                        CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
+                        CurrentFileInput = std::make_unique<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
                         return SendResultAndDie(false, TStringBuilder() << "Failed to open snapshot file " << CurrentFilePath << ": " << e.what());
                     }
@@ -1160,7 +1160,7 @@ public:
 
                     YDB_LOG_DEBUG("Processing changelog");
                     try {
-                        CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
+                        CurrentFileInput = std::make_unique<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
                         return SendResultAndDie(false, TStringBuilder() << "Failed to open changelog file " << CurrentFilePath << ": " << e.what());
                     }
@@ -1502,7 +1502,7 @@ private:
 
     TFsPath CurrentFilePath;
     TString CurrentTableName;
-    THolder<TFileInput> CurrentFileInput;
+    std::unique_ptr<TFileInput> CurrentFileInput;
     bool ChangelogProcessed = false;
 }; // TBackupReader
 

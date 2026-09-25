@@ -114,7 +114,7 @@ namespace NKafka {
             TString GetMetadataDatabasePath() const;
             TString GetYqlWithTablesNames();
             NYdb::TParams BuildSelectParams();
-            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
+            std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
             void HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);

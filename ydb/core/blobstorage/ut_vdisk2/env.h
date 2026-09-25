@@ -58,7 +58,7 @@ namespace NKikimr {
             void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
                 EdgeId = ev->Sender;
                 for (auto& id : Subscribers) {
-                    auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                    auto update = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
                     update->Record.CopyFrom(ev->Get()->Record);
                     Send(id, update.Release());
                 }
@@ -69,7 +69,7 @@ namespace NKikimr {
             }
 
             void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr& ev) {
-                Send(ev->Sender, MakeHolder<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
+                Send(ev->Sender, std::make_unique<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
             }
         };
 
@@ -180,7 +180,7 @@ namespace NKikimr {
 
         void ChangeMinHugeBlobSize(ui32 minHugeBlobSize) {
             const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
-            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
             auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
             perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
             perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);

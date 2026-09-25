@@ -23,7 +23,7 @@ public:
         return false;
     }
 
-    TListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListQueues, std::move(cb))
     {
     }
@@ -107,7 +107,7 @@ private:
     }
 };
 
-IActor* CreateListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TListQueuesActor(sourceSqsRequest, std::move(cb));
 }
 

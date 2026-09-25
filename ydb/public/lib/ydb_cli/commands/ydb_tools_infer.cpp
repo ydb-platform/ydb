@@ -188,7 +188,7 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
             }
             file = TFile(FilePaths[0], RdOnly);
         }
-        auto input = MakeHolder<TFileInput>(file);
+        auto input = std::make_unique<TFileInput>(file);
         NCsvFormat::TLinesSplitter csvSplitter(*input);
         TString firstLine = csvSplitter.ConsumeLine();
 

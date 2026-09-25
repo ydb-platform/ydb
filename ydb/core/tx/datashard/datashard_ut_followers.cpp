@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
 
-        TVector<THolder<IEventHandle>> blockedReads;
+        TVector<std::unique_ptr<IEventHandle>> blockedReads;
         auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
             for (auto pageId : msg->Pages) {
@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
 
-        TVector<THolder<IEventHandle>> blockedReads;
+        TVector<std::unique_ptr<IEventHandle>> blockedReads;
         auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
             for (auto pageId : msg->Pages) {

@@ -111,8 +111,8 @@ private:
 };
 }
 
-THolder<IGraphTransformer> CreateYdbIODiscoveryTransformer(TYdbState::TPtr state) {
-    return THolder(new TYdbIODiscoveryTransformer(std::move(state)));
+std::unique_ptr<IGraphTransformer> CreateYdbIODiscoveryTransformer(TYdbState::TPtr state) {
+    return std::unique_ptr<TYdbIODiscoveryTransformer>(new TYdbIODiscoveryTransformer(std::move(state)));
 }
 
 }

@@ -270,7 +270,7 @@ void TExecutor::Broken(EBrokenReason reason) {
 
 void TExecutor::RecreatePrivateCache()
 {
-    PrivatePageCache = MakeHolder<TPrivatePageCache>();
+    PrivatePageCache = std::make_unique<TPrivatePageCache>();
 
     Stats->PacksMetaBytes = 0;
 
@@ -463,7 +463,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Y_ENSURE(!CompactionLogic);
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
+    ResourceMetrics = std::make_unique<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
@@ -509,12 +509,12 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
+    CompactionLogic = std::unique_ptr<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
-    VacuumLogic = MakeHolder<TVacuumLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
+    VacuumLogic = std::make_unique<TVacuumLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
+    ResourceMetrics = std::make_unique<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
@@ -879,8 +879,8 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     }
 
     if (!Counters) {
-        Counters = MakeHolder<TExecutorCounters>();
-        CountersBaseline = MakeHolder<TExecutorCounters>();
+        Counters = std::make_unique<TExecutorCounters>();
+        CountersBaseline = std::make_unique<TExecutorCounters>();
         Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
     }
 
@@ -918,8 +918,8 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
         || CurrentStateFunc() == &TThis::StateFollower);
 
     if (!Counters) {
-        Counters = MakeHolder<TExecutorCounters>();
-        CountersBaseline = MakeHolder<TExecutorCounters>();
+        Counters = std::make_unique<TExecutorCounters>();
+        CountersBaseline = std::make_unique<TExecutorCounters>();
         Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
     }
 
@@ -970,7 +970,7 @@ void TExecutor::DetachTablet() {
     return PassAway();
 }
 
-void TExecutor::FollowerUpdate(THolder<TEvTablet::TFUpdateBody> upd) {
+void TExecutor::FollowerUpdate(std::unique_ptr<TEvTablet::TFUpdateBody> upd) {
     if (BootLogic) {
         Y_ENSURE(CurrentStateFunc() == &TThis::StateFollowerBoot);
         PostponedFollowerUpdates.emplace_back(std::move(upd));
@@ -1062,7 +1062,7 @@ void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
 
 void TExecutor::ApplyFollowerPostponedUpdates() {
     while (PostponedFollowerUpdates && !PendingPartSwitches) {
-        THolder<TEvTablet::TFUpdateBody> upd = std::move(PostponedFollowerUpdates.front());
+        std::unique_ptr<TEvTablet::TFUpdateBody> upd = std::move(PostponedFollowerUpdates.front());
         PostponedFollowerUpdates.pop_front();
 
         if (upd->Step) {
@@ -1073,7 +1073,7 @@ void TExecutor::ApplyFollowerPostponedUpdates() {
     }
 }
 
-void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
+void TExecutor::ApplyFollowerUpdate(std::unique_ptr<TEvTablet::TFUpdateBody> update) {
     if (update->Step <= Step0 || CommitManager) {
         Y_TABLET_ERROR(
             NFmt::Do(*this) << " got unexpected follower update to Step "
@@ -3468,7 +3468,7 @@ void TExecutor::StartSeat(ui64 task, TResource *cookie_)
     EnqueueActivation(seat, CanExecuteTransaction());
 }
 
-THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::TCompactionParams *params, TRowVersion snapshot)
+std::unique_ptr<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::TCompactionParams *params, TRowVersion snapshot)
 {
     LogicRedo->FlushBatchedLog();
 
@@ -3514,7 +3514,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         MakeLogSnapshot();
     }
 
-    return THolder<TScanSnapshot>(new TScanSnapshot{table, std::move(barrier), subset, snapshot});
+    return std::unique_ptr<TScanSnapshot>(new TScanSnapshot{table, std::move(barrier), subset, snapshot});
 }
 
 void TExecutor::StartScan(ui64 serial, ui32 table)
@@ -3907,7 +3907,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     // We have applied all effects, time to notify compaction of completion
 
-    auto compactionResult = MakeHolder<NTable::TCompactionResult>(
+    auto compactionResult = std::make_unique<NTable::TCompactionResult>(
         results ? results.front().Part.Epoch() : NTable::TEpoch::Max(),
         results.size());
     for (const auto& result : results) {
@@ -4331,7 +4331,7 @@ void TExecutor::DropScanSnapshot(ui64 snap)
 
 ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options)
 {
-    THolder<TScanSnapshot> snapshot;
+    std::unique_ptr<TScanSnapshot> snapshot;
 
     if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
         auto snapshotId = byId->SnapshotId;
@@ -4796,7 +4796,7 @@ const NTable::TScheme& TExecutor::Scheme() const {
 
 void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) {
     AppCounters = appCounters;
-    AppCountersBaseline = MakeHolder<TTabletCountersBase>();
+    AppCountersBaseline = std::make_unique<TTabletCountersBase>();
     AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
     AppTxCounters = dynamic_cast<TTabletCountersWithTxTypes*>(AppCounters.Get());
@@ -5018,7 +5018,7 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     return false;
 }
 
-THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
+std::unique_ptr<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
 {
     using NTable::NPage::ECache;
 
@@ -5106,7 +5106,7 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         logl << NFmt::Do(*this) << " begin direct part write for table " << tableId << " at step " << step;
     }
 
-    return MakeHolder<TDirectPartWriter>(mask, std::move(cfg), std::move(rowScheme));
+    return std::make_unique<TDirectPartWriter>(mask, std::move(cfg), std::move(rowScheme));
 }
 
 void TExecutor::ReleaseWritePart(ui32 step)
@@ -5125,7 +5125,7 @@ void TExecutor::ReleaseWritePart(ui32 step)
     CheckCollectionBarrier(barrier);
 }
 
-ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
+ui64 TExecutor::BeginCompaction(std::unique_ptr<NTable::TCompactionParams> params)
 {
     if (auto logl = Logger->Log(ELnLev::Info))
         logl << NFmt::Do(*this) << " starting compaction";

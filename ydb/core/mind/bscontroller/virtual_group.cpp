@@ -605,7 +605,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             req->DatabaseName = domainPath;
 
             auto& item = req->ResultSet.emplace_back();

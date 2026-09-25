@@ -215,9 +215,9 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TDDiskClient : public TPerfTest {
-    THolder<TActorSystemSetup> Setup;
+    std::unique_ptr<TActorSystemSetup> Setup;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<TActorSystem> ActorSystem;
+    std::unique_ptr<TActorSystem> ActorSystem;
     TAppData AppData;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     yexception LastException;

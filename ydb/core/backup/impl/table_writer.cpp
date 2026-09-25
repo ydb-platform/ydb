@@ -60,8 +60,8 @@ public:
     {
     }
 
-    THolder<IChangeRecordSerializer> Clone() const override {
-        return MakeHolder<TSerializer>(Type);
+    std::unique_ptr<IChangeRecordSerializer> Clone() const override {
+        return std::make_unique<TSerializer>(Type);
     }
 
     void Serialize(TChangeRecord::TPtr in, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& out) override {
@@ -90,7 +90,7 @@ IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePath
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(type), createResolverFn);
+    return CreateLocalTableWriter(database, tablePathId, std::make_unique<TParser>(), std::make_unique<TSerializer>(type), createResolverFn);
 }
 
 }

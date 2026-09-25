@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
         metrics->SetPeerInfo("peer", "1", "peer");
 
-        auto destroyCallback = [](THolder<IEventBase>) {};
+        auto destroyCallback = [](std::unique_ptr<IEventBase>) {};
         TEventHolderPool pool(common, destroyCallback);
 
         TSessionParams params;
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         UNIT_ASSERT(info.Sections[2].IsInline);
         UNIT_ASSERT_VALUES_EQUAL(info.Sections[2].Size, 0u);
 
-        auto handle = MakeHolder<IEventHandle>(TActorId(), TActorId(), event);
+        auto handle = std::make_unique<IEventHandle>(TActorId(), TActorId(), event);
         channel.Push(*handle, pool, TInstant::Zero());
 
         NInterconnect::TOutgoingStream main;
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
         metrics->SetPeerInfo("peer", "1", "peer");
 
-        auto destroyCallback = [](THolder<IEventBase>) {};
+        auto destroyCallback = [](std::unique_ptr<IEventBase>) {};
         TEventHolderPool pool(common, destroyCallback);
 
         TSessionParams params;
@@ -120,8 +120,8 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         second->Record.SetBlobID(42);
         UNIT_ASSERT_VALUES_UNEQUAL(second->Record.ByteSize(), 0);
 
-        auto firstHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), first);
-        auto secondHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), second);
+        auto firstHandle = std::make_unique<IEventHandle>(TActorId(), TActorId(), first);
+        auto secondHandle = std::make_unique<IEventHandle>(TActorId(), TActorId(), second);
         channel.Push(*firstHandle, pool, TInstant::Zero());
         channel.Push(*secondHandle, pool, TInstant::Zero());
 

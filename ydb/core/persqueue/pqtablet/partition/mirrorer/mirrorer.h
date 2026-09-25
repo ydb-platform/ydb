@@ -161,7 +161,7 @@ private:
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;
     NYdb::NTopic::TPartitionSession::TPtr PartitionStream;
-    THolder<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent> StreamStatus;
+    std::unique_ptr<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent> StreamStatus;
     TInstant LastInitStageTimestamp;
 
     TDuration ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
@@ -177,7 +177,7 @@ private:
     TMultiCounter MirrorerErrors;
     TMultiCounter InitTimeoutCounter;
     TMultiCounter WriteTimeoutCounter;
-    THolder<TPercentileCounter> MirrorerTimeLags;
+    std::unique_ptr<TPercentileCounter> MirrorerTimeLags;
 
     TMap<ui64, std::pair<TInstant, NThreading::TFuture<void>>> ReadFeatures;
     ui64 ReadFeatureId = 0;

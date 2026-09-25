@@ -617,7 +617,7 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         );
     }
 
-    auto resp = MakeHolder<TEvExternalIdpProvider::TEvAuthenticateResponse>(msg->Key);
+    auto resp = std::make_unique<TEvExternalIdpProvider::TEvAuthenticateResponse>(msg->Key);
     resp->Status = TEvExternalIdpProvider::EStatus::SUCCESS;
 
     const TString subject = std::invoke([&]() {
@@ -979,7 +979,7 @@ void TExternalIdpProvider::ReplyError(
         {"message", message}
     );
 
-    auto resp = MakeHolder<TEvExternalIdpProvider::TEvAuthenticateResponse>(key);
+    auto resp = std::make_unique<TEvExternalIdpProvider::TEvAuthenticateResponse>(key);
     resp->Status = status;
     resp->Error.Message = message;
     resp->Error.Retryable = retryable;

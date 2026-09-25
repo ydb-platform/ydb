@@ -311,7 +311,7 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
 
 void TTargetWithStream::SetLocation() {
     if (!Location) {
-        Location = MakeHolder<NKikimrReplication::TReplicationLocationConfig>();
+        Location = std::make_unique<NKikimrReplication::TReplicationLocationConfig>();
         Location->CopyFrom(GetReplication()->GetLocation());
     }
 }

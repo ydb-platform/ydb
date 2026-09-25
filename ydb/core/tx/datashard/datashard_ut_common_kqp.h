@@ -103,7 +103,7 @@ namespace NKqpHelpers {
     inline void SendRequest(
             TTestActorRuntime& runtime,
             TActorId sender,
-            THolder<NKqp::TEvKqp::TEvQueryRequest> request)
+            std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request)
     {
         runtime.Send(
             new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()),
@@ -113,7 +113,7 @@ namespace NKqpHelpers {
     inline NKqp::TEvKqp::TEvQueryResponse::TPtr ExecRequest(
             TTestActorRuntime& runtime,
             TActorId sender,
-            THolder<NKqp::TEvKqp::TEvQueryRequest> request)
+            std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request)
     {
         SendRequest(runtime, sender, std::move(request));
         return runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
@@ -126,13 +126,13 @@ namespace NKqpHelpers {
             std::move(request), "", /* token */ "", runtime.GetActorSystem(0));
     }
 
-    inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
+    inline std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
         const TActorId sender,
         const TString& sql,
         const bool collectStats = false)
     {
         Y_UNUSED(collectStats);
-        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
         request->Record.MutableRequest()->SetKeepSession(false);

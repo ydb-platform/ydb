@@ -29,7 +29,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
 
         const ui32 group = ChannelInfo->History[CurrentHistoryIndex].GroupID;
         const ui32 minGeneration = ChannelInfo->History[CurrentHistoryIndex].FromGeneration;
-        auto request = MakeHolder<TEvBlobStorage::TEvDiscover>(Info->TabletID, minGeneration, ReadBody, true, TInstant::Max(), BlockedGeneration, Leader);
+        auto request = std::make_unique<TEvBlobStorage::TEvDiscover>(Info->TabletID, minGeneration, ReadBody, true, TInstant::Max(), BlockedGeneration, Leader);
         // With ReadBody set this discover reads the entry back with MustRestoreFirst, which makes
         // BlobStorage rewrite the parts it is missing; the tablet cannot boot if that write is
         // rejected, so it is admitted as whatever the tablet itself writes.

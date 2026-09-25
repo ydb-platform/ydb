@@ -34,7 +34,7 @@ IGraphTransformer::TStatus AnnotateDqTransform(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx);
 
-THolder<TVisitorTransformerBase> CreateDqTypeAnnotationTransformer();
+std::unique_ptr<TVisitorTransformerBase> CreateDqTypeAnnotationTransformer();
 
 bool IsTypeSupportedInMergeCn(EDataSlot type);
 bool IsTypeSupportedInMergeCn(const TDataExprType* dataType);

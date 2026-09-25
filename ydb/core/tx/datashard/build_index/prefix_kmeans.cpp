@@ -403,7 +403,7 @@ protected:
                 LastAckedKey = PendingCheckpointKey;
                 PendingCheckpointKey = {};
 
-                auto progress = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
+                auto progress = std::make_unique<TEvDataShard::TEvPrefixKMeansResponse>();
                 auto& rec = progress->Record;
                 rec.SetId(BuildId);
                 rec.SetTabletId(TabletId);
@@ -696,7 +696,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvPrefixKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting prefix K-means scan",

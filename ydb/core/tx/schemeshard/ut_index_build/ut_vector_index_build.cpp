@@ -35,23 +35,23 @@ namespace {
 
     auto MakeCpuMeteringDeterministic(TTestBasicRuntime& runtime) {
         return std::make_tuple(
-            MakeHolder<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
                 return MakeCpuMeteringDeterministic(ev);
             }),
-            MakeHolder<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
                 // special internal Scheme Shard event, no cpu, but AddRead/AddUpload helpers will fix it
                 auto stats = ev->Get()->Record.MutableMeteringStats();
                 UNIT_ASSERT(!stats->HasCpuTimeUs() || stats->GetCpuTimeUs() == (stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
                 stats->SetCpuTimeUs((stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
                 return false;
             }),
-            MakeHolder<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
                 return MakeCpuMeteringDeterministic(ev);
             }),
-            MakeHolder<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
                 return MakeCpuMeteringDeterministic(ev);
             }),
-            MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
                 return MakeCpuMeteringDeterministic(ev);
             })
         );
@@ -59,23 +59,23 @@ namespace {
 
     auto ZeroMeteringCpuTimeUs(TTestBasicRuntime& runtime) {
         return std::make_tuple(
-            MakeHolder<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
                 ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
                 return false;
             }),
-            MakeHolder<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
                 ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
                 return false;
             }),
-            MakeHolder<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
                 ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
                 return false;
             }),
-            MakeHolder<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
                 ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
                 return false;
             }),
-            MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+            std::make_unique<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
                 ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
                 return false;
             })
@@ -2964,7 +2964,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         // It was crashing index build because of incorrect types
         auto ackKey = TSerializedCellVec::Serialize({TCell::Make(ui64(0)), TCell::Make(ui32(0))});
         TBlockEvents<TEvTxUserProxy::TEvUploadRowsResponse> uploadBlocker(runtime, [&](const auto&) {
-            auto progress = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+            auto progress = std::make_unique<TEvDataShard::TEvLocalKMeansResponse>();
             auto& rec = progress->Record;
             rec.SetId(buildIndexTx);
             rec.SetTabletId(req.GetTabletId());

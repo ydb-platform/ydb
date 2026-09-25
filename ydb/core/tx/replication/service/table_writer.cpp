@@ -71,8 +71,8 @@ public:
     {
     }
 
-    THolder<IChangeRecordSerializer> Clone() const override {
-        return MakeHolder<TSerializer>();
+    std::unique_ptr<IChangeRecordSerializer> Clone() const override {
+        return std::make_unique<TSerializer>();
     }
 
     void Serialize(TChangeRecord::TPtr in, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& out) override {
@@ -101,7 +101,7 @@ IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePath
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode);
+    return CreateLocalTableWriter(database, tablePathId, std::make_unique<TParser>(), std::make_unique<TSerializer>(), createResolverFn, mode);
 }
 
 } // namespace NKikimr::NReplication::NService

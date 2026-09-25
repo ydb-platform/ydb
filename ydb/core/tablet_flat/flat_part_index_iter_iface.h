@@ -29,6 +29,6 @@ namespace NKikimr::NTable {
         virtual ~IPartGroupIndexIter() = default;
     };
 
-    THolder<IPartGroupIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId);
+    std::unique_ptr<IPartGroupIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId);
     
 }

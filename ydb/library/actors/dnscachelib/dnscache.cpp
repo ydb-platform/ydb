@@ -99,7 +99,7 @@ NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
             sin6.sin6_addr = addr.AddrsV6.front();
             sin6.sin6_port = HostToInet(port);
 
-            return MakeHolder<NAddr::TIPv6Addr>(sin6);
+            return std::make_unique<NAddr::TIPv6Addr>(sin6);
         }
     }
 
@@ -108,7 +108,7 @@ NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
 
         TGuard<TMutex> lock(CacheMtx);
         if (!addr.AddrsV4.empty()) {
-            return MakeHolder<NAddr::TIPv4Addr>(TIpAddress(addr.AddrsV4.front(), port));
+            return std::make_unique<NAddr::TIPv4Addr>(TIpAddress(addr.AddrsV4.front(), port));
         }
     }
 
@@ -124,7 +124,7 @@ void TDnsCache::GetAllAddresses(
 
         TGuard<TMutex> lock(CacheMtx);
         for (size_t i = 0; i < addr4.AddrsV4.size(); i++) {
-            addrs.push_back(MakeHolder<NAddr::TIPv4Addr>(TIpAddress(addr4.AddrsV4[i], 0)));
+            addrs.push_back(std::make_unique<NAddr::TIPv4Addr>(TIpAddress(addr4.AddrsV4[i], 0)));
         }
     }
 
@@ -139,7 +139,7 @@ void TDnsCache::GetAllAddresses(
         for (size_t i = 0; i < addr6.AddrsV6.size(); i++) {
             sin6.sin6_addr = addr6.AddrsV6[i];
 
-            addrs.push_back(MakeHolder<NAddr::TIPv6Addr>(sin6));
+            addrs.push_back(std::make_unique<NAddr::TIPv6Addr>(sin6));
         }
     }
 }
@@ -359,7 +359,7 @@ void TDnsCache::WaitTask(TAtomic& flag) {
 }
 
 void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
-    THolder<TGHBNContext> ctx(static_cast<TGHBNContext*>(arg));
+    std::unique_ptr<TGHBNContext> ctx(static_cast<TGHBNContext*>(arg));
     TGuard<TMutex> lock(ctx->Owner->CacheMtx);
     THostCache::iterator p = ctx->Owner->HostCache.find(ctx->Hostname);
 
@@ -399,7 +399,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
 }
 
 void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
-    THolder<TGHBAContext> ctx(static_cast<TGHBAContext*>(arg));
+    std::unique_ptr<TGHBAContext> ctx(static_cast<TGHBAContext*>(arg));
     TGuard<TMutex> lock(ctx->Owner->CacheMtx);
     TAddrCache::iterator p = ctx->Owner->AddrCache.find(ctx->Addr);
 

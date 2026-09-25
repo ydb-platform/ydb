@@ -24,7 +24,7 @@ public:
         return true;
     }
 
-    TCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CreateQueue, std::move(cb))
     {
     }
@@ -242,7 +242,7 @@ private:
     TString TagsJson_;
 };
 
-IActor* CreateCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TCreateQueueActor(sourceSqsRequest, std::move(cb));
 }
 

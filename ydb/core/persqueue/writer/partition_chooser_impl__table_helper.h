@@ -105,8 +105,8 @@ public:
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest(const TActorContext& ctx) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+    std::unique_ptr<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest(const TActorContext& ctx) {
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
         return ev;
     }
@@ -133,8 +133,8 @@ public:
         }
     }
 
-    THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest() {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+    std::unique_ptr<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest() {
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
         return ev;
     }
@@ -144,7 +144,7 @@ public:
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequest(const NActors::TActorContext& ctx) {
+    std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequest(const NActors::TActorContext& ctx) {
         SelectPhase = ESelectPhase::Primary;
         return MakeSelectQueryRequestImpl(TopicKey, EncodedSourceId, ctx);
     }
@@ -160,7 +160,7 @@ public:
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeLegacyKeySelectQueryRequest(const NActors::TActorContext& ctx) {
+    std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeLegacyKeySelectQueryRequest(const NActors::TActorContext& ctx) {
         SelectPhase = ESelectPhase::LegacyKey;
         return MakeSelectQueryRequestImpl(TopicName, FallbackEncodedSourceId, ctx);
     }
@@ -207,8 +207,8 @@ public:
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(ui32 partitionId, std::optional<ui64> seqNo, const NActors::TActorContext& ctx) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(ui32 partitionId, std::optional<ui64> seqNo, const NActors::TActorContext& ctx) {
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -264,10 +264,10 @@ public:
     }
 
 private:
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequestImpl(const TString& topicKey,
+    std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequestImpl(const TString& topicKey,
                                                                       const NPQ::NSourceIdEncoding::TEncodedSourceId& encodedSourceId,
                                                                       const NActors::TActorContext& ctx) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);

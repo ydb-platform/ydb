@@ -15,7 +15,7 @@ using namespace Tests;
 namespace {
 
 auto GetValueFromLocalDb(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId, const TString& query) {
-    auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+    auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
     request->Record.MutableProgram()->MutableProgram()->SetText(query);
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 

@@ -105,10 +105,10 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             completionTimes.reserve(Rounds);
 
             for (ui32 round = 0; round < Rounds; ++round) {
-                TVector<THolder<TEvents::TEvPing>> events;
+                TVector<std::unique_ptr<TEvents::TEvPing>> events;
                 events.reserve(messageCount);
                 for (ui32 i = 0; i < messageCount; ++i) {
-                    events.emplace_back(MakeHolder<TEvents::TEvPing>());
+                    events.emplace_back(std::make_unique<TEvents::TEvPing>());
                 }
 
                 Sleep(idleDuration);
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     };
 
     Y_UNIT_TEST(GetStatisticsWithLongRunningActor) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, true, false);
 
         TActorSystem actorSystem(setup);
@@ -212,8 +212,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TAtomic actorsAlive = 0;
         std::atomic<bool> stop = false;
 
-        THolder<IActor> longRunningActor{
-            new TTestEndDecorator(THolder(new TLongRunningActor(stop, 1, &startPad)), &stopPad, &actorsAlive)
+        std::unique_ptr<IActor> longRunningActor{
+            new TTestEndDecorator(std::unique_ptr<TLongRunningActor>(new TLongRunningActor(stop, 1, &startPad)), &stopPad, &actorsAlive)
         };
         actorSystem.Register(longRunningActor.Release(), TMailboxType::HTSwap, 0);
 
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithOnlyOneSharedExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, true);
 
         TActorSystem actorSystem(setup);
@@ -281,8 +281,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             TMailboxType::HTSwap,
             followerPoolId
         );
-        THolder<IActor> leader{
-            new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+        std::unique_ptr<IActor> leader{
+            new TTestEndDecorator(std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                 TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
             )),
             &pad,
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
 
 
     Y_UNIT_TEST(WithOnlyOneNotSharedExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, false);
 
         TActorSystem actorSystem(setup);
@@ -336,8 +336,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             TMailboxType::HTSwap,
             followerPoolId
         );
-        THolder<IActor> leader{
-            new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+        std::unique_ptr<IActor> leader{
+            new TTestEndDecorator(std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                 TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
             )),
             &pad,
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithOnlyOneSharedAndOneCommonExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 2, true, true);
 
         TActorSystem actorSystem(setup);
@@ -390,8 +390,8 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 TMailboxType::HTSwap,
                 followerPoolId
             );
-            THolder<IActor> leader{
-                new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+            std::unique_ptr<IActor> leader{
+                new TTestEndDecorator(std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                     TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
                 )),
                 &pad,
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithSharedExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, false);
          TActorBenchmark::AddBasicPool(setup, 2, 1, true);
 
@@ -433,9 +433,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 TMailboxType::HTSwap,
                 followerPoolId
             );
-            THolder<IActor> leader{
+            std::unique_ptr<IActor> leader{
                 new TTestEndDecorator(
-                    THolder(new TActorBenchmark::TSendReceiveActor(
+                    std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                         TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
                     )),
                     &pad,
@@ -454,9 +454,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 TMailboxType::HTSwap,
                 followerPoolId
             );
-            THolder<IActor> leader{
+            std::unique_ptr<IActor> leader{
                 new TTestEndDecorator(
-                    THolder(new TActorBenchmark::TSendReceiveActor(
+                    std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                         TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
                     )),
                     &pad,
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithoutSharedExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
         TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
 
@@ -513,9 +513,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 TMailboxType::HTSwap,
                 followerPoolId
             );
-            THolder<IActor> leader{
+            std::unique_ptr<IActor> leader{
                 new TTestEndDecorator(
-                    THolder(new TActorBenchmark::TSendReceiveActor(
+                    std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                         TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
                     )),
                     &pad,
@@ -534,9 +534,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                 TMailboxType::HTSwap,
                 followerPoolId
             );
-            THolder<IActor> leader{
+            std::unique_ptr<IActor> leader{
                 new TTestEndDecorator(
-                    THolder(new TActorBenchmark::TSendReceiveActor(
+                    std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                         TSendReceiveActorParams{.OwnEvents=eventsPerPair / 2, .Receivers={followerId}, .Allocation=true}
                     )),
                     &pad,
@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         TAutoPtr<IEventHandle> SavedEvent = nullptr;
         ui64* Counter;
 
-        TPingDecorator(THolder<IActor>&& actor, ui64* counter)
+        TPingDecorator(std::unique_ptr<IActor>&& actor, ui64* counter)
             : TDecorator(std::move(actor))
             , Counter(counter)
         {
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
     struct TPongDecorator : TDecorator {
         ui64* Counter;
 
-        TPongDecorator(THolder<IActor>&& actor, ui64* counter)
+        TPongDecorator(std::unique_ptr<IActor>&& actor, ui64* counter)
             : TDecorator(std::move(actor))
             , Counter(counter)
         {
@@ -770,7 +770,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
     };
 
     Y_UNIT_TEST(Basic) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        std::unique_ptr<TActorSystemSetup> setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
@@ -786,16 +786,16 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
-        THolder<IActor> innerActor = MakeHolder<TTestActor>();
+        std::unique_ptr<IActor> innerActor = std::make_unique<TTestActor>();
         ui64 pongCounter = 0;
-        THolder<IActor> pongActor = MakeHolder<TPongDecorator>(std::move(innerActor), &pongCounter);
+        std::unique_ptr<IActor> pongActor = std::make_unique<TPongDecorator>(std::move(innerActor), &pongCounter);
         ui64 pingCounter = 0;
-        THolder<IActor> pingActor = MakeHolder<TPingDecorator>(std::move(pongActor), &pingCounter);
+        std::unique_ptr<IActor> pingActor = std::make_unique<TPingDecorator>(std::move(pongActor), &pingCounter);
 
         TThreadParkPad pad;
         TAtomic actorsAlive = 0;
 
-        THolder<IActor> endActor = MakeHolder<TTestEndDecorator>(std::move(pingActor), &pad, &actorsAlive);
+        std::unique_ptr<IActor> endActor = std::make_unique<TTestEndDecorator>(std::move(pingActor), &pad, &actorsAlive);
         actorSystem.Register(endActor.Release(), TMailboxType::HTSwap);
 
         pad.Park();
@@ -902,7 +902,7 @@ Y_UNIT_TEST_SUITE(TestAliases) {
     };
 
     Y_UNIT_TEST(AliasEventDelivery) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        std::unique_ptr<TActorSystemSetup> setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
@@ -1333,7 +1333,7 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
     };
 
     Y_UNIT_TEST(CurrentQueueTimestamps) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        std::unique_ptr<TActorSystemSetup> setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
@@ -1411,7 +1411,7 @@ Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
     };
 
     Y_UNIT_TEST(TailSendHasMailboxScheduledTimestamp) {
-        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        std::unique_ptr<TActorSystemSetup> setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);

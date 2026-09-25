@@ -150,9 +150,9 @@ void TCheckWriteUnit::Complete(TOperation::TPtr, const TActorContext &)
 {
 }
 
-THolder<TExecutionUnit> CreateCheckWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
+std::unique_ptr<TExecutionUnit> CreateCheckWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
 {
-    return THolder(new TCheckWriteUnit(dataShard, pipeline));
+    return std::unique_ptr<TCheckWriteUnit>(new TCheckWriteUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

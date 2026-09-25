@@ -754,8 +754,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreatePqLogicalOptProposalTransformer(TPqState::TPtr state) {
-    return MakeHolder<TPqLogicalOptProposalTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreatePqLogicalOptProposalTransformer(TPqState::TPtr state) {
+    return std::make_unique<TPqLogicalOptProposalTransformer>(state);
 }
 
 } // namespace NYql

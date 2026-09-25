@@ -607,8 +607,8 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
     }
 }
 
-THolder<IWorkloadQueryGenerator> TKvWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TKvWorkloadGenerator>(this);
+std::unique_ptr<IWorkloadQueryGenerator> TKvWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TKvWorkloadGenerator>(this);
 }
 
 TString TKvWorkloadParams::GetWorkloadName() const {

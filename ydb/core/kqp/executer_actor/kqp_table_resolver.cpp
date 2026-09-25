@@ -354,7 +354,7 @@ private:
 private:
     void ResolveKeys() {
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         const auto& databaseName = TasksGraph.GetMeta().Database;
         requestNavigate->DatabaseName = databaseName;
         request->DatabaseName = databaseName;
@@ -526,9 +526,9 @@ private:
     }
 
 private:
-    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TVector<NScheme::TTypeInfo>& keyTypes, TKeyDesc::ERowOperation operation) {
+    std::unique_ptr<TKeyDesc> ExtractKey(const TTableId& table, const TVector<NScheme::TTypeInfo>& keyTypes, TKeyDesc::ERowOperation operation) {
         auto range = GetFullRange(keyTypes.size());
-        return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, keyTypes, TVector<TKeyDesc::TColumnOp>{});
+        return std::make_unique<TKeyDesc>(table, range.ToTableRange(), operation, keyTypes, TVector<TKeyDesc::TColumnOp>{});
     }
 
     static TSerializedTableRange GetFullRange(ui32 columnsCount) {

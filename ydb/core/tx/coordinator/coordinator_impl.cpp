@@ -507,7 +507,7 @@ void TTxCoordinator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, cons
 }
 
 void TTxCoordinator::SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie) {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, SelfId(), event, flags, cookie);
+    std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(target, SelfId(), event, flags, cookie);
 
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);

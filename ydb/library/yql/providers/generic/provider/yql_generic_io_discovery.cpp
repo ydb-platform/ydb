@@ -192,8 +192,8 @@ namespace NYql {
         };
     } // namespace
 
-    THolder<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state) {
-        return THolder(new TGenericIODiscoveryTransformer(std::move(state)));
+    std::unique_ptr<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state) {
+        return std::unique_ptr<TGenericIODiscoveryTransformer>(new TGenericIODiscoveryTransformer(std::move(state)));
     }
 
 } // namespace NYql

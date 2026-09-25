@@ -221,12 +221,12 @@ class TGetStatisticsHelper: public TActorBootstrapped<TGetStatisticsHelper> {
     const TActorId ResponseActorId;
     const TIndexBuildId BuildId;
     const TPathId PathId;
-    THolder<NStat::TEvStatistics::TEvGetStatistics> Request;
+    std::unique_ptr<NStat::TEvStatistics::TEvGetStatistics> Request;
     NActors::NStructuredLog::TStructuredMessage LogContext;
 
 public:
     TGetStatisticsHelper(const TActorId& responseActorId,
-        TIndexBuildId buildId, THolder<NStat::TEvStatistics::TEvGetStatistics> request)
+        TIndexBuildId buildId, std::unique_ptr<NStat::TEvStatistics::TEvGetStatistics> request)
         : ResponseActorId(responseActorId)
         , BuildId(buildId)
         , PathId(request->StatRequests.at(0).PathId)
@@ -245,7 +245,7 @@ public:
 
     void HandleResponse(NStat::TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
         auto *inRes = ev->Get();
-        auto response = MakeHolder<TEvIndexBuilder::TEvGetIndexStatsResponse>();
+        auto response = std::make_unique<TEvIndexBuilder::TEvGetIndexStatsResponse>();
         response->BuildId = ui64(BuildId);
         response->PathId = PathId;
         for (auto& stat: inRes->StatResponses) {
@@ -268,7 +268,7 @@ public:
             {"eventType", ev->GetTypeRewrite()},
             {"event", ev->ToString()},
         );
-        auto response = MakeHolder<TEvIndexBuilder::TEvGetIndexStatsResponse>();
+        auto response = std::make_unique<TEvIndexBuilder::TEvGetIndexStatsResponse>();
         response->BuildId = ui64(BuildId);
         response->PathId = PathId;
         this->Send(ResponseActorId, response.Release());
@@ -340,10 +340,10 @@ std::shared_ptr<TIndexBuildInfo> CreateRowIdProvisioningChild(
     return child;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
     TSchemeShard* ss, TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
     propose->Record.SetOwner(ChooseAppropriateOwner(propose->Record, AppData()));
 
@@ -375,12 +375,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildVectorIndex());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto path = GetBuildPath(ss, buildInfo, buildInfo.KMeans.WriteTo(true));
@@ -406,13 +406,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildVectorIndex());
     Y_ENSURE(buildInfo.IsRebuild);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     // This propose contains only drop operations, so FailOnExist (relevant only for create) is irrelevant here.
     propose->Record.SetFailOnExist(false);
 
@@ -463,13 +463,13 @@ static void InheritDetailedMetricsSettings(
     }
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildVectorIndex());
     Y_ENSURE(buildInfo.IsRebuild);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
@@ -524,12 +524,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildVectorIndex());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
     propose->Record.SetOwner(ChooseAppropriateOwner(propose->Record, AppData()));
 
@@ -665,13 +665,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateBuildSequencePropose");
     Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
 
     auto tablePath = TPath::Init(buildInfo.TablePathId, ss);
 
@@ -733,13 +733,13 @@ static void AddDropSequencePropose(TSchemeShard* ss, const TIndexBuildInfo& buil
     }
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateDropSequencePropose");
     Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
     AddDropSequencePropose(ss, buildInfo, *propose);
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
@@ -748,12 +748,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildFulltextCompact());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
@@ -805,12 +805,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
 
 // Creates the transient "row-id source" table for a compact rowid-mode build: the main table re-keyed
 // by the dense seq, holding the indexed text + data columns. Dropped on apply (IsBuildImplTable).
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildFulltextCompactRowId());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
@@ -857,7 +857,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
 }
 
 // Copy compact fulltext index table partition boundaries from the 0build table
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildFulltextCompact(), "Unknown operation kind while building AlterIndexPartitioningPropose");
@@ -883,7 +883,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropos
         return nullptr;
     }
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -907,12 +907,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropos
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
@@ -959,12 +959,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex, "Unknown operation kind while building PrepareValidationPropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto path = TPath::Init(buildInfo.TablePathId, ss);
@@ -985,10 +985,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     if (buildInfo.SubState == TIndexBuildInfo::ESubState::RebuildReplacing) {
@@ -1036,10 +1036,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     if (buildInfo.SubState == TIndexBuildInfo::ESubState::RebuildReplacing) {
@@ -1077,10 +1077,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.DropColumnsTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.DropColumnsTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -1105,12 +1105,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
     Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex(), "Unknown operation kind while building AlterSequencePropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSequence);
@@ -1144,7 +1144,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuilder::TTxBase {
 private:
-    TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    TMap<TTabletId, std::unique_ptr<IEventBase>> ToTabletSend;
 
     template <bool WithSnapshot = true, typename TRequest>
     TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1201,7 +1201,7 @@ private:
 
     void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         if (buildInfo.KMeans.Level == 1) {
@@ -1245,7 +1245,7 @@ private:
 
     void SendVectorAutodetectRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         if (buildInfo.KMeans.Level == 1) {
@@ -1271,7 +1271,7 @@ private:
 
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
@@ -1327,7 +1327,7 @@ private:
 
     void SendKMeansRecomputeRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvRecomputeKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
@@ -1361,7 +1361,7 @@ private:
 
     void SendKMeansLocalRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
-        auto ev = MakeHolder<TEvDataShard::TEvLocalKMeansRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvLocalKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
@@ -1449,7 +1449,7 @@ private:
         Y_ENSURE(buildInfo.KMeans.Parent == buildInfo.KMeans.ParentEnd());
         Y_ENSURE(buildInfo.KMeans.Level == 2);
 
-        auto ev = MakeHolder<TEvDataShard::TEvPrefixKMeansRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
@@ -1513,7 +1513,7 @@ private:
     void SendKMeansFilterRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         Y_ENSURE(buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
-        auto ev = MakeHolder<TEvDataShard::TEvFilterKMeansRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvFilterKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.GetBuildIndexName());
@@ -1636,7 +1636,7 @@ private:
     }
 
     void SendBuildSecondaryIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvBuildIndexCreateRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
@@ -1703,7 +1703,7 @@ private:
             buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex,
             "Unknown operation kind in SendGetColumnStats");
 
-        auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        auto event = std::make_unique<NStat::TEvStatistics::TEvGetStatistics>();
         event->StatType = NKikimr::NStat::EStatType::EQ_HEIGHT_HISTOGRAM;
         // event->Database is not filled because in a serverless DB statistics belongs
         // to the shared DB and statistics service resolves the DB itself
@@ -1724,7 +1724,7 @@ private:
     }
 
     void SendValidateUniqueIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvValidateUniqueIndexRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvValidateUniqueIndexRequest>();
         auto& record = ev->Record;
 
         record.SetId(ui64(BuildId));
@@ -1822,7 +1822,7 @@ private:
     // generic secondary-index build scan (TBuildIndexScan) rather than a bespoke fulltext scan path: it
     // is a secondary index over [__ydb_row_id] carrying the indexed text + data columns as values.
     void SendBuildFulltextRowIdSrcRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvBuildIndexCreateRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         // Scan the snapshotted main table; FillScanRequestCommon attaches the build snapshot.
@@ -1855,7 +1855,7 @@ private:
     }
 
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvBuildFulltextIndexRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         // The scanned table is the main table, except the compact rowid-mode posting fill, which scans
@@ -1944,7 +1944,7 @@ private:
     }
 
     void SendBuildFulltextDictRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
-        auto ev = MakeHolder<TEvDataShard::TEvBuildFulltextDictRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextDictRequest>();
         ev->Record.SetId(ui64(BuildId));
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
 
@@ -3251,7 +3251,7 @@ public:
             } else if (buildInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), LockPropose(Self, buildInfo, buildInfo.LockTxId, TPath::Init(buildInfo.TablePathId, Self)), 0, ui64(BuildId));
             } else if (!buildInfo.LockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
             } else {
                 if (buildInfo.IsBuildColumns()) {
                     if (buildInfo.HasFromSequenceBuildColumn()) {
@@ -3282,7 +3282,7 @@ public:
                     Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
                 }
             } else if (!buildInfo.CreateBuildSequenceTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.CreateBuildSequenceTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.CreateBuildSequenceTxId)));
             } else {
                 buildInfo.CreateBuildSequenceTxId = {};
                 buildInfo.CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
@@ -3303,7 +3303,7 @@ public:
             } else if (buildInfo.AlterMainTableTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), AlterMainTablePropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.AlterMainTableTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.AlterMainTableTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.AlterMainTableTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 Progress(BuildId);
@@ -3322,7 +3322,7 @@ public:
                     break;
                 }
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
                 break;
             }
 
@@ -3401,7 +3401,7 @@ public:
             } else if (buildInfo.InitiateTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CreateIndexPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.InitiateTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
                 if (buildInfo.IsBuildFulltextCompactRowId() &&
                     buildInfo.SubState == TIndexBuildInfo::ESubState::None) {
@@ -3468,7 +3468,7 @@ public:
                     Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
@@ -3502,7 +3502,7 @@ public:
                     Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.SnapshotTxId = {};
                 buildInfo.SnapshotStep = {};
@@ -3560,7 +3560,7 @@ public:
                 }
                 Send(Self->SelfId(), LockPropose(Self, buildInfo, buildInfo.ApplyTxId, GetBuildPath(Self, buildInfo, tableName)), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = InvalidTxId;
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
@@ -3585,7 +3585,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), AlterSequencePropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
@@ -3605,7 +3605,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), PrepareValidationPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
@@ -3624,7 +3624,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), ApplyPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 if (!buildInfo.RebuildIndexName.empty() &&
                     buildInfo.SubState != TIndexBuildInfo::ESubState::RebuildReplacing) {
@@ -3649,7 +3649,7 @@ public:
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Done);
                 Progress(BuildId);
@@ -3670,7 +3670,7 @@ public:
             } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), DropColumnsPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.DropColumnsTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Applying);
                 Progress(BuildId);
@@ -3682,7 +3682,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CancelPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Unlocking);
                 Progress(BuildId);
@@ -3694,7 +3694,7 @@ public:
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancelled);
                 Progress(BuildId);
@@ -3714,7 +3714,7 @@ public:
             } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), DropColumnsPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.DropColumnsTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
             } else {
                 auto notApplied = !buildInfo.ApplyTxDone && buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess;
                 if (buildInfo.InitiateTxDone && notApplied) {
@@ -3731,7 +3731,7 @@ public:
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), CancelPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Unlocking);
                 Progress(BuildId);
@@ -3743,7 +3743,7 @@ public:
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
                 Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
+                Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Rejected);
                 Progress(BuildId);
@@ -4705,7 +4705,7 @@ public:
 
     void ReplyOnCreation(const TIndexBuildInfo& buildInfo,
                          const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
-        auto responseEv = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(ui64(buildInfo.Id));
+        auto responseEv = std::make_unique<TEvIndexBuilder::TEvCreateResponse>(ui64(buildInfo.Id));
 
         Fill(*responseEv->Record.MutableIndexBuild(), buildInfo);
 
@@ -4796,7 +4796,7 @@ public:
                     buildInfo.DependencyTxIds.insert(copyTxId);
                     Self->TxIdToDependentIndexBuild[copyTxId].insert(buildInfo.Id);
                     // subscribe to tx notification
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
+                    Send(Self->SelfId(), std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
                     return true;
                 }
             }

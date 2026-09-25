@@ -166,7 +166,7 @@ protected:
 
     TActorId Request(const NPq::NProto::TEvDescribeConsumer& record, ui64 cookie = 0) {
         const auto reader = Runtime.AllocateEdgeActor();
-        auto event = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
+        auto event = std::make_unique<TPqControlPlaneEvents::TEvDescribeConsumer>();
         event->Record = record;
         Runtime.Send(new IEventHandle(ControlPlaneId, reader, event.Release(), 0, cookie));
         return reader;
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
 
         auto readyRequest = MakeRequest();
         readyRequest.MutableConnection()->SetTopicPath("ready-topic");
-        auto event = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
+        auto event = std::make_unique<TPqControlPlaneEvents::TEvDescribeConsumer>();
         event->Record = readyRequest;
         const TActorId missingReader(Runtime.GetNodeId(0), "gone-reader");
         Runtime.Send(new IEventHandle(ControlPlaneId, missingReader, event.Release(), 0, 12));
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         UNIT_ASSERT(first);
         const auto fatalError = first->Get()->Record.SerializeAsString();
 
-        auto event = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
+        auto event = std::make_unique<TPqControlPlaneEvents::TEvDescribeConsumer>();
         event->Record = MakeRequest();
         Runtime.Send(new IEventHandle(ControlPlaneId, reader, event.Release(), 0, 72));
         const auto second = Runtime.GrabEdgeEvent<TEvResult>(reader);
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         UNIT_ASSERT_VALUES_EQUAL(original->Get()->Record.GetStatus(), Ydb::StatusIds::INTERNAL_ERROR);
 
         // Hold timers so duplicate failures are processed before a retry fires.
-        std::vector<THolder<IEventHandle>> retries;
+        std::vector<std::unique_ptr<IEventHandle>> retries;
         runtime.SetScheduledEventFilter([&](auto&, auto& event, TDuration delay, auto&) {
             if (event->Recipient == controlPlane) {
                 UNIT_ASSERT(delay > TDuration::Zero());
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
             driver, std::make_shared<TCredentialsFactory>(), MakeIntrusive<TGateway>(client), {}));
         const auto request = [&](const TString& topic, ui64 cookie, ui32 nodeIndex = 0) {
             const auto reader = runtime.AllocateEdgeActor(nodeIndex);
-            auto event = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
+            auto event = std::make_unique<TPqControlPlaneEvents::TEvDescribeConsumer>();
             event->Record.MutableConnection()->SetTopicPath(topic);
             runtime.Send(new IEventHandle(controlPlane, reader, event.Release(), 0, cookie), nodeIndex);
             return reader;
@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         const auto reader = runtime.Register(new TReader(compute, controlPlane, client));
         const auto request = runtime.GrabEdgeEvent<TPqControlPlaneEvents::TEvDescribeConsumer>(controlPlane);
         UNIT_ASSERT(request);
-        auto response = MakeHolder<TEvResult>();
+        auto response = std::make_unique<TEvResult>();
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         auto* partition = response->Record.AddPartitions();
         partition->SetPartitionId(0);
@@ -698,7 +698,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         const auto error = runtime.GrabEdgeEvent<IDqComputeActorAsyncInput::TEvAsyncInputError>(compute);
         UNIT_ASSERT(error);
         UNIT_ASSERT_STRING_CONTAINS(error->Get()->Issues.ToString(), "control-plane actor disconnected");
-        auto response = MakeHolder<TEvResult>();
+        auto response = std::make_unique<TEvResult>();
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         auto* partition = response->Record.AddPartitions();
         partition->SetPartitionId(0);

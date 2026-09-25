@@ -237,7 +237,7 @@ struct TQuoterState {
     // Used to detect a hung quoter resolve during cleanup.
     TInstant ResolveStartTime;
 
-    THashMap<ui64, THolder<TResource>> Resources;
+    THashMap<ui64, std::unique_ptr<TResource>> Resources;
     THashMap<TString, ui64> ResourcesIndex;
 
     TSet<TRequestId> WaitingQueueResolve; // => requests

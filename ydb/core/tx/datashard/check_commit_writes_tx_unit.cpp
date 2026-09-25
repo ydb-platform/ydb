@@ -101,8 +101,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TCheckCommitWritesTxUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TCheckCommitWritesTxUnit>(new TCheckCommitWritesTxUnit(self, pipeline));
 }
 
 } // namespace NDataShard

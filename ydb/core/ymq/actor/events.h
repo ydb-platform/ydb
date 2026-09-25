@@ -993,7 +993,7 @@ struct TSqsEvents {
         }
 
         bool Success = true;
-        THolder<TSchemeNode> RootHolder;
+        std::unique_ptr<TSchemeNode> RootHolder;
     };
 
     struct TEvGarbageCleaningResult : public NActors::TEventLocal<TEvGarbageCleaningResult, EvGarbageCleaningResult> {

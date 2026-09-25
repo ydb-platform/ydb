@@ -42,7 +42,7 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
             TString data;
             Y_PROTOBUF_SUPPRESS_NODISCARD newPartition.SerializeToString(&data);
 
-            auto partition = MakeHolder<NKikimrSysView::TTopPartitionsInfo>();
+            auto partition = std::make_unique<NKikimrSysView::TTopPartitionsInfo>();
             partition->CopyFrom(newPartition);
             result.emplace_back(std::move(partition));
 

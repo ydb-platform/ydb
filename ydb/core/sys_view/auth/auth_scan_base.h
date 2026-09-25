@@ -159,7 +159,7 @@ protected:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         IsNavigatePathInProgress = false;
-        THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
+        std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
 
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         auto& entry = request->ResultSet.back();
@@ -173,7 +173,7 @@ protected:
         YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::HandleNavigateResult: received navigate result",
             {"navigateResult", request->ToString(*AppData()->TypeRegistry)});
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
         if (RequireUserAdministratorAccess
             || !UserToken || UserToken->GetSerializedToken().empty()
@@ -202,7 +202,7 @@ protected:
     void NavigatePath(TPath path) {
         IsNavigatePathInProgress = true;
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->DatabaseName;
 
         auto& entry = request->ResultSet.emplace_back();

@@ -2679,7 +2679,7 @@ Y_UNIT_TEST_QUAD(FullTextDeliveryProblem, LimitRowsPerRequest, EnableIndexStream
                 if ((cnt & 1) == 0) {
                     Cerr << "Injecting delivery problem for shard " << forward->TabletId
                          << " to actor " << ev->Sender << Endl;
-                    auto undelivery = MakeHolder<NKikimr::TEvPipeCache::TEvDeliveryProblem>(forward->TabletId, true);
+                    auto undelivery = std::make_unique<NKikimr::TEvPipeCache::TEvDeliveryProblem>(forward->TabletId, true);
                     runtime.Send(new NActors::IEventHandle(ev->Sender, sender, undelivery.Release()));
                     deliveryProblemSent++;
                     drop = true;
@@ -3786,7 +3786,7 @@ void UpdateFulltextPrefixFlag(TKikimrRunner& kikimr, bool enabled) {
     for (const auto& service : {
             MakeKqpProxyID(runtime.GetNodeId()),
             MakeKqpCompileServiceID(runtime.GetNodeId())}) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         *request->Record.MutableConfig() = config;
         runtime.Send(service, edge, request.Release());
         auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(

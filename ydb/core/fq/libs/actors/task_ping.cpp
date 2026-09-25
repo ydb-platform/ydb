@@ -48,7 +48,7 @@ public:
         YDB_LOG_ERROR("PrivatePingTask - TTaskPingRequestActor::OnUndelivered",
             {"queryId", OperationId},
             {"owner", OwnerId});
-        auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
+        auto res = std::make_unique<TEvents::TEvPingTaskResponse>();
         res->Status = Ydb::StatusIds::GENERIC_ERROR;
         res->Issues.AddIssue("UNDELIVERED");
         Send(ev->Sender, res.Release());
@@ -68,7 +68,7 @@ public:
             {"owner", OwnerId},
             {"code", codeStr},
             {"details", Issues});
-        auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
+        auto res = std::make_unique<TEvents::TEvPingTaskResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
         Send(Sender, res.Release());
@@ -116,7 +116,7 @@ private:
             return;
         }
 
-        auto response = MakeHolder<TEvents::TEvPingTaskResponse>();
+        auto response = std::make_unique<TEvents::TEvPingTaskResponse>();
         response->Status = Ydb::StatusIds::SUCCESS;
         response->Record.ConstructInPlace(ev->Get()->Record);
         Send(Sender, response.Release());

@@ -9,8 +9,8 @@ namespace NDataShard {
 
 class TCdcStreamUnitBase : public TExecutionUnit {
 protected:
-    TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
-    THolder<TEvChangeExchange::TEvAddSender> AddSender;
+    TVector<std::unique_ptr<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
+    std::unique_ptr<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
     TCdcStreamUnitBase(EExecutionUnitKind kind, bool createCdcStream, TDataShard& self, TPipeline& pipeline);

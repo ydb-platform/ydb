@@ -323,7 +323,7 @@ namespace NKikimr {
             }
         }
 
-        THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
+        std::unique_ptr<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
         bool RejectAll;
         TActorId LastServerId;
         ui32 ServerPipesOpened;

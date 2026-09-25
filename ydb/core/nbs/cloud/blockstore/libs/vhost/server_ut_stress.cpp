@@ -34,7 +34,7 @@ namespace {
 class TScopedTasks
 {
 private:
-    using TThread = THolder<IThreadFactory::IThread>;
+    using TThread = std::unique_ptr<IThreadFactory::IThread>;
 
     TVector<TThread> Workers;
     std::atomic_flag ShouldStart = false;

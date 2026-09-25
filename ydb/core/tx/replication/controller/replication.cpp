@@ -25,7 +25,7 @@ class TReplication::TImpl: public TLagProvider {
     friend class TReplication;
 
     struct TTarget: public TItemWithLag {
-        THolder<ITarget> Ptr;
+        std::unique_ptr<ITarget> Ptr;
 
         explicit TTarget(ITarget* iface)
             : Ptr(iface)
@@ -163,7 +163,7 @@ public:
 
     void Progress(const TActorContext& ctx) {
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
-            THolder<IActor> ydbProxy;
+            std::unique_ptr<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
             const auto& endpoint = params.GetEndpoint();
             const auto& database = params.GetDatabase();

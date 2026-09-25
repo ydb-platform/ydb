@@ -235,7 +235,7 @@ class TSubOperationState: public ISubOperationState {
     TSet<ui32> MsgToIgnore;
 
 public:
-    using TPtr = THolder<TSubOperationState>;
+    using TPtr = std::unique_ptr<TSubOperationState>;
 
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) override;
@@ -257,7 +257,7 @@ public:
     virtual const char* Name() const = 0;
     virtual const char* CurrentStateName() const = 0;
 
-    virtual THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0;
+    virtual std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0;
 
     // call it inside multipart operations after failed propose
     virtual void AbortPropose(TOperationContext& context) = 0;
@@ -382,19 +382,19 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id, const TTxTransactio
 
 template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context, Args&&... args) {
-    auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
+    auto result = std::make_unique<T>(id, state, std::forward<Args>(args)...);
     result->SetState(state, context);
     return result.Release();
 }
 
 template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, Args&&... args) {
-    auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
+    auto result = std::make_unique<T>(id, state, std::forward<Args>(args)...);
     result->SetState(state);
     return result.Release();
 }
 
-ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response);
+ISubOperation::TPtr CreateReject(TOperationId id, std::unique_ptr<TProposeResponse> response);
 ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message);
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx);

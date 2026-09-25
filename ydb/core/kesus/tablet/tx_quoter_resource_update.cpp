@@ -10,7 +10,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     const ui64 Cookie;
     NKikimrKesus::TEvUpdateQuoterResource Record;
 
-    THolder<TEvKesus::TEvUpdateQuoterResourceResult> Reply;
+    std::unique_ptr<TEvKesus::TEvUpdateQuoterResourceResult> Reply;
 
     TTxQuoterResourceUpdate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvUpdateQuoterResource& record)
         : TTxBase(self)
@@ -26,7 +26,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
         NKikimrKesus::TEvUpdateQuoterResourceResult result;
         result.SetResourceId(quoterResourceId);
         result.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(result);
+        Reply = std::make_unique<TEvKesus::TEvUpdateQuoterResourceResult>(result);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -43,14 +43,14 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
             Self->QuoterResources.FindId(resourceDesc.GetResourceId()) :
             Self->QuoterResources.FindPath(resourceDesc.GetResourcePath());
         if (!resource) {
-            Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(
+            Reply = std::make_unique<TEvKesus::TEvUpdateQuoterResourceResult>(
                     Ydb::StatusIds::NOT_FOUND,
                     "No resource found.");
             return true;
         }
         TString errorMessage;
         if (!resource->Update(resourceDesc, errorMessage)) {
-            Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(
+            Reply = std::make_unique<TEvKesus::TEvUpdateQuoterResourceResult>(
                     Ydb::StatusIds::BAD_REQUEST,
                     errorMessage);
             return true;

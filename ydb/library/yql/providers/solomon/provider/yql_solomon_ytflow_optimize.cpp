@@ -47,9 +47,9 @@ private:
     TSolomonState* State_;
 };
 
-THolder<IYtflowOptimization> CreateSolomonYtflowOptimization(const TSolomonState::TPtr& state) {
+std::unique_ptr<IYtflowOptimization> CreateSolomonYtflowOptimization(const TSolomonState::TPtr& state) {
     YQL_ENSURE(state);
-    return MakeHolder<TSolomonYtflowOptimization>(state);
+    return std::make_unique<TSolomonYtflowOptimization>(state);
 }
 
 } // namespace NYql

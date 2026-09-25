@@ -111,7 +111,7 @@ public:
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
             Y_ABORT_UNLESS(tabletId != InvalidTabletId);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvCreateSequence>(txState->TargetPathId);
+            auto event = std::make_unique<NSequenceShard::TEvSequenceShard::TEvCreateSequence>(txState->TargetPathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             event->Record.SetFrozen(true);
@@ -426,7 +426,7 @@ public:
             auto shardIdx = shard.Idx;
             auto currentTabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
             Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
+            auto event = std::make_unique<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
                 txState->TargetPathId, GetSequenceResult);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
@@ -450,7 +450,7 @@ public:
         for (auto shard : txState->Shards) {
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvGetSequence>(txState->SourcePathId);
+            auto event = std::make_unique<NSequenceShard::TEvSequenceShard::TEvGetSequence>(txState->SourcePathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             YDB_LOG_DEBUG_CTX(context.Ctx, "sending TEvGetSequence to tablet",
@@ -553,7 +553,7 @@ public:
 
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvDropSequence>(pathId);
+            auto event = std::make_unique<NSequenceShard::TEvSequenceShard::TEvDropSequence>(pathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 
@@ -652,13 +652,13 @@ class TMoveSequence: public TSubOperation {
         case TTxState::Propose:
             return TPtr(new TPropose(OperationId, AfterPropose));
         case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            return std::make_unique<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeleteTableBarrier>(OperationId);
+            return std::make_unique<TDeleteTableBarrier>(OperationId);
         case TTxState::ProposedMoveSequence:
             return TPtr(new TProposedMoveSequence(OperationId));
         case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
+            return std::make_unique<TDropParts>(OperationId);
         case TTxState::Done:
             return TPtr(new TDone(OperationId));
         default:
@@ -669,7 +669,7 @@ class TMoveSequence: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const auto& moveSequence = Transaction.GetMoveSequence();
 
@@ -681,7 +681,7 @@ public:
             {"to", dstPathStr},
         );
 
-        THolder<TProposeResponse> result;
+        std::unique_ptr<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId())));
 

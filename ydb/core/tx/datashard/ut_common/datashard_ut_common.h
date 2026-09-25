@@ -170,7 +170,7 @@ public:
 protected:
     NMiniKQL::TScopedAlloc Alloc;
     NMiniKQL::TTypeEnvironment Env;
-    THolder<NMiniKQL::IEngineFlat> Engine;
+    std::unique_ptr<NMiniKQL::IEngineFlat> Engine;
 };
 
 ///
@@ -359,14 +359,14 @@ private:
 ///
 class TKeyExtractor : public TEngineHolder {
 public:
-    using TPKey = THolder<TKeyDesc>;
+    using TPKey = std::unique_ptr<TKeyDesc>;
 
     TKeyExtractor(TTester& tester, TString programText);
 
     const TVector<TPKey>& GetKeys() const { return Engine->GetDbKeys(); }
 };
 
-THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
+std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml = true,
                                                       TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
@@ -804,13 +804,13 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRunti
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
-THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Navigate(
         TTestActorRuntime& runtime,
         const TActorId& sender,
         const TString& path,
         NSchemeCache::TSchemeCacheNavigate::EOp op = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable);
 
-THolder<NSchemeCache::TSchemeCacheNavigate> Ls(
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Ls(
         TTestActorRuntime& runtime,
         const TActorId& sender,
         const TString& path);

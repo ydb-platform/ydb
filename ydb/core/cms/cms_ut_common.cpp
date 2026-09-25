@@ -57,7 +57,7 @@ void TFakeNodeWhiteboardService::Handle(TEvConfigsDispatcher::TEvGetConfigReques
     Y_UNUSED(ev);
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableBootstrapConfig()->CopyFrom(BootstrapConfig);
-    auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
+    auto resp = std::make_unique<TEvConfigsDispatcher::TEvGetConfigResponse>();
     resp->Config = std::make_shared<NKikimrConfig::TAppConfig>(appConfig);
     {
         auto unguard = Unguard(guard);
@@ -70,7 +70,7 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
 {
     TGuard<TMutex> guard(Mutex);
     auto &rec = ev->Get()->Record;
-    auto resp = MakeHolder<TEvBlobStorage::TEvControllerConfigResponse>();
+    auto resp = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
     if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasQueryBaseConfig()) {
         resp->Record.CopyFrom(Config);
     } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasReadDriveStatus()) {
@@ -641,7 +641,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
 
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableSentinelConfig()->SetEnable(options.EnableSentinel);
-    runtime.GetAppData().DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(cmsConfig);
+    runtime.GetAppData().DefaultCmsConfig = std::make_unique<NKikimrCms::TCmsConfig>(cmsConfig);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -912,7 +912,7 @@ TCmsTestEnv::RequestState(const NKikimrCms::TClusterStateRequest &request,
 NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult
 TCmsTestEnv::RequestBSControllerDDiskInfoList()
 {
-    auto event = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
+    auto event = std::make_unique<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
     SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
@@ -924,7 +924,7 @@ TCmsTestEnv::RequestBSControllerDDiskInfoList()
 NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
 TCmsTestEnv::RequestBSControllerDDiskInfo(ui64 tabletId)
 {
-    auto event = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    auto event = std::make_unique<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
     event->Record.SetTabletId(tabletId);
     SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
@@ -937,7 +937,7 @@ TCmsTestEnv::RequestBSControllerDDiskInfo(ui64 tabletId)
 NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult
 TCmsTestEnv::RequestDDiskInfoList()
 {
-    auto event = MakeHolder<TEvCms::TEvDDiskInfoListRequest>();
+    auto event = std::make_unique<TEvCms::TEvDDiskInfoListRequest>();
     SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
@@ -949,7 +949,7 @@ TCmsTestEnv::RequestDDiskInfoList()
 NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
 TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
 {
-    auto event = MakeHolder<TEvCms::TEvDDiskInfoGetRequest>();
+    auto event = std::make_unique<TEvCms::TEvDDiskInfoGetRequest>();
     event->Record.SetTabletId(tabletId);
     SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
@@ -962,7 +962,7 @@ TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
 NKikimrCms::TDDiskTabletListResponse
 TCmsTestEnv::RequestDDiskTabletList(const NKikimrCms::TDDiskTabletListRequest &request)
 {
-    auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
+    auto event = std::make_unique<TEvCms::TEvDDiskTabletListRequest>();
     event->Record.CopyFrom(request);
     SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
@@ -975,7 +975,7 @@ TCmsTestEnv::RequestDDiskTabletList(const NKikimrCms::TDDiskTabletListRequest &r
 NKikimrCms::TDDiskDiskListResponse
 TCmsTestEnv::RequestDDiskDiskList(const NKikimrCms::TDDiskDiskListRequest &request)
 {
-    auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
+    auto event = std::make_unique<TEvCms::TEvDDiskDiskListRequest>();
     event->Record.CopyFrom(request);
     SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
@@ -1038,7 +1038,7 @@ void TCmsTestEnv::ConfigureDDiskPool(ui32 numGroups)
     cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
     cmd->SetNumDDiskGroups(numGroups);
 
-    auto event = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto event = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     event->Record.MutableRequest()->CopyFrom(request);
     SendToPipe(MakeBSControllerID(), Sender, event.Release(), 0, GetPipeConfigWithRetries());
 
@@ -1053,7 +1053,7 @@ void TCmsTestEnv::ConfigureDDiskPool(ui32 numGroups)
 NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult
 TCmsTestEnv::AllocateDDiskBlockGroup(ui64 tabletId, ui64 directBlockGroupId, ui32 targetNumVChunks)
 {
-    auto event = MakeHolder<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    auto event = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
     auto& record = event->Record;
     record.SetDDiskPoolName("ddisk_pool");
     record.SetPersistentBufferDDiskPoolName("ddisk_pool");

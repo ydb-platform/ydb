@@ -99,15 +99,15 @@ class TDropStreamingQuery : public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TOperationContext& context) {
+    static bool IsDestinationPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& dstPath, const TOperationContext& context) {
         const auto checks = dstPath.Check();
         checks.NotEmpty()
             .NotUnderDomainUpgrade()
@@ -138,7 +138,7 @@ class TDropStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
+    bool IsApplyIfChecksPassed(const std::unique_ptr<TProposeResponse>& result, const TOperationContext& context) const {
         if (TString errorStr; !context.SS->CheckApplyIf(Transaction, errorStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
             return false;
@@ -181,7 +181,7 @@ class TDropStreamingQuery : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -191,7 +191,7 @@ public:
             {"path", parentPathStr + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 

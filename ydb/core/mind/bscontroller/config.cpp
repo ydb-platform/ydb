@@ -708,7 +708,7 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::CommitSelfHealUpdates(TConfigState& state) {
             auto ev = std::make_unique<TEvControllerNotifyGroupChange>();
-            auto sh = MakeHolder<TEvControllerUpdateSelfHealInfo>();
+            auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
 
             for (auto&& [base, overlay] : state.Groups.Diff()) {
                 const TGroupId groupId = overlay->first;

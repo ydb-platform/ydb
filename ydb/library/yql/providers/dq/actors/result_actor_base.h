@@ -106,7 +106,7 @@ struct TWriteQueue {
             , Rows(0)
             , Truncated(false)
             , FullResultWriterID()
-            , ResultBuilder(resultType ? MakeHolder<TProtoBuilder>(resultType, columns) : nullptr)
+            , ResultBuilder(resultType ? std::make_unique<TProtoBuilder>(resultType, columns) : nullptr)
             , ResultSampleDataSize(0)
             , ResultSampleData()
             , Issues()
@@ -120,7 +120,7 @@ struct TWriteQueue {
         }
 
         virtual void FinishFullResultWriter() {
-            TBase::Send(FullResultWriterID, MakeHolder<NActors::TEvents::TEvPoison>());
+            TBase::Send(FullResultWriterID, std::make_unique<NActors::TEvents::TEvPoison>());
         }
 
         void OnReceiveData(NDq::TDqSerializedBatch&& data, const TString& messageId = "", bool autoAck = false) {
@@ -130,7 +130,7 @@ struct TWriteQueue {
                 Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.RowCount())).SetCode(0, TSeverityIds::S_WARNING));
             }
             if (Discard || !ResultBuilder || autoAck) {
-                TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(messageId));
+                TBase::Send(TBase::SelfId(), std::make_unique<TEvMessageProcessed>(messageId));
                 return;
             }
 
@@ -164,7 +164,7 @@ struct TWriteQueue {
 
                 if (full) {
                     WriteQueue.back().SentProcessedEvent = true;
-                    TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(messageId));
+                    TBase::Send(TBase::SelfId(), std::make_unique<TEvMessageProcessed>(messageId));
                     return;
                 }
 
@@ -194,7 +194,7 @@ struct TWriteQueue {
                 : TIssuesIds::DQ_GATEWAY_ERROR;
             const auto issue = TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});  // remember issue to pass it with TEvQueryResponse, cause executor_actor ignores TEvDqFailure after finish
-            auto req = MakeHolder<TEvDqFailure>(statusCode, issue);
+            auto req = std::make_unique<TEvDqFailure>(statusCode, issue);
             FlushCounters(req->Record);
             TBase::Send(ExecuterID, req.Release());
         }
@@ -264,7 +264,7 @@ struct TWriteQueue {
 
             QueryResponse.Reset(ev->Release().Release());
             TBase::Become(&TDerived::ShutdownHandler);
-            TBase::Send(TBase::SelfId(), MakeHolder<NActors::TEvents::TEvGone>());
+            TBase::Send(TBase::SelfId(), std::make_unique<NActors::TEvents::TEvGone>());
         }
 
         void OnFullResultWriterShutdown() {
@@ -300,7 +300,7 @@ struct TWriteQueue {
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             Y_ABORT_UNLESS(ev->Get()->Record.GetMessageId() == WriteQueue.front().MessageId);
             if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
-                TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
+                TBase::Send(TBase::SelfId(), std::make_unique<TEvMessageProcessed>(WriteQueue.front().MessageId));
             }
             WriteQueue.pop();
 
@@ -401,7 +401,7 @@ struct TWriteQueue {
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
 
             auto& src = WriteQueue.front();
-            auto req = MakeHolder<TEvFullResultWriterWriteRequest>();
+            auto req = std::make_unique<TEvFullResultWriterWriteRequest>();
 
             req->Record.SetMessageId(src.MessageId);
             *(req->Record.MutableData()) = std::move(src.Data.Proto);
@@ -431,12 +431,12 @@ struct TWriteQueue {
         ui64 Rows;
         bool Truncated;
         NActors::TActorId FullResultWriterID;
-        THolder<TProtoBuilder> ResultBuilder;
+        std::unique_ptr<TProtoBuilder> ResultBuilder;
         ui64 ResultSampleDataSize;
         TVector<NDqProto::TData> ResultSampleData;
         TIssues Issues;
         THashSet<NActors::TActorId> BlockingActors;
-        THolder<TEvQueryResponse> QueryResponse;
+        std::unique_ptr<TEvQueryResponse> QueryResponse;
         bool WaitingAckFromFRW;
     };
 } // namespace NYql::NDqs::NExecutionHelpers

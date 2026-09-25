@@ -589,8 +589,8 @@ public:
     }
 };
 
-THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
-    return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+std::unique_ptr<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
+    return std::make_unique<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
 };
 
 void ZeroSharedCache(TMyEnvBase &env) {
@@ -3541,7 +3541,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         TActorId FollowerTabletActor;
         TActorId LeaderTabletActor;
         ui32 SnapshotStep = 0;
-        THolder<IEventHandle> SnapshotCommitResult;
+        std::unique_ptr<IEventHandle> SnapshotCommitResult;
         bool Detached = false;
 
         void Install(TTestActorRuntimeBase& runtime) {
@@ -5092,7 +5092,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
         Cerr << "...making snapshot with concurrent commit" << Endl;
         {
-            TVector<THolder<NTabletFlatExecutor::ITransaction>> txs;
+            TVector<std::unique_ptr<NTabletFlatExecutor::ITransaction>> txs;
             txs.emplace_back(new TTxMakeSnapshot);
             txs.emplace_back(new TTxCommitLongTx(234));
             env.SendAsync(new NFake::TEvExecute{ std::move(txs) });

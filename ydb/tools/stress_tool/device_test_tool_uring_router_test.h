@@ -64,7 +64,7 @@ class TUringRouterTest : public TPerfTest {
     struct alignas(64) TDeviceState {
         ui32 BuffSize = 0;
         ui64 DeviceSizeBytes = 0;
-        THolder<NPDisk::TUringRouter> Router;
+        std::unique_ptr<NPDisk::TUringRouter> Router;
 
         TVector<TOp> Ops;
         TVector<ui8*> Buffers;
@@ -127,7 +127,7 @@ class TUringRouterTest : public TPerfTest {
     const ui32 NumberOfRandomRefills;
     const bool UseWriteFixed;
 
-    TVector<THolder<TDeviceState>> DeviceStates;
+    TVector<std::unique_ptr<TDeviceState>> DeviceStates;
 
     // Sync barrier for multi-device
     std::atomic<ui32> ReadyCount{0};
@@ -157,7 +157,7 @@ public:
 
         DeviceStates.resize(Cfg.NumDevices());
         for (ui32 d = 0; d < Cfg.NumDevices(); ++d) {
-            DeviceStates[d] = MakeHolder<TDeviceState>();
+            DeviceStates[d] = std::make_unique<TDeviceState>();
             TrimDeviceBeforeRun(d);
             InitDevice(d);
         }
@@ -259,7 +259,7 @@ private:
 
         NPDisk::TUringRouterConfig cfg;
         cfg.QueueDepth = QueueDepth;
-        dev.Router = MakeHolder<NPDisk::TUringRouter>(std::move(file), nullptr, cfg);
+        dev.Router = std::make_unique<NPDisk::TUringRouter>(std::move(file), nullptr, cfg);
         dev.Router->RegisterFile();
 
         dev.Ops.resize(QueueDepth);

@@ -92,7 +92,7 @@ public:
     void SetLocation();
 
 protected:
-    THolder<NKikimrReplication::TReplicationLocationConfig> Location;
+    std::unique_ptr<NKikimrReplication::TReplicationLocationConfig> Location;
     virtual TTargetWithStreamStats* GetStatsImpl();
     virtual TTargetWithStreamCounters* GetCountersImpl();
 

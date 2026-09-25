@@ -490,7 +490,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         std::make_unique<NDDisk::TEvWritePersistentBufferResult>();
     SetCantAcquireStatus(errorResponse->Record);
 
-    ctx.Send(MakeHolder<IEventHandle>(
+    ctx.Send(std::make_unique<IEventHandle>(
         ctx.SelfID,
         ctx.SelfID,
         errorResponse.release(),
@@ -632,7 +632,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
         CantAcquireDataErrorMessage,
         msg->PersistentBufferIds);
-    ctx.Send(MakeHolder<IEventHandle>(
+    ctx.Send(std::make_unique<IEventHandle>(
         ctx.SelfID,
         ctx.SelfID,
         errorResponse.release(),
@@ -768,7 +768,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
     auto errorResponse = std::make_unique<NKikimr::NDDisk::TEvWriteResult>();
     SetCantAcquireStatus(errorResponse->Record);
 
-    ctx.Send(MakeHolder<IEventHandle>(
+    ctx.Send(std::make_unique<IEventHandle>(
         ctx.SelfID,
         ctx.SelfID,
         errorResponse.release(),
@@ -861,7 +861,7 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
         request->AddErase(pBufferKey.Lsn, pBufferKey.Generation);
     }
 
-    ctx.Send(MakeHolder<IEventHandle>(
+    ctx.Send(std::make_unique<IEventHandle>(
         msg->ServiceId,
         ctx.SelfID,
         request.release(),

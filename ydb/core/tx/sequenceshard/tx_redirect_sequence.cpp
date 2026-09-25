@@ -75,7 +75,7 @@ namespace NSequenceShard {
         }
 
         TEvSequenceShard::TEvRedirectSequence::TPtr Ev;
-        THolder<TEvSequenceShard::TEvRedirectSequenceResult> Result;
+        std::unique_ptr<TEvSequenceShard::TEvRedirectSequenceResult> Result;
     };
 
 

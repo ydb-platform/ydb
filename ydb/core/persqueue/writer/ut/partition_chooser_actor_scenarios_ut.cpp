@@ -134,7 +134,7 @@ private:
     }
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        auto response = std::make_unique<TEvPQ::TEvCheckPartitionStatusResponse>();
         response->Record.SetStatus(Status);
         if (CheckSeqNo) {
             response->Record.SetSeqNo(*CheckSeqNo);
@@ -143,7 +143,7 @@ private:
     }
 
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+        auto response = std::make_unique<TEvPersQueue::TEvResponse>();
         response->Record.SetStatus(ResponseStatus);
         response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         response->Record.MutablePartitionResponse();
@@ -163,7 +163,7 @@ private:
     }
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr& ev, const TActorContext& ctx) {
-        auto response = MakeHolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
+        auto response = std::make_unique<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
         response->Record.SetPartitionId(PqrPartitionId);
         ctx.Send(ev->Sender, response.Release());
     }
@@ -224,7 +224,7 @@ public:
 
     void ReplyPendingCreateSession(const TActorContext& ctx) {
         UNIT_ASSERT(PendingCreateSessionSender);
-        auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+        auto response = std::make_unique<NKqp::TEvKqp::TEvCreateSessionResponse>();
         response->Record.SetYdbStatus(Settings.CreateSessionStatus);
         if (Settings.CreateSessionStatus == Ydb::StatusIds::SUCCESS) {
             response->Record.MutableResponse()->SetSessionId("session-1");
@@ -247,7 +247,7 @@ private:
             PendingCreateSessionCookie = ev->Cookie;
             return;
         }
-        auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+        auto response = std::make_unique<NKqp::TEvKqp::TEvCreateSessionResponse>();
         response->Record.SetYdbStatus(Settings.CreateSessionStatus);
         if (Settings.CreateSessionStatus == Ydb::StatusIds::SUCCESS) {
             response->Record.MutableResponse()->SetSessionId("session-1");
@@ -257,7 +257,7 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvQueryRequest::TPtr& ev, const TActorContext& ctx) {
         const bool isUpdate = ev->Get()->Record.GetRequest().GetTxControl().commit_tx();
-        auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+        auto response = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
 
         if (isUpdate) {
             ++UpdateRequests;
@@ -498,20 +498,20 @@ struct TEnv {
         return actorId;
     }
 
-    THolder<TEvPartitionChooser::TEvChooseResult> WaitResult(TDuration timeout = TDuration::Seconds(2)) {
+    std::unique_ptr<TEvPartitionChooser::TEvChooseResult> WaitResult(TDuration timeout = TDuration::Seconds(2)) {
         auto ev = Runtime.GrabEdgeEvent<TEvPartitionChooser::TEvChooseResult>(Edge, timeout);
         if (!ev) {
             return {};
         }
-        return THolder<TEvPartitionChooser::TEvChooseResult>(ev->Release().Release());
+        return std::unique_ptr<TEvPartitionChooser::TEvChooseResult>(ev->Release().Release());
     }
 
-    THolder<TEvPartitionChooser::TEvChooseError> WaitError(TDuration timeout = TDuration::Seconds(2)) {
+    std::unique_ptr<TEvPartitionChooser::TEvChooseError> WaitError(TDuration timeout = TDuration::Seconds(2)) {
         auto ev = Runtime.GrabEdgeEvent<TEvPartitionChooser::TEvChooseError>(Edge, timeout);
         if (!ev) {
             return {};
         }
-        return THolder<TEvPartitionChooser::TEvChooseError>(ev->Release().Release());
+        return std::unique_ptr<TEvPartitionChooser::TEvChooseError>(ev->Release().Release());
     }
 };
 

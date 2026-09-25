@@ -192,7 +192,7 @@ private:
     }
 
     void StartCollectTableSettings(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary) {
-        CollectTableSettingsState = MakeHolder<TCollectTableSettingsState>();
+        CollectTableSettingsState = std::make_unique<TCollectTableSettingsState>();
         CollectTableSettingsState->TablePath = tablePath;
         CollectTableSettingsState->TableDescription = tableDesc;
         CollectTableSettingsState->Temporary = temporary;
@@ -420,7 +420,7 @@ private:
         Y_ENSURE(path.has_value());
         Y_ENSURE(createQuery.has_value());
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
         FillBatch(*batch, path.value(), createQuery.value());
 
@@ -455,7 +455,7 @@ private:
                         if (it == CollectTableSettingsState->PersQueues.end() || it->second) {
                             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected topic path");
                         }
-                        it->second = MakeHolder<NKikimrSchemeOp::TPersQueueGroupDescription>(description);
+                        it->second = std::make_unique<NKikimrSchemeOp::TPersQueueGroupDescription>(description);
                         CollectTableSettingsState->CurrentPersQueuesNumber++;
 
                         if (!CollectTableSettingsState->IsReady()) {
@@ -509,7 +509,7 @@ private:
         Y_ENSURE(path.has_value());
         Y_ENSURE(createQuery.has_value());
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
         FillBatch(*batch, path.value(), createQuery.value());
 
@@ -531,7 +531,7 @@ private:
         if (it->second) {
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Found duplicate sequence path id: " << msg->PathId);
         }
-        it->second = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>(*msg);
+        it->second = std::make_unique<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>(*msg);
         CollectTableSettingsState->CurrentSequencesNumber++;
 
         if (!CollectTableSettingsState->IsReady()) {
@@ -560,7 +560,7 @@ private:
         Y_ENSURE(path.has_value());
         Y_ENSURE(createQuery.has_value());
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
         FillBatch(*batch, path.value(), createQuery.value());
 
@@ -576,26 +576,26 @@ private:
         TString TablePath;
         NKikimrSchemeOp::TTableDescription TableDescription;
         bool Temporary;
-        THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>> PersQueues;
+        THashMap<TString, std::unique_ptr<NKikimrSchemeOp::TPersQueueGroupDescription>> PersQueues;
         ui32 CurrentPersQueuesNumber = 0;
-        THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>> Sequences;
+        THashMap<TPathId, std::unique_ptr<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>> Sequences;
         ui32 CurrentSequencesNumber = 0;
 
         bool IsReady() const {
             return CurrentPersQueuesNumber == PersQueues.size() && CurrentSequencesNumber == Sequences.size();
         }
     };
-    THolder<TCollectTableSettingsState> CollectTableSettingsState;
+    std::unique_ptr<TCollectTableSettingsState> CollectTableSettingsState;
 };
 
 }
 
-THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TShowCreate>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+    return std::make_unique<TShowCreate>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
         std::move(userToken));
 }
 

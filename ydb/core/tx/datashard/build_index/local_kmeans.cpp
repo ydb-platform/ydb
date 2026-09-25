@@ -364,7 +364,7 @@ protected:
                 LastAckedKey = PendingCheckpointKey;
                 PendingCheckpointKey = {};
 
-                auto progress = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+                auto progress = std::make_unique<TEvDataShard::TEvLocalKMeansResponse>();
                 auto& rec = progress->Record;
                 rec.SetId(BuildId);
                 rec.SetTabletId(TabletId);
@@ -682,7 +682,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvLocalKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting local K-means scan",

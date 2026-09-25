@@ -35,8 +35,8 @@ struct TDropPlan {
     }
 };
 
-THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPath& bcPath) {
-    auto plan = MakeHolder<TDropPlan>();
+std::unique_ptr<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPath& bcPath) {
+    auto plan = std::make_unique<TDropPlan>();
     plan->BackupCollectionId = bcPath.Base()->PathId;
 
     YDB_LOG_INFO_CTX(context.Ctx, "DropPlan: Starting collection for backup collection",
@@ -271,9 +271,9 @@ class TDropBackupCollection : public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -356,7 +356,7 @@ class TDropBackupCollection : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
@@ -364,7 +364,7 @@ public:
             {"path", rootPathStr + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
@@ -563,7 +563,7 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
     }
 
     // Use the same validation logic as ResolveBackupCollectionPaths to be consistent
-    auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, static_cast<ui64>(nextId.GetTxId()), static_cast<ui64>(context.SS->SelfTabletId()));
+    auto proposeResult = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, static_cast<ui64>(nextId.GetTxId()), static_cast<ui64>(context.SS->SelfTabletId()));
     auto bcPaths = NBackup::ResolveBackupCollectionPaths(parentPathStr, dropOperation.GetName(), false, context, proposeResult);
     if (!bcPaths) {
         return {CreateReject(nextId, proposeResult->Record.GetStatus(), proposeResult->Record.GetReason())};
@@ -586,7 +586,7 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
             if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() &&
                 (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
 
-                auto errorResult = MakeHolder<TProposeResponse>(checks.GetStatus(), static_cast<ui64>(nextId.GetTxId()), static_cast<ui64>(context.SS->SelfTabletId()));
+                auto errorResult = std::make_unique<TProposeResponse>(checks.GetStatus(), static_cast<ui64>(nextId.GetTxId()), static_cast<ui64>(context.SS->SelfTabletId()));
                 errorResult->SetError(checks.GetStatus(), checks.GetError());
                 errorResult->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
                 errorResult->SetPathId(dstPath.Base()->PathId.LocalPathId);

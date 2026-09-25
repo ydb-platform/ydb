@@ -85,7 +85,7 @@ public:
     void Bootstrap() {
         Become(&TDatabaseCacheTestActor::StateFunc);
 
-        auto event = MakeHolder<TEvKqp::TEvQueryRequest>();
+        auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
         event->Record.MutableRequest()->SetDatabase(Database);
         Send(SelfId(), event.Release());
 
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         TActorId sender = runtime->AllocateEdgeActor();
 
         auto SendBadRequestToSession = [&](const TString& sessionId) {
-            auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
             ev->Record.MutableRequest()->SetSessionId(sessionId);
             ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         TActorId kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
         TActorId sender = runtime->AllocateEdgeActor();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         //ev->Record.MutableRequest()->SetSessionId(sessionId);
         ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "SomeUniqTextForUt");
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         {
             TString sessionId = CreateSession(runtime, kqpProxy2, sender);
-            auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
             ev->Record.MutableRequest()->SetSessionId(sessionId);
             ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             {
                 TString sessionId = CreateSession(runtime, kqpProxy2, sender);
                 Cerr << "Created  session " << sessionId << Endl;
-                auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+                auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
                 ev->Record.MutableRequest()->SetSessionId(sessionId);
                 ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
                 ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -465,7 +465,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
             {
                 TString sessionId = CreateSession(runtime, kqpProxy2, sender);
-                auto ev = MakeHolder<NKqp::TEvKqp::TEvPingSessionRequest>();
+                auto ev = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
                 ev->Record.MutableRequest()->SetSessionId(sessionId);
                 ev->Record.MutableRequest()->SetTimeoutMs(1);
                 runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
@@ -519,7 +519,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             for (ui32 node = 0; node < nodesCount; ++node) {
                 TActorId kqpProxy = MakeKqpProxyID(runtime->GetNodeId(node));
 
-                auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
+                auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
                 auto& req = *ev->Record.MutableRequest();
                 req.SetQuery("SELECT 42");
                 req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             TString sessionId = CreateSession(runtime, kqpProxy, sender);
             UNIT_ASSERT(!sessionId.empty());
 
-            auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+            auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             closeEv->Record.MutableRequest()->SetSessionId(sessionId);
             runtime->Send(new IEventHandle(kqpProxy, sender, closeEv.Release()));
         }

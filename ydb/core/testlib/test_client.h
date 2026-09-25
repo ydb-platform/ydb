@@ -432,8 +432,8 @@ namespace Tests {
         // background operations can cause the gRPC client to hang
         // or trigger use-after-free during its destruction.
         std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
-        THolder<TTestActorRuntime> Runtime;
-        THolder<NYdb::TDriver> Driver;
+        std::unique_ptr<TTestActorRuntime> Runtime;
+        std::unique_ptr<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
@@ -740,7 +740,7 @@ namespace Tests {
         Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props);
         Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const TMaybe<double> maxUnitsPerSecond = Nothing());
 
-        THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
+        std::unique_ptr<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
 
     protected:
         TString PrintToString(const ::google::protobuf::Message& msg, size_t maxSz = 1000) {

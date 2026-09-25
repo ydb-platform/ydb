@@ -8,11 +8,11 @@
 namespace NKikimr {
 
 struct TActorSystemStub {
-    THolder<NActors::TActorSystem> System;
-    THolder<NActors::TMailbox> Mailbox;
-    THolder<NActors::TExecutorThread> ExecutorThread;
+    std::unique_ptr<NActors::TActorSystem> System;
+    std::unique_ptr<NActors::TMailbox> Mailbox;
+    std::unique_ptr<NActors::TExecutorThread> ExecutorThread;
     NActors::TActorId SelfID;
-    THolder<NActors::TActorContext> Ctx;
+    std::unique_ptr<NActors::TActorContext> Ctx;
     NActors::TActivationContext* PrevCtx;
     TAppData AppData;
 

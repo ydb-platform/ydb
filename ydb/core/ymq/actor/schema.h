@@ -21,22 +21,22 @@ namespace NKikimr::NSQS {
 extern const TString QUOTER_KESUS_NAME;
 extern const TString RPS_QUOTA_NAME;
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeExecuteEvent(const TString& query);
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeCreateTableEvent(const TString& root,
                          const TTable& table,
                          size_t queueShardsCount = 0);
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeDeleteTableEvent(const TString& root,
                          const TTable& table);
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveDirectoryEvent(const TString& root, const TString& name);
 
-THolder<TEvTxUserProxy::TEvProposeTransaction>
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveTopicEvent(const TString& root, const TString& name);
 
 // Create actor that calls AddQuoterResource and handles pipe errors and retries
@@ -81,7 +81,7 @@ private:
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
 
-    THolder<TEvTxUserProxy::TEvProposeTransaction> MakeMkDirRequest(const TString& root, const TString& dirName);
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> MakeMkDirRequest(const TString& root, const TString& dirName);
 
     void AddRPSQuota();
 

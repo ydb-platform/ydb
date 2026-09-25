@@ -24,7 +24,7 @@ void THistogramCounter::IncrementFor(ui64 value) {
     Histogram->Collect(value);
 }
 
-using THistogramVector = TVector<THolder<THistogramCounter>>;
+using THistogramVector = TVector<std::unique_ptr<THistogramCounter>>;
 
 /*
 ** class TAggregatedSimpleCounters
@@ -45,7 +45,7 @@ void TAggregatedSimpleCounters::Reserve(size_t hint) {
 }
 
 void TAggregatedSimpleCounters::AddSimpleCounter(
-    const char* name, THolder<THistogramCounter> percentileAggregate)
+    const char* name, std::unique_ptr<THistogramCounter> percentileAggregate)
 {
     ChangedCounters.push_back(true);
 
@@ -207,7 +207,7 @@ void TAggregatedCumulativeCounters::Reserve(size_t hint) {
 }
 
 void TAggregatedCumulativeCounters::AddCumulativeCounter(
-    const char* name, THolder<THistogramCounter> percentileAggregate)
+    const char* name, std::unique_ptr<THistogramCounter> percentileAggregate)
 {
     ChangedCounters.push_back(true);
 
@@ -355,7 +355,7 @@ void TAggregatedHistogramCounters::Reserve(size_t hint) {
 void TAggregatedHistogramCounters::AddCounter(
     const char* name,
     const NKikimr::TTabletPercentileCounter& percentileCounter,
-    THashMap<TString, THolder<THistogramCounter>>& histogramAggregates) {
+    THashMap<TString, std::unique_ptr<THistogramCounter>>& histogramAggregates) {
     TStringBuf counterName(name);
     TStringBuf simpleCounterName = GetHistogramAggregateSimpleName(counterName);
     bool histogramAggregate = !simpleCounterName.empty();

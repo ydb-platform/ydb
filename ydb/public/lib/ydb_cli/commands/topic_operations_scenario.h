@@ -164,7 +164,7 @@ private:
 
     static NTable::TSession GetSession(NTable::TTableClient& client);
 
-    static THolder<TLogBackend> MakeLogBackend(ui32 level);
+    static std::unique_ptr<TLogBackend> MakeLogBackend(ui32 level);
 
     void InitLog(TClientCommand::TConfig& config);
     void InitDriver(TClientCommand::TConfig& config);

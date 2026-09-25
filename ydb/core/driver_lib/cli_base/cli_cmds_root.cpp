@@ -82,7 +82,7 @@ void TClientCommandRootKikimrBase::ParseProfile() {
     }
 
     if (LocalProfileName) {
-        ProfileConfig = MakeHolder<TProfileConfig>(LocalProfileName);
+        ProfileConfig = std::make_unique<TProfileConfig>(LocalProfileName);
     }
 }
 
@@ -217,7 +217,7 @@ private:
 };
 
 int NewLiteClient(int argc, char** argv) {
-    THolder<TClientCommandRootLite> commandsRoot = MakeHolder<TClientCommandRootLite>();
+    std::unique_ptr<TClientCommandRootLite> commandsRoot = std::make_unique<TClientCommandRootLite>();
     commandsRoot->Opts.SetTitle("YDB client");
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);

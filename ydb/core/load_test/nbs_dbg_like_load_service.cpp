@@ -129,7 +129,7 @@ private:
             OpenHivePipe();
             return;
         }
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = TenantName;
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -497,7 +497,7 @@ private:
             return;
         }
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = TenantName;
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

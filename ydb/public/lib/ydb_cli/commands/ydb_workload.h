@@ -97,11 +97,11 @@ protected:
 
     NYdbWorkload::TWorkloadParams::ECommandType CommandType;
     NYdbWorkload::TWorkloadParams& Params;
-    THolder<TScopedDriver> Driver;
-    THolder<NTable::TTableClient> TableClient;
-    THolder<NTopic::TTopicClient> TopicClient;
-    THolder<NScheme::TSchemeClient> SchemeClient;
-    THolder<NQuery::TQueryClient> QueryClient;
+    std::unique_ptr<TScopedDriver> Driver;
+    std::unique_ptr<NTable::TTableClient> TableClient;
+    std::unique_ptr<NTopic::TTopicClient> TopicClient;
+    std::unique_ptr<NScheme::TSchemeClient> SchemeClient;
+    std::unique_ptr<NQuery::TQueryClient> QueryClient;
     int Type = 0;
     bool DryRun = false;
 
@@ -134,7 +134,7 @@ public:
 
 private:
     std::unique_ptr<TClientCommand> CreateRunCommand(const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
-    THolder<NYdbWorkload::TWorkloadParams> Params;
+    std::unique_ptr<NYdbWorkload::TWorkloadParams> Params;
 };
 
 }

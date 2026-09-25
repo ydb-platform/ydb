@@ -57,11 +57,11 @@ private:
 
     Tests::TServerSettings::TPtr Settings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TClient> Client;
+    std::unique_ptr<Tests::TClient> Client;
 
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
 
     std::shared_ptr<std::vector<std::string>> AuditLogLines;
     TActorId WebLoginService;

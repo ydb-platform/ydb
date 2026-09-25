@@ -60,7 +60,7 @@ public:
             return PageCollection->Page(pageId).Size;
         }
 
-        const TPageMap<THolder<TPage>>& GetPageMap() const noexcept {
+        const TPageMap<std::unique_ptr<TPage>>& GetPageMap() const noexcept {
             return PageMap;
         }
 
@@ -76,7 +76,7 @@ public:
         // Otherwise stat counters would be out of sync
 
         bool AddPage(TPageId pageId, TSharedPageRef sharedBody) {
-            return PageMap.emplace(pageId, MakeHolder<TPage>(
+            return PageMap.emplace(pageId, std::make_unique<TPage>(
                 pageId,
                 GetPageSize(pageId),
                 std::move(sharedBody),
@@ -110,7 +110,7 @@ public:
 
     private:
         // all pages in PageMap have valid unused shared body
-        TPageMap<THolder<TPage>> PageMap;
+        TPageMap<std::unique_ptr<TPage>> PageMap;
 
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;

@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
     opts.AddLongOption("codec", "blob encoding: lz4, plain")
         .RequiredArgument("STR").DefaultValue("plain");
 
-    THolder<TOptsParseResult> res(new TOptsParseResult(&opts, argc, argv));
+    std::unique_ptr<TOptsParseResult> res(new TOptsParseResult(&opts, argc, argv));
 
     auto raw = TFileInput(res->Get("path")).ReadAll();
 

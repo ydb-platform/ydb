@@ -319,7 +319,7 @@ public:
     void *Cookie;
     TCallback LogCallback;
     NPDisk::TCommitRecord CommitRecord;
-    THolder<NPDisk::TEvLogResult> Result;
+    std::unique_ptr<NPDisk::TEvLogResult> Result;
     std::function<void()> OnDestroy;
 
     bool Replied = false;
@@ -540,7 +540,7 @@ public:
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
 
-    THolder<TCompletionChunkWrite> Completion;
+    std::unique_ptr<TCompletionChunkWrite> Completion;
 
     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 

@@ -427,11 +427,11 @@ void TWorkloadCommandBase::Config(TConfig& config) {
 
 int TWorkloadCommandBase::Run(TConfig& config) {
     if (!DryRun) {
-        Driver = MakeHolder<TScopedDriver>(CreateDriver(config));
-        TableClient = MakeHolder<NTable::TTableClient>(*Driver);
-        TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
-        SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
-        QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
+        Driver = std::make_unique<TScopedDriver>(CreateDriver(config));
+        TableClient = std::make_unique<NTable::TTableClient>(*Driver);
+        TopicClient = std::make_unique<NTopic::TTopicClient>(*Driver);
+        SchemeClient = std::make_unique<NScheme::TSchemeClient>(*Driver);
+        QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver);
         Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
     Params.DbPath = config.Database;

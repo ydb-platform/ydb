@@ -94,7 +94,7 @@ namespace NActors {
         return GetActorContext().ExecutorThread.Send(ev);
     }
 
-    THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TMonotonic deadline) {
+    std::unique_ptr<IEventHandle> TActorCoroImpl::WaitForEvent(TMonotonic deadline) {
         IEventHandle *timeoutEv = nullptr;
         if (deadline != TMonotonic::Max()) {
             TActivationContext::Schedule(deadline, timeoutEv = new IEventHandle(TEvents::TSystem::CoroTimeout, 0,
@@ -105,7 +105,7 @@ namespace NActors {
         Y_ABORT_UNLESS(!Finished);
 
         // obtain pending event and ensure we've got one
-        while (THolder<IEventHandle> event = ReturnToActorSystem()) {
+        while (std::unique_ptr<IEventHandle> event = ReturnToActorSystem()) {
             if (event->GetTypeRewrite() != TEvents::TSystem::CoroTimeout) {
                 return event;
             } else if (event.Get() == timeoutEv) {
@@ -115,7 +115,7 @@ namespace NActors {
         Y_ABORT("no pending event");
     }
 
-    bool TActorCoroImpl::ProcessEvent(THolder<IEventHandle> ev) {
+    bool TActorCoroImpl::ProcessEvent(std::unique_ptr<IEventHandle> ev) {
         if (!SelfActorId) { // process bootstrap message, extract actor ids
             Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap);
             SelfActorId = ev->Recipient;
@@ -139,7 +139,7 @@ namespace NActors {
         return Finished;
     }
 
-    void TActorCoroImpl::Resume(THolder<IEventHandle> ev) {
+    void TActorCoroImpl::Resume(std::unique_ptr<IEventHandle> ev) {
         BeforeResume();
 
         Y_ABORT_UNLESS(!PendingEvent);
@@ -184,7 +184,7 @@ namespace NActors {
         ReturnToActorSystem();
     }
 
-    THolder<IEventHandle> TActorCoroImpl::ReturnToActorSystem() {
+    std::unique_ptr<IEventHandle> TActorCoroImpl::ReturnToActorSystem() {
 #if CORO_THROUGH_THREADS
         OutEvent.Signal();
         if (Finished) {
@@ -205,7 +205,7 @@ namespace NActors {
         }
 #endif
 
-        if (THolder<IEventHandle> ev = std::exchange(PendingEvent, nullptr)) {
+        if (std::unique_ptr<IEventHandle> ev = std::exchange(PendingEvent, nullptr)) {
             return ev;
         } else {
             // we have returned from the actor system and it kindly asks us to terminate the coroutine as it is being

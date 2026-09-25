@@ -1083,7 +1083,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         // A freshly-created table's shards may not have reported Ready to the
         // scheme shard yet; re-propose the split until it is accepted.
         for (ui32 attempt = 0; attempt < 120; ++attempt) {
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
             auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1110,7 +1110,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         auto& runtime = *server.GetRuntime();
         auto& settings = server.GetSettings();
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         auto tid = NKikimr::Tests::ChangeStateStorage(NKikimr::Tests::SchemeRoot, settings.Domain);
         runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());

@@ -297,9 +297,9 @@ public:
 
 template<ui32 ChunkSize = 128 << 20 >
 struct TPDiskTest : public TPerfTest {
-    THolder<TActorSystemSetup> Setup;
+    std::unique_ptr<TActorSystemSetup> Setup;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<TActorSystem> ActorSystem;
+    std::unique_ptr<TActorSystem> ActorSystem;
     TAppData AppData;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;

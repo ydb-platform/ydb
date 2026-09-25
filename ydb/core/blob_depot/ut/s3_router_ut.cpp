@@ -111,9 +111,9 @@ class TStallingS3Server {
     const TDuration HoldDuration;
     std::atomic<size_t> RequestsReceived{0};
     std::atomic<bool> Stopped{false};
-    THolder<TThread> AcceptThread;
+    std::unique_ptr<TThread> AcceptThread;
     TMutex ConnectionsMutex;
-    TVector<THolder<TThread>> ConnectionThreads;
+    TVector<std::unique_ptr<TThread>> ConnectionThreads;
 
 public:
     TStallingS3Server(size_t bodySize, TDuration holdDuration)
@@ -128,7 +128,7 @@ public:
         Y_ENSURE(getsockname(Listener, reinterpret_cast<sockaddr*>(&name), &len) == 0);
         Port = InetToHost(name.sin_port);
         Y_ENSURE(Listener.Listen(16) == 0);
-        AcceptThread = MakeHolder<TThread>([this] { AcceptLoop(); });
+        AcceptThread = std::make_unique<TThread>([this] { AcceptLoop(); });
         AcceptThread->Start();
     }
 
@@ -148,7 +148,7 @@ public:
         TSockAddrInet addr("127.0.0.1", Port);
         poke.Connect(&addr);
         AcceptThread->Join();
-        TVector<THolder<TThread>> threads;
+        TVector<std::unique_ptr<TThread>> threads;
         with_lock (ConnectionsMutex) {
             threads.swap(ConnectionThreads);
         }
@@ -168,7 +168,7 @@ private:
                 return;
             }
 
-            auto thread = MakeHolder<TThread>([this, client] { Serve(*client); });
+            auto thread = std::make_unique<TThread>([this, client] { Serve(*client); });
             thread->Start();
             with_lock (ConnectionsMutex) {
                 ConnectionThreads.push_back(std::move(thread));

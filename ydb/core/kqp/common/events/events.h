@@ -220,13 +220,13 @@ struct TEvKqp {
     };
 
     struct TEvDelayedRequestError : public TEventLocal<TEvDelayedRequestError, TKqpEvents::EvDelayedRequestError> {
-        TEvDelayedRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        TEvDelayedRequestError(std::unique_ptr<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
             : RequestEvent(std::move(requestEvent))
             , Status(status)
             , Issues(std::move(issues))
         {}
 
-        THolder<IEventHandle> RequestEvent;
+        std::unique_ptr<IEventHandle> RequestEvent;
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
     };

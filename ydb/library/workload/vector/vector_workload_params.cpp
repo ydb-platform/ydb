@@ -206,8 +206,8 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
     }
 }
 
-THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TVectorWorkloadGenerator>(this);
+std::unique_ptr<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TVectorWorkloadGenerator>(this);
 }
 
 TWorkloadDataInitializer::TList TVectorWorkloadParams::CreateDataInitializers() const {

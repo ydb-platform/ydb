@@ -170,12 +170,12 @@ public:
 
 } // anonymous namespace
 
-THolder<IKqpPlannerStrategy> CreateKqpGreedyPlanner() {
-    return MakeHolder<TKqpGreedyPlanner>();
+std::unique_ptr<IKqpPlannerStrategy> CreateKqpGreedyPlanner() {
+    return std::make_unique<TKqpGreedyPlanner>();
 }
 
-THolder<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner() {
-    return MakeHolder<TKqpMockEmptyPlanner>();
+std::unique_ptr<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner() {
+    return std::make_unique<TKqpMockEmptyPlanner>();
 }
 
 } // namespace NKikimr::NKqp

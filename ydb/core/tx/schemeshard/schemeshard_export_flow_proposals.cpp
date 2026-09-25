@@ -19,7 +19,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo
@@ -40,7 +40,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo
@@ -235,7 +235,7 @@ void FillEncryptionSettings(
     }
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
@@ -384,7 +384,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
@@ -406,7 +406,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo
@@ -427,11 +427,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
+std::unique_ptr<TEvSchemeShard::TEvCancelTx> CancelPropose(
     const TExportInfo& exportInfo,
     TTxId backupTxId
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
+    auto propose = std::make_unique<TEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
     record.SetTxId(exportInfo.Id);

@@ -431,7 +431,7 @@ namespace NTable {
                 Boots.reserve(Levels->size());
                 for (auto &run: *Levels) {
                     Boots.push_back(
-                        MakeHolder<TRunIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
+                        std::make_unique<TRunIter>(run, Lead.Tags, keyDefaults, CurrentEnv));
                 }
             }
         }
@@ -541,14 +541,14 @@ namespace NTable {
         TRowVersion NextRowVersion;
 
     private:
-        using TBoots = TVector<THolder<TRunIter>>;
+        using TBoots = TVector<std::unique_ptr<TRunIter>>;
 
         IPages* CurrentEnv = nullptr;
 
         TVector<TPartView> LoadedParts;
         size_t LoadingParts = 0;
 
-        THolder<TLevels> Levels;
+        std::unique_ptr<TLevels> Levels;
         TLead Lead;
         TBoots Boots;
         TAutoPtr<TTableIter> Iter;

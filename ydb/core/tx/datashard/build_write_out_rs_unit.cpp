@@ -104,8 +104,8 @@ EExecutionStatus TBuildWriteOutRSUnit::OnTabletNotReady(TWriteOperation& writeOp
     return EExecutionStatus::Restart;
 }
 
-THolder<TExecutionUnit> CreateBuildWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TBuildWriteOutRSUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateBuildWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
+    return std::unique_ptr<TBuildWriteOutRSUnit>(new TBuildWriteOutRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

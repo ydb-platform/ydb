@@ -16,7 +16,7 @@ class TAlterUserAttrs: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& userAttrsPatch = Transaction.GetAlterUserAttributes();
@@ -28,7 +28,7 @@ public:
             {"path", TStringBuilder() << parentPathStr << "/" << name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasAlterUserAttributes()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "UserAttributes are not present");

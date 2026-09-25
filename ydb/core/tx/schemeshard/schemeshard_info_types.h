@@ -3015,14 +3015,14 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
     NKikimrFileStore::TConfig Config;
     ui64 Version = 0;
 
-    THolder<NKikimrFileStore::TConfig> AlterConfig;
+    std::unique_ptr<NKikimrFileStore::TConfig> AlterConfig;
     ui64 AlterVersion = 0;
 
     void PrepareAlter(const NKikimrFileStore::TConfig& alterConfig) {
         Y_ENSURE(!AlterConfig);
         Y_ENSURE(!AlterVersion);
 
-        AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
+        AlterConfig = std::make_unique<NKikimrFileStore::TConfig>();
         AlterConfig->CopyFrom(alterConfig);
 
         Y_ENSURE(!AlterConfig->GetBlockSize());
@@ -3106,7 +3106,7 @@ struct TKesusInfo : public TSimpleRefCount<TKesusInfo> {
     TTabletId KesusTabletId = InvalidTabletId;
     Ydb::Coordination::Config Config;
     ui64 Version = 0;
-    THolder<Ydb::Coordination::Config> AlterConfig;
+    std::unique_ptr<Ydb::Coordination::Config> AlterConfig;
     ui64 AlterVersion = 0;
 
     void FinishAlter() {

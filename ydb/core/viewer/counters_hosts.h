@@ -16,8 +16,8 @@ class TCountersHostsList : public TActorBootstrapped<TCountersHostsList> {
 
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodesResponses;
+    std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    TMap<TNodeId, std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse>> NodesResponses;
     THashSet<TActorId> TcpProxies;
     ui32 NodesRequested = 0;
     ui32 NodesReceived = 0;
@@ -63,7 +63,7 @@ public:
 
     void SendRequest(ui32 nodeId) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        THolder<TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
+        std::unique_ptr<TEvWhiteboard::TEvSystemStateRequest> request = std::make_unique<TEvWhiteboard::TEvSystemStateRequest>();
         Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         NodesRequested++;
     }

@@ -854,10 +854,10 @@ void TCheckSchemeTxUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)
 {
-    return THolder(new TCheckSchemeTxUnit(dataShard, pipeline));
+    return std::unique_ptr<TCheckSchemeTxUnit>(new TCheckSchemeTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

@@ -20,7 +20,7 @@ public:
 
     bool Execute(TTransactionContext &, const TActorContext &) override
     {
-        Response = MakeHolder<TEvConsole::TEvGetAllMetadataResponse>();
+        Response = std::make_unique<TEvConsole::TEvGetAllMetadataResponse>();
 
         if (Self->MainYamlConfig) {
             auto doc = NFyaml::TDocument::Parse(Self->MainYamlConfig);
@@ -55,7 +55,7 @@ public:
 
 private:
     TEvConsole::TEvGetAllMetadataRequest::TPtr Request;
-    THolder<TEvConsole::TEvGetAllMetadataResponse> Response;
+    std::unique_ptr<TEvConsole::TEvGetAllMetadataResponse> Response;
 };
 
 ITransaction *TConfigsManager::CreateTxGetYamlMetadata(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev)

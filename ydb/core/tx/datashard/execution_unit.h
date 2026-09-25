@@ -129,7 +129,7 @@ protected:
     THashSet<TOperation::TPtr> OpsInFly;
 };
 
-THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
+std::unique_ptr<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
                                             TDataShard &dataShard,
                                             TPipeline &pipeline);
 

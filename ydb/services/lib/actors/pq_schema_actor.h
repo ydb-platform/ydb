@@ -473,7 +473,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             DescribeSchemeResult = std::move(ev);
         }
     protected:
-        THolder<NActors::TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DescribeSchemeResult;
+        std::unique_ptr<NActors::TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DescribeSchemeResult;
     };
 
 
@@ -543,7 +543,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             : TBase(request.Topic, request.Database)
             , Request(request)
             , Requester(requester)
-            , Response(MakeHolder<TEvResponse>())
+            , Response(std::make_unique<TEvResponse>())
         {
         }
 
@@ -618,7 +618,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         TActorId Requester;
 
     protected:
-        THolder<TEvResponse> Response;
+        std::unique_ptr<TEvResponse> Response;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
         TMaybe<TString> PrivateTopicName;
     };

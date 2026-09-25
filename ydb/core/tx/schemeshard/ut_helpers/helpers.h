@@ -81,7 +81,7 @@ namespace NSchemeShardUT_Private {
     void SetConfig(
         TTestActorRuntime &runtime,
         ui64 schemeShard,
-        THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request);
+        std::unique_ptr<NConsole::TEvConsole::TEvConfigNotificationRequest> request);
 
     ////////// tablet
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err);
@@ -118,7 +118,7 @@ namespace NSchemeShardUT_Private {
     TString TestLs(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts, NLs::TCheckFunc check = nullptr);
     TString TestLsPathId(TTestActorRuntime& runtime, ui64 pathId, NLs::TCheckFunc check = nullptr);
 
-    THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TString& path,
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TString& path,
         NSchemeCache::TSchemeCacheNavigate::EOp op = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath);
 
     ////////// expected results
@@ -761,8 +761,8 @@ namespace NSchemeShardUT_Private {
         TTablePartitioningInfo TablePartitioningInfo;
     };
 
-    TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 type);
-    void WaitForSuppressed(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 count, TTestActorRuntime::TEventObserver prevObserver);
+    TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime& runtime, TVector<std::unique_ptr<IEventHandle>>& suppressed, ui32 type);
+    void WaitForSuppressed(TTestActorRuntime& runtime, TVector<std::unique_ptr<IEventHandle>>& suppressed, ui32 count, TTestActorRuntime::TEventObserver prevObserver);
 
 
     NKikimrTxDataShard::TEvCompactTableResult CompactTable(

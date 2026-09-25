@@ -15,7 +15,7 @@ using namespace NSchemeShard;
 
 class TMessageBusSchemeInitRoot : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>> {
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusSchemeInitRoot>>;
-    THolder<TBusSchemeInitRoot> Request;
+    std::unique_ptr<TBusSchemeInitRoot> Request;
     const bool WithRetry = true;
     TActorId PipeClient;
 
@@ -74,7 +74,7 @@ public:
         TString tagName = Request->Record.GetTagName();
         const TDomainsInfo::TDomain *domain = AppData(ctx)->DomainsInfo->GetDomainByName(tagName);
         if (domain != nullptr) {
-            THolder<TEvSchemeShard::TEvInitRootShard> x = MakeHolder<TEvSchemeShard::TEvInitRootShard>(ctx.SelfID, domain->DomainRootTag(), domain->Name);
+            std::unique_ptr<TEvSchemeShard::TEvInitRootShard> x = std::make_unique<TEvSchemeShard::TEvInitRootShard>(ctx.SelfID, domain->DomainRootTag(), domain->Name);
             if (Request->Record.HasGlobalConfig()) {
                 x->Record.MutableConfig()->MergeFrom(Request->Record.GetGlobalConfig());
             }

@@ -15,7 +15,7 @@ namespace NActors {
         const TSchedulerConfig Config;
 
         struct TMonCounters;
-        const THolder<TMonCounters> MonCounters;
+        const std::unique_ptr<TMonCounters> MonCounters;
 
         TActorSystem* ActorSystem;
         volatile ui64* CurrentTimestamp;
@@ -31,7 +31,7 @@ namespace NActors {
 
         TScheduleMap ScheduleMap;
 
-        THolder<NThreading::TLegacyFuture<void, false>> MainCycle;
+        std::unique_ptr<NThreading::TLegacyFuture<void, false>> MainCycle;
 
         static const ui64 IntrasecondThreshold = 1048576; // ~second
 

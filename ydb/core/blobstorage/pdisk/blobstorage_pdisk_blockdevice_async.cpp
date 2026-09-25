@@ -898,13 +898,13 @@ protected:
     TString Path;
 
 private:
-    THolder<TCompletionThreads> CompletionThreads;
-    THolder<TTrimThread> TrimThread;
-    THolder<TGetThread> GetEventsThread;
-    THolder<TSubmitGetThread> SpdkSubmitGetThread;
+    std::unique_ptr<TCompletionThreads> CompletionThreads;
+    std::unique_ptr<TTrimThread> TrimThread;
+    std::unique_ptr<TGetThread> GetEventsThread;
+    std::unique_ptr<TSubmitGetThread> SpdkSubmitGetThread;
 
-    THolder<TSharedCallback> SharedCallback;
-    THolder<TSubmitThreadBase> SubmitThread;
+    std::unique_ptr<TSharedCallback> SharedCallback;
+    std::unique_ptr<TSubmitThreadBase> SubmitThread;
 
     bool IsFileOpened;
     bool IsInitialized;
@@ -1023,20 +1023,20 @@ protected:
         }
         if (IsFileOpened) {
             IoContext->SetActorSystem(PCtx->ActorSystem);
-            CompletionThreads = MakeHolder<TCompletionThreads>(*this, CompletionThreadsCount, MaxQueuedCompletionActions);
-            TrimThread = MakeHolder<TTrimThread>(*this);
-            SharedCallback = MakeHolder<TSharedCallback>(*this);
+            CompletionThreads = std::make_unique<TCompletionThreads>(*this, CompletionThreadsCount, MaxQueuedCompletionActions);
+            TrimThread = std::make_unique<TTrimThread>(*this);
+            SharedCallback = std::make_unique<TSharedCallback>(*this);
             if (Flags & TDeviceMode::UseSpdk) {
-                SpdkSubmitGetThread = MakeHolder<TSubmitGetThread>(*this);
+                SpdkSubmitGetThread = std::make_unique<TSubmitGetThread>(*this);
                 SpdkState->LaunchThread(TSubmitGetThread::ThreadProcSpdk, SpdkSubmitGetThread.Get());
             } else {
                 if (Flags & TDeviceMode::UseSubmitGetThread) {
-                    SubmitThread = MakeHolder<TSubmitGetThread>(*this);
+                    SubmitThread = std::make_unique<TSubmitGetThread>(*this);
                     SubmitThread->Start();
                 } else {
-                    SubmitThread = MakeHolder<TSubmitThread>(*this);
+                    SubmitThread = std::make_unique<TSubmitThread>(*this);
                     SubmitThread->Start();
-                    GetEventsThread = MakeHolder<TGetThread>(*this);
+                    GetEventsThread = std::make_unique<TGetThread>(*this);
                     GetEventsThread->Start();
                 }
             }

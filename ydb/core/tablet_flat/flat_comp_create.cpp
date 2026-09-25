@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NTable{
 
-    THolder<ICompactionStrategy> CreateGenCompactionStrategy(
+    std::unique_ptr<ICompactionStrategy> CreateGenCompactionStrategy(
             ui32 table,
             ICompactionBackend* backend,
             IResourceBroker* broker,
@@ -12,7 +12,7 @@ namespace NTable{
             NUtil::ILogger* logger,
             TString taskNameSuffix)
     {
-        return MakeHolder<NCompGen::TGenCompactionStrategy>(
+        return std::make_unique<NCompGen::TGenCompactionStrategy>(
                 table, backend, broker, time, logger, std::move(taskNameSuffix));
     }
 

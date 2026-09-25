@@ -2309,7 +2309,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto CreateSession = [&]() -> std::pair<TActorId, TActorId> {
             TActorId edge = ctx.Runtime->AllocateEdgeActor();
             const TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
-            auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
+            auto req = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
             ActorIdToProto(edge, req->Record.MutableActorID());
             auto* reqRes = req->Record.AddResources();
             reqRes->SetResourcePath("Root");

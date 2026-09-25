@@ -172,7 +172,7 @@ public:
 
             NodeId = Self->Dirty.FreeIds.FirstNonZeroBit();
 
-            Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
+            Node = std::make_unique<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
             Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
             Node->Lease = 1;
             if (rec.GetFixedNodeId()) {
@@ -261,7 +261,7 @@ private:
     const TSubDomainKey ServicedSubDomain;
     TString ResolveError;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
-    THolder<TNodeInfo> Node;
+    std::unique_ptr<TNodeInfo> Node;
     ui32 NodeId;
     bool ExtendLease;
     bool FixNodeId;

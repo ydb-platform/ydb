@@ -52,7 +52,7 @@ private:
     }
 
     void SendModifyScheme(ui64 txId) {
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
         record.SetTxId(txId);
 
@@ -87,7 +87,7 @@ private:
     }
 
     void SubscribeToCompletion(ui64 txId) {
-        auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
 
         YDB_LOG_DEBUG("TabletMigrator - send TEvNotifyTxCompletion",
@@ -176,10 +176,10 @@ private:
     TMigrationInfo Current;
 };
 
-THolder<IActor> CreateTabletMigrator(ui64 ssTabletId, TActorId ssActorId,
+std::unique_ptr<IActor> CreateTabletMigrator(ui64 ssTabletId, TActorId ssActorId,
     std::queue<TMigrationInfo>&& migrations)
 {
-    return MakeHolder<TTabletMigrator>(ssTabletId, ssActorId, std::move(migrations));
+    return std::make_unique<TTabletMigrator>(ssTabletId, ssActorId, std::move(migrations));
 }
 
 } // namespace NKikimr::NSchemeShard

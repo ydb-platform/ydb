@@ -137,10 +137,10 @@ void TBuildSchemeTxOutRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateBuildSchemeTxOutRSUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateBuildSchemeTxOutRSUnit(TDataShard &dataShard,
                                                      TPipeline &pipeline)
 {
-    return MakeHolder<TBuildSchemeTxOutRSUnit>(dataShard, pipeline);
+    return std::make_unique<TBuildSchemeTxOutRSUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

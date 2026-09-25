@@ -240,13 +240,13 @@ class TDropTableIndex: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
+            return std::make_unique<TPropose>(OperationId, AfterPropose);
         case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            return std::make_unique<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeletePathBarrier>(OperationId);
+            return std::make_unique<TDeletePathBarrier>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -255,7 +255,7 @@ class TDropTableIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -266,7 +266,7 @@ public:
             {"pathId", Transaction.GetDrop().GetId()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasDrop()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Drop is not present");
@@ -404,7 +404,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
         }
 
         if (!checks) {
-            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
+            auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
             result->SetError(checks.GetStatus(), checks.GetError());
             if (table.IsResolved() && table.Base()->IsTable() && (table.Base()->PlannedToDrop() || table.Base()->Dropped())) {
                 result->SetPathDropTxId(ui64(table.Base()->DropTxId));

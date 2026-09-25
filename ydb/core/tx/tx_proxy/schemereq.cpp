@@ -54,7 +54,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     const TTxProxyServices Services;
     const ui64 TxId;
-    THolder<TEvTxProxyReq::TEvSchemeRequest> SchemeRequest;
+    std::unique_ptr<TEvTxProxyReq::TEvSchemeRequest> SchemeRequest;
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TInstant WallClockStarted;
@@ -127,8 +127,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     }
 
-    THolder<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
-        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
+    std::unique_ptr<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
+        auto request = std::make_unique<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
 
         request->Record.SetOwner(ChooseAppropriateOwner(request->Record, AppData(), UserToken));
 
@@ -152,7 +152,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         // TODO: Need to check superuser permissions
 
-        auto req = MakeHolder<TEvSchemeShardPropose>(TxId, shardToRequest);
+        auto req = std::make_unique<TEvSchemeShardPropose>(TxId, shardToRequest);
         req->Record.AddTransaction()->MergeFrom(GetModifyScheme());
 
         SendPropose(req.Release(), shardToRequest, ctx);
@@ -583,7 +583,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(
+    static std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(
         const TString& database, NKikimrSchemeOp::TModifyScheme& scheme)
     {
         auto parts = GetFullPath(scheme);
@@ -591,7 +591,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return {};
         }
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = database;
 
         TVector<TString> path;
@@ -721,7 +721,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             // Cluster admin trumps database admin, database owner check is needed only for database admin.
             if (!IsClusterAdministrator && CheckDatabaseAdministrator) {
-                auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+                auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
                 request->DatabaseName = GetRequestProto().GetDatabaseName();
 
                 auto& entry = request->ResultSet.emplace_back();
@@ -1255,7 +1255,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return true;
     }
 
-    THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForACL() {
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForACL() {
         if (!ResolveForACL) {
             return {};
         }

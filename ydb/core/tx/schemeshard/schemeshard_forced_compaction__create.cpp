@@ -28,7 +28,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             {"request", request.ShortDebugString()},
         );
 
-        auto response = MakeHolder<TEvForcedCompaction::TEvCreateResponse>(Request->Get()->Record.GetTxId());
+        auto response = std::make_unique<TEvForcedCompaction::TEvCreateResponse>(Request->Get()->Record.GetTxId());
 
         if (Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) {
             return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
@@ -216,7 +216,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
 private:
     void Reply(
-        THolder<TEvForcedCompaction::TEvCreateResponse> response,
+        std::unique_ptr<TEvForcedCompaction::TEvCreateResponse> response,
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString())
     {

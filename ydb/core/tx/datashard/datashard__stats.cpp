@@ -126,7 +126,7 @@ private:
     void RunImpl() {
         ObtainResources();
 
-        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvBuildTableStatsResult>();
+        auto ev = std::make_unique<TDataShard::TEvPrivate::TEvBuildTableStatsResult>();
         ev->TableId = TableId;
         ev->StatsUpdateTime = StatsUpdateTime;
         ev->PartCount = Subset->Flatten.size() + Subset->ColdParts.size();
@@ -702,7 +702,7 @@ public:
                     shadowSubset->ColdParts.end());
             }
 
-            auto builder = new TActorCoro(MakeHolder<TTableStatsCoroBuilder>(
+            auto builder = new TActorCoro(std::make_unique<TTableStatsCoroBuilder>(
                 TTableStatsCoroBuilderArgs{
                     .ReplyTo = ctx.SelfID,
                     .TabletId = Self->TabletID(),

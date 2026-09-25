@@ -1652,7 +1652,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
-        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        TVector<std::unique_ptr<IEventHandle>> blockedEnqueueRecords;
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                 blockedEnqueueRecords.emplace_back(ev.Release());

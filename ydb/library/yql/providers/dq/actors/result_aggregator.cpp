@@ -98,7 +98,7 @@ private:
         }
 
         Continue = false;
-        Send(SelfId(), MakeHolder<TEvPullResult>());
+        Send(SelfId(), std::make_unique<TEvPullResult>());
     }
 
     void OnWakeup() {
@@ -116,7 +116,7 @@ private:
         if (!PingRequested) {
             PingRequested = true;
             PingStartTime = now;
-            Send(SourceID, MakeHolder<TEvPingRequest>(), IEventHandle::FlagTrackDelivery);
+            Send(SourceID, std::make_unique<TEvPingRequest>(), IEventHandle::FlagTrackDelivery);
         }
 
         TimerCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
@@ -128,7 +128,7 @@ private:
         AddCounters(ev->Get()->Record);
 
         SourceID = NActors::ActorIdFromProto(ev->Get()->Record.GetSourceId());
-        Send(SelfId(), MakeHolder<TEvPullResult>());
+        Send(SelfId(), std::make_unique<TEvPullResult>());
 
         PingStartTime = PullRequestStartTime = TInstant::Now();
         TimerCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
@@ -141,7 +141,7 @@ private:
     void OnPullResult(TEvPullResult::TPtr&, const TActorContext&) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         PullRequestStartTime = TInstant::Now();
-        Send(SourceID, MakeHolder<TEvPullDataRequest>(MAX_RESULT_BATCH), IEventHandle::FlagTrackDelivery);
+        Send(SourceID, std::make_unique<TEvPullDataRequest>(MAX_RESULT_BATCH), IEventHandle::FlagTrackDelivery);
     }
 
     void OnPingResponse(TEvPingResponse::TPtr&, const TActorContext&) {
@@ -207,7 +207,7 @@ private:
 
 } // unnamed
 
-THolder<NActors::IActor> MakeResultAggregator(
+std::unique_ptr<NActors::IActor> MakeResultAggregator(
     const TVector<TString>& columns,
     const NActors::TActorId& executerId,
     const TString& traceId,
@@ -217,15 +217,15 @@ THolder<NActors::IActor> MakeResultAggregator(
     bool discard,
     const NActors::TActorId& graphExecutionEventsId)
 {
-    THolder<IActor> result;
+    std::unique_ptr<IActor> result;
     if (!settings->EnableComputeActor.Get().GetOrElse(false)) {
         // worker actor pull
-        result = MakeHolder<TResultAggregator>(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard);
+        result = std::make_unique<TResultAggregator>(columns, executerId, traceId, settings, resultType, graphExecutionEventsId, discard);
     } else {
         // compute actor push
         result = NYql::MakeResultReceiver(columns, executerId, traceId, settings, secureParams, resultType, graphExecutionEventsId, discard);
     }
-    return MakeHolder<TLogWrapReceive>(result.Release(), traceId);
+    return std::make_unique<TLogWrapReceive>(result.Release(), traceId);
 }
 
 } // NYql::NDqs::NExecutionHelpers

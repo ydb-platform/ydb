@@ -7,7 +7,7 @@ namespace NYql {
         IMetricsRegistryPtr metricsRegistry,
         NActors::NLog::EPriority loggingLevel,
         TIntrusivePtr<NActors::NLog::TSettings> loggingSettings)
-        : Setup_(MakeHolder<TActorSystemSetup>())
+        : Setup_(std::make_unique<TActorSystemSetup>())
         , ActorSystem_(std::nullopt)
         , ActorNodeIDCounter_(0)
         , LoggingSettings_(loggingSettings)
@@ -36,7 +36,7 @@ namespace NYql {
         ApplySetupModifier([&](TActorSystemSetup& setup) { ModifySetupWithDefaults(setup, ObtainNextActorNodeId()); });
 
         // Create actor for logging
-        LoggerBackend_ = MakeHolder<TYqlLogBackend>();
+        LoggerBackend_ = std::make_unique<TYqlLogBackend>();
         TLoggerActor* loggerActor = new NActors::TLoggerActor(
             LoggingSettings_,
             LoggerBackend_,

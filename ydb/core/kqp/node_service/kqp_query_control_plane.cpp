@@ -272,14 +272,14 @@ public:
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
             //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
+            auto addDatabaseEvent = std::make_unique<NScheduler::TEvAddDatabase>(databaseId);
             this->Send(schedulerServiceId, addDatabaseEvent.Release());
 
             // TODO: replace with more precise pool events.
-            auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
+            auto addPoolEvent = std::make_unique<NScheduler::TEvAddPool>(databaseId, poolId);
             this->Send(schedulerServiceId, addPoolEvent.Release());
 
-            auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+            auto addQueryEvent = std::make_unique<NScheduler::TEvAddQuery>();
             addQueryEvent->DatabaseId = databaseId;
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = txId;
@@ -317,7 +317,7 @@ public:
             {"executer", executerId},
             {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
 
-        auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+        auto reply = std::make_unique<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
 
         NComputeActor::TComputeStagesWithScan computesByStage;
@@ -485,7 +485,7 @@ public:
     }
 
     void SendProfileStats() {
-        auto ev = MakeHolder<NYql::NDq::TEvDqCompute::TEvNodeState>();
+        auto ev = std::make_unique<NYql::NDq::TEvDqCompute::TEvNodeState>();
 
         ev->Record.SetNodeId(SelfId().NodeId());
 
@@ -519,7 +519,7 @@ public:
     void ReplyError(const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
-        auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+        auto ev = std::make_unique<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(request.GetTxId());
         for (auto& task : request.GetTasks()) {
             auto* resp = ev->Record.AddNotStartedTasks();

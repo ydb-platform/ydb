@@ -617,11 +617,11 @@ class TAlterExtSubDomainCreateHive: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateHive>(OperationId);
+            return std::make_unique<TCreateHive>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TEmptyPropose>(OperationId);
+            return std::make_unique<TEmptyPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -632,7 +632,7 @@ public:
 
     virtual const char* Name() const override final { return "TAlterExtSubDomainCreateHive"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
@@ -651,7 +651,7 @@ public:
         auto subdomainInfo = context.SS->SubDomains.at(basenameId);
         Y_ABORT_UNLESS(subdomainInfo);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
         result->SetPathId(basenameId.LocalPathId);
 
         // Check params and build change delta
@@ -801,7 +801,7 @@ public:
 
             const TTabletId hiveToSync = context.SS->ResolveHive(pathId);
 
-            auto event = MakeHolder<TEvHive::TEvUpdateDomain>();
+            auto event = std::make_unique<TEvHive::TEvUpdateDomain>();
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.MutableDomainKey()->SetSchemeShard(pathId.OwnerId);
             event->Record.MutableDomainKey()->SetPathId(pathId.LocalPathId);
@@ -866,17 +866,17 @@ class TAlterExtSubDomain: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch(state) {
         case TTxState::Waiting:
-            return MakeHolder<TWaitHiveCreated>(OperationId);
+            return std::make_unique<TWaitHiveCreated>(OperationId);
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<NSubDomainState::TConfigureParts>(OperationId);
+            return std::make_unique<NSubDomainState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<NSubDomainState::TPropose>(OperationId);
+            return std::make_unique<NSubDomainState::TPropose>(OperationId);
         case TTxState::SyncHive:
-            return MakeHolder<TSyncHive>(OperationId);
+            return std::make_unique<TSyncHive>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -887,7 +887,7 @@ public:
 
     virtual const char* Name() const override final { return "TAlterExtSubDomain"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
@@ -906,7 +906,7 @@ public:
         auto subdomainInfo = context.SS->SubDomains.at(basenameId);
         Y_ABORT_UNLESS(subdomainInfo);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
         result->SetPathId(basenameId.LocalPathId);
 
         // Check params and build change delta

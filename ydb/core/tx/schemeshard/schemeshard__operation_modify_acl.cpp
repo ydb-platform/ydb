@@ -22,7 +22,7 @@ class TModifyACL: public TSubOperationBase {
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString databaseName = CanonizePath(context.SS->RootPathElements);
 
@@ -36,7 +36,7 @@ public:
             {"path", TStringBuilder() << parentPathStr << "/" << name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 
         const auto path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {

@@ -100,7 +100,7 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ThreadCtx.PoolId() && ThreadCtx.Pool()->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType().GetIndex());
-        DyingActors.push_back(THolder(actor));
+        DyingActors.push_back(std::unique_ptr<IActor>(actor));
     }
 
     void TExecutorThread::DropUnregistered() {

@@ -195,7 +195,7 @@ class TAlterFileStore: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(
+    std::unique_ptr<TProposeResponse> Propose(
         const TString& owner,
         TOperationContext& context) override;
 
@@ -234,11 +234,11 @@ private:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         default:
             return nullptr;
         }
@@ -270,7 +270,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THolder<TProposeResponse> TAlterFileStore::Propose(
+std::unique_ptr<TProposeResponse> TAlterFileStore::Propose(
     const TString& owner,
     TOperationContext& context)
 {
@@ -290,7 +290,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         {"pathId", pathId},
     );
 
-    auto result = MakeHolder<TProposeResponse>(
+    auto result = std::make_unique<TProposeResponse>(
         NKikimrScheme::StatusAccepted,
         ui64(OperationId.GetTxId()),
         ui64(ssId));

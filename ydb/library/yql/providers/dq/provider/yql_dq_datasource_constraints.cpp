@@ -44,8 +44,8 @@ public:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreateDqDataSourceConstraintTransformer() {
-    return THolder<IGraphTransformer>(new TDqDataSourceConstraintTransformer());
+std::unique_ptr<IGraphTransformer> CreateDqDataSourceConstraintTransformer() {
+    return std::unique_ptr<IGraphTransformer>(new TDqDataSourceConstraintTransformer());
 }
 
 } // namespace NYql

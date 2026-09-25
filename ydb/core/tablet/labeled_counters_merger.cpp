@@ -4,7 +4,7 @@ namespace NKikimr {
 
 namespace NLC = NKikimrLabeledCounters;
 
-TMerger::TMerger(THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>& response,
+TMerger::TMerger(std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse>& response,
                  TTabletLabeledCountersResponseContext& record)
     : Response(response)
     , ResponseContext(record)

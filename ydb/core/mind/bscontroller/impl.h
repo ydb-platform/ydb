@@ -364,7 +364,7 @@ public:
         void OnCommit();
     };
 
-    using TVSlots = TMap<TVSlotId, THolder<TVSlotInfo>>;
+    using TVSlots = TMap<TVSlotId, std::unique_ptr<TVSlotInfo>>;
 
     class TPDiskInfo : public TIndirectReferable<TPDiskInfo> {
     public:
@@ -656,7 +656,7 @@ public:
         void OnCommit();
     };
 
-    using TPDisks = TMap<TPDiskId, THolder<TPDiskInfo>>;
+    using TPDisks = TMap<TPDiskId, std::unique_ptr<TPDiskInfo>>;
 
     using TGroupSpecies = std::tuple<Schema::Group::ErasureSpecies::Type,
                                      Schema::Group::DesiredPDiskCategory::Type,
@@ -959,7 +959,7 @@ public:
         void OnCommit();
     };
 
-    using TGroups = TMap<TGroupId, THolder<TGroupInfo>>;
+    using TGroups = TMap<TGroupId, std::unique_ptr<TGroupInfo>>;
 
     class TNodeInfo {
     public:
@@ -1487,7 +1487,7 @@ public:
         }
 
         void OnCommit() {}
-        void OnClone(const THolder<TDriveSerialInfo>&) {}
+        void OnClone(const std::unique_ptr<TDriveSerialInfo>&) {}
     };
 
     struct TBlobDepotDeleteQueueInfo {
@@ -1536,7 +1536,7 @@ private:
     TMaybe<TActorId> MigrationId;
     TVSlots VSlots; // ordering is important
     TPDisks PDisks; // ordering is important
-    TMap<TSerial, THolder<TDriveSerialInfo>> DrivesSerials;
+    TMap<TSerial, std::unique_ptr<TDriveSerialInfo>> DrivesSerials;
     TGroups GroupMap;
     THashMap<TGroupId, TGroupInfo*> GroupLookup;
     TMap<TGroupSpecies, TVector<TGroupId>> IndexGroupSpeciesToGroup;
@@ -1743,7 +1743,7 @@ private:
     template <typename... Types>
     TVSlotInfo& AddVSlot(TVSlotId id, Types... values) {
         SysViewChangedVSlots.insert(id);
-        return *VSlots.emplace(id, MakeHolder<TVSlotInfo>(id, std::forward<Types>(values)...)).first->second;
+        return *VSlots.emplace(id, std::make_unique<TVSlotInfo>(id, std::forward<Types>(values)...)).first->second;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1762,7 +1762,7 @@ private:
     template <typename... Types>
     TGroupInfo& AddGroup(TGroupId id, Types&&... values) {
         SysViewChangedGroups.insert(id);
-        auto&& [it, inserted] = GroupMap.emplace(id, MakeHolder<TGroupInfo>(id, std::forward<Types>(values)...));
+        auto&& [it, inserted] = GroupMap.emplace(id, std::make_unique<TGroupInfo>(id, std::forward<Types>(values)...));
         Y_ABORT_UNLESS(inserted);
         GroupLookup.emplace(id, it->second.Get());
         return *it->second;
@@ -1798,7 +1798,7 @@ private:
     template<typename... Types>
     TPDiskInfo& AddPDisk(TPDiskId id, Types&&... values) {
         SysViewChangedPDisks.insert(id);
-        auto&& [it, inserted] = PDisks.emplace(id, MakeHolder<TPDiskInfo>(std::forward<Types>(values)...));
+        auto&& [it, inserted] = PDisks.emplace(id, std::make_unique<TPDiskInfo>(std::forward<Types>(values)...));
         Y_ABORT_UNLESS(inserted);
         return *it->second;
     }

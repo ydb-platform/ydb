@@ -43,7 +43,7 @@ namespace NFwd {
     public:
         TPartGroupLoadingQueue(ui32 partIndex, ui64 cookie, 
                 TIntrusiveConstPtr<IPageCollection> indexPageCollection, TIntrusiveConstPtr<IPageCollection> groupPageCollection, 
-                THolder<IPageLoadingLogic> pageLoadingLogic)
+                std::unique_ptr<IPageLoadingLogic> pageLoadingLogic)
             : PartIndex(partIndex)
             , Cookie(cookie)
             , IndexPageCollection(std::move(indexPageCollection))
@@ -90,7 +90,7 @@ namespace NFwd {
         const ui64 Cookie;
         const TIntrusiveConstPtr<IPageCollection> IndexPageCollection;
         const TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
-        const THolder<IPageLoadingLogic> PageLoadingLogic;
+        const std::unique_ptr<IPageLoadingLogic> PageLoadingLogic;
         bool Grow = false;  /* Should call Forward(...) for preloading */
         TFetch GroupFetch;
         TFetch IndexFetch;
@@ -98,7 +98,7 @@ namespace NFwd {
 
     struct TEnv : public IPages {
         struct TGroupPages {
-            THolder<IPageLoadingLogic> PageLoadingLogic;
+            std::unique_ptr<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> IndexPageCollection;
             TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         };
@@ -386,7 +386,7 @@ namespace NFwd {
 
                 bool trace = Conf.Trace && !ColdParts.contains(part);
 
-                return {MakeHolder<TBlobs>(part->Large, std::move(bounds), edge, trace), nullptr, blobs};
+                return {std::make_unique<TBlobs>(part->Large, std::move(bounds), edge, trace), nullptr, blobs};
             } else {
                 return {nullptr, nullptr, nullptr};
             }
@@ -401,7 +401,7 @@ namespace NFwd {
 
                 auto pageCollection = partStore->PageCollections.at(partStore->GroupsCount)->PageCollection;
 
-                return {MakeHolder<TBlobs>(small, std::move(bounds), edge, false), nullptr, pageCollection};
+                return {std::make_unique<TBlobs>(small, std::move(bounds), edge, false), nullptr, pageCollection};
             } else {
                 return {nullptr, nullptr, nullptr};
             }

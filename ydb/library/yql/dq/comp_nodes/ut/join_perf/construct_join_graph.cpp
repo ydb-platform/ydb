@@ -186,7 +186,7 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash || kind == ETestedJoinAlgo::kBlockMap;
 }
 
-THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
+std::unique_ptr<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
                                                     bool withSpiller, TBlockHashJoinSettings joinSettings) {
 
     const bool scalar = !IsBlockJoin(algo);
@@ -266,7 +266,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     }();
 
     auto blockGraphFrom = [&](TRuntimeNode blockWideStreamJoin) {
-        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(blockWideStreamJoin, args.Entrypoints);
+        std::unique_ptr<IComputationGraph> graph = descr.Setup->BuildGraph(blockWideStreamJoin, args.Entrypoints);
         TComputationContext& ctx = graph->GetContext();
         const int blockSize = descr.BlockSize;
         auto leftBlocks = descr.InputsAreBlocks
@@ -292,7 +292,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     };
 
     auto scalarGraphFrom = [&](TRuntimeNode wideStreamJoin) {
-        THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStreamJoin, args.Entrypoints);
+        std::unique_ptr<IComputationGraph> graph = descr.Setup->BuildGraph(wideStreamJoin, args.Entrypoints);
 
         SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
         return graph;

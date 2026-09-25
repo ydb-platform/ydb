@@ -461,7 +461,7 @@ void TColumnShardScan::ContinueProcessing() {
 
 void TColumnShardScan::MakeResult(size_t reserveRows /*= 0*/) {
     if (!Finished && !Result) {
-        Result = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId, ScanGen);
+        Result = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId, ScanGen);
         if (reserveRows) {
             Y_ABORT_UNLESS(DataFormat != NKikimrDataEvents::FORMAT_ARROW);
             Result->Rows.reserve(reserveRows);
@@ -582,7 +582,7 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     AFL_VERIFY(reason);
     const TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId << ", reason: " + reason;
 
-    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
+    auto ev = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
     ev->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
     auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, msg);
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
@@ -600,7 +600,7 @@ void TColumnShardScan::SendScanAborted() {
     // Same answer datashard gives a read on a broken write lock: the rows would be inconsistent, and the
     // transaction cannot commit anyway, so abort instead of returning them.
     const TString msg = TStringBuilder() << "Read conflict with concurrent transaction at tablet " << TabletId;
-    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
+    auto ev = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
     ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
     auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, msg);
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());

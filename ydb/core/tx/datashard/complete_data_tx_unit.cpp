@@ -156,10 +156,10 @@ void TCompleteOperationUnit::Complete(TOperation::TPtr op,
     }
 }
 
-THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
                                                     TPipeline &pipeline)
 {
-    return THolder(new TCompleteOperationUnit(dataShard, pipeline));
+    return std::unique_ptr<TCompleteOperationUnit>(new TCompleteOperationUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

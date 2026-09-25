@@ -78,7 +78,7 @@ public:
     void Bootstrap() {
         Become(&TThis::Working);
 
-        RootHolder = MakeHolder<TSchemeNode>();
+        RootHolder = std::make_unique<TSchemeNode>();
 
         SendListChildrenRequest(PathsToTraverse);
     }
@@ -89,7 +89,7 @@ private:
 
         Y_ABORT_UNLESS(elementsCount);
 
-        auto schemeCacheRequest = MakeHolder<TSchemeCacheNavigate>();
+        auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>();
 
         schemeCacheRequest->ResultSet.resize(elementsCount);
 
@@ -110,7 +110,7 @@ private:
     }
 
     void OnFinishedTraversal(bool success) {
-        auto ev = MakeHolder<TSqsEvents::TEvSchemeTraversalResult>(success);
+        auto ev = std::make_unique<TSqsEvents::TEvSchemeTraversalResult>(success);
 
         if (success) {
             ev->RootHolder = std::move(RootHolder);
@@ -165,7 +165,7 @@ private:
     const ui64 MaxDepth;
     ui64 CurrentDepth;
 
-    THolder<TSchemeNode> RootHolder;
+    std::unique_ptr<TSchemeNode> RootHolder;
 };
 
 class TGarbageSearcher : public TActorBootstrapped<TGarbageSearcher> {
@@ -330,7 +330,7 @@ private:
     }
 
     void ReplyToParentAndDie(bool success) {
-        auto ev = MakeHolder<TSqsEvents::TEvGarbageSearchResult>(success);
+        auto ev = std::make_unique<TSqsEvents::TEvGarbageSearchResult>(success);
 
         if (success) {
             ev->GarbageHints = std::move(GarbageHints);
@@ -433,7 +433,7 @@ private:
     }
 
     void ReportToParentAndDie(const bool success) {
-        auto ev = MakeHolder<TSqsEvents::TEvGarbageCleaningResult>(success);
+        auto ev = std::make_unique<TSqsEvents::TEvGarbageCleaningResult>(success);
 
         ev->Record.Account = GarbageHint.Account;
         ev->Record.HintPath = CanonizePath(GarbageHint.SchemeNode.Path);
@@ -483,7 +483,7 @@ private:
     }
 
     void RemoveCurrentNode() const {
-        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
         auto path = CurrentNode.Path;

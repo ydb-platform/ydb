@@ -502,7 +502,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     NTable::TAsyncDataQueryResult asyncResult;
 
     if (!Parameters.empty() || InputParamStream) {
-        THolder<TParamsBuilder> paramBuilder;
+        std::unique_ptr<TParamsBuilder> paramBuilder;
         while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
@@ -782,7 +782,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
     if (!Parameters.empty() || InputParamStream) {
-        THolder<TParamsBuilder> paramBuilder;
+        std::unique_ptr<TParamsBuilder> paramBuilder;
         while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();

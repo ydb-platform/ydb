@@ -291,7 +291,7 @@ public:
 
     virtual const char* Name() const override final { return "TCreateOlapStore"; }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -304,7 +304,7 @@ public:
         );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
-        auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!AppDataVerified().FeatureFlags.GetEnableColumnStore()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,

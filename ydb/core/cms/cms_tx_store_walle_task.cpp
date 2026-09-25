@@ -9,7 +9,7 @@ namespace NKikimr::NCms {
 
 class TCms::TTxStoreWalleTask : public TTransactionBase<TCms> {
 public:
-    TTxStoreWalleTask(TCms *self, const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp)
+    TTxStoreWalleTask(TCms *self, const TTaskInfo &task, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp)
         : TBase(self)
         , Task(task)
         , Request(std::move(req))
@@ -58,11 +58,11 @@ public:
 
 private:
     TTaskInfo Task;
-    THolder<IEventBase> Request;
+    std::unique_ptr<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
 };
 
-ITransaction *TCms::CreateTxStoreWalleTask(const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp) {
+ITransaction *TCms::CreateTxStoreWalleTask(const TTaskInfo &task, std::unique_ptr<IEventBase> req, TAutoPtr<IEventHandle> resp) {
     return new TTxStoreWalleTask(this, task, std::move(req), std::move(resp));
 }
 

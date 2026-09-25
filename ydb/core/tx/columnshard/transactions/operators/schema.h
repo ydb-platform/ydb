@@ -128,7 +128,7 @@ public:
             TxAddSharding->Complete(ctx);
         }
         for (TActorId subscriber : NotifySubscribers) {
-            auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+            auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
             ctx.Send(subscriber, event.Release(), 0, 0);
         }
 

@@ -21,11 +21,11 @@ public:
         AuditLinesPtr = std::make_shared<std::vector<std::string>>();
         settings.SetAuditLogBackendLines(AuditLinesPtr);
 
-        Server = MakeHolder<TServer>(settings);
+        Server = std::make_unique<TServer>(settings);
         Server->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
         auto driverConfig = TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
 
-        Driver = MakeHolder<TDriver>(driverConfig);
+        Driver = std::make_unique<TDriver>(driverConfig);
         TableClient = MakeSimpleShared<NYdb::NTable::TTableClient>(*Driver);
     }
 
@@ -181,9 +181,9 @@ private:
     }
 
 private:
-    THolder<TDriver> Driver;
+    std::unique_ptr<TDriver> Driver;
     TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient;
-    THolder<TServer> Server;
+    std::unique_ptr<TServer> Server;
     TString Root = "/Root/SQS";
     std::shared_ptr<std::vector<std::string>> AuditLinesPtr;
 

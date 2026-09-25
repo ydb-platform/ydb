@@ -202,7 +202,7 @@ void EraseRows(
         }
 
         IEventBase* MakeRequest() const override {
-            auto request = MakeHolder<TEvRequest>();
+            auto request = std::make_unique<TEvRequest>();
             request->Record = MakeEraseRowsRequest(TableId, KeyTags, Keys);
             return request.Release();
         }
@@ -271,7 +271,7 @@ void ConditionalEraseRows(
         }
 
         IEventBase* MakeRequest() const override {
-            auto request = MakeHolder<TEvRequest>();
+            auto request = std::make_unique<TEvRequest>();
             request->Record.SetTableId(TableId.PathId.LocalPathId);
             request->Record.SetSchemaVersion(TableId.SchemaVersion);
             request->Record.MutableExpiration()->SetColumnId(ColumnId);
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
             .SetDatabase("/" + serverSettings.DomainName);
         auto driver = NYdb::TDriver(driverConfig);
 
-        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+        auto client = std::make_unique<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
 
         // add consumer
         const TString consumerName{"user"};
@@ -988,7 +988,7 @@ key = 5, value = (pg null)
             (3, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
-        THolder<IEventHandle> delayed;
+        std::unique_ptr<IEventHandle> delayed;
         auto prevObserver = server->GetRuntime()->SetObserverFunc([&delayed](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::TEvEraseRowsRequest::EventType:
@@ -1062,13 +1062,13 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
     }
 
     template <typename TPath>
-    THolder<TNavigate> Navigate(TServer::TPtr server, const TActorId& sender, const TPath& path, TNavigate::EOp op) {
+    std::unique_ptr<TNavigate> Navigate(TServer::TPtr server, const TActorId& sender, const TPath& path, TNavigate::EOp op) {
         using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
         using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
 
         auto& runtime = *server->GetRuntime();
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         auto& entry = request->ResultSet.emplace_back();
         FillPath(entry, path);
         entry.Operation = op;
@@ -1084,7 +1084,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         UNIT_ASSERT(response->ErrorCount == 0);
         UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
 
-        return THolder(response);
+        return std::unique_ptr<TNavigate>(response);
     }
 
     NDataShard::TIndexes GetIndexes(TServer::TPtr server, const TActorId& sender, const TString& path) {
@@ -1145,11 +1145,11 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         return indexes;
     }
 
-    TVector<THolder<IEventHandle>> ConditionalEraseRowsDelayedPlan(
+    TVector<std::unique_ptr<IEventHandle>> ConditionalEraseRowsDelayedPlan(
             TServer::TPtr server, const TActorId& sender, const TString& path,
             const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) {
 
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
 
         auto& runtime = *server->GetRuntime();
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1176,11 +1176,11 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         return delayed;
     }
 
-    TVector<THolder<IEventHandle>> ConditionalEraseRowsDelayedResolve(
+    TVector<std::unique_ptr<IEventHandle>> ConditionalEraseRowsDelayedResolve(
             TServer::TPtr server, const TActorId& sender, const TString& path,
             const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) {
 
-        TVector<THolder<IEventHandle>> delayed;
+        TVector<std::unique_ptr<IEventHandle>> delayed;
         TActorId eraser;
 
         auto& runtime = *server->GetRuntime();
@@ -1686,14 +1686,14 @@ tkey = 100, key = 4
         });
 
         badRequest(TEvResponse::ProtoRecordType::BAD_REQUEST, "Cannot parse key", []() -> IEventBase* {
-            auto request = MakeHolder<TEvRequest>();
+            auto request = std::make_unique<TEvRequest>();
             request->Record.MutableExpiration();
             request->Record.AddKeyColumns("trash");
             return request.Release();
         });
 
         badRequest(TEvResponse::ProtoRecordType::BAD_REQUEST, "Key column is absent", []() -> IEventBase* {
-            auto request = MakeHolder<TEvRequest>();
+            auto request = std::make_unique<TEvRequest>();
             request->Record.MutableExpiration();
             for (const auto& key : SerializeKeys({1, 2})) {
                 request->Record.AddKeyColumns(key);

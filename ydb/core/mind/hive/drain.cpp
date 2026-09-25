@@ -190,7 +190,7 @@ protected:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
         DomainHivePipeClient = Register(NTabletPipe::CreateClient(SelfId(), DomainHiveId, pipeConfig));
-        THolder<TEvHive::TEvDrainNode> event = MakeHolder<TEvHive::TEvDrainNode>(nodeId);
+        std::unique_ptr<TEvHive::TEvDrainNode> event = std::make_unique<TEvHive::TEvDrainNode>(nodeId);
         event->Record.SetDownPolicy(Settings.DownPolicy);
         event->Record.SetPersist(Settings.Persist);
         event->Record.SetDrainInFlight(Settings.DrainInFlight);

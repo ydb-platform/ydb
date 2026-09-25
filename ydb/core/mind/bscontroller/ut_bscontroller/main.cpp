@@ -39,7 +39,7 @@ public:
 };
 
 struct TEnvironmentSetup {
-    THolder<TTestBasicRuntime> Runtime;
+    std::unique_ptr<TTestBasicRuntime> Runtime;
     const ui32 NodeCount;
     const ui32 DataCenterCount;
     const ui32 Domain = 0;
@@ -97,7 +97,7 @@ struct TEnvironmentSetup {
 
     NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request) {
         const TActorId self = Runtime->AllocateEdgeActor();
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->CopyFrom(request);
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
         auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(self);
@@ -114,7 +114,7 @@ struct TEnvironmentSetup {
             }
             if (nodeIndex != Runtime->GetNodeCount()) {
                 const TActorId self = Runtime->AllocateEdgeActor(nodeIndex);
-                auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
+                auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
                 Runtime->SendToPipe(TabletId, self, ev.Release(), nodeIndex, GetPipeConfigWithRetries());
                 auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
             }
@@ -124,7 +124,7 @@ struct TEnvironmentSetup {
 
     NKikimrBlobStorage::TEvControllerSelectGroupsResult SelectGroups(const NKikimrBlobStorage::TEvControllerSelectGroups& request) {
         const TActorId self = Runtime->AllocateEdgeActor();
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
         ev->Record.MergeFrom(request);
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
         auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerSelectGroupsResult>(self);
@@ -207,7 +207,7 @@ struct TEnvironmentSetup {
     }
 
     void SetupRuntime(ui32 nodeCount, ui32 dataCenterCount) {
-        Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, dataCenterCount);
+        Runtime = std::make_unique<TTestBasicRuntime>(nodeCount, dataCenterCount);
 
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
@@ -1526,17 +1526,17 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     return Value == other.Value;
                 }
 
-                void OnClone(const THolder<TItem>&) {}
+                void OnClone(const std::unique_ptr<TItem>&) {}
                 void OnCommit(...) {}
                 void OnRollback(...) {}
             };
 
-            TMap<ui32, THolder<TItem>> base, reference;
+            TMap<ui32, std::unique_ptr<TItem>> base, reference;
 
             for (ui32 i = 0; i < 1000; ++i) {
                 ui32 index = RandomNumber<ui32>(1000);
-                base[index] = MakeHolder<TItem>(i);
-                reference[index] = MakeHolder<TItem>(i);
+                base[index] = std::make_unique<TItem>(i);
+                reference[index] = std::make_unique<TItem>(i);
                 Ctest << "initial " << index << " -> " << i << Endl;
             }
 
@@ -1563,7 +1563,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                         Ctest << "inserting " << index << " -> " << value << Endl;
                         overlay.ConstructInplaceNewEntry(index, value);
                     }
-                    reference[index] = MakeHolder<TItem>(value);
+                    reference[index] = std::make_unique<TItem>(value);
                 }
             }
 
@@ -1573,7 +1573,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT(inserted);
             });
 
-            auto downgradeMap = [](const TMap<ui32, THolder<TItem>>& m) {
+            auto downgradeMap = [](const TMap<ui32, std::unique_ptr<TItem>>& m) {
                 TMap<ui32, TItem> res;
                 for (auto&& [key, value] : m) {
                     UNIT_ASSERT(value);
@@ -1631,7 +1631,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             TOverlayMap<unsigned, TAlpha> Alphas;
             TOverlayMap<unsigned, TBeta> Betas;
 
-            TState(TMap<unsigned, THolder<TAlpha>>& alphas, TMap<unsigned, THolder<TBeta>>& betas)
+            TState(TMap<unsigned, std::unique_ptr<TAlpha>>& alphas, TMap<unsigned, std::unique_ptr<TBeta>>& betas)
                 : Alphas(alphas)
                 , Betas(betas)
             {}
@@ -1640,11 +1640,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         for (int iter = 0; iter < 100; ++iter) {
             Ctest << "Next iteration\n";
             const unsigned num = 1000;
-            TMap<unsigned, THolder<TAlpha>> alphas;
-            TMap<unsigned, THolder<TBeta>> betas;
+            TMap<unsigned, std::unique_ptr<TAlpha>> alphas;
+            TMap<unsigned, std::unique_ptr<TBeta>> betas;
             for (unsigned key = 0; key < num; ++key) {
-                alphas.emplace(key, MakeHolder<TAlpha>(key));
-                betas.emplace(key, MakeHolder<TBeta>(key));
+                alphas.emplace(key, std::make_unique<TAlpha>(key));
+                betas.emplace(key, std::make_unique<TBeta>(key));
                 Ctest << Sprintf("Alpha[%u]# %p\n", key, alphas[key].Get());
                 Ctest << Sprintf("Beta[%u]# %p\n", key, alphas[key].Get());
             }
@@ -1709,8 +1709,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(OverlayMapRollbackAfterCloneThenDelete) {
-        TMap<unsigned, THolder<TAlpha>> alphas;
-        alphas.emplace(1, MakeHolder<TAlpha>(1));
+        TMap<unsigned, std::unique_ptr<TAlpha>> alphas;
+        alphas.emplace(1, std::make_unique<TAlpha>(1));
 
         {
             TOverlayMap<unsigned, TAlpha> overlay(alphas);
@@ -2084,7 +2084,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     pdiskNodeId, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}));
                 env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
 
-                auto ev = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+                auto ev = std::make_unique<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
                 auto* m = ev->Record.AddPDisksMetrics();
                 m->SetPDiskId(pdiskId);
                 m->SetExpectedSlotCount(expectedSlotCount);

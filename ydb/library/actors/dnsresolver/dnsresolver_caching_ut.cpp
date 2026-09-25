@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
 
     private:
         void SendReply(const TActorId& sender, ui64 cookie, TMockReply&& reply) {
-            auto res = MakeHolder<TEvDns::TEvGetHostByNameResult>();
+            auto res = std::make_unique<TEvDns::TEvGetHostByNameResult>();
             res->Status = reply.Status;
             if (res->Status != 0) {
                 res->ErrorText = ares_strerror(res->Status);

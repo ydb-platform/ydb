@@ -47,12 +47,12 @@ public:
         } catch (const yexception& ex) {
             Error = true;
 
-            auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+            auto ev = std::make_unique<TEvConsole::TEvGenericError>();
             ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             auto *issue = ev->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message(ex.what());
-            Response = MakeHolder<NActors::IEventHandle>(Request->Sender, ctx.SelfID, ev.Release());
+            Response = std::make_unique<NActors::IEventHandle>(Request->Sender, ctx.SelfID, ev.Release());
             return true;
         }
 
@@ -62,7 +62,7 @@ public:
             db.Table<Schema::YamlConfig>().Key(Version).Delete();
         }
 
-        Response = MakeHolder<NActors::IEventHandle>(Request->Sender, ctx.SelfID, new TEvConsole::TEvDropConfigResponse());
+        Response = std::make_unique<NActors::IEventHandle>(Request->Sender, ctx.SelfID, new TEvConsole::TEvDropConfigResponse());
 
         return true;
     }
@@ -80,7 +80,7 @@ public:
 
             Self->VolatileYamlConfigs.clear();
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>("");
+            auto resp = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>("");
             ctx.Send(Self->ConfigsProvider, resp.Release());
         }
 
@@ -89,7 +89,7 @@ public:
 
 private:
     TEvConsole::TEvDropConfigRequest::TPtr Request;
-    THolder<NActors::IEventHandle> Response;
+    std::unique_ptr<NActors::IEventHandle> Response;
     bool Error = false;
     bool Modify = false;
     ui32 Version;

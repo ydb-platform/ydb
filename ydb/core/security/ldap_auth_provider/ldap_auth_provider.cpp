@@ -65,7 +65,7 @@ private:
 
     struct TInitAndBindResponse {
         bool Success = true;
-        THolder<IEventBase> Event;
+        std::unique_ptr<IEventBase> Event;
     };
 
 public:
@@ -96,7 +96,7 @@ private:
         TEvLdapAuthProvider::TEvAuthenticateRequest* request = ev->Get();
         LDAP* ld = nullptr;
         auto initAndBindResult = InitAndBind(&ld, [](const TEvLdapAuthProvider::EStatus& status, const TEvLdapAuthProvider::TError& error) {
-            return MakeHolder<TEvLdapAuthProvider::TEvAuthenticateResponse>(status, error);
+            return std::make_unique<TEvLdapAuthProvider::TEvAuthenticateResponse>(status, error);
         });
         if (!initAndBindResult.Success) {
             Send(ev->Sender, initAndBindResult.Event.Release());
@@ -122,7 +122,7 @@ private:
         TEvLdapAuthProvider::TEvEnrichGroupsRequest* request = ev->Get();
         LDAP* ld = nullptr;
         auto initAndBindResult = InitAndBind(&ld, [&request](const TEvLdapAuthProvider::EStatus& status, const TEvLdapAuthProvider::TError& error) {
-            return MakeHolder<TEvLdapAuthProvider::TEvEnrichGroupsResponse>(request->Key, status, error);
+            return std::make_unique<TEvLdapAuthProvider::TEvEnrichGroupsResponse>(request->Key, status, error);
         });
         if (!initAndBindResult.Success) {
             Send(ev->Sender, initAndBindResult.Event.Release());
@@ -168,7 +168,7 @@ private:
         Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, allUserGroups));
     }
 
-    TInitAndBindResponse InitAndBind(LDAP** ld, std::function<THolder<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
+    TInitAndBindResponse InitAndBind(LDAP** ld, std::function<std::unique_ptr<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
         const auto initializeResponse = InitializeLDAPConnection(ld);
         if (initializeResponse.Error) {
             return {.Success = false, .Event = eventFabric(initializeResponse.Status, initializeResponse.Error)};

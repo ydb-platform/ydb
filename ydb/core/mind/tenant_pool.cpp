@@ -41,7 +41,7 @@ struct TDynamicSlotInfo : public TThrRefBase {
     TIntrusivePtr<TTenantInfo> AssignedTenant;
     NKikimrTabletBase::TMetrics ResourceLimit;
     TAutoPtr<IEventHandle> ActiveAction;
-    TQueue<THolder<IEventHandle>> PendingActions;
+    TQueue<std::unique_ptr<IEventHandle>> PendingActions;
     TString Label;
 };
 
@@ -174,7 +174,7 @@ public:
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TenantSlotBroker.TabletId, pipeConfig);
         TenantSlotBroker.Pipe = ctx.Register(pipe);
 
-        auto request = MakeHolder<TEvTenantSlotBroker::TEvRegisterPool>();
+        auto request = std::make_unique<TEvTenantSlotBroker::TEvRegisterPool>();
         ActorIdToProto(TenantSlotBroker.Pipe, request->Record.MutableClientId());
         request->Record.SetSeqNo(++TenantSlotBroker.SeqNo);
         NTabletPipe::SendData(ctx, TenantSlotBroker.Pipe, request.Release());
@@ -219,7 +219,7 @@ public:
                         const TString &error, const TActorContext &ctx)
     {
         Y_ABORT_UNLESS(slot->ActiveAction);
-        auto event = MakeHolder<TEvTenantPool::TEvConfigureSlotResult>();
+        auto event = std::make_unique<TEvTenantPool::TEvConfigureSlotResult>();
         event->Record.SetStatus(status);
         event->Record.SetError(error);
         FillSlotStatus(slot, *event->Record.MutableSlotStatus());
@@ -246,7 +246,7 @@ public:
     void SendConfigureError(TEvTenantPool::TEvConfigureSlot::TPtr &ev, const TString &slotId,
                             NKikimrTenantPool::EStatus status, const TString &error, const TActorContext &ctx)
     {
-        auto event = MakeHolder<TEvTenantPool::TEvConfigureSlotResult>();
+        auto event = std::make_unique<TEvTenantPool::TEvConfigureSlotResult>();
         event->Record.SetStatus(status);
         event->Record.SetError(error);
         event->Record.MutableSlotStatus()->SetId(slotId);
@@ -291,7 +291,7 @@ public:
                 {"tenantName", tenant->Name},
                 {"resourceLimit", tenant->ResourceLimit.ShortDebugString()});
 
-            auto event = MakeHolder<TEvLocal::TEvAddTenant>(tenant->Name,
+            auto event = std::make_unique<TEvLocal::TEvAddTenant>(tenant->Name,
                                                             tenant->ResourceLimit);
             ctx.Send(LocalID, event.Release());
         } else if (tenant->LastStatus == TEvLocal::TEvTenantStatus::STARTED) {
@@ -301,7 +301,7 @@ public:
                     {"tenantName", tenant->Name},
                     {"resourceLimit", tenant->ResourceLimit.ShortDebugString()});
 
-                auto event = MakeHolder<TEvLocal::TEvAlterTenant>(tenant->Name,
+                auto event = std::make_unique<TEvLocal::TEvAlterTenant>(tenant->Name,
                                                                   tenant->ResourceLimit);
                 ctx.Send(LocalID, event.Release());
             } else {
@@ -309,7 +309,7 @@ public:
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name});
 
-                auto event = MakeHolder<TEvLocal::TEvRemoveTenant>(tenant->Name);
+                auto event = std::make_unique<TEvLocal::TEvRemoveTenant>(tenant->Name);
                 ctx.Send(LocalID, event.Release());
             }
         } else {
@@ -355,9 +355,9 @@ public:
             DetachSlot(*tenant->AssignedSlots.begin(), ctx);
     }
 
-    THolder<TEvTenantPool::TEvTenantPoolStatus> BuildStatusEvent(bool listStatic = false)
+    std::unique_ptr<TEvTenantPool::TEvTenantPoolStatus> BuildStatusEvent(bool listStatic = false)
     {
-        THolder<TEvTenantPool::TEvTenantPoolStatus> ev = MakeHolder<TEvTenantPool::TEvTenantPoolStatus>();
+        std::unique_ptr<TEvTenantPool::TEvTenantPoolStatus> ev = std::make_unique<TEvTenantPool::TEvTenantPoolStatus>();
         if (listStatic) {
             for (auto& pr : Config->StaticSlots) {
                 NKikimrTenantPool::TSlotConfig& slotConfig = pr.second;
@@ -498,7 +498,7 @@ public:
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
 
         YDB_LOG_TRACE_CTX(ctx, "TDomainTenantPool::Handle TEvConsole::TEvConfigNotificationRequest: send TEvConfigNotificationResponse",
             {"logPrefix", LogPrefix},

@@ -140,7 +140,7 @@ private:
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::OnGraph";
         TFailureInjector::Reach("dq_fail_on_graph", [&] {
             // YQL-15117, it's very likely that the status was INTERNAL_ERROR, originated from worker_actor::OnTaskRunnerCreated (with no issues attached)
-            auto ev = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
+            auto ev = std::make_unique<TEvDqFailure>(NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
             Send(SelfId(), std::move(ev));
         });
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
@@ -183,7 +183,7 @@ private:
         }
         TasksHistogram->Collect(tasks.size());
 
-        ExecutionPlanner = THolder<IDqsExecutionPlanner>(new TGraphExecutionPlanner(
+        ExecutionPlanner = std::unique_ptr<IDqsExecutionPlanner>(new TGraphExecutionPlanner(
             tasks,
             ev->Get()->Record.GetRequest().GetSourceId(),
             ev->Get()->Record.GetRequest().GetResultType(),
@@ -200,7 +200,7 @@ private:
             enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
             computeActorType,
             StatsMode));
-        auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
+        auto allocateRequest = std::make_unique<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
@@ -260,7 +260,7 @@ private:
 
     void OnQueryStatus(NYql::NDqs::TEvQueryStatus::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
-        auto response = MakeHolder<NYql::NDqs::TEvQueryStatusResponse>();
+        auto response = std::make_unique<NYql::NDqs::TEvQueryStatusResponse>();
         auto* r = response->Record.MutableResponse();
         for (auto& metric : LatestStats.GetMetric()) {
             auto& responseMetric = *r->AddMetric();
@@ -293,7 +293,7 @@ private:
             IssuesToMessage(Issues, result.MutableIssues());
             result.SetStatusCode(statusCode);
             result.SetTimeout(timeout);
-            Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
+            Send(ControlId, std::make_unique<TEvQueryResponse>(std::move(result)));
             Finished = true;
         }
     }
@@ -416,7 +416,7 @@ private:
 
         YQL_ENSURE(workers.size() == tasks.size());
 
-        auto res = MakeHolder<TEvReadyState>(ExecutionPlanner->GetSourceID(), ExecutionPlanner->GetResultType(), StatsMode);
+        auto res = std::make_unique<TEvReadyState>(ExecutionPlanner->GetSourceID(), ExecutionPlanner->GetResultType(), StatsMode);
 
         if (Settings->EnableComputeActor.Get().GetOrElse(false) == false) {
             for (size_t i = 0; i < tasks.size(); i++) {
@@ -428,7 +428,7 @@ private:
                 }
                 tasks[i].MutableMeta()->PackFrom(taskMeta);
                 // }
-                auto workerEv = MakeHolder<TEvDqTask>(std::move(tasks[i]));
+                auto workerEv = std::make_unique<TEvDqTask>(std::move(tasks[i]));
                 Send(workers[i], workerEv.Release());
             }
         } else {
@@ -510,7 +510,7 @@ private:
     NActors::TActorId ControlId;
     NActors::TActorId ResultId;
     TExprNode::TPtr ExprRoot;
-    THolder<IDqsExecutionPlanner> ExecutionPlanner;
+    std::unique_ptr<IDqsExecutionPlanner> ExecutionPlanner;
     ui64 ResourceId = 0;
     const TString TraceId;
     const TString Username;

@@ -770,7 +770,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
         columns.emplace_back(std::move(op));
     }
 
-    auto keyDesc = MakeHolder<TKeyDesc>(ScanDataMeta.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns);
+    auto keyDesc = std::make_unique<TKeyDesc>(ScanDataMeta.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns);
 
     YDB_LOG_DEBUG("Sending TEvResolveKeySet request for table",
         {"logPrefix", this->LogPrefix},
@@ -778,7 +778,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
         {"range", DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)},
         {"resolveAttempt", state.ResolveAttempt});
 
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
     request->DatabaseName = Database;
     request->ResultSet.emplace_back(std::move(keyDesc));
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, ScanSpan.GetTraceId());

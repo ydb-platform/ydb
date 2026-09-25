@@ -285,7 +285,7 @@ private:
 
     TAutoPtr<NTable::TScheme> Scheme;
     TAutoPtr<NTable::TDatabaseImpl> DatabaseImpl;
-    THolder<NTable::TDatabase> Database_;
+    std::unique_ptr<NTable::TDatabase> Database_;
 
     ui64 Serial = 0;
     TVector<TCommit> RedoLog;
@@ -958,14 +958,14 @@ bool TTabletBoot::TImpl::Run(const TTabletLogHistory& history) {
 
     DatabaseImpl->Rewind(Serial);
     DatabaseImpl->MergeDone();
-    Database_ = MakeHolder<NTable::TDatabase>(DatabaseImpl.Release());
+    Database_ = std::make_unique<NTable::TDatabase>(DatabaseImpl.Release());
 
     Repeated.Flush(Issues, "warning");
     return true;
 }
 
 TTabletBoot::TTabletBoot(TBlobStore& store, ui64 tabletId, TIssueLog& issues)
-    : Impl(MakeHolder<TImpl>(store, tabletId, issues))
+    : Impl(std::make_unique<TImpl>(store, tabletId, issues))
 {}
 
 TTabletBoot::~TTabletBoot() = default;

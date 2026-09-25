@@ -265,7 +265,7 @@ private:
     }
 
     void ProcessRows() {
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
         for(int idx = 0; idx < LastResponse.GetSessions().size(); ++idx) {
             TVector<TCell> cells;
@@ -317,11 +317,11 @@ private:
     NKikimrKqp::TEvListSessionsResponse LastResponse;
 };
 
-THolder<NActors::IActor> CreateSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TSessionsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TSessionsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

@@ -15,7 +15,7 @@ namespace NYdb::NConsoleClient {
 
     class IYQLCompleter {
     public:
-        using TPtr = THolder<IYQLCompleter>;
+        using TPtr = std::unique_ptr<IYQLCompleter>;
 
         virtual TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
         virtual THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) = 0;

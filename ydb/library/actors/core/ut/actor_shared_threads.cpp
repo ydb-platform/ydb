@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     class TAliveCounterDecorator : public TDecorator {
     public:
         TAliveCounterDecorator(IActor* actor, TThreadParkPad* pad, std::atomic<ui64> &actorsAlive)
-            : TDecorator(THolder(actor))
+            : TDecorator(std::unique_ptr<IActor>(actor))
             , Pad(pad)
             , ActorsAlive(actorsAlive)
         {
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
     template <ESendingType SendingType>
     void RunRegistrationAndPassingAwayActors(bool strictPool, bool enableWaker = false) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 1, 1, true);
          TActorBenchmark::AddBasicPool(setup, 1, 1, true);
         for (auto& config : setup->CpuManager.Basic) {
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
             ui32 poolId = 0;
             std::unique_ptr<IActor> actor = std::make_unique<TRegistratorActor<SendingType>>(actorFactory, poolId, 1000, &pad, actorsAlive, strictPool);
 
-            THolder<IActor> decoratedActor{
+            std::unique_ptr<IActor> decoratedActor{
                 new TAliveCounterDecorator(
                     actor.release(),
                     &pad,
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         for (ui32 i = 0; i < 10; ++i) {
             ui32 poolId = 1;
             std::unique_ptr<IActor> actor = std::make_unique<TRegistratorActor<SendingType>>(actorFactory, poolId, 1000, &pad, actorsAlive, strictPool);
-            THolder<IActor> decoratedActor{
+            std::unique_ptr<IActor> decoratedActor{
                 new TAliveCounterDecorator(
                     actor.release(),
                     &pad,
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     }
 
     Y_UNIT_TEST(AllThreadsSharedRunWithoutLegacySharedFlag) {
-        THolder<TActorSystemSetup> setup = TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup = TActorBenchmark::GetActorSystemSetup();
         setup->CpuManager.Shared.United = true;
         setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
             .PoolId = 0,

@@ -393,7 +393,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(this->SelfId(), this->ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(this->SelfId(), this->ActorActivityType());
         auto& record = *response->Record.MutableReplicaSubscriberResponse();
 
         ActorIdToProto(Parent, record.MutableParent());
@@ -565,7 +565,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(this->SelfId(), this->ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(this->SelfId(), this->ActorActivityType());
         auto& record = *response->Record.MutableSubscriberProxyResponse();
 
         ActorIdToProto(Parent, record.MutableParent());
@@ -728,8 +728,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     };
 
     template <typename TNotify, typename... Args>
-    static THolder<TNotify> BuildNotify(const NKikimrSchemeBoard::TEvNotify& record, Args&&... args) {
-        THolder<TNotify> notify;
+    static std::unique_ptr<TNotify> BuildNotify(const NKikimrSchemeBoard::TEvNotify& record, Args&&... args) {
+        std::unique_ptr<TNotify> notify;
 
         TString path;
         TPathId pathId;
@@ -744,11 +744,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_ABORT_UNLESS(path || pathId);
 
         if (!pathId) {
-            notify = MakeHolder<TNotify>(path, std::forward<Args>(args)...);
+            notify = std::make_unique<TNotify>(path, std::forward<Args>(args)...);
         } else if (!path) {
-            notify = MakeHolder<TNotify>(pathId, std::forward<Args>(args)...);
+            notify = std::make_unique<TNotify>(pathId, std::forward<Args>(args)...);
         } else {
-            notify = MakeHolder<TNotify>(path, pathId, std::forward<Args>(args)...);
+            notify = std::make_unique<TNotify>(path, pathId, std::forward<Args>(args)...);
         }
 
         return notify;
@@ -1115,7 +1115,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(this->SelfId(), this->ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(this->SelfId(), this->ActorActivityType());
         auto& record = *response->Record.MutableSubscriberResponse();
 
         ActorIdToProto(Owner, record.MutableOwner());

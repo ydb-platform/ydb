@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         setup1->Start();
         setup2.Start(false);
         Cerr << "=== Start session 1\n";
-        auto helper = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1);
+        auto helper = std::make_unique<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1);
         helper->Write(true);
         auto retryPolicy = helper->Policy;
         retryPolicy->Initialize();
@@ -162,8 +162,8 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
 
         TString sourceId1 = SDKTestSetup::GetTestMessageGroupId() + "1";
         TString sourceId2 = SDKTestSetup::GetTestMessageGroupId() + "2";
-        auto writer1 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, sourceId1 , true);
-        auto writer2 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, sourceId2, true);
+        auto writer1 = std::make_unique<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, sourceId1 , true);
+        auto writer2 = std::make_unique<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, sourceId2, true);
 
         auto settings = setup1->GetWriteSessionSettings();
         auto& client = setup1->GetPersQueueClient();
@@ -187,8 +187,8 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         Cerr << "===Recreate writers\n";
 
         //! Re-create writers, kill previous sessions. New sessions will connect to dc2.
-        writer1 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, sourceId1, true);
-        writer2 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, sourceId2, true);
+        writer1 = std::make_unique<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, sourceId1, true);
+        writer2 = std::make_unique<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1, sourceId2, true);
 
         //! Write some data and await confirmation - just to ensure sessions are started.
         Cerr << "===Write one message into every writer\n";

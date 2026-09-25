@@ -116,13 +116,13 @@ NUdf::TUnboxedValue TKqpStreamLockWorker::ConvertRowToUnboxedValue(const TOwnedC
     return result;
 }
 
-THolder<NEvents::TDataEvents::TEvLockRows> TKqpStreamLockWorker::BuildLockRequestMessage(
+std::unique_ptr<NEvents::TDataEvents::TEvLockRows> TKqpStreamLockWorker::BuildLockRequestMessage(
     ui64 requestId,
     const TVector<TCell>& allCells,
     size_t batchSize,
     size_t keyColumnCount)
 {
-    auto lockRequest = MakeHolder<NEvents::TDataEvents::TEvLockRows>(requestId);
+    auto lockRequest = std::make_unique<NEvents::TDataEvents::TEvLockRows>(requestId);
     lockRequest->Record.SetLockId(Settings.LockTxId);
     lockRequest->Record.SetLockNodeId(Settings.LockNodeId);
     lockRequest->Record.SetLockMode(Settings.LockMode);
@@ -285,7 +285,7 @@ void TKqpStreamLockWorker::ResetLockRowsProcessing(ui64 requestId) {
     BatchesByRequestId.erase(batchIt);
 }
 
-std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> TKqpStreamLockWorker::PopNextLockRequest() {
+std::pair<ui64, std::unique_ptr<NEvents::TDataEvents::TEvLockRows>> TKqpStreamLockWorker::PopNextLockRequest() {
     if (PendingLockRequests.empty()) {
         return {0, nullptr};
     }

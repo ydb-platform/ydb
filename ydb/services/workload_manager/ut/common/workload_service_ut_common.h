@@ -116,7 +116,7 @@ public:
     // Scheme queries helpers
     virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
     virtual void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const = 0;
-    virtual THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const = 0;
+    virtual std::unique_ptr<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const = 0;
     virtual void WaitPoolAccess(const TString& userSID, ui32 access, const TString& poolId = "") const = 0;
 
     // Generic query helpers

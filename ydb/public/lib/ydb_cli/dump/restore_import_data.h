@@ -18,7 +18,7 @@ NPrivate::IDataWriter* CreateImportDataWriter(
     ui32 partitionCount,
     NImport::TImportClient& importClient,
     NTable::TTableClient& tableClient,
-    const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
+    const TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& accumulators,
     const TRestoreSettings& settings,
     const std::shared_ptr<TLog>& log);
 

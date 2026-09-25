@@ -39,7 +39,7 @@ void TTrimTest::Init() {
     bool isBlockDevice = false;
     DetectFileParameters(Cfg.Path, DeviceSizeBytes, isBlockDevice);
 
-    File = MakeHolder<TFileHandle>(Cfg.Path.c_str(), OpenExisting | RdWr | DirectAligned | Sync);
+    File = std::make_unique<TFileHandle>(Cfg.Path.c_str(), OpenExisting | RdWr | DirectAligned | Sync);
 
     int ret = File->Flock(LOCK_EX | LOCK_NB);
     Y_VERIFY_S(ret == 0, "Error in file locking, path# " << Cfg.Path.Quote());

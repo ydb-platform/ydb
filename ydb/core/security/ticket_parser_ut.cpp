@@ -3063,7 +3063,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    THolder<TEvTicketParser::TEvAuthorizeTicketResult> RunPeernameQuery(
+    std::unique_ptr<TEvTicketParser::TEvAuthorizeTicketResult> RunPeernameQuery(
         TTestActorRuntime* runtime,
         const TString& peername) {
         TActorId sender = runtime->AllocateEdgeActor();

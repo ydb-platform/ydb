@@ -39,7 +39,7 @@ struct DestroyZCtx {
 
 class TZStdCompressionProcessor {
 public:
-    using TPtr = THolder<TZStdCompressionProcessor>;
+    using TPtr = std::unique_ptr<TZStdCompressionProcessor>;
 
     explicit TZStdCompressionProcessor(const TS3ExportBufferSettings::TCompressionSettings& settings);
 

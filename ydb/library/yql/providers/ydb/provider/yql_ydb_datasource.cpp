@@ -151,11 +151,11 @@ public:
 
 private:
     const TYdbState::TPtr State_;
-    const THolder<IGraphTransformer> IODiscoveryTransformer_;
-    const THolder<IGraphTransformer> LoadMetaDataTransformer_;
-    const THolder<IGraphTransformer> CallableExecutionTransformer_;
-    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    const THolder<IDqIntegration> DqIntegration_;
+    const std::unique_ptr<IGraphTransformer> IODiscoveryTransformer_;
+    const std::unique_ptr<IGraphTransformer> LoadMetaDataTransformer_;
+    const std::unique_ptr<IGraphTransformer> CallableExecutionTransformer_;
+    const std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    const std::unique_ptr<IDqIntegration> DqIntegration_;
 };
 
 }

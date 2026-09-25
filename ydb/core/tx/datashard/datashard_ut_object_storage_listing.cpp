@@ -147,7 +147,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> List(
         }
 
         IEventBase* MakeRequest() const override {
-            auto request = MakeHolder<TEvRequest>();
+            auto request = std::make_unique<TEvRequest>();
             request->Record = MakeListingRequest(TableId, DoFilter);
             return request.Release();
         }

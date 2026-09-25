@@ -133,7 +133,7 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT(!loadResponse.Metadata->DoesExist);
 }
 
-THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> DoGatewayOperation(TTestActorRuntime& runtime, const TString& path, std::function<NThreading::TFuture<IKikimrGateway::TGenericResult>()> gatewayOperation, bool fail = false) {
+std::unique_ptr<NKikimr::NSchemeCache::TSchemeCacheNavigate> DoGatewayOperation(TTestActorRuntime& runtime, const TString& path, std::function<NThreading::TFuture<IKikimrGateway::TGenericResult>()> gatewayOperation, bool fail = false) {
     const auto& responseFuture = gatewayOperation();
     responseFuture.Wait();
     const auto& response = responseFuture.GetValue();

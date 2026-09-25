@@ -71,7 +71,7 @@ struct TDomainsInfo : public TThrRefBase {
 
     private:
         struct TImpl;
-        const THolder<TImpl> Impl;
+        const std::unique_ptr<TImpl> Impl;
 
     public:
         const TStoragePoolKinds& StoragePoolTypes;

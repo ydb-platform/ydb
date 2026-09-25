@@ -219,7 +219,7 @@ class TListOperationsRPC
 
     void ResolveStatisticsAggregatorForList() {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = GetDatabaseName();
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpPath;
@@ -270,7 +270,7 @@ class TListOperationsRPC
 
     void NavigateAnalyzeDomainKey(const TPathId& domainKey) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto navigate = MakeHolder<TNavigate>();
+        auto navigate = std::make_unique<TNavigate>();
         navigate->DatabaseName = GetDatabaseName();
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);

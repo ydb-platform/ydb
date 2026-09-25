@@ -17,7 +17,7 @@ using namespace Tests;
 
 ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard)
 {
-    auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+    auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
     TString miniKQL =   R"___((
         (let range '('ExcFrom '('TxId (Uint64 '0) (Void))))
         (let select '('TxId))
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // Add some fake RS to the first shard.
         {
-            auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+            auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
             TString miniKQL =   R"___((
                 (let range (ListFromRange (Uint64 '1) (Uint64 '450001)))
                 (let upd (lambda '(x) (UpdateRow 'InReadSets

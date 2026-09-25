@@ -22,7 +22,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
+std::unique_ptr<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
 {
     auto tablePartitionConfig = ss->GetTablePartitionConfigWithAlterData(targetPath->PathId);
     const auto& shard = ss->ShardInfos[shardIdx];
@@ -40,7 +40,7 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
         }*/
     }
 
-    THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
+    std::unique_ptr<TEvHive::TEvCreateTablet> ev = std::make_unique<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
     TPathId domainId = ss->ResolvePathIdForDomain(targetPath);
 
@@ -294,12 +294,12 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
     return false;
 }
 
-THolder<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, TOperationContext& context) {
+std::unique_ptr<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, TOperationContext& context) {
     Y_ABORT_UNLESS(context.SS->AdoptedShards.contains(shardIdx));
     auto& adoptedShard = context.SS->AdoptedShards[shardIdx];
     auto& shard = context.SS->ShardInfos[shardIdx];
 
-    THolder<TEvHive::TEvAdoptTablet> ev = MakeHolder<TEvHive::TEvAdoptTablet>(
+    std::unique_ptr<TEvHive::TEvAdoptTablet> ev = std::make_unique<TEvHive::TEvAdoptTablet>(
         ui64(shard.TabletID),
         adoptedShard.PrevOwner, ui64(adoptedShard.PrevShardIdx),
         shard.TabletType,
@@ -701,7 +701,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
             {"datashard", tabletId},
         );
 
-        auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
+        auto event = std::make_unique<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(operationId.GetTxId()));
 
         context.OnComplete.Send(ackTo, std::move(event), ui64(shardIdx.GetLocalId()));

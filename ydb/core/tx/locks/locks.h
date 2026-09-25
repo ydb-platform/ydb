@@ -967,7 +967,7 @@ public:
     }
 
 private:
-    const THolder<TLocksDataShard> Self;
+    const std::unique_ptr<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
     THashMap<ui64, TLockInfo::TPtr> RemovedLocks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
@@ -1364,7 +1364,7 @@ public:
     void RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& db);
 
 private:
-    THolder<TLocksDataShard> Self;
+    std::unique_ptr<TLocksDataShard> Self;
     TLockLocker Locker;
     TLocksUpdate* Update = nullptr;
     TLocksCache* AccessLog = nullptr;

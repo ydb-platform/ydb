@@ -36,7 +36,7 @@ void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::
         {"readRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
         {"tableId", tableId});
 
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
+    auto desc = std::make_unique<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
 
     Info.Keys.emplace_back(NMiniKQL::IEngineFlat::TValidatedKey(std::move(desc), /* isWrite */ false));
     ++Info.ReadsCount;
@@ -60,7 +60,7 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
         {"tableId", tableId});
 
     auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);
+    auto desc = std::make_unique<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);
 
     Info.Keys.emplace_back(NMiniKQL::IEngineFlat::TValidatedKey(std::move(desc), /* isWrite */ true));
     ++Info.WritesCount;

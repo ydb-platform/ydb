@@ -132,7 +132,7 @@ public:
     // TFacade objects. The TFacade destructor calls TGRpcStreamingRequest::FinishInternal(), which
     // accesses Server->IsShuttingDown(). If GRpcServer were destroyed first,
     // this would be a use-after-free.
-    THolder<NYdbGrpc::TGRpcServer> GRpcServer;
+    std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
     TServer::TPtr Server;
     TString GRpcEndpoint;
 
@@ -432,7 +432,7 @@ TManualEvent* THangActor::Attached = nullptr;
 
 Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     Y_UNIT_TEST(SimpleEcho) {
-        auto server = MakeHolder<TGRpcTestServer<TSimpleEchoActor>>();
+        auto server = std::make_unique<TGRpcTestServer<TSimpleEchoActor>>();
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     }
 
     Y_UNIT_TEST(ClientNeverWrites) {
-        auto server = MakeHolder<TGRpcTestServer<TReadFailActor>>();
+        auto server = std::make_unique<TGRpcTestServer<TReadFailActor>>();
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
@@ -475,7 +475,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     }
 
     Y_UNIT_TEST(ClientDisconnects) {
-        auto server = MakeHolder<TGRpcTestServer<TDisconnectWaitActor>>();
+        auto server = std::make_unique<TGRpcTestServer<TDisconnectWaitActor>>();
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     }
 
     Y_UNIT_TEST(ReadFinish) {
-        auto server = MakeHolder<TGRpcTestServer<TReadFinishActor>>();
+        auto server = std::make_unique<TGRpcTestServer<TReadFinishActor>>();
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     }
 
     Y_UNIT_TEST(WritesDoneFromClient) {
-        auto server = MakeHolder<TGRpcTestServer<TExpectWritesDoneActor>>();
+        auto server = std::make_unique<TGRpcTestServer<TExpectWritesDoneActor>>();
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     }
 
     Y_UNIT_TEST(WriteAndFinishWorks) {
-        auto server = MakeHolder<TGRpcTestServer<TWriteAndFinishActor>>();
+        auto server = std::make_unique<TGRpcTestServer<TWriteAndFinishActor>>();
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
         TManualEvent attached;
         THangActor::Attached = &attached;
 
-        auto server = MakeHolder<TGRpcTestServer<THangActor>>(std::move(options));
+        auto server = std::make_unique<TGRpcTestServer<THangActor>>(std::move(options));
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);

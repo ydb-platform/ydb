@@ -33,8 +33,8 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    THolder<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
-        THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
+    std::unique_ptr<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
+        std::unique_ptr<NHealthCheck::TEvSelfCheckRequest> request = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = Database;
         if (Params.Has("verbose")) {
             request->Request.set_return_verbose_status(FromStringWithDefault<bool>(Params.Get("verbose"), false));
@@ -151,7 +151,7 @@ public:
         return issueLog.count() == 0 ? 1 : issueLog.count();
     }
 
-    THolder<THashMap<TMetricRecord, ui32>> GetRecordCounters() {
+    std::unique_ptr<THashMap<TMetricRecord, ui32>> GetRecordCounters() {
         const auto *descriptor = Ydb::Monitoring::StatusFlag_Status_descriptor();
         THashMap<TMetricRecord, ui32> recordCounters;
         for (auto& log : Result->issue_log()) {
@@ -170,7 +170,7 @@ public:
             }
         }
 
-        return MakeHolder<THashMap<TMetricRecord, ui32>>(recordCounters);
+        return std::make_unique<THashMap<TMetricRecord, ui32>>(recordCounters);
     }
 
     void HandlePrometheus() {
@@ -251,7 +251,7 @@ public:
             auto activeNode = TDatabaseMetadataCache::PickActiveNode(MetadataCacheEndpointsLookup->InfoEntries);
             if (activeNode != 0) {
                 TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
-                auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+                auto request = std::make_unique<NHealthCheck::TEvSelfCheckRequestProto>();
                 Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
                 SubscriptionNodeIds.push_back(activeNode);
                 return;

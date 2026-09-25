@@ -18,7 +18,7 @@ private:
     TString JsonConfig;
     bool IsRunning = false;
     TMutex EmuMutex;
-    THolder<NSchLab::TSchEmu> SchEmu;
+    std::unique_ptr<NSchLab::TSchEmu> SchEmu;
 public:
     TSchArmMonPage(const TString& path, const TString& schVizUrl)
         : IMonPage(path, "SchArm")

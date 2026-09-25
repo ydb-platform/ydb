@@ -334,8 +334,8 @@ void TGenericListSplitTransformer::Rewind() {
     AsyncFuture_ = {};
 }
 
-THolder<TGraphTransformerBase> CreateGenericListSplitTransformer(TGenericState::TPtr state) {
-    return MakeHolder<TGenericListSplitTransformer>(std::move(state));
+std::unique_ptr<TGraphTransformerBase> CreateGenericListSplitTransformer(TGenericState::TPtr state) {
+    return std::make_unique<TGenericListSplitTransformer>(std::move(state));
 }
 
 } // NYql

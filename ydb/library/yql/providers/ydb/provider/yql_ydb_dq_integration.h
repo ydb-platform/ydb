@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreateYdbDqIntegration(TYdbState::TPtr state);
+std::unique_ptr<IDqIntegration> CreateYdbDqIntegration(TYdbState::TPtr state);
 
 }

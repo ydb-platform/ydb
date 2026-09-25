@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TSpillingTest) {
 Y_UNIT_TEST(TestCreateStorage) {
     TFileStorageConfig config;
     config.Path = NFs::CurrentWorkingDirectory();
-    std::pair< THolder<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
+    std::pair< std::unique_ptr<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
     CTEST << "Path: " << config.Path << Endl;
     UNIT_ASSERT(sp.second.Status == EOperationStatus::Success);
 }
@@ -39,7 +39,7 @@ Y_UNIT_TEST(TestCreateStorage) {
 Y_UNIT_TEST(TestCreateNoStorage) {
     TFileStorageConfig config;
     config.Path = "Temp123456";
-    std::pair< THolder<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
+    std::pair< std::unique_ptr<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
     CTEST << "Path: " << config.Path << Endl;
     CTEST << "Error string: " << sp.second.ErrorString << Endl;
     UNIT_ASSERT(sp.second.Status == EOperationStatus::CannotOpenStorageProxy);
@@ -48,7 +48,7 @@ Y_UNIT_TEST(TestCreateNoStorage) {
 Y_UNIT_TEST(TestNamespaces) {
     TFileStorageConfig config;
     config.Path = NFs::CurrentWorkingDirectory();
-    std::pair< THolder<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
+    std::pair< std::unique_ptr<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
     TVector<TString> ns = sp.first->GetNamespaces();
     for ( auto n : ns) {
         CTEST << "Namespace: " << n << Endl;
@@ -76,7 +76,7 @@ Y_UNIT_TEST(TestCreateNamespaces) {
 
     TFileStorageConfig config;
     config.Path = NFs::CurrentWorkingDirectory();
-    std::pair< THolder<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
+    std::pair< std::unique_ptr<ISpillStorage>, TOperationResults > sp = OpenFileStorageForSpilling(config);
     TVector<TString> ns = sp.first->GetNamespaces();
     for ( auto n : ns) {
         CTEST << "Namespace: " << n << Endl;
@@ -87,7 +87,7 @@ Y_UNIT_TEST(TestCreateNamespaces) {
         }
         UNIT_ASSERT(opres.Status == EOperationStatus::Success);
     }
-    THolder<ISpillFile> spf = sp.first->CreateSpillFile(TString("temp1"), TString("ydbspl.1.met"), 4*1024*1024);
+    std::unique_ptr<ISpillFile> spf = sp.first->CreateSpillFile(TString("temp1"), TString("ydbspl.1.met"), 4*1024*1024);
     TOperationResults opres = sp.first->LastOperationResults();
     UNIT_ASSERT(opres.Status == EOperationStatus::Success);
     UNIT_ASSERT(spf->IsLocked());

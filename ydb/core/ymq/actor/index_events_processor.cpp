@@ -120,7 +120,7 @@ void TSearchEventsProcessor::StartQueuesListing(const TActorContext& ctx) {
 }
 
 void TSearchEventsProcessor::RunQueuesListQuery(const TActorContext& ctx) {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
     auto* request = ev->Record.MutableRequest();
 
     request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -308,7 +308,7 @@ NActors::TActorSystem* TSearchEventsProcessor::GetActorSystem() {
 
 void TSearchEventsProcessor::StopSession(const TActorContext& ctx) {
     if (!SessionId.empty()) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(SessionId);
         Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
         SessionId = TString();
@@ -317,7 +317,7 @@ void TSearchEventsProcessor::StopSession(const TActorContext& ctx) {
 
 void TSearchEventsProcessor::RunQuery(const TString& query, NYdb::TParams* params, bool readonly,
                                       const TActorContext& ctx) {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
     auto* request = ev->Record.MutableRequest();
 
     request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);

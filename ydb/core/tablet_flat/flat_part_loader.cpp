@@ -23,7 +23,7 @@ TLoader::TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections,
     if (PageCollections.size() < 1) {
         Y_TABLET_ERROR("Cannot load TPart from " << PageCollections.size() << " page collections");
     }
-    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
+    LoaderEnv = std::make_unique<TLoaderEnv>(PageCollections[0]);
 }
 
 TLoader::~TLoader() { }

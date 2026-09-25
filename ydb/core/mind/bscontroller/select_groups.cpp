@@ -32,7 +32,7 @@ public:
             {"sender", request->Sender},
             {"cookie", request->Cookie});
 
-        auto result = MakeHolder<TEvBlobStorage::TEvControllerSelectGroupsResult>();
+        auto result = std::make_unique<TEvBlobStorage::TEvControllerSelectGroupsResult>();
         auto& out = result->Record;
         out.SetStatus(NKikimrProto::OK);
         out.SetNewStyleQuerySupported(true);

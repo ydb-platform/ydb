@@ -185,25 +185,25 @@ public:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "");
 
         // Begin check conditions
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        THolder<TProposeResponse> result;
+        std::unique_ptr<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 

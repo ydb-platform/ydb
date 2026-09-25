@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto &runtime = *server->GetRuntime();
         TAutoPtr<IEventHandle> handle;
 
-        THolder<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, true);
+        std::unique_ptr<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, true);
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr, std::move(traceId)));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetYdbStatus(), code);

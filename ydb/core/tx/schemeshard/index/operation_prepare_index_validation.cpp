@@ -221,15 +221,15 @@ class TPrepareIndexValidation: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateTxShards>(OperationId);
+            return std::make_unique<TCreateTxShards>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -238,7 +238,7 @@ class TPrepareIndexValidation: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto& publish = Transaction.GetPrepareIndexValidation();
@@ -250,7 +250,7 @@ public:
             {"path", TStringBuilder() << parentPathStr << "/" << tableName},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
 

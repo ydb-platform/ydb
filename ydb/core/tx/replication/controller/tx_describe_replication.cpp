@@ -117,7 +117,7 @@ class TController::TTxDescribeReplication: public TTxBase {
     TEvController::TEvDescribeReplication::TPtr PubEv;
     TEvPrivate::TEvDescribeTargetsResult::TPtr PrivEv;
     TReplication::TPtr Replication;
-    THolder<TEvController::TEvDescribeReplicationResult> Result;
+    std::unique_ptr<TEvController::TEvDescribeReplicationResult> Result;
     THashMap<ui64, TString> TargetsToDescribe;
 
 public:
@@ -159,7 +159,7 @@ public:
 
         Replication = Self->Find(pathId);
         if (!Replication) {
-            Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
+            Result = std::make_unique<TEvController::TEvDescribeReplicationResult>();
             Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             return true;
         }
@@ -190,7 +190,7 @@ public:
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
+            Result = std::make_unique<TEvController::TEvDescribeReplicationResult>();
             Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             return true;
         }
@@ -199,7 +199,7 @@ public:
     }
 
     bool DescribeReplication(TReplication::TPtr replication, bool includeDetailedStats) {
-        Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
+        Result = std::make_unique<TEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
         Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());

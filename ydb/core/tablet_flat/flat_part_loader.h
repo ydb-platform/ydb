@@ -299,6 +299,6 @@ namespace NTable {
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;
         TPartView PartView;
-        THolder<TLoaderEnv> LoaderEnv;
+        std::unique_ptr<TLoaderEnv> LoaderEnv;
     };
 }}

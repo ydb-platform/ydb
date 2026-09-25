@@ -1747,8 +1747,8 @@ namespace NActors {
         return actor;
     }
 
-    THolder<TActorSystemSetup> TTestActorRuntimeBase::MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node) {
-        THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> TTestActorRuntimeBase::MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node) {
+        std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
         setup->NodeId = FirstNodeId + nodeIndex;
 
         IHarmonizer* harmonizer = nullptr;
@@ -1786,7 +1786,7 @@ namespace NActors {
         return setup;
     }
 
-    THolder<TActorSystem> TTestActorRuntimeBase::MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
+    std::unique_ptr<TActorSystem> TTestActorRuntimeBase::MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
         auto setup = MakeActorSystemSetup(nodeIndex, node);
 
         node->ExecutorPools.reserve(setup->ExecutorsCount);
@@ -1855,7 +1855,7 @@ namespace NActors {
             setup->LocalServices.push_back(std::move(loggerActorPair));
         }
 
-        auto actorSystem = THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
+        auto actorSystem = std::unique_ptr<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
 
         if (node->ExecutorPools.empty()) {
             // Initialize pools from actor system (except IO pool)
@@ -2071,7 +2071,7 @@ namespace NActors {
         bool HasReply;
         TDispatchOptions DelegateeOptions;
         TTestActorRuntimeBase* Runtime;
-        THolder<IReplyChecker> ReplyChecker;
+        std::unique_ptr<IReplyChecker> ReplyChecker;
         ui32 RequestType;
     };
 

@@ -200,7 +200,7 @@ namespace NKikimr {
             TValueStorage* ptr = reinterpret_cast<TValueStorage*>(tls->Get(Key));
 
             if (Y_UNLIKELY(!ptr)) {
-                THolder<TValueStorage> storage = MakeHolder<TValueStorage>(this, tls);
+                std::unique_ptr<TValueStorage> storage = std::make_unique<TValueStorage>(this, tls);
                 storage->Initialize(Key);
                 ptr = storage.Release();
 

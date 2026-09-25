@@ -23,7 +23,7 @@ public:
         return false;
     }
 
-    TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::CountQueues, std::move(cb))
     {
     }
@@ -67,7 +67,7 @@ private:
     }
 };
 
-IActor* CreateCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TCountQueuesActor(sourceSqsRequest, std::move(cb));
 }
 

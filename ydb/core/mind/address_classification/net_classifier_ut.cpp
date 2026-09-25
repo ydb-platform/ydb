@@ -18,8 +18,8 @@ namespace NKikimr::NNetClassifierTests {
 using namespace NNetClassifier;
 using namespace Tests;
 
-static THolder<TTempFileHandle> CreateNetDataFile(const TString& content) {
-    auto netDataFile = MakeHolder<TTempFileHandle>();
+static std::unique_ptr<TTempFileHandle> CreateNetDataFile(const TString& content) {
+    auto netDataFile = std::make_unique<TTempFileHandle>();
 
     netDataFile->Write(content.data(), content.size());
     netDataFile->FlushData();

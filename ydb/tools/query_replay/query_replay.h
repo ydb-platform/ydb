@@ -40,8 +40,8 @@ struct TQueryReplayApp {
     ui32 ShardId = 0;
     TVector<TString> Queries;
 
-    THolder<NActors::TActorSystem> ActorSystem;
-    THolder<NKikimr::TAppData> AppData;
+    std::unique_ptr<NActors::TActorSystem> ActorSystem;
+    std::unique_ptr<NKikimr::TAppData> AppData;
     TIntrusivePtr<NKikimr::NScheme::TKikimrTypeRegistry> TypeRegistry;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;

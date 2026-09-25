@@ -5,6 +5,6 @@
 
 namespace NYql {
 
-THolder<TGraphTransformerBase> CreateGenericListSplitTransformer(TGenericState::TPtr state);
+std::unique_ptr<TGraphTransformerBase> CreateGenericListSplitTransformer(TGenericState::TPtr state);
 
 } // NYql

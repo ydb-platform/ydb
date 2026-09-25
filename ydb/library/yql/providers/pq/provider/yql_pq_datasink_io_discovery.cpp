@@ -74,8 +74,8 @@ private:
 };
 }
 
-THolder<IGraphTransformer> CreatePqDataSinkIODiscoveryTransformer(TPqState::TPtr state) {
-    return THolder(new TPqDataSinkIODiscoveryTransformer(state));
+std::unique_ptr<IGraphTransformer> CreatePqDataSinkIODiscoveryTransformer(TPqState::TPtr state) {
+    return std::unique_ptr<TPqDataSinkIODiscoveryTransformer>(new TPqDataSinkIODiscoveryTransformer(state));
 }
 
 }

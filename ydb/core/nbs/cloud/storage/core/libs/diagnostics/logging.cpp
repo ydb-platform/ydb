@@ -371,7 +371,7 @@ TLog CreateComponentLog(
     IAsyncLoggerPtr asyncLogger,
     const TLogSettings& logSettings)
 {
-    return {MakeHolder<TComponentLogBackend>(
+    return {std::make_unique<TComponentLogBackend>(
         std::move(component),
         std::move(backend),
         std::move(asyncLogger),
@@ -401,7 +401,7 @@ ILoggingServicePtr CreateUnifiedAgentLoggingService(
     auto backend = MakeLogBackend(
         TClientParameters{endpoint},
         TSessionParameters{},
-        MakeHolder<TStorageRecordConverter>(true, syslogService));
+        std::make_unique<TStorageRecordConverter>(true, syslogService));
 
     return CreateLoggingService(
         std::shared_ptr<TLogBackend>(backend.Release()),

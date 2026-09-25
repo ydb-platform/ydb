@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
                 threadPoolParams->ThreadsUsed--;
                 return false;
             }
-            return threadPoolParams->ThreadPool.AddAndOwn(THolder(new TQuickSortTask(params, ActiveThreadRegistry)));
+            return threadPoolParams->ThreadPool.AddAndOwn(std::unique_ptr<TQuickSortTask>(new TQuickSortTask(params, ActiveThreadRegistry)));
         }
     };
 
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
     }
 
     std::unique_ptr<TActorSystem> PrepareActorSystem(ui32 poolThreads, TAffinity* affinity = nullptr) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
 
         setup->ExecutorsCount = 1;
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
 
             BENCH_START(thread);
 
-            Y_ABORT_UNLESS(threadPool.AddAndOwn(THolder(new TQuickSortTask(params, activeThreadRegistry))));
+            Y_ABORT_UNLESS(threadPool.AddAndOwn(std::unique_ptr<TQuickSortTask>(new TQuickSortTask(params, activeThreadRegistry))));
             UNIT_ASSERT_C(activeThreadRegistry.WaitForAllInactive(60s), "timeout");
 
             threaPoolSortDurationTotal += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(thread));
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             BENCH_START(kvSearch);
 
             for (auto& key : keysToSearch) {
-                Y_ABORT_UNLESS(threadPool.AddAndOwn(THolder(new TKvSearchTask(key, dict))));
+                Y_ABORT_UNLESS(threadPool.AddAndOwn(std::unique_ptr<TKvSearchTask>(new TKvSearchTask(key, dict))));
             }
 
             // CondVar logic gives too much of overhead (2-10 times more than just sleep_for)

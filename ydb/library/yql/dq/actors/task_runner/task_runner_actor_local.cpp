@@ -43,7 +43,7 @@ class TLocalTaskRunnerActor
 public:
     static constexpr char ActorName[] = "YQL_DQ_TASK_RUNNER";
 
-    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
+    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, std::unique_ptr<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
         : TActor<TLocalTaskRunnerActor>(&TLocalTaskRunnerActor::Handler)
         , Alloc(alloc)
         , Parent(parent)
@@ -191,10 +191,10 @@ private:
             sourcesFreeSpace[index] = TaskRunner->GetSource(index)->GetFreeSpace();
         }
 
-        THolder<TMiniKqlProgramState> mkqlProgramState;
+        std::unique_ptr<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
             if (ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
-                mkqlProgramState = MakeHolder<TMiniKqlProgramState>();
+                mkqlProgramState = std::make_unique<TMiniKqlProgramState>();
                 try {
                     mkqlProgramState->RuntimeVersion = NDqProto::RUNTIME_VERSION_YQL_1_0;
                     TStateData& data = mkqlProgramState->Data;
@@ -222,7 +222,7 @@ private:
         }
 
         {
-            auto st = MakeHolder<TEvStatistics>();
+            auto st = std::make_unique<TEvStatistics>();
 
             THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
             for (const auto sinkId : Sinks) {
@@ -493,7 +493,7 @@ private:
             }
         }
 
-        auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
+        auto event = std::make_unique<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),
             TaskRunner->GetTaskParams(),
             TaskRunner->GetReadRanges(),
@@ -510,7 +510,7 @@ private:
             ev->Cookie);
     }
 
-    THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException& e) {
+    std::unique_ptr<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException& e) {
         const bool isHardLimit = dynamic_cast<const THardMemoryLimitException*>(&e) != nullptr;
         TStringBuilder err;
         err << "Mkql memory limit exceeded";
@@ -526,11 +526,11 @@ private:
         LOG_E("TMemoryLimitExceededException: " << err);
         TIssue issue(err);
         SetIssueCode(TIssuesIds::KIKIMR_PRECONDITION_FAILED, issue);
-        return MakeHolder<TEvDq::TEvAbortExecution>(isHardLimit ? NYql::NDqProto::StatusIds::LIMIT_EXCEEDED : NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});
+        return std::make_unique<TEvDq::TEvAbortExecution>(isHardLimit ? NYql::NDqProto::StatusIds::LIMIT_EXCEEDED : NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});
     }
 
-    THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {
-        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
+    std::unique_ptr<TEvDq::TEvAbortExecution> GetError(const TString& message) {
+        return std::make_unique<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
     }
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -546,7 +546,7 @@ private:
     TVector<ui32> Sources;
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
-    THolder<TDqMemoryQuota> MemoryQuota; // declared before TaskRunner: the graph must die before its quota
+    std::unique_ptr<TDqMemoryQuota> MemoryQuota; // declared before TaskRunner: the graph must die before its quota
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     ui64 ActorElapsedTicks = 0;
     bool HasActiveCheckpoint = false;
@@ -563,7 +563,7 @@ struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
+        std::unique_ptr<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
     {
         auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(memoryQuota));
         return std::make_tuple(

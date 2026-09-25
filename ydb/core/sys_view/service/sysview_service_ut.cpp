@@ -59,7 +59,7 @@ namespace NKikimr {
 
             private:
                 void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
-                    THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
+                    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
 
                     if (request->ResultSet.size() == 1) {
                         auto& entry = request->ResultSet.back();
@@ -98,7 +98,7 @@ namespace NKikimr {
                                                             NKikimrSysView::EDbCountersService service)
             {
                 auto stub = MakeIntrusive<TStubDetailedCounters>();
-                auto ev = MakeHolder<TEvSysView::TEvRegisterDbDetailedCounters>(Database, service, stub);
+                auto ev = std::make_unique<TEvSysView::TEvRegisterDbDetailedCounters>(Database, service, stub);
                 runtime.Send(new IEventHandle(serviceId, runtime.AllocateEdgeActor(), ev.Release()), 0, true);
                 return stub;
             }
@@ -113,7 +113,7 @@ namespace NKikimr {
 
             void SendAck(TTestBasicRuntime& runtime, const TActorId& serviceId, ui64 generation)
             {
-                auto ack = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();
+                auto ack = std::make_unique<TEvSysView::TEvSendDbCountersResponse>();
                 ack->Record.SetDatabase(Database);
                 ack->Record.SetGeneration(generation);
                 runtime.Send(new IEventHandle(serviceId, runtime.AllocateEdgeActor(), ack.Release()), 0, true);

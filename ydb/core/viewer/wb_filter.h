@@ -227,14 +227,14 @@ public:
         CppType Value;
     };
 
-    static void FilterResponse(TResponseType& source, const TVector<THolder<IFieldProtoFilter>>& filters) {
+    static void FilterResponse(TResponseType& source, const TVector<std::unique_ptr<IFieldProtoFilter>>& filters) {
         ResponseType result;
         auto& field = TWhiteboardInfo<ResponseType>::GetElementsField(result);
         auto& sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source);
         field.Reserve(sourceField.size());
         for (TElementType& info : sourceField) {
             size_t cnt = 0;
-            for (const THolder<IFieldProtoFilter>& filter : filters) {
+            for (const std::unique_ptr<IFieldProtoFilter>& filter : filters) {
                 if (!filter->CheckFilter(info))
                     break;
                 ++cnt;
@@ -267,11 +267,11 @@ public:
         return result;
     }
 
-    static TVector<THolder<IFieldProtoFilter>> GetProtoFilters(TString filters) {
+    static TVector<std::unique_ptr<IFieldProtoFilter>> GetProtoFilters(TString filters) {
         // TODO: convert to StringBuf operations?
         const Descriptor& descriptor = *TElementType::descriptor();
         TVector<TString> requestedFilters;
-        TVector<THolder<IFieldProtoFilter>> foundFilters;
+        TVector<std::unique_ptr<IFieldProtoFilter>> foundFilters;
         if (filters.StartsWith('(') && filters.EndsWith(')')) {
             filters = filters.substr(1, filters.size() - 2);
         }
@@ -280,7 +280,7 @@ public:
             size_t opFirstPos = str.find_first_of("!><=");
             // TODO: replace with error reporting
             //Y_ABORT_UNLESS(opPos != TString::npos);
-            THolder<IFieldProtoFilter> filter;
+            std::unique_ptr<IFieldProtoFilter> filter;
             TString field = str.substr(0, opFirstPos);
             size_t opEndPos = str.find_first_not_of("!><=", opFirstPos);
             if (opEndPos != TString::npos) {
@@ -296,34 +296,34 @@ public:
                             StringSplitter(value.substr(1, value.size() - 2)).Split(',').SkipEmpty().Collect(&values);
                             switch (fieldDescriptor->cpp_type()) {
                             case FieldDescriptor::CPPTYPE_INT32:
-                                filter = MakeHolder<TFieldProtoFilterInValue<i32>>(fieldDescriptor, FromStringWithDefaultArray<i32>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<i32>>(fieldDescriptor, FromStringWithDefaultArray<i32>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_INT64:
-                                filter = MakeHolder<TFieldProtoFilterInValue<i64>>(fieldDescriptor, FromStringWithDefaultArray<i64>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<i64>>(fieldDescriptor, FromStringWithDefaultArray<i64>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT32:
-                                filter = MakeHolder<TFieldProtoFilterInValue<ui32>>(fieldDescriptor, FromStringWithDefaultArray<ui32>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<ui32>>(fieldDescriptor, FromStringWithDefaultArray<ui32>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT64:
-                                filter = MakeHolder<TFieldProtoFilterInValue<ui64>>(fieldDescriptor, FromStringWithDefaultArray<ui64>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<ui64>>(fieldDescriptor, FromStringWithDefaultArray<ui64>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_DOUBLE:
-                                filter = MakeHolder<TFieldProtoFilterInValue<double>>(fieldDescriptor, FromStringWithDefaultArray<double>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<double>>(fieldDescriptor, FromStringWithDefaultArray<double>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_FLOAT:
-                                filter = MakeHolder<TFieldProtoFilterInValue<float>>(fieldDescriptor, FromStringWithDefaultArray<float>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<float>>(fieldDescriptor, FromStringWithDefaultArray<float>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_BOOL:
-                                filter = MakeHolder<TFieldProtoFilterInValue<bool>>(fieldDescriptor, FromStringWithDefaultArray<bool>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<bool>>(fieldDescriptor, FromStringWithDefaultArray<bool>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_ENUM:
-                                filter = MakeHolder<TFieldProtoFilterInValue<TEnumValue>>(fieldDescriptor, ConvertStringArray<TEnumValue>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<TEnumValue>>(fieldDescriptor, ConvertStringArray<TEnumValue>(values));
                                 break;
                             case FieldDescriptor::CPPTYPE_STRING:
-                                filter = MakeHolder<TFieldProtoFilterInValue<TString>>(fieldDescriptor, values);
+                                filter = std::make_unique<TFieldProtoFilterInValue<TString>>(fieldDescriptor, values);
                                 break;
                             case FieldDescriptor::CPPTYPE_MESSAGE:
-                                filter = MakeHolder<TFieldProtoFilterInValue<TMessageValue>>(fieldDescriptor, ConvertStringArray<TMessageValue>(values));
+                                filter = std::make_unique<TFieldProtoFilterInValue<TMessageValue>>(fieldDescriptor, ConvertStringArray<TMessageValue>(values));
                                 break;
                             default:
                                 break;
@@ -331,34 +331,34 @@ public:
                         } else {
                             switch (fieldDescriptor->cpp_type()) {
                             case FieldDescriptor::CPPTYPE_INT32:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_INT64:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT32:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_UINT64:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_DOUBLE:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_FLOAT:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_BOOL:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_ENUM:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
                                 break;
                             case FieldDescriptor::CPPTYPE_STRING:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<TString>>(fieldDescriptor, value);
+                                filter = std::make_unique<TFieldProtoFilterEqValue<TString>>(fieldDescriptor, value);
                                 break;
                             case FieldDescriptor::CPPTYPE_MESSAGE:
-                                filter = MakeHolder<TFieldProtoFilterEqValue<TMessageValue>>(fieldDescriptor, TMessageValue(value));
+                                filter = std::make_unique<TFieldProtoFilterEqValue<TMessageValue>>(fieldDescriptor, TMessageValue(value));
                                 break;
                             default:
                                 break;
@@ -367,34 +367,34 @@ public:
                     } else if (op == "<>" || op == "!=") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<TString>>(fieldDescriptor, value);
+                            filter = std::make_unique<TFieldProtoFilterNeValue<TString>>(fieldDescriptor, value);
                             break;
                         case FieldDescriptor::CPPTYPE_MESSAGE:
-                            filter = MakeHolder<TFieldProtoFilterNeValue<TMessageValue>>(fieldDescriptor, TMessageValue(value));
+                            filter = std::make_unique<TFieldProtoFilterNeValue<TMessageValue>>(fieldDescriptor, TMessageValue(value));
                             break;
                         default:
                             break;
@@ -402,31 +402,31 @@ public:
                     } else if (op == "<") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = std::make_unique<TFieldProtoFilterLtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterLtValue<TString>>(fieldDescriptor, value);
+                            filter = std::make_unique<TFieldProtoFilterLtValue<TString>>(fieldDescriptor, value);
                             break;
                         default:
                             break;
@@ -434,31 +434,31 @@ public:
                     } else if (op == ">") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = std::make_unique<TFieldProtoFilterGtValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterGtValue<TString>>(fieldDescriptor, value);
+                            filter = std::make_unique<TFieldProtoFilterGtValue<TString>>(fieldDescriptor, value);
                             break;
                         default:
                             break;
@@ -466,31 +466,31 @@ public:
                     } else if (op == "<=") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = std::make_unique<TFieldProtoFilterLeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterLeValue<TString>>(fieldDescriptor, value);
+                            filter = std::make_unique<TFieldProtoFilterLeValue<TString>>(fieldDescriptor, value);
                             break;
                         default:
                             break;
@@ -498,31 +498,31 @@ public:
                     } else if (op == ">=") {
                         switch (fieldDescriptor->cpp_type()) {
                         case FieldDescriptor::CPPTYPE_INT32:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<i32>>(fieldDescriptor, FromStringWithDefault<i32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_INT64:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<i64>>(fieldDescriptor, FromStringWithDefault<i64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT32:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<ui32>>(fieldDescriptor, FromStringWithDefault<ui32>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_UINT64:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<ui64>>(fieldDescriptor, FromStringWithDefault<ui64>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_DOUBLE:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<double>>(fieldDescriptor, FromStringWithDefault<double>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_FLOAT:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<float>>(fieldDescriptor, FromStringWithDefault<float>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_BOOL:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<bool>>(fieldDescriptor, FromStringWithDefault<bool>(value));
                             break;
                         case FieldDescriptor::CPPTYPE_ENUM:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
+                            filter = std::make_unique<TFieldProtoFilterGeValue<TEnumValue>>(fieldDescriptor, TEnumValue(value));
                             break;
                         case FieldDescriptor::CPPTYPE_STRING:
-                            filter = MakeHolder<TFieldProtoFilterGeValue<TString>>(fieldDescriptor, value);
+                            filter = std::make_unique<TFieldProtoFilterGeValue<TString>>(fieldDescriptor, value);
                             break;
                         default:
                             break;
@@ -545,7 +545,7 @@ public:
 
 template<typename ResponseType>
 void FilterWhiteboardResponses(ResponseType& response, const TString& filters) {
-    TVector<THolder<typename TWhiteboardFilter<ResponseType>::IFieldProtoFilter>> filterFilters =
+    TVector<std::unique_ptr<typename TWhiteboardFilter<ResponseType>::IFieldProtoFilter>> filterFilters =
             TWhiteboardFilter<ResponseType>::GetProtoFilters(filters);
     TWhiteboardFilter<ResponseType>::FilterResponse(response, filterFilters);
 }

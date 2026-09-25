@@ -83,11 +83,11 @@ namespace {
         };
     }
 
-    THolder<TActorSystem> MakeActorSystem(
+    std::unique_ptr<TActorSystem> MakeActorSystem(
             std::unique_ptr<TCGroupV2StatsSubSystem> v2 = {},
             std::unique_ptr<TCGroupV1StatsSubSystem> v1 = {},
             std::unique_ptr<TCGroupOomSubSystem> oom = {}) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 2;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
@@ -104,7 +104,7 @@ namespace {
         if (oom) {
             setup->RegisterSubSystem(std::move(oom));
         }
-        return MakeHolder<TActorSystem>(setup);
+        return std::make_unique<TActorSystem>(setup);
     }
 
     template<class TEvent, class TResult>

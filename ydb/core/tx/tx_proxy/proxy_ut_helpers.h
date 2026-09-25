@@ -76,8 +76,8 @@ protected:
     TPortManager PortManager;
     Tests::TServerSettings::TPtr Settings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TTenants> Tenants;
-    THolder<Tests::TClient> Client;
+    std::unique_ptr<Tests::TTenants> Tenants;
+    std::unique_ptr<Tests::TClient> Client;
 
     void SetLogging() {
         if (GetSettings().SupportsRedirect && Tests::IsServerRedirected())
@@ -122,8 +122,8 @@ public:
 
         Server = new Tests::TServer(Settings);
 
-        Client = MakeHolder<Tests::TClient>(GetSettings());
-        Tenants = MakeHolder<Tests::TTenants>(Server);
+        Client = std::make_unique<Tests::TClient>(GetSettings());
+        Tenants = std::make_unique<Tests::TTenants>(Server);
 
         SetLogging();
         InitRoot();
@@ -227,8 +227,8 @@ public:
 
         Server = new Tests::TServer(Settings);
 
-        Client = MakeHolder<Tests::TClient>(GetSettings());
-        Tenants = MakeHolder<Tests::TTenants>(Server);
+        Client = std::make_unique<Tests::TClient>(GetSettings());
+        Tenants = std::make_unique<Tests::TTenants>(Server);
 
         SetLogging();
         InitRoot();

@@ -62,7 +62,7 @@ namespace {
 
         void Bootstrap(const TActorContext& ctx) {
             TBase::Become(&TPublicHttpActor::StateWork);
-            THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> ev = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(Config.GetPort());
+            std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> ev = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(Config.GetPort());
             ev->Secure = Config.GetSecure();
             ev->CertificateFile = Config.GetCert();
             ev->PrivateKeyFile = Config.GetKey();

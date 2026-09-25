@@ -36,15 +36,15 @@ public:
 class IChangeRecordSerializer {
 public:
     virtual ~IChangeRecordSerializer() = default;
-    virtual THolder<IChangeRecordSerializer> Clone() const = 0;
+    virtual std::unique_ptr<IChangeRecordSerializer> Clone() const = 0;
     virtual void Serialize(NChangeExchange::IChangeRecord::TPtr in, NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& out) = 0;
 };
 
 IActor* CreateLocalTableWriter(
     const TString& database,
     const TPathId& tablePathId,
-    THolder<IChangeRecordParser>&& parser,
-    THolder<IChangeRecordSerializer>&& serializer,
+    std::unique_ptr<IChangeRecordParser>&& parser,
+    std::unique_ptr<IChangeRecordSerializer>&& serializer,
     std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
     EWriteMode mode = EWriteMode::Simple);
 

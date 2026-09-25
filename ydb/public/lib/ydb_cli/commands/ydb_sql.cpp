@@ -190,7 +190,7 @@ int TCommandSql::RunCommand(TConfig& config) {
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
-        THolder<TParamsBuilder> paramBuilder;
+        std::unique_ptr<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             ExecSettings.Parameters = paramBuilder->Build();
 

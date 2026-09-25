@@ -1110,7 +1110,7 @@ const TPath::TChecker& TPath::TChecker::IsValidACL(const TString& acl, EStatus s
         return *this;
     }
 
-    auto secObj = MakeHolder<NACLib::TACL>();
+    auto secObj = std::make_unique<NACLib::TACL>();
     if (Path.IsResolved()) {
         secObj.Reset(new NACLib::TACL(Path.Base()->ACL));
     }

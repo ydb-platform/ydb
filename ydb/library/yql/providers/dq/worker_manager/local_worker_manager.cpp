@@ -294,7 +294,7 @@ private:
         TFailureInjector::Set(request.GetName(), request.GetSkip(), request.GetCountOfFails());
         YQL_CLOG(DEBUG, ProviderDq) << "Failure injector is configured " << request.GetName();
 
-        auto response = MakeHolder<TEvConfigureFailureInjectorResponse>();
+        auto response = std::make_unique<TEvConfigureFailureInjectorResponse>();
         auto* r = response->Record.MutableResponse();
         r->Setsuccess(true);
 
@@ -315,7 +315,7 @@ private:
         TString computeActorType = ev->Get()->Record.GetComputeActorType();
 
         if (createComputeActor && !Options.CanUseComputeActor) {
-            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled", NYql::NDqProto::StatusIds::BAD_REQUEST), 0, ev->Cookie);
+            Send(ev->Sender, std::make_unique<TEvAllocateWorkersResponse>("Compute Actor Disabled", NYql::NDqProto::StatusIds::BAD_REQUEST), 0, ev->Cookie);
             return;
         }
 
@@ -348,7 +348,7 @@ private:
 
         bool canAllocate = MemoryQuoter->Allocate(traceId, 0, totalInitialTaskMemoryLimit);
         if (!canAllocate) {
-            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Not enough memory to allocate tasks", NYql::NDqProto::StatusIds::OVERLOADED), 0, ev->Cookie);
+            Send(ev->Sender, std::make_unique<TEvAllocateWorkersResponse>("Not enough memory to allocate tasks", NYql::NDqProto::StatusIds::OVERLOADED), 0, ev->Cookie);
             return;
         }
 
@@ -377,7 +377,7 @@ private:
             }
 
             for (ui32 i = 0; i < count; i++) {
-                THolder<NActors::IActor> actor;
+                std::unique_ptr<NActors::IActor> actor;
                 ui64 taskId = 0;
                 if (createComputeActor) {
                     YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
@@ -412,7 +412,7 @@ private:
         }
 
         Send(ev->Sender,
-            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors.ActorIds),
+            std::make_unique<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors.ActorIds),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             ev->Cookie);
         Subscribe(ev->Sender.NodeId());
@@ -425,7 +425,7 @@ private:
     }
 
     void OnQueryStatus(TEvQueryStatus::TPtr& ev) {
-        auto response = MakeHolder<TEvQueryStatusResponse>();
+        auto response = std::make_unique<TEvQueryStatusResponse>();
         Send(ev->Sender, response.Release());
     }
 

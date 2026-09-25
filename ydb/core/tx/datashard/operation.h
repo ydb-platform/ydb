@@ -480,8 +480,8 @@ struct TInputOpData {
 };
 
 struct TOutputOpData {
-    using TResultPtr = THolder<TEvDataShard::TEvProposeTransactionResult>;
-    using TDelayedAcks = TVector<THolder<IEventHandle>>;
+    using TResultPtr = std::unique_ptr<TEvDataShard::TEvProposeTransactionResult>;
+    using TDelayedAcks = TVector<std::unique_ptr<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
     using TChangeRecord = IDataShardChangeCollector::TChange;
     using TExpectedReadSets = TMap<std::pair<ui64, ui64>, TStackVec<TActorId, 1>>;
@@ -491,7 +491,7 @@ struct TOutputOpData {
     TDelayedAcks DelayedAcks;
     TOutReadSets OutReadSets;
     TExpectedReadSets ExpectedReadSets;
-    TVector<THolder<TEvTxProcessing::TEvReadSet>> PreparedOutReadSets;
+    TVector<std::unique_ptr<TEvTxProcessing::TEvReadSet>> PreparedOutReadSets;
     // Access log of checked locks
     TLocksCache LocksAccessLog;
     // Collected change records
@@ -670,14 +670,14 @@ public:
     TOutputOpData::TResultPtr &Result() { return OutputDataRef().Result; }
 
     TOutputOpData::TDelayedAcks &DelayedAcks() { return OutputDataRef().DelayedAcks; }
-    void AddDelayedAck(THolder<IEventHandle> ack)
+    void AddDelayedAck(std::unique_ptr<IEventHandle> ack)
     {
         DelayedAcks().emplace_back(ack.Release());
     }
 
     TOutputOpData::TOutReadSets &OutReadSets() { return OutputDataRef().OutReadSets; }
     TOutputOpData::TExpectedReadSets &ExpectedReadSets() { return OutputDataRef().ExpectedReadSets; }
-    TVector<THolder<TEvTxProcessing::TEvReadSet>> &PreparedOutReadSets()
+    TVector<std::unique_ptr<TEvTxProcessing::TEvReadSet>> &PreparedOutReadSets()
     {
         return OutputDataRef().PreparedOutReadSets;
     }
@@ -939,14 +939,14 @@ protected:
     TOutputOpData &OutputDataRef()
     {
         if (!OutputData)
-            OutputData = MakeHolder<TOutputOpData>();
+            OutputData = std::make_unique<TOutputOpData>();
         return *OutputData;
     }
 
     TInputOpData &InputDataRef()
     {
         if (!InputData)
-            InputData = MakeHolder<TInputOpData>();
+            InputData = std::make_unique<TInputOpData>();
         return *InputData;
     }
     void ClearInputData() { InputData = nullptr; }
@@ -956,8 +956,8 @@ protected:
 private:
     THPTimer TotalTimer;
     THPTimer CurrentTimer;
-    THolder<TInputOpData> InputData;
-    THolder<TOutputOpData> OutputData;
+    std::unique_ptr<TInputOpData> InputData;
+    std::unique_ptr<TOutputOpData> OutputData;
     ui64 Cookie;
     // A set of locks affected by this operation
     absl::flat_hash_set<ui64> AffectedLocks;

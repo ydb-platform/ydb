@@ -88,15 +88,15 @@ class TCreateStreamingQuery : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
     }
 
-    static bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
+    static bool IsParentPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& parentPath) {
         const auto checks = IsParentPathValid(parentPath);
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -105,7 +105,7 @@ class TCreateStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TOperationContext& context) const {
+    bool IsDestinationPathValid(const std::unique_ptr<TProposeResponse>& result, const TPath& dstPath, const TOperationContext& context) const {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
 
@@ -137,7 +137,7 @@ class TCreateStreamingQuery : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
+    bool IsApplyIfChecksPassed(const std::unique_ptr<TProposeResponse>& result, const TOperationContext& context) const {
         if (TString errorStr; !context.SS->CheckApplyIf(Transaction, errorStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errorStr);
             return false;
@@ -146,7 +146,7 @@ class TCreateStreamingQuery : public TSubOperation {
         return true;
     }
 
-    bool IsDescriptionValid(const THolder<TProposeResponse>& result) const {
+    bool IsDescriptionValid(const std::unique_ptr<TProposeResponse>& result) const {
         if (const ui64 propertiesSize = Transaction.GetCreateStreamingQuery().GetProperties().ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
             result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize);
             return false;
@@ -167,7 +167,7 @@ class TCreateStreamingQuery : public TSubOperation {
         context.DbChanges.PersistTxState(OperationId);
     }
 
-    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TOperationContext& context) const {
+    void AddPathIntoSchemeShard(const std::unique_ptr<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TOperationContext& context) const {
         dstPath.MaterializeLeaf(owner, newPathId);
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, dstPath.Parent(), context);
@@ -226,14 +226,14 @@ public:
         return checks;
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateStreamingQuery().GetName();
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"path", parentPathStr + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 

@@ -283,7 +283,7 @@ std::unique_ptr<IActor> CreateStorageStatsCoroCalculator(
     ui32 groupReserveMin,
     ui32 groupReservePart)
 {
-    auto coroCalculatorImpl = MakeHolder<TStorageStatsCoroCalculatorImpl>(
+    auto coroCalculatorImpl = std::make_unique<TStorageStatsCoroCalculatorImpl>(
         systemViewsState,
         hostRecordMap,
         groupReserveMin,

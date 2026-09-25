@@ -21,7 +21,7 @@ std::optional<NBackup::TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool validateFeatureFlag,
     TOperationContext& context,
-    THolder<TProposeResponse>& result,
+    std::unique_ptr<TProposeResponse>& result,
     bool enforceBackupCollectionsDirExists)
 {
     bool backupServiceEnabled = AppData()->FeatureFlags.GetEnableBackupService();

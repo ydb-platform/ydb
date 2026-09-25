@@ -45,8 +45,8 @@ private:
 };
 }
 
-THolder<TVisitorTransformerBase> CreateDqFunctionIntentTransformer(TDqFunctionState::TPtr state) {
-    return THolder(new TDqFunctionIntentTransformer(state));
+std::unique_ptr<TVisitorTransformerBase> CreateDqFunctionIntentTransformer(TDqFunctionState::TPtr state) {
+    return std::unique_ptr<TDqFunctionIntentTransformer>(new TDqFunctionIntentTransformer(state));
 }
 
 }

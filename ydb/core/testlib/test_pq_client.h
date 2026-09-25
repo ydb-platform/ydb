@@ -29,7 +29,7 @@ using namespace NKikimr::Tests;
 
 const static ui32 PQ_DEFAULT_NODE_COUNT = 2;
 
-inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, const TString& yql_timeout = "10", const std::unique_ptr<TTempFileHandle>& netDataFile = nullptr) {
     NKikimrPQ::TPQConfig pqConfig;
     NKikimrProto::TAuthConfig authConfig;
     authConfig.SetUseBuiltinDomain(true);
@@ -77,7 +77,7 @@ inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEF
 }
 
 // deprecated.
-inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount, bool roundrobin, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount, bool roundrobin, const TString& yql_timeout = "10", const std::unique_ptr<TTempFileHandle>& netDataFile = nullptr) {
     Y_UNUSED(roundrobin);
 
     return PQSettings(port, nodesCount, yql_timeout, netDataFile);
@@ -140,8 +140,8 @@ struct TRequestCreatePQ {
     ui64 SourceIdMaxCount;
     ui64 SourceIdLifetime;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest() const {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest()->MutableCmdCreateTopic();
         req->SetTopic(Topic);
         req->SetNumPartitions(NumParts);
@@ -227,8 +227,8 @@ struct TRequestAlterPQ {
     bool FillPartitionConfig;
     std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest() {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest() {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest()->MutableCmdChangeTopic();
         req->SetTopic(Topic);
         req->SetNumPartitions(NumParts);
@@ -257,8 +257,8 @@ struct TRequestDeletePQ {
 
     TString Topic;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest() {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest() {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest()->MutableCmdDeleteTopic();
         req->SetTopic(Topic);
         return request;
@@ -274,8 +274,8 @@ struct TRequestGetOwnership {
     TString Topic;
     ui32 Partition;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest() const {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(Topic);
         req->SetPartition(Partition);
@@ -298,8 +298,8 @@ struct TRequestWritePQ {
     TString SourceId;
     ui64 SeqNo;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TString& data, const TString& cookie, TMaybe<i64> cmdWriteOffset = {}) const {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TString& data, const TString& cookie, TMaybe<i64> cmdWriteOffset = {}) const {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(Topic);
         req->SetPartition(Partition);
@@ -339,8 +339,8 @@ struct TRequestReadPQ {
     TString User;
     ui64 ReadTimestampMs;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest() const {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(Topic);
         req->SetPartition(Partition);
@@ -371,8 +371,8 @@ struct TRequestSetClientOffsetPQ {
     ui64 Offset;
     TString User;
 
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest() const {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(Topic);
         req->SetPartition(Partition);
@@ -391,8 +391,8 @@ struct FetchPartInfo {
 };
 
 struct TFetchRequestPQ {
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<FetchPartInfo>& fetchParts, ui32 maxBytes, ui32 waitMs) {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<FetchPartInfo>& fetchParts, ui32 maxBytes, ui32 waitMs) {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableFetchRequest();
         req->SetWaitMs(waitMs);
         req->SetTotalMaxBytes(maxBytes);
@@ -409,8 +409,8 @@ struct TFetchRequestPQ {
 };
 
 struct TRequestGetPartOffsets {
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts) {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts) {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest();
         auto partOff = req->MutableCmdGetPartitionOffsets();
         partOff->SetClientId("user");
@@ -426,8 +426,8 @@ struct TRequestGetPartOffsets {
 };
 
 struct TRequestGetClientInfo {
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<TString>& topics, const TString& user) {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<TString>& topics, const TString& user) {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest();
         auto partOff = req->MutableCmdGetReadSessionsInfo();
         partOff->SetClientId(user);
@@ -440,8 +440,8 @@ struct TRequestGetClientInfo {
 
 
 struct TRequestGetPartStatus {
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts) {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts) {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest();
         auto partOff = req->MutableCmdGetPartitionStatus();
         partOff->SetClientId("user1");
@@ -457,8 +457,8 @@ struct TRequestGetPartStatus {
 };
 
 struct TRequestGetPartLocations {
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts) {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts) {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest();
         auto partOff = req->MutableCmdGetPartitionLocations();
         for (const auto& t : topicsAndParts) {
@@ -473,8 +473,8 @@ struct TRequestGetPartLocations {
 };
 
 struct TRequestDescribePQ {
-    THolder<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<TString>& topics) const {
-        THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
+    std::unique_ptr<NMsgBusProxy::TBusPersQueue> GetRequest(const TVector<TString>& topics) const {
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest();
         auto partOff = req->MutableCmdGetTopicMetadata();
         for (const auto& t : topics) {
@@ -507,10 +507,10 @@ private:
     const Tests::TServerSettings Settings;
     const ui16 GRpcPort;
     NClient::TKikimr Kikimr;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
     // Authenticated driver for Topic/PQv1 schema ops. Main Driver stays
     // unauthenticated: FullInit YQL and many UTs rely on that.
-    THolder<NYdb::TDriver> AdminDriver;
+    std::unique_ptr<NYdb::TDriver> AdminDriver;
     std::unique_ptr<NKikimrClient::TGRpcServer::Stub> Stub;
 
     ui64 TopicsVersion = 0;
@@ -588,14 +588,14 @@ public:
             .SetEndpoint(endpoint)
             .SetDatabase(database)
             .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-        Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
+        Driver.Reset(std::make_unique<NYdb::TDriver>(driverConfig));
 
         auto adminDriverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
             .SetDatabase(database)
             .SetAuthToken(BUILTIN_ACL_ROOT)
             .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-        AdminDriver.Reset(MakeHolder<NYdb::TDriver>(adminDriverConfig));
+        AdminDriver.Reset(std::make_unique<NYdb::TDriver>(adminDriverConfig));
 
         grpc::ChannelArguments args;
         if (settings.GrpcMaxMessageSize != 0)
@@ -942,7 +942,7 @@ public:
 
         Y_ABORT_UNLESS(tabletId != Max<ui64>());
 
-        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         auto* cmd = request->Record.AddCmdReadRange();
         auto* range = cmd->MutableRange();
         range->SetFrom("\x00");
@@ -1465,7 +1465,7 @@ public:
 
         TString cookie = GetOwnership({writeRequest.Topic, writeRequest.Partition}, expectedOwnerStatus);
 
-        THolder<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie, cmdWriteOffset);
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie, cmdWriteOffset);
         if (!ticket.empty())
             request.Get()->Record.SetTicket(ticket);
 
@@ -1498,7 +1498,7 @@ public:
             NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
             NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK
     ) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = readRequest.GetRequest();
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = readRequest.GetRequest();
         if (!ticket.empty()) {
             request.Get()->Record.SetTicket(ticket);
         }
@@ -1540,7 +1540,7 @@ public:
             NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
             NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK
     ) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = cmdRequest.GetRequest();
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = cmdRequest.GetRequest();
         if (!ticket.empty()) {
             request.Get()->Record.SetTicket(ticket);
         }
@@ -1560,12 +1560,12 @@ public:
     }
 
     void FetchRequestPQ(const TVector<FetchPartInfo>& fetchParts, ui32 maxBytes, ui32 waitMs) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = TFetchRequestPQ().GetRequest(fetchParts, maxBytes, waitMs);
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TFetchRequestPQ().GetRequest(fetchParts, maxBytes, waitMs);
         CallPersQueueGRPC(request->Record);
     }
 
     void GetPartOffset(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts, ui32 resCount, ui32 hasClientOffset, bool ok) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartOffsets().GetRequest(topicsAndParts);
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartOffsets().GetRequest(topicsAndParts);
 
         auto response = CallPersQueueGRPC(request->Record);
 
@@ -1591,7 +1591,7 @@ public:
     }
 
     NKikimrClient::TResponse GetClientInfo(const TVector<TString>& topics, const TString& user, bool ok, const TVector<TString>& badTopics = {}) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetClientInfo().GetRequest(topics, user);
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestGetClientInfo().GetRequest(topics, user);
         Cerr << "Request: " << request->Record << Endl;
 
         auto response = CallPersQueueGRPC(request->Record);
@@ -1621,7 +1621,7 @@ public:
 
 
     void GetPartStatus(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts, ui32 resCount, bool ok) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartStatus().GetRequest(topicsAndParts);
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartStatus().GetRequest(topicsAndParts);
 
         auto response = CallPersQueueGRPC(request->Record);
 
@@ -1648,7 +1648,7 @@ public:
             doRetry = false;
             nodeIds.clear();
 
-            THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartLocations().GetRequest(topicsAndParts);
+            std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartLocations().GetRequest(topicsAndParts);
 
             auto response = CallPersQueueGRPC(request->Record);
 
@@ -1687,7 +1687,7 @@ public:
     }
 
      NKikimrClient::TPersQueueMetaResponse::TCmdGetTopicMetadataResult DescribeTopic(const TVector<TString>& topics, bool error = false) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest(topics);
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest(topics);
 
         TAutoPtr<NBus::TBusMessage> reply;
         auto response = CallPersQueueGRPC(request->Record);

@@ -104,7 +104,7 @@ private:
         ctx.Send(Sink, new NActors::TEvents::TEvWakeup(ev->Get()->ConfigItemKinds.front()));
         ctx.Send(ev->Sender, new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse());
 
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto notification = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.SetSubscriptionId(InitialSubscriptionId);
         notification->Record.AddItemKinds(ev->Get()->ConfigItemKinds.front());
         notification->Record.MutableConfig()->MutableCompositeConveyorConfig()->CopyFrom(InitialConfig);
@@ -170,7 +170,7 @@ public:
     std::pair<ui64, ui64> SendUpdate(const NKikimrConfig::TCompositeConveyorConfig& config) {
         const ui64 id = NextUpdateId++;
         const ui64 cookie = 1000 + id;
-        auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto update = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         update->Record.SetSubscriptionId(id);
         auto* itemId = update->Record.MutableConfigId()->AddItemIds();
         itemId->SetId(id);

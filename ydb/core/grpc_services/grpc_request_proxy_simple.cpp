@@ -76,7 +76,7 @@ private:
             return;
         }
 
-        THolder<TEvListEndpointsRequest> request(event->Release().Release());
+        std::unique_ptr<TEvListEndpointsRequest> request(event->Release().Release());
         auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
         const auto& grpcConfig = AppConfig.GetGRpcConfig();
         AddEndpointsForGrpcConfig(grpcConfig, *result);

@@ -19,7 +19,7 @@ struct TUserInfo;
 struct TReadAnswer {
     ui64 Size = 0;
     ui64 ConsumedMessages = 0;
-    THolder<IEventBase> Event;
+    std::unique_ptr<IEventBase> Event;
     bool IsInternal = false;
     TActorId ReplyTo;
 };
@@ -152,7 +152,7 @@ struct TReadInfo : TLogPrefix {
                                          const TActorId& tablet,
                                          ui64 realReadOffset,
                                          NKikimrClient::TCmdReadResult* readResult,
-                                         THolder<TEvPQ::TEvProxyResponse>& answer,
+                                         std::unique_ptr<TEvPQ::TEvProxyResponse>& answer,
                                          bool& needStop,
                                          ui32& cnt, ui32& size, ui32& lastBlobSize,
                                          const TActorContext& ctx);

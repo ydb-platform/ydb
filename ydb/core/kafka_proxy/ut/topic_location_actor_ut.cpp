@@ -173,17 +173,17 @@ namespace NKafka::NTests {
             AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(path, partitions)), Ydb::StatusIds::SUCCESS);
         }
 
-        THolder<TEvLocationResponse> GrabLocationResponse(
+        std::unique_ptr<TEvLocationResponse> GrabLocationResponse(
             NActors::TTestActorRuntime& runtime,
             const TActorId& edge,
             TDuration waitTimeout)
         {
             auto handle = runtime.GrabEdgeEvent<TEvLocationResponse>(edge, waitTimeout);
             UNIT_ASSERT(handle);
-            return THolder(handle->Release());
+            return std::unique_ptr<TEvLocationResponse>(handle->Release().Release());
         }
 
-        THolder<TEvLocationResponse> RunTopicLocation(
+        std::unique_ptr<TEvLocationResponse> RunTopicLocation(
             NActors::TTestActorRuntime& runtime,
             const TString& path,
             const TString& token = {},
@@ -197,7 +197,7 @@ namespace NKafka::NTests {
 
         // Isolated runtime has no cluster timers. Wait until the test observer has
         // fired, jump past the actor retry delay, then grab the reply.
-        THolder<TEvLocationResponse> RunTopicLocationAfterInjection(
+        std::unique_ptr<TEvLocationResponse> RunTopicLocationAfterInjection(
             NActors::TTestActorRuntime& runtime,
             const TString& path,
             std::function<bool()> injected)

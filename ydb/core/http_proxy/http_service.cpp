@@ -38,8 +38,8 @@ namespace NKikimr::NHttpProxy {
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TActorContext& ctx);
 
         NKikimrConfig::TServerlessProxyConfig Config;
-        THolder<THttpRequestProcessors> Processors;
-        THolder<NYdb::TDriver> Driver;
+        std::unique_ptr<THttpRequestProcessors> Processors;
+        std::unique_ptr<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
         TIntrusivePtr<NHttp::TSocketDescriptor> PreboundSocket;
     };
@@ -49,7 +49,7 @@ namespace NKikimr::NHttpProxy {
         , Config(cfg.Config)
     {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
-        Processors = MakeHolder<THttpRequestProcessors>(Config);
+        Processors = std::make_unique<THttpRequestProcessors>(Config);
         if (cfg.UseSDK) {
             auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
                 .SetClientThreadsNum(1)
@@ -60,7 +60,7 @@ namespace NKikimr::NHttpProxy {
             if (Config.GetCaCert()) {
                 config.UseSecureConnection(TFileInput(Config.GetCaCert()).ReadAll());
             }
-            Driver = MakeHolder<NYdb::TDriver>(std::move(config));
+            Driver = std::make_unique<NYdb::TDriver>(std::move(config));
         }
         const ui16 httpPort = Config.GetHttpConfig().GetPort();
         PreboundSocket = NHttp::TryBindListeningSocket({}, httpPort);
@@ -74,8 +74,8 @@ namespace NKikimr::NHttpProxy {
     void THttpProxyActor::Bootstrap(const TActorContext& ctx) {
         TBase::Become(&THttpProxyActor::StateWork);
         const auto& config = Config.GetHttpConfig();
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> ev =
-            MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(config.GetPort());
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> ev =
+            std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(config.GetPort());
         ev->MaxRecycledRequestsCount = 0;
         ev->Secure = config.GetSecure();
         ev->CertificateFile = config.GetCert();

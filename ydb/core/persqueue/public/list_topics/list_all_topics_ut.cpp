@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TListAllTopicsTests) {
         setup.GetServer().AnnoyingClient->MkDir(parent, name);
     }
 
-    THolder<TEvPQ::TEvListAllTopicsResponse> GetListing(
+    std::unique_ptr<TEvPQ::TEvListAllTopicsResponse> GetListing(
         NActors::TTestActorRuntime& runtime,
         bool recursive,
         const TMaybe<ui64>& limit = {},
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TListAllTopicsTests) {
     }
 
     void AssertTopics(
-        const THolder<TEvPQ::TEvListAllTopicsResponse>& resp,
+        const std::unique_ptr<TEvPQ::TEvListAllTopicsResponse>& resp,
         const TVector<TString>& expected,
         bool haveMore = false)
     {

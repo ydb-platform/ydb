@@ -20,7 +20,7 @@ enum ELockMode {
 struct TTestContext {
     TTabletTypes::EType TabletType;
     ui64 TabletId;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     THashMap<std::tuple<TActorId, ui64>, TActorId> ProxyClients;
 
     TTestContext();
@@ -42,13 +42,13 @@ struct TTestContext {
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) {
+    std::unique_ptr<TEvent> ExpectEdgeEvent(const TActorId& actor) {
         return Runtime->GrabEdgeEvent<TEvent>(actor)->Release();
     }
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
+    std::unique_ptr<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
         auto ev = Runtime->GrabEdgeEvent<TEvent>(actor);
         UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
         return ev->Release();
@@ -67,7 +67,7 @@ struct TTestContext {
     void SendFromEdge(const TActorId& edge, IEventBase* payload, ui64 cookie = 0);
 
     template <class TEvent>
-    void SendFromEdge(const TActorId& edge, THolder<TEvent> payload, ui64 cookie = 0) {
+    void SendFromEdge(const TActorId& edge, std::unique_ptr<TEvent> payload, ui64 cookie = 0) {
         SendFromEdge(edge, payload.Release(), cookie);
     }
 
@@ -244,10 +244,10 @@ struct TTestContext {
     TDescribeSemaphoreChanges ExpectDescribeSemaphoreChanged(ui64 reqId, const TActorId& proxy, ui64 generation);
 
     // Quoter
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
+    std::unique_ptr<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
         const NKikimrKesus::TEvDescribeQuoterResources& req,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
+    std::unique_ptr<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
         const std::vector<ui64>& resourceIds,
         const std::vector<TString>& resourcePaths,
         bool recursive,

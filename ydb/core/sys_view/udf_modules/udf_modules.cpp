@@ -264,7 +264,7 @@ private:
         };
         static TExtractorsMap extractors;
 
-        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+        auto batch = std::make_unique<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
 
         for (const auto& row : rows) {
@@ -295,7 +295,7 @@ private:
 
 } // namespace
 
-THolder<NActors::IActor> CreateUdfModulesScan(
+std::unique_ptr<NActors::IActor> CreateUdfModulesScan(
     const NActors::TActorId& ownerId,
     ui32 scanId,
     const TString& database,
@@ -305,7 +305,7 @@ THolder<NActors::IActor> CreateUdfModulesScan(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     bool reverse)
 {
-    return MakeHolder<TUdfModulesScan>(
+    return std::make_unique<TUdfModulesScan>(
         ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), reverse);
 }
 

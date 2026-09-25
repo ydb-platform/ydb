@@ -638,7 +638,7 @@ public:
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
         , LogBackend(new TLogBackendWithCapture("cerr", runConfig.LogPriority, TUI_LOG_LINES))
-        , Log(std::make_unique<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
+        , Log(std::make_unique<TLog>(std::unique_ptr<TLogBackend>(static_cast<TLogBackend*>(LogBackend))))
     {
     }
 

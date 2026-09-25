@@ -202,7 +202,7 @@ private:
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         navigate->DatabaseName = DatabaseName;
 
         auto& entry = navigate->ResultSet.emplace_back();
@@ -213,7 +213,7 @@ private:
     }
 
     void Navigate(const TTableId& pathId) {
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         navigate->DatabaseName = DatabaseName;
 
         auto& entry = navigate->ResultSet.emplace_back();

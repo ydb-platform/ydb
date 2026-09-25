@@ -321,7 +321,7 @@ namespace NDnsResolver {
 
             switch (reqCtx->Type) {
                 case ERequestType::GetHostByName: {
-                    auto result = MakeHolder<TEvDns::TEvGetHostByNameResult>();
+                    auto result = std::make_unique<TEvDns::TEvGetHostByNameResult>();
                     if (status == ARES_SUCCESS) {
                         for (auto *node = ptr->nodes; node; node = node->ai_next) {
                             switch (node->ai_family) {
@@ -347,7 +347,7 @@ namespace NDnsResolver {
                 }
 
                 case ERequestType::GetAddr: {
-                    auto result = MakeHolder<TEvDns::TEvGetAddrResult>();
+                    auto result = std::make_unique<TEvDns::TEvGetAddrResult>();
                     if (status == ARES_SUCCESS && Y_UNLIKELY(ptr->nodes == nullptr)) {
                         status = ARES_ENODATA;
                     }

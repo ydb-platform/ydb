@@ -31,7 +31,7 @@ namespace NYql {
 
 using namespace NActors;
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools = 1);
+std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools = 1);
 
 struct TTableReadAccessInfo {
     std::string ReadType;

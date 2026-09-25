@@ -26,7 +26,7 @@ inline TType* GetVerySimpleDataType<std::string>(const TTypeEnvironment& env)
 }
 
 template<typename K, typename V, typename R, typename Next>
-THolder<R> DispatchByMap(EHashMapImpl implType, Next&& next)
+std::unique_ptr<R> DispatchByMap(EHashMapImpl implType, Next&& next)
 {
     if (implType == EHashMapImpl::Absl) {
         return next(TAbslMapImpl<K, V>());
@@ -223,7 +223,7 @@ class IDataSampler
 public:
     virtual ~IDataSampler() {};
 
-    virtual THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const = 0;
+    virtual std::unique_ptr<IWideStream> MakeStream(const THolderFactory& holderFactory) const = 0;
     virtual TType* GetKeyType(TProgramBuilder& pb) const = 0;
     virtual void ComputeReferenceResult(IWideStream& referenceStream) = 0;
 
@@ -247,9 +247,9 @@ public:
     {
     }
 
-    THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
+    std::unique_ptr<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
     {
-        return THolder(new TKVStream<ui64, ui64, false, NumAggregates>(holderFactory, Samples, StreamNumIters));
+        return std::unique_ptr<TKVStream<ui64, ui64, false, NumAggregates>>(new TKVStream<ui64, ui64, false, NumAggregates>(holderFactory, Samples, StreamNumIters));
     }
 
     TType* GetKeyType(TProgramBuilder& pb) const override
@@ -297,12 +297,12 @@ public:
     {
     }
 
-    THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
+    std::unique_ptr<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
     {
         if (LongStrings) {
-            return THolder(new TKVStream<std::string, ui64, false, NumAggregates>(holderFactory, Samples, StreamNumIters));
+            return std::unique_ptr<TKVStream<std::string, ui64, false, NumAggregates>>(new TKVStream<std::string, ui64, false, NumAggregates>(holderFactory, Samples, StreamNumIters));
         } else {
-            return THolder(new TKVStream<std::string, ui64, true, NumAggregates>(holderFactory, Samples, StreamNumIters));
+            return std::unique_ptr<TKVStream<std::string, ui64, true, NumAggregates>>(new TKVStream<std::string, ui64, true, NumAggregates>(holderFactory, Samples, StreamNumIters));
         }
     }
 
@@ -426,7 +426,7 @@ class IBlockSampler
 public:
     virtual ~IBlockSampler() {};
 
-    virtual THolder<IWideStream> MakeStream(const TComputationContext& ctx) const = 0;
+    virtual std::unique_ptr<IWideStream> MakeStream(const TComputationContext& ctx) const = 0;
     virtual TType* BuildKeyType(const TTypeEnvironment& env) const = 0;
     virtual TType* BuildValueType(const TTypeEnvironment& env) const = 0;
 
@@ -437,8 +437,8 @@ public:
     virtual void VerifyGraphResultAgainstReference(const NUdf::TUnboxedValue& blockList) = 0;
 };
 
-THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params);
-THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params);
+std::unique_ptr<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params);
+std::unique_ptr<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params);
 
 }
 }

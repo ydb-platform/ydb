@@ -54,7 +54,7 @@ void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
     Y_ABORT_UNLESS(ss->ShardInfos.contains(shardId));
 
     const auto& shard = ss->ShardInfos.at(shardId);
-    Shards.emplace(shardId, MakeHolder<TShardInfo>(shard));
+    Shards.emplace(shardId, std::make_unique<TShardInfo>(shard));
 }
 
 void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {

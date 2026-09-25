@@ -2402,10 +2402,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         // The set of the partitions never changes, and neither do their simple counters:
         // everything the reader asserts below is a constant of the whole test
-        TVector<THolder<TFakeTablet>> partitions;
+        TVector<std::unique_ptr<TFakeTablet>> partitions;
         ui64 expectedRowsSum = 0;
         for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
-            auto& partition = partitions.emplace_back(MakeHolder<TFakeTablet>(1000 + i, 0));
+            auto& partition = partitions.emplace_back(std::make_unique<TFakeTablet>(1000 + i, 0));
             partition->SetSimple(DB_UNIQUE_ROWS_TOTAL, i + 1);
             expectedRowsSum += i + 1;
         }
@@ -2503,9 +2503,9 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
         TInstant now = TInstant::Seconds(100);
 
-        TVector<THolder<TFakeTablet>> partitions;
+        TVector<std::unique_ptr<TFakeTablet>> partitions;
         for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
-            auto& partition = partitions.emplace_back(MakeHolder<TFakeTablet>(1000 + i, 0));
+            auto& partition = partitions.emplace_back(std::make_unique<TFakeTablet>(1000 + i, 0));
             partition->SetSimple(DB_UNIQUE_ROWS_TOTAL, i + 1);
         }
 

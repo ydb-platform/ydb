@@ -279,8 +279,8 @@ private:
     }
 };
 
-THolder<IGraphTransformer> CreateDqsRecaptureTransformer(TDqStatePtr state) {
-    return THolder(new TDqsRecaptureTransformer(state));
+std::unique_ptr<IGraphTransformer> CreateDqsRecaptureTransformer(TDqStatePtr state) {
+    return std::unique_ptr<TDqsRecaptureTransformer>(new TDqsRecaptureTransformer(state));
 }
 
 } // NYql

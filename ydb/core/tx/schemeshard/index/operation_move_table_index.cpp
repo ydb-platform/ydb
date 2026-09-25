@@ -276,13 +276,13 @@ class TMoveTableIndex: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
+            return std::make_unique<TPropose>(OperationId, AfterPropose);
         case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            return std::make_unique<TWaitRenamedPathPublication>(OperationId);
         case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeleteTableBarrier>(OperationId);
+            return std::make_unique<TDeleteTableBarrier>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -293,7 +293,7 @@ public:
 
     const char* Name() const override { return "TMoveTableIndex"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -307,7 +307,7 @@ public:
             {"to", dstPathStr},
         );
 
-        THolder<TProposeResponse> result;
+        std::unique_ptr<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
 

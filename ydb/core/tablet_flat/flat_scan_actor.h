@@ -49,7 +49,7 @@ namespace NOps {
             return NKikimrServices::TActivity::TABLET_OPS_HOST_A;
         }
 
-        TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, THolder<TScanSnapshot> snapshot)
+        TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, std::unique_ptr<TScanSnapshot> snapshot)
             : TActor(&TDriver::StateBoot)
             , NTable::TFeed(scan.Release(), *snapshot->Subset, snapshot->Snapshot)
             , Serial(serial)
@@ -470,7 +470,7 @@ namespace NOps {
                     if (stat.ElapsedCycles() >= MaxCyclesPerIteration) {
                         // Yield to allow other actors to use this thread
                         if (!ContinueInFly) {
-                            SendToSelf(MakeHolder<TEvContinue>());
+                            SendToSelf(std::make_unique<TEvContinue>());
                             ContinueInFly = true;
                         }
                         yield = true;
@@ -713,7 +713,7 @@ namespace NOps {
             OnUnhandledException(exc);
         }
 
-        void SendToSelf(THolder<IEventBase> event)
+        void SendToSelf(std::unique_ptr<IEventBase> event)
         {
             Send(SelfId(), event.Release());
         }
@@ -742,7 +742,7 @@ namespace NOps {
         TAutoPtr<NUtil::ILogger> Logger;
         TActorId Owner;
 
-        THolder<TScanSnapshot> Snapshot;
+        std::unique_ptr<TScanSnapshot> Snapshot;
         TAutoPtr<TEnv> Cache;       /* NFwd scan read ahead cache   */
         TAutoPtr<TSpent> Spent;     /* NBlockIO read blockage stats */
         ui64 Depth = 0;

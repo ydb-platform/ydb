@@ -51,9 +51,9 @@ class TKesusProxyService : public TActor<TKesusProxyService> {
 
         struct TEvResolveResult : TEventLocal<TEvResolveResult, EvResolveResult> {
             TString KesusPath;
-            THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> Event;
+            std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> Event;
 
-            TEvResolveResult(const TString& kesusPath, THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> event)
+            TEvResolveResult(const TString& kesusPath, std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> event)
                 : KesusPath(kesusPath)
                 , Event(std::move(event))
             {}
@@ -232,7 +232,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Sending resolve request to SchemeCache",
             {"path", KesusPath});
-        auto request = MakeHolder<TSchemeCacheNavigate>();
+        auto request = std::make_unique<TSchemeCacheNavigate>();
         request->DatabaseName = Database;
 
         auto& entry = request->ResultSet.emplace_back();
@@ -251,7 +251,7 @@ private:
         const auto& ctx = TActivationContext::AsActorContext();
         YDB_LOG_TRACE_CTX(ctx, "Forwarding resolve result from SchemeCache",
             {"path", KesusPath});
-        Send(Owner, new TEvPrivate::TEvResolveResult(KesusPath, THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release())));
+        Send(Owner, new TEvPrivate::TEvResolveResult(KesusPath, std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release())));
         PassAway();
     }
 

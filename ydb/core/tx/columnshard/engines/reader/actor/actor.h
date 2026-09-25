@@ -161,7 +161,7 @@ private:
     TMaybe<TString> AbortReason;
 
     TChunksLimiter ChunksLimiter;
-    THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
+    std::unique_ptr<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
     ui32 BuildResultCounter = 0;

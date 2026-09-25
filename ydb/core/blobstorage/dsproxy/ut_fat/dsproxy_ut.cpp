@@ -3986,9 +3986,9 @@ public:
         SectorMapByPath.clear();
     }
 
-    THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ::NMonitoring::TDynamicCounters &counters,
+    std::unique_ptr<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ::NMonitoring::TDynamicCounters &counters,
             TIntrusivePtr<TTableNameserverSetup> &nameserverTable, TInterconnectMock &interconnectMock) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = nodeId;
         setup->ExecutorsCount = 4;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
@@ -4036,7 +4036,7 @@ public:
         return setup;
     }
 
-    TIntrusivePtr<NActors::NLog::TSettings> AddLoggerActor(THolder<TActorSystemSetup> &setup,
+    TIntrusivePtr<NActors::NLog::TSettings> AddLoggerActor(std::unique_ptr<TActorSystemSetup> &setup,
             ::NMonitoring::TDynamicCounters &counters) {
 
         NActors::TActorId loggerActorId = NActors::TActorId(setup->NodeId, "logger");
@@ -4117,8 +4117,8 @@ public:
         auto ioContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
         appData.IoContextFactory = ioContext.get();
 
-        THolder<TActorSystemSetup> setup1 = BuildActorSystemSetup(1, *counters, nameserverTable, interconnect);
-        THolder<TActorSystemSetup> setup2 = BuildActorSystemSetup(2, *counters, nameserverTable, interconnect);
+        std::unique_ptr<TActorSystemSetup> setup1 = BuildActorSystemSetup(1, *counters, nameserverTable, interconnect);
+        std::unique_ptr<TActorSystemSetup> setup2 = BuildActorSystemSetup(2, *counters, nameserverTable, interconnect);
 
         TIntrusivePtr<TDsProxyNodeMon> dsProxyNodeMon(new TDsProxyNodeMon(counters, true));
         TDsProxyPerPoolCounters perPoolCounters(counters);

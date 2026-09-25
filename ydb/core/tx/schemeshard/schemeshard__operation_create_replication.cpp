@@ -147,7 +147,7 @@ public:
                 );
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
-                auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
+                auto ev = std::make_unique<NReplication::TEvController::TEvCreateReplication>();
                 pathId.ToProto(ev->Record.MutablePathId());
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
@@ -328,13 +328,13 @@ class TCreateReplication: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -357,7 +357,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         auto desc = Transaction.GetReplication();
         const auto& name = desc.GetName();
@@ -368,7 +368,7 @@ public:
             {"path", workingDir + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
         const auto parentPath = TPath::Resolve(workingDir, context.SS);
         {

@@ -45,7 +45,7 @@ protected:
         //TTestActorRuntime::SetVerbose(true); // debug events
 
         // Initialize runtime
-        Runtime = MakeHolder<TTestBasicRuntime>();
+        Runtime = std::make_unique<TTestBasicRuntime>();
         Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& event) {
             return EventsObserver(event);
         });
@@ -114,11 +114,11 @@ protected:
         }
     }
 
-    THolder<TEvPersQueue::TEvUpdateBalancerConfig> MakeUpdateBalancerConfigRequest(const TString& topic, const TVector<std::pair<ui32, ui64>>& partitionsToTablets, const ui64 schemeShardId = 123) {
+    std::unique_ptr<TEvPersQueue::TEvUpdateBalancerConfig> MakeUpdateBalancerConfigRequest(const TString& topic, const TVector<std::pair<ui32, ui64>>& partitionsToTablets, const ui64 schemeShardId = 123) {
         static int version = 0;
         ++version;
 
-        THolder<TEvPersQueue::TEvUpdateBalancerConfig> request = MakeHolder<TEvPersQueue::TEvUpdateBalancerConfig>();
+        std::unique_ptr<TEvPersQueue::TEvUpdateBalancerConfig> request = std::make_unique<TEvPersQueue::TEvUpdateBalancerConfig>();
         for (const auto& p : partitionsToTablets) {
             auto* part = request->Record.AddPartitions();
             part->SetPartition(p.first);
@@ -148,7 +148,7 @@ protected:
         EnsureHasFakeSchemeShard();
         TActorId id = StartBalancer(balancerTabletId);
 
-        THolder<TEvPersQueue::TEvUpdateBalancerConfig> request = MakeUpdateBalancerConfigRequest(topic, partitionsToTablets, schemeShardId);
+        std::unique_ptr<TEvPersQueue::TEvUpdateBalancerConfig> request = MakeUpdateBalancerConfigRequest(topic, partitionsToTablets, schemeShardId);
 
         Runtime->SendToPipe(balancerTabletId, EdgeActorId, request.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
@@ -167,11 +167,11 @@ protected:
         return id;
     }
 
-    THolder<TEvPersQueue::TEvProposeTransactionBuilder> MakeUpdatePQRequest(const TString& topic, const TVector<size_t>& partitions) {
+    std::unique_ptr<TEvPersQueue::TEvProposeTransactionBuilder> MakeUpdatePQRequest(const TString& topic, const TVector<size_t>& partitions) {
         static int version = 0;
         ++version;
 
-        auto request = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+        auto request = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
         request->Record.SetTxId(12345);
         ActorIdToProto(EdgeActorId, request->Record.MutableSourceActor());
         auto* tabletConfig = request->Record.MutableConfig()->MutableTabletConfig();
@@ -209,7 +209,7 @@ protected:
 
         TAutoPtr<IEventHandle> handle;
         {
-            THolder<TEvPersQueue::TEvProposeTransactionBuilder> request = MakeUpdatePQRequest(topic, partitions);
+            std::unique_ptr<TEvPersQueue::TEvProposeTransactionBuilder> request = MakeUpdatePQRequest(topic, partitions);
             Runtime->SendToPipe(tabletId, EdgeActorId, request.Release(), 0, GetPipeConfigWithRetries());
             auto* prepared = Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
             UNIT_ASSERT(prepared);
@@ -219,7 +219,7 @@ protected:
             UNIT_ASSERT_C(prepared->Record.HasTxId() && prepared->Record.GetTxId() == 12345, "rec: " << prepared->Record);
             UNIT_ASSERT_C(prepared->Record.HasOrigin() && prepared->Record.GetOrigin() == tabletId, "rec: " << prepared->Record);
 
-            auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+            auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>();
             plan->Record.SetStep(1);
             auto* tx = plan->Record.AddTransactions();
             tx->SetTxId(12345);
@@ -238,7 +238,7 @@ protected:
         }
 
         {
-            THolder<TEvKeyValue::TEvRequest> request;
+            std::unique_ptr<TEvKeyValue::TEvRequest> request;
             request.Reset(new TEvKeyValue::TEvRequest);
             auto read = request->Record.AddCmdRead();
             read->SetKey("_config");
@@ -457,7 +457,7 @@ protected:
     THashSet<TActorId> TestActors; // Actor and its children
     THashSet<ui64> PausedEventTypes;
     std::list<TAutoPtr<IEventHandle>> PausedEvents;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
 
 };
 

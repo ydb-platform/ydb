@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TOperationServiceTest) {
 
     struct TFixture {
         TPortManager PortManager;
-        THolder<TServer> Server;
+        std::unique_ptr<TServer> Server;
         TTestActorRuntime* Runtime = nullptr;
         TActorId Sender;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TOperationServiceTest) {
             NKikimrProto::TAuthConfig authConfig;
             auto settings = TServerSettings(kikimrPort, authConfig);
             settings.SetDomainName("Root");
-            Server = MakeHolder<TServer>(settings);
+            Server = std::make_unique<TServer>(settings);
             Runtime = Server->GetRuntime();
             Sender = Runtime->AllocateEdgeActor();
         }
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TOperationServiceTest) {
         std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
 
         for (ui32 i = 1; i <= 2; ++i) {
-            auto request = MakeHolder<NCloud::TEvOperationService::TEvGetOperationRequest>();
+            auto request = std::make_unique<NCloud::TEvOperationService::TEvGetOperationRequest>();
             request->Token = "ssa-token";
             request->Request.set_operation_id("op-1");
             f.Runtime->Send(new IEventHandle(operationServiceId, f.Sender, request.Release()));

@@ -846,8 +846,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        auto delayConditionalErase = [&]() -> THolder<IEventHandle> {
-            THolder<IEventHandle> delayed;
+        auto delayConditionalErase = [&]() -> std::unique_ptr<IEventHandle> {
+            std::unique_ptr<IEventHandle> delayed;
 
             auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
@@ -921,7 +921,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // The TTL min-heap fires FakeHiveTablets+0 first (smaller ShardIdx), so
         // FakeHiveTablets+0 ends up in InFlightCondErase while FakeHiveTablets+1
         // remains in CondEraseSchedule.
-        THolder<IEventHandle> blocked;
+        std::unique_ptr<IEventHandle> blocked;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
                 blocked.Reset(ev.Release());
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Block the erase request so the shard enters InFlightCondErase.
-        THolder<IEventHandle> blocked;
+        std::unique_ptr<IEventHandle> blocked;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
                 blocked.Reset(ev.Release());
@@ -1043,7 +1043,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Hold one erase request so the shard lands in InFlightCondErase.
-        THolder<IEventHandle> blocked;
+        std::unique_ptr<IEventHandle> blocked;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
                 blocked.Reset(ev.Release());

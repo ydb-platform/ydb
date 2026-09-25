@@ -11,16 +11,16 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state);
-THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state);
-THolder<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state);
 
-THolder<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state);
-THolder<TExecTransformerBase> CreateSolomonDataSourceExecTransformer(TSolomonState::TPtr state);
+std::unique_ptr<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state);
+std::unique_ptr<TExecTransformerBase> CreateSolomonDataSourceExecTransformer(TSolomonState::TPtr state);
 
-THolder<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state);
-THolder<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState::TPtr state);
+std::unique_ptr<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state);
+std::unique_ptr<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState::TPtr state);
 
-THolder<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state);
 
 } // namespace NYql

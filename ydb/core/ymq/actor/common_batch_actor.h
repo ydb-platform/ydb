@@ -35,7 +35,7 @@ public:
         return false;
     }
 
-    TCommonBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, const EAction action, THolder<IReplyCallback> cb)
+    TCommonBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, const EAction action, std::unique_ptr<IReplyCallback> cb)
         : TActionActor<TDerived>(sourceSqsRequest, action, std::move(cb))
     {
     }
@@ -61,7 +61,7 @@ private:
             RLOG_SQS_DEBUG("Create proxy subactor[" << i << "]. Req id: " << reqId);
             requests[i].SetRequestId(reqId);
             requests[i].SetRequestRateLimit(false); // already requested
-            this->Register(new TProxyActor(requests[i], MakeHolder<TBatchRequestReplyCallback>(this->SelfId(), i)));
+            this->Register(new TProxyActor(requests[i], std::make_unique<TBatchRequestReplyCallback>(this->SelfId(), i)));
         }
     }
 

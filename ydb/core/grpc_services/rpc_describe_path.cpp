@@ -37,7 +37,7 @@ public:
 
 private:
     void ResolvePath(const TActorContext& ctx) {
-        auto request = MakeHolder<TSchemeCacheNavigate>();
+        auto request = std::make_unique<TSchemeCacheNavigate>();
         request->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
 
         auto& entry = request->ResultSet.emplace_back();

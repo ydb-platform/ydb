@@ -415,7 +415,7 @@ private:
 
         SchemePipeActorId = Register(NTabletPipe::CreateClient(SelfId(), response.GetSchemeShardTabletId()));
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
         LOG_D("Subscribe on create pool tx: " << txId);

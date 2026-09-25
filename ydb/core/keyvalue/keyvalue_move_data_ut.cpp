@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TKeyValueMoveDataTest) {
 
 struct TTestContext {
     ui64 TabletId;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     TActorId TabletActorId;
     TActorId Edge;
     TString Value;
@@ -204,7 +204,7 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
     Y_ABORT_UNLESS(creationUnixTimes.empty() || (creationUnixTimes.size() == keys.size()));
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -278,7 +278,7 @@ void CmdRead(const TDeque<TString> &keys,
 
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -329,7 +329,7 @@ void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, c
     Y_ABORT_UNLESS(renameUnixTimes.empty() || (oldKeys.size() == renameUnixTimes.size()));
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -384,7 +384,7 @@ void CmdRename(const TString &oldKey, const TString &newKey, TTestContext &tc, b
 void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const bool keepInputs, TTestContext &tc) {
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -412,7 +412,7 @@ void CmdDeleteRange(const TString &from, const bool includeFrom, const TString &
         TTestContext &tc, ui32 expectedStatus = (ui32)NMsgBusProxy::MSTATUS_OK) {
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
@@ -446,7 +446,7 @@ void CmdCopyRange(const TString &from, const bool includeFrom, const TString &to
         const TString &prefixToAdd, const TString &prefixToRemove, TTestContext &tc) {
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
-    THolder<TEvKeyValue::TEvRequest> request;
+    std::unique_ptr<TEvKeyValue::TEvRequest> request;
 
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();

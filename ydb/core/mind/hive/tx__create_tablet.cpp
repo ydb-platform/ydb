@@ -174,7 +174,7 @@ public:
             {"tabletId", TabletId},
             {"status", NKikimrProto::EReplyStatus_Name(status)});
         Y_ABORT_UNLESS(!!Sender);
-        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
+        std::unique_ptr<TEvHive::TEvCreateTabletReply> reply = std::make_unique<TEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
         if (ForwardRequest.HasHiveTabletId()) {
             reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
         }

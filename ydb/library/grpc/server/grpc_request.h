@@ -563,8 +563,8 @@ private:
     ICounterBlockPtr Counters_;
     IGRpcRequestLimiterPtr RequestLimiter_;
 
-    THolder<grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>> Writer_;
-    THolder<grpc::ServerAsyncWriterInterface<TUniversalResponse<TOut>>> StreamWriter_;
+    std::unique_ptr<grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>> Writer_;
+    std::unique_ptr<grpc::ServerAsyncWriterInterface<TUniversalResponse<TOut>>> StreamWriter_;
     TStateFunc StateFunc_;
 
     google::protobuf::Arena Arena_;

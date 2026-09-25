@@ -43,8 +43,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TFinalizeDataTxPlanUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline) {
+    return std::unique_ptr<TFinalizeDataTxPlanUnit>(new TFinalizeDataTxPlanUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

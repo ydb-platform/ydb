@@ -291,7 +291,7 @@ void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVe
     }
 }
 
-void TExecutorGCLogic::MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source) {
+void TExecutorGCLogic::MergeVectors(std::unique_ptr<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source) {
     if (!source.empty()) {
         if (!destination) {
             destination.Reset(new TVector<TLogoBlobID>(source));
@@ -425,8 +425,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
     }
     ValidateGCVector(tabletid, channel, "Keep", keep);
     ValidateGCVector(tabletid, channel, "DoNotKeep", notKeep);
-    THolder<TEvBlobStorage::TEvCollectGarbage> ev =
-        MakeHolder<TEvBlobStorage::TEvCollectGarbage>(
+    std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> ev =
+        std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
             tabletid,
             generation, GcCounter,
             channel, true,

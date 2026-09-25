@@ -316,7 +316,7 @@ protected:
                 NextCheckpointAtBytes = Uploader.GetUploadBytes() + ScanSettings.GetMaxCheckpointBytes();
                 LastAckedKey = LastProcessedKey;
 
-                auto progress = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+                auto progress = std::make_unique<TEvDataShard::TEvReshuffleKMeansResponse>();
                 auto& record = progress->Record;
                 record.SetId(BuildId);
                 record.SetTabletId(TabletId);
@@ -462,7 +462,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvReshuffleKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting K-means reshuffle scan",

@@ -48,7 +48,7 @@ namespace NKikimr {
             };
 
             struct TEvResponse : TEventLocal<TEvResponse, ResponseTag> {
-                THolder <IEventHandle> Request;
+                std::unique_ptr<IEventHandle> Request;
                 TProtoResponse Response;
                 NYdbGrpc::TGrpcStatus Status;
             };
@@ -175,21 +175,21 @@ namespace NKikimr {
             }
 
             void Handle(typename TEvPrivate::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-                THolder<TEvResultType> result = MakeHolder<TEvResultType>(CacheItem);
+                std::unique_ptr<TEvResultType> result = std::make_unique<TEvResultType>(CacheItem);
                 result->Response = std::move(ev->Get()->Response);
                 ctx.Send(Sender, result.Release());
                 TBase::Die(ctx);
             }
 
             void Handle(typename TEvPrivate::TEvError::TPtr& ev, const TActorContext& ctx) {
-                THolder<TEvResultType> result = MakeHolder<TEvResultType>(CacheItem);
+                std::unique_ptr<TEvResultType> result = std::make_unique<TEvResultType>(CacheItem);
                 result->Status = ev->Get()->Status;
                 ctx.Send(Sender, result.Release());
                 TBase::Die(ctx);
             }
 
             void HandleTimeout(const TActorContext& ctx) {
-                THolder<TEvResultType> result = MakeHolder<TEvResultType>(CacheItem);
+                std::unique_ptr<TEvResultType> result = std::make_unique<TEvResultType>(CacheItem);
                 result->Status = NYdbGrpc::TGrpcStatus("Timeout", grpc::StatusCode::DEADLINE_EXCEEDED, true);
                 ctx.Send(Sender, result.Release());
                 TBase::Die(ctx);

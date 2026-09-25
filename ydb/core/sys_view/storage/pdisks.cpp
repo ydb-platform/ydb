@@ -13,7 +13,7 @@ public:
     static constexpr const char *GetName() { return "TPDisksScan"; }
 
     TEvSysView::TEvGetPDisksRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetPDisksRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetPDisksRequest>();
         ConvertKeyRange<NKikimrSysView::TEvGetPDisksRequest, ui32, ui32>(request->Record, TableRange);
         return request.Release();
     }
@@ -50,11 +50,11 @@ public:
     }
 };
 
-THolder<NActors::IActor> CreatePDisksScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreatePDisksScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPDisksScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TPDisksScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

@@ -140,7 +140,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void ReplyWithError(const NActors::TActorContext& ctx, const TString& errorText, NPersQueue::NErrorCode::EErrorCode errorCode) {
-            auto result = MakeHolder<NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult>();
+            auto result = std::make_unique<NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult>();
             result->PartitionId = Partition;
             result->ErrorText = errorText;
             result->ErrorCode = errorCode;
@@ -158,7 +158,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void ReplySuccessAndDie(const NActors::TActorContext& ctx, ui64 offset) {
-            auto result = MakeHolder<NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult>();
+            auto result = std::make_unique<NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult>();
             result->PartitionId = Partition;
             result->CurrentOffset = offset;
             ctx.Send(ParentId, result.Release());
@@ -317,7 +317,7 @@ namespace NKikimr::NDataStreams::V1 {
         entry.SyncVersion = true;
         schemeCacheRequest->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
         schemeCacheRequest->ResultSet.emplace_back(entry);
-        ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+        ctx.Send(MakeSchemeCacheID(), std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
     }
 
     template<class TDerived, class TProto>

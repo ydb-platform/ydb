@@ -188,10 +188,10 @@ void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard,
                                                            TPipeline &pipeline)
 {
-    return THolder(new TBuildAndWaitDependenciesUnit(dataShard, pipeline));
+    return std::unique_ptr<TBuildAndWaitDependenciesUnit>(new TBuildAndWaitDependenciesUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

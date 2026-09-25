@@ -33,7 +33,7 @@ private:
     const TString Address = "::1";
     const TDuration DeadPeerTimeout;
     NMonitoring::TDynamicCounterPtr Counters;
-    THashMap<ui32, THolder<TNode>> Nodes;
+    THashMap<ui32, std::unique_ptr<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
     THashMap<ui32, TTrafficInterrupter*> InterrupterByNode;
     NActors::TChannelsConfig ChannelsConfig;
@@ -85,7 +85,7 @@ public:
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
-            Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
+            Nodes.emplace(i, std::make_unique<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
                 /*numDynamicNodes=*/0, NumThreads, LoggerSettings, inflight,
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
                 flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT,

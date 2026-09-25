@@ -192,7 +192,7 @@ public:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto event = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         *event->Record.MutableConfig() = Config;
         ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
@@ -775,7 +775,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
 
     if (opts.InitYdbDriver_) {
-        YdbDriver = MakeHolder<NYdb::TDriver>(NYdb::TDriverConfig());
+        YdbDriver = std::make_unique<NYdb::TDriver>(NYdb::TDriverConfig());
         runtime.GetAppData().YdbDriver = YdbDriver.Get();
     }
 
@@ -1107,7 +1107,7 @@ void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(
     const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());
 
     const TActorId sender = runtime.AllocateEdgeActor();
-    auto ev = MakeHolder<TEvFakeHive::TEvRequestDomainInfo>(subdomainKey);
+    auto ev = std::make_unique<TEvFakeHive::TEvRequestDomainInfo>(subdomainKey);
     ForwardToTablet(runtime, hive, sender, ev.Release());
 
     const auto event = runtime.GrabEdgeEvent<TEvFakeHive::TEvRequestDomainInfoReply>(sender);

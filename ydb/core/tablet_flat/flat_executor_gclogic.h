@@ -141,7 +141,7 @@ protected:
     THashSet<ui32> ChannelsToCutHistory;
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
-    static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
+    static inline void MergeVectors(std::unique_ptr<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
     static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);
     static inline TVector<TLogoBlobID>* CreateVector(const TVector<TLogoBlobID>& source);
 };

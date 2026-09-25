@@ -48,7 +48,7 @@ struct TDelayedQueue {
 class TTxProxy : public TActorBootstrapped<TTxProxy> {
     TTxProxyServices Services;
 
-    THolder<NTabletPipe::IClientCache> PipeClientCache;
+    std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     TTxAllocatorClient TxAllocatorClient;
 
     static const TDuration TimeoutDelayedRequest;
@@ -336,7 +336,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             {"selfId", SelfId()},
             {"txId", txid});
 
-        auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
+        auto executerEv = std::make_unique<NKqp::TEvKqpExecuter::TEvTxRequest>();
         ActorIdToProto(ev->Sender, executerEv->Record.MutableTarget());
         executerEv->Record.MutableRequest()->SetTxId(txid);
         ctx.Send(ev->Get()->ExecuterId, executerEv.Release());
@@ -359,7 +359,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     }
 
     void ProcessRequest(TEvTxUserProxy::TEvAllocateTxId::TPtr &ev, const TActorContext &ctx, ui64 txId) {
-        auto reply = MakeHolder<TEvTxUserProxy::TEvAllocateTxIdResult>(txId, Services, TxProxyMon);
+        auto reply = std::make_unique<TEvTxUserProxy::TEvAllocateTxIdResult>(txId, Services, TxProxyMon);
         ctx.Send(ev->Sender, reply.Release(), 0, ev->Cookie);
     }
 
@@ -383,7 +383,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvGetProxyServicesRequest",
             {"selfId", SelfId()});
 
-        auto reply = MakeHolder<TEvTxUserProxy::TEvGetProxyServicesResponse>(Services);
+        auto reply = std::make_unique<TEvTxUserProxy::TEvGetProxyServicesResponse>(Services);
         ctx.Send(ev->Sender, reply.Release(), 0, ev->Cookie);
     }
 

@@ -269,7 +269,7 @@ private:
         }
         const auto& domain = response.ResultSet.front().DomainInfo;
         if (domain->IsServerless() && ev->Cookie != 1) {
-            auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             auto& entry = navigate->ResultSet.emplace_back();
             entry.TableId = TTableId(domain->ResourcesDomainKey.OwnerId, domain->ResourcesDomainKey.LocalPathId);
@@ -289,7 +289,7 @@ private:
         NTabletPipe::TClientConfig config;
         config.RetryPolicy.RetryLimitCount = 3;
         ControllerPipe_ = Register(NTabletPipe::CreateClient(SelfId(), tablet, config));
-        auto request = MakeHolder<NUdfStore::TEvCompileController::TEvDescribeModule>();
+        auto request = std::make_unique<NUdfStore::TEvCompileController::TEvDescribeModule>();
         request->Record.SetName(Name_);
         request->Record.SetUid(Uid_);
         request->Record.SetKind(ArtifactKind_ == "library"

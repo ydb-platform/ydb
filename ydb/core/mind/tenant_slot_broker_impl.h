@@ -1173,7 +1173,7 @@ private:
     THashSet<TActorId> KnownPoolPipes;
     TCounters::TPtr Counters;
     ITransaction *ActiveTx = nullptr;
-    TDeque<THolder<ITransaction>> TxQueue;
+    TDeque<std::unique_ptr<ITransaction>> TxQueue;
     ui64 ConfigSubscriptionId;
 };
 

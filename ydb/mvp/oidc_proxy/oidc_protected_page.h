@@ -24,7 +24,7 @@ protected:
     const TOpenIdConnectSettings Settings;
     const TCrackedPage ProtectedPage;
 
-    THolder<TExtensionManager> ExtensionManager;
+    std::unique_ptr<TExtensionManager> ExtensionManager;
     NHttp::THttpOutgoingResponsePtr StreamResponse;
     NActors::TActorId StreamConnection;
 

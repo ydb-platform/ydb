@@ -334,7 +334,7 @@ void TCompactionLogic::ReflectRemovedRowVersions(ui32 table)
     }
 }
 
-THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
+std::unique_ptr<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
         NKikimrCompaction::ECompactionStrategy strategy)
 {
@@ -682,8 +682,8 @@ TCompactionLogic::HandleCompaction(
 TTableCompactionResult
 TCompactionLogic::CompleteCompaction(
         ui64 compactionId,
-        THolder<NTable::TCompactionParams> params,
-        THolder<NTable::TCompactionResult> result)
+        std::unique_ptr<NTable::TCompactionParams> params,
+        std::unique_ptr<NTable::TCompactionResult> result)
 {
     TTableCompactionResult ret;
 
@@ -698,7 +698,7 @@ TCompactionLogic::CompleteCompaction(
 void
 TCompactionLogic::CancelledCompaction(
         ui64 compactionId,
-        THolder<NTable::TCompactionParams> params)
+        std::unique_ptr<NTable::TCompactionParams> params)
 {
     HandleCompaction(compactionId, params.Get(), nullptr);
 }

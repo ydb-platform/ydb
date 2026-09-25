@@ -446,20 +446,20 @@ class TCopyTable: public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId, TTxState::ETxState::CopyTableBarrier);
+            return std::make_unique<NTableState::TProposedWaitParts>(OperationId, TTxState::ETxState::CopyTableBarrier);
         case TTxState::CopyTableBarrier:
-            return MakeHolder<TWaitCopyTableBarrier>(OperationId);
+            return std::make_unique<TWaitCopyTableBarrier>(OperationId);
         case TTxState::Done:
             if (!TargetState) {
-                return MakeHolder<TDone>(OperationId);
+                return std::make_unique<TDone>(OperationId);
             } else {
-                return MakeHolder<TDone>(OperationId, *TargetState);
+                return std::make_unique<TDone>(OperationId, *TargetState);
             }
         default:
             return nullptr;
@@ -485,7 +485,7 @@ public:
         return AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateTable().GetName();
@@ -495,7 +495,7 @@ public:
             {"path", parentPath + "/" + name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath parent = TPath::Resolve(parentPath, context.SS);
         {

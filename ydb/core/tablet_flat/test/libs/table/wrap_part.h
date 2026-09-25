@@ -76,7 +76,7 @@ namespace NTest {
         void Make(IPages *env)
         {
             Ready = EReady::Gone;
-            Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
+            Iter = std::make_unique<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
         }
 
         EReady Seek(TRawVals key_, ESeek seek)
@@ -194,7 +194,7 @@ namespace NTest {
         TRowState State;
         TRun Run_;
         TRun& Run;
-        THolder<TRunIter> Iter;
+        std::unique_ptr<TRunIter> Iter;
         TOwnedCellVec StopKey;
     };
 

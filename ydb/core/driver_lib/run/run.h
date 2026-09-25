@@ -60,13 +60,13 @@ protected:
     TDuration MinDelayBeforeShutdown;
     TDuration DrainTimeout;
     TDuration CheckForStopInterval;
-    THolder<NSQS::TAsyncHttpServer> SqsHttp;
+    std::unique_ptr<NSQS::TAsyncHttpServer> SqsHttp;
 
-    THolder<NYdb::TDriver> YdbDriver;
+    std::unique_ptr<NYdb::TDriver> YdbDriver;
 
     std::vector<std::shared_ptr<void>> GlobalObjects;
 
-    THolder<NKqp::TKqpShutdownController> KqpShutdownController;
+    std::unique_ptr<NKqp::TKqpShutdownController> KqpShutdownController;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;

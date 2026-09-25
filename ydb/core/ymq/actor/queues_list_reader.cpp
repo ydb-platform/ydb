@@ -28,7 +28,7 @@ void TQueuesListReader::HandleReadQueuesList(TSqsEvents::TEvReadQueuesList::TPtr
 
     if (!ListingQueues) {
         ListingQueues = true;
-        Result = MakeHolder<TSqsEvents::TEvQueuesList>();
+        Result = std::make_unique<TSqsEvents::TEvQueuesList>();
         CurrentUser = TString();
         CurrentQueue = TString();
         if (CompiledQuery) {
@@ -160,7 +160,7 @@ void TQueuesListReader::Success() {
         Send(*Recipients.begin(), std::move(Result));
     } else {
         for (const auto& recipientId : Recipients) {
-            auto result = MakeHolder<TSqsEvents::TEvQueuesList>();
+            auto result = std::make_unique<TSqsEvents::TEvQueuesList>();
             result->SortedQueues = Result->SortedQueues;
             result->Success = Result->Success;
             Send(recipientId, result.Release());

@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>& topicPartitions)
     {
         for (const auto& topicPartition : topicPartitions) {
-            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto request = std::make_unique<TEvPersQueue::TEvRequest>();
             {
                 auto& record = *request->Record.MutablePartitionRequest();
                 record.SetPartition(topicPartition.GetPartitionId());

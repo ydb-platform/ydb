@@ -87,7 +87,7 @@ private:
     void RequestCurrentConfigViaCookie() {
         YDB_LOG_DEBUG("NetClassifierUpdater requested distributable config item via cookie");
 
-        auto event = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();
+        auto event = std::make_unique<TEvConsole::TEvGetConfigItemsRequest>();
 
         event->Record.AddItemKinds(static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem));
         event->Record.MutableCookieFilter()->AddCookies(COOKIE);
@@ -98,7 +98,7 @@ private:
     void InitDefaultConfiguration() {
         YDB_LOG_INFO("NetClassifierUpdate is adding distributable config item with cookie");
 
-        auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
+        auto event = std::make_unique<TEvConsole::TEvConfigureRequest>();
 
         auto& configItem = *event->Record.AddActions()->MutableAddConfigItem()->MutableConfigItem();
         configItem.MutableConfig()->MutableNetClassifierDistributableConfig(); // just initialize the field
@@ -293,7 +293,7 @@ private:
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
             Y_ABORT_UNLESS(record.ConfigItemsSize() == 1); // only one config item should have the cookie
 
-            auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
+            auto event = std::make_unique<TEvConsole::TEvConfigureRequest>();
 
             auto& configItem = *event->Record.AddActions()->MutableModifyConfigItem()->MutableConfigItem();
 

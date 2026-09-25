@@ -33,7 +33,7 @@ namespace {
 class TReplicaTest: public NUnitTest::TTestBase {
 public:
     void SetUp() override {
-        Context = MakeHolder<TTestContext>();
+        Context = std::make_unique<TTestContext>();
         Context->Initialize(TAppPrepare().Unwrap());
         Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
 
@@ -103,7 +103,7 @@ public:
     void PathIdLessThanBadRootSchemeshardId2();
 
 private:
-    THolder<TTestContext> Context;
+    std::unique_ptr<TTestContext> Context;
     TActorId Replica;
 
 }; // TReplicaTest
@@ -557,7 +557,7 @@ void TReplicaTest::StrongNotificationAfterCommit() {
 class TReplicaCombinationTest: public NUnitTest::TTestBase {
 public:
     void SetUp() override {
-        Context = MakeHolder<TTestContext>();
+        Context = std::make_unique<TTestContext>();
         Context->Initialize(TAppPrepare().Unwrap());
         Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
         Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
@@ -583,7 +583,7 @@ public:
 
 
 private:
-    THolder<TTestContext> Context;
+    std::unique_ptr<TTestContext> Context;
 }; // TReplicaCombinationTest
 
 UNIT_TEST_SUITE_REGISTRATION(TReplicaCombinationTest);

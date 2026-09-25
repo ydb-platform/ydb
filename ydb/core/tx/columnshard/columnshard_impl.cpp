@@ -1161,7 +1161,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     const auto pathId = TPathId::FromProto(record.GetPathId());
 
     const auto reply = [&](const NKikimrTxDataShard::TEvCompactTableResult::EStatus status) {
-        auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), pathId, status);
+        auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(TabletID(), pathId, status);
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     };
 
@@ -1240,7 +1240,7 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
         for (const auto& waiter : waiters) {
             LOG_S_DEBUG("Forced compaction finished: tablet# " << TabletID() << ", pathId# " << waiter.SchemePathId << ", status# "
                                                                << (int)*status << ", reply to# " << waiter.Sender);
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
+            auto response = std::make_unique<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
             ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
         }
         finished.push_back(internalPathId);

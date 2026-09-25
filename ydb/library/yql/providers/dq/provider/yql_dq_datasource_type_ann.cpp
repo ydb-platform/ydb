@@ -188,8 +188,8 @@ private:
 
 } // unnamed
 
-THolder<TVisitorTransformerBase> CreateDqsDataSourceTypeAnnotationTransformer(bool annotateConfigure) {
-    return THolder(new TDqsDataSourceTypeAnnotationTransformer(annotateConfigure));
+std::unique_ptr<TVisitorTransformerBase> CreateDqsDataSourceTypeAnnotationTransformer(bool annotateConfigure) {
+    return std::unique_ptr<TDqsDataSourceTypeAnnotationTransformer>(new TDqsDataSourceTypeAnnotationTransformer(annotateConfigure));
 }
 
 } // NYql

@@ -216,7 +216,7 @@ private:
             {"success", GetYdbStatus(result)},
             {"issues", result.Issues().ToOneLineString()});
 
-        auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
+        auto responseEv = std::make_unique<TEvKqp::TEvSplitResponse>(
             GetYdbStatus(result), result.Issues(),
             QueryId, std::move(result.Exprs), std::move(result.World), std::move(result.Ctx));
         Send(Owner, responseEv.Release());
@@ -248,7 +248,7 @@ private:
 
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
+            auto processEv = std::make_unique<TEvKqp::TEvContinueProcess>(0, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 
@@ -355,7 +355,7 @@ private:
 
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
+            auto processEv = std::make_unique<TEvKqp::TEvContinueProcess>(0, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 
@@ -477,7 +477,7 @@ private:
         if (ReplayMessageUserView) {
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
         }
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
+        auto responseEv = std::make_unique<TEvKqp::TEvCompileResponse>(KqpCompileResult);
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
         ReplayMessage = std::nullopt;
@@ -558,7 +558,7 @@ private:
             {"owner", Owner},
             {"size", astStatements.size()});
 
-        auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
+        auto responseEv = std::make_unique<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);

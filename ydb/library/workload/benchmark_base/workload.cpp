@@ -198,7 +198,7 @@ void TWorkloadDataInitializerBase::ConfigureOpts(NLastGetopt::TOpts& opts) {
 
 TBulkDataGeneratorList TWorkloadDataInitializerBase::GetBulkInitialData() {
     if (StatePath.IsDefined()) {
-        StateProcessor = MakeHolder<TGeneratorStateProcessor>(StatePath, Clear);
+        StateProcessor = std::make_unique<TGeneratorStateProcessor>(StatePath, Clear);
     }
     return DoGetBulkInitialData();
 }

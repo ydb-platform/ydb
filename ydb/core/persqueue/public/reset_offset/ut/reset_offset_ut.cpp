@@ -63,14 +63,14 @@ TRegisteredActor CreateActor(NActors::TTestActorRuntime& runtime, TCoreSettings 
     return registered;
 }
 
-THolder<TEvResetOffsetResult> WaitResult(
+std::unique_ptr<TEvResetOffsetResult> WaitResult(
     NActors::TTestActorRuntime& runtime,
     const TRegisteredActor& actor,
     TDuration timeout = TDuration::Seconds(30))
 {
     auto ev = runtime.GrabEdgeEvent<TEvResetOffsetResult>(actor.Edge, timeout);
     UNIT_ASSERT_C(ev, "TEvResetOffsetResult timed out");
-    return THolder<TEvResetOffsetResult>(ev->Release().Release());
+    return std::unique_ptr<TEvResetOffsetResult>(ev->Release().Release());
 }
 
 void AssertRequestError(
@@ -84,7 +84,7 @@ void AssertRequestError(
     UNIT_ASSERT_STRING_CONTAINS(result->Error, substring);
 }
 
-void AssertAllPartitionsSuccess(const THolder<TEvResetOffsetResult>& result) {
+void AssertAllPartitionsSuccess(const std::unique_ptr<TEvResetOffsetResult>& result) {
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Error);
     UNIT_ASSERT(!result->Partitions.empty());
     for (const auto& partition : result->Partitions) {

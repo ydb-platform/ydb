@@ -40,9 +40,9 @@ TString TExtensionFinal::FixReferenceInHtml(TStringBuf html, TStringBuf host) {
 void TExtensionFinal::SetProxyResponseHeaders() {
     auto& params = Context->Params;
 
-    THolder<NHttp::THeadersBuilder> headers = std::move(params.HeadersOverride);
+    std::unique_ptr<NHttp::THeadersBuilder> headers = std::move(params.HeadersOverride);
 
-    params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+    params.HeadersOverride = std::make_unique<NHttp::THeadersBuilder>();
     for (const auto& header : Settings.RESPONSE_HEADERS_WHITE_LIST) {
         if (headers->Has(header)) {
             params.HeadersOverride->Set(header, headers->Get(header));

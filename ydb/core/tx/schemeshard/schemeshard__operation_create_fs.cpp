@@ -189,7 +189,7 @@ public:
 
     virtual const char* Name() const override final { return "TCreateFileStore"; }
 
-    THolder<TProposeResponse> Propose(
+    std::unique_ptr<TProposeResponse> Propose(
         const TString& owner,
         TOperationContext& context) override;
 
@@ -230,13 +230,13 @@ private:
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
+            return std::make_unique<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return std::make_unique<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return std::make_unique<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -259,7 +259,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THolder<TProposeResponse> TCreateFileStore::Propose(
+std::unique_ptr<TProposeResponse> TCreateFileStore::Propose(
     const TString& owner,
     TOperationContext& context)
 {
@@ -276,7 +276,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     );
 
     auto status = NKikimrScheme::StatusAccepted;
-    auto result = MakeHolder<TProposeResponse>(
+    auto result = std::make_unique<TProposeResponse>(
         status,
         ui64(OperationId.GetTxId()),
         ui64(ssId));

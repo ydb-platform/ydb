@@ -139,7 +139,7 @@ protected:
         TString Subject; // login
         typename TPermissionRecord::TTypeCase SubjectType = TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         TEvTicketParser::TError Error;
-        TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
+        TDeque<std::unique_ptr<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
         TInstant InitTime;
         TInstant RefreshTime;
@@ -421,8 +421,8 @@ private:
     }
 
     template <typename TRequest, typename TTokenRecord>
-    static THolder<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) {
-        auto request = MakeHolder<TRequest>(key);
+    static std::unique_ptr<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) {
+        auto request = std::make_unique<TRequest>(key);
 
         if (record.Signature.AccessKeyId) {
             const auto& sign = record.Signature;
@@ -542,7 +542,7 @@ private:
 
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
-        auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
+        auto request = std::make_unique<TEvNebiusAccessServiceAuthorizeRequest>(key);
         request->RequestId = record.TraceContext.RequestId;
         request->PeerName = record.TraceContext.PeerName;
         TStringBuilder requestForPermissions;
@@ -595,7 +595,7 @@ private:
 
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
-        auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
+        auto request = std::make_unique<TEvNebiusAccessServiceAuthenticateRequest>(key);
         request->RequestId = record.TraceContext.RequestId;
         request->PeerName = record.TraceContext.PeerName;
         request->Request.set_iam_token(record.Ticket);
@@ -1236,7 +1236,7 @@ private:
                     {"peerName", record.TraceContext.PeerName},
                     {"requestId", record.TraceContext.RequestId}
                 );
-                THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                std::unique_ptr<TEvAccessServiceGetUserAccountRequest> request = std::make_unique<TEvAccessServiceGetUserAccountRequest>(key);
                 request->Token = record.Ticket;
                 request->Request.set_user_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
                 Send(UserAccountService, request.Release());
@@ -1252,7 +1252,7 @@ private:
                     {"peerName", record.TraceContext.PeerName},
                     {"requestId", record.TraceContext.RequestId}
                 );
-                THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                std::unique_ptr<TEvAccessServiceGetServiceAccountRequest> request = std::make_unique<TEvAccessServiceGetServiceAccountRequest>(key);
                 request->Token = record.Ticket;
                 request->Request.set_service_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
                 Send(ServiceAccountService, request.Release());

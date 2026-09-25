@@ -270,7 +270,7 @@ public:
         }
 
         ModuleResolverState->FreezeGuardHolder =
-            MakeHolder<NYql::TExprContext::TFreezeGuard>(ModuleResolverState->ExprCtx);
+            std::make_unique<NYql::TExprContext::TFreezeGuard>(ModuleResolverState->ExprCtx);
 
         UpdateYqlLogLevels();
 
@@ -596,7 +596,7 @@ public:
 
         RebuildSharedServiceConfigs();
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
@@ -706,7 +706,7 @@ public:
             return;
         }
 
-        auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
+        auto responseEv = std::make_unique<TEvKqp::TEvCreateSessionResponse>();
         // If we create many sessions per second, it might be ok to check and close
         // several idle sessions
         CheckIdleSessions(3);
@@ -754,7 +754,7 @@ public:
         }
 
         // TODO: not the best place for adding database.
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
+        auto addDatabaseEvent = std::make_unique<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
 
         const TString& database = ev->Get()->GetDatabase();
@@ -1809,7 +1809,7 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    void HandleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+    void HandleDelayedRequestError(EDelayedRequestType requestType, std::unique_ptr<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         switch (requestType) {
             case EDelayedRequestType::QueryRequest: {
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
@@ -1846,7 +1846,7 @@ private:
     }
 
     template<typename TResponse>
-    void HandleDelayedScriptRequestError(THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
+    void HandleDelayedScriptRequestError(std::unique_ptr<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
         Send(requestEvent->Sender, new TResponse(status, std::move(issues)), 0, requestEvent->Cookie);
     }
 

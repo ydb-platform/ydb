@@ -67,7 +67,7 @@ namespace NKikimr::NDataShard {
         absl::flat_hash_set<ui64> WaitingRemovalOperations;
         TStackVec<IVolatileTxCallback::TPtr, 2> Callbacks;
 
-        TVector<THolder<IEventHandle>> DelayedAcks;
+        TVector<std::unique_ptr<IEventHandle>> DelayedAcks;
         absl::flat_hash_set<ui64> DelayedConfirmations;
 
         // A list of readset sequence numbers that are on hold until arbiter
@@ -257,7 +257,7 @@ namespace NKikimr::NDataShard {
          */
         bool ProcessReadSet(
             const TEvTxProcessing::TEvReadSet& rs,
-            THolder<IEventHandle>&& ack,
+            std::unique_ptr<IEventHandle>&& ack,
             TTransactionContext& txc);
 
         void ProcessReadSetMissing(

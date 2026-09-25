@@ -156,7 +156,7 @@ public:
     }
 
     NKikimrUdfStore::TEvDescribeModuleResult Describe(const TString& name, const TString& uid) {
-        auto request = MakeHolder<TEvCompileController::TEvDescribeModule>();
+        auto request = std::make_unique<TEvCompileController::TEvDescribeModule>();
         request->Record.SetName(name);
         request->Record.SetUid(uid);
         request->Record.SetKind(NKikimrUdfStore::ARTIFACT_KIND_MODULE);

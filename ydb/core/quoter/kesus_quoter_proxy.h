@@ -19,12 +19,12 @@ struct ITabletPipeFactory {
 
     virtual ~ITabletPipeFactory() = default;
 
-    static THolder<ITabletPipeFactory> GetDefaultFactory();
+    static std::unique_ptr<ITabletPipeFactory> GetDefaultFactory();
 };
 
 extern const ui64 KesusReconnectLimit;
 
-NActors::IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const NActors::TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory = ITabletPipeFactory::GetDefaultFactory());
+NActors::IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const NActors::TActorId& quoterServiceId, std::unique_ptr<ITabletPipeFactory> tabletPipeFactory = ITabletPipeFactory::GetDefaultFactory());
 
 class TKesusResourceAllocationStatistics {
 public:

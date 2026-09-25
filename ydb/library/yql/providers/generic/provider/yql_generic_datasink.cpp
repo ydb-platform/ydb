@@ -72,10 +72,10 @@ namespace NYql {
 
         private:
             const TGenericState::TPtr State_;
-            const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-            const THolder<TExecTransformerBase> ExecutionTransformer_;
-            const THolder<IGraphTransformer> LogicalOptProposalTransformer_;
-            const THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+            const std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+            const std::unique_ptr<TExecTransformerBase> ExecutionTransformer_;
+            const std::unique_ptr<IGraphTransformer> LogicalOptProposalTransformer_;
+            const std::unique_ptr<IGraphTransformer> PhysicalOptProposalTransformer_;
         };
 
     } // namespace

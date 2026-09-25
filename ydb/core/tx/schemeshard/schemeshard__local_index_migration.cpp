@@ -111,7 +111,7 @@ private:
         );
 
         // Create and send ModifySchemeTransaction
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
         record.SetTxId(static_cast<ui64>(txId));
 
@@ -277,10 +277,10 @@ private:
 
 } // anonymous namespace
 
-THolder<IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, TActorId selfActorId,
+std::unique_ptr<IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, TActorId selfActorId,
                                          TSchemeShard* schemeshard,
                                          TVector<TLocalIndexMigrationItem>&& items) {
-    return MakeHolder<TLocalIndexMigrator>(selfTabletId, selfActorId, schemeshard, std::move(items));
+    return std::make_unique<TLocalIndexMigrator>(selfTabletId, selfActorId, schemeshard, std::move(items));
 }
 
 } // namespace NKikimr::NSchemeShard

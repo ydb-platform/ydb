@@ -19,7 +19,7 @@ namespace NKesus {
 struct TTestContext {
     TTabletTypes::EType TabletType;
     ui64 TabletId;
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     THashMap<ui64, TActorId> ProxyActors;
 
     TTestContext();
@@ -38,13 +38,13 @@ struct TTestContext {
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) {
+    std::unique_ptr<TEvent> ExpectEdgeEvent(const TActorId& actor) {
         return Runtime->GrabEdgeEvent<TEvent>(actor)->Release();
     }
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
+    std::unique_ptr<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
         return Runtime->GrabEdgeEventIf<TEvent>(actor, [=](const auto& ev) {
             return ev->Cookie == cookie;
         })->Release();

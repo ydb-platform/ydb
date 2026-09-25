@@ -64,7 +64,7 @@ private:
     ui32 Limit = 10;
     bool TruncateLongMessages = true;
     ui64 MaxSingleMessageSize = 1024 * 1024;
-    TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
+    TMap<ui32, std::unique_ptr<NYdb::NTopic::ICodec>> Codecs;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResponse;
 
     TAutoPtr<TEvPersQueue::TEvResponse> ReadResponse;

@@ -61,20 +61,20 @@ struct Perfomancer {
     };
 
     template <typename Trait>
-    inline THolder<Interface> Create() {
-        return MakeHolder<Interface>();
+    inline std::unique_ptr<Interface> Create() {
+        return std::make_unique<Interface>();
     }
 
 };
 
 template<>
-THolder<Perfomancer::Interface> Perfomancer::Create<AVX2Trait>();
+std::unique_ptr<Perfomancer::Interface> Perfomancer::Create<AVX2Trait>();
 
 template<>
-THolder<Perfomancer::Interface> Perfomancer::Create<SSE42Trait>();
+std::unique_ptr<Perfomancer::Interface> Perfomancer::Create<SSE42Trait>();
 
 template<>
-THolder<Perfomancer::Interface> Perfomancer::Create<FallbackTrait>();
+std::unique_ptr<Perfomancer::Interface> Perfomancer::Create<FallbackTrait>();
 
 template <typename TFactory>
 auto ChooseTrait(TFactory& factory) {

@@ -99,7 +99,7 @@ void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, boo
         bucket.ExpiringRequests.erase(GetExpirationInfo(request.Deadline, request.TxId, executerId));
 
         if (requestIt->second.Query) {
-            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+            auto removeQueryEvent = std::make_unique<NScheduler::TEvRemoveQuery>();
             removeQueryEvent->QueryId = txId;
             Y_ENSURE(TlsActivationContext);
             auto* actorSystem = TlsActivationContext->ActorSystem();

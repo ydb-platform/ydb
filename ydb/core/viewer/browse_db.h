@@ -82,11 +82,11 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvResponseControllerInfo::TPtr &ev, const TActorContext &ctx) {
-        THolder<TEvBlobStorage::TEvResponseControllerInfo> bsResult = ev->Release();
+        std::unique_ptr<TEvBlobStorage::TEvResponseControllerInfo> bsResult = ev->Release();
         auto& bsGroupInfo = *bsResult->Record.MutableBSGroupInfo();
 
         while (!bsGroupInfo.empty()) {
-            THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo> groupInfo(bsGroupInfo.ReleaseLast());
+            std::unique_ptr<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo> groupInfo(bsGroupInfo.ReleaseLast());
             ErasureSpecies.insert(groupInfo->GetErasureSpecies());
             for (const auto& vDiskInfo : groupInfo->GetVDiskInfo()) {
                 VDiskCategories.insert(vDiskInfo.GetVDiskCategory());
@@ -103,7 +103,7 @@ public:
     }
 
     virtual void Bootstrap(const TActorContext& ctx) override {
-        THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+        std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
         if (!BrowseContext.UserToken.empty()) {
             request->Record.SetUserToken(BrowseContext.UserToken);
         }

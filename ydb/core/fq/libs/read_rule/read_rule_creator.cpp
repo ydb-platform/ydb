@@ -130,7 +130,7 @@ public:
         RequestInFlight = false;
         const NYdb::TStatus& status = ev->Get()->Status;
         if (status.IsSuccess() || status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
-            Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(), 0, Index);
+            Send(Owner, std::make_unique<TEvPrivate::TEvSingleReadRuleCreatorResult>(), 0, Index);
             PassAway();
         } else {
             if (!RetryState) {
@@ -148,7 +148,7 @@ public:
                 {"status", status.GetStatus()},
                 {"nextRetryDelay", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
-                Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
+                Send(Owner, std::make_unique<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
             } else {
                 if (!CheckFinish()) {
@@ -172,7 +172,7 @@ public:
 
     bool CheckFinish() {
         if (Finishing && !RequestInFlight) {
-            Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(), 0, Index);
+            Send(Owner, std::make_unique<TEvPrivate::TEvSingleReadRuleCreatorResult>(), 0, Index);
             PassAway();
             return true;
         }
@@ -277,7 +277,7 @@ public:
                 }
                 issues.AddIssue(std::move(mainIssue));
             }
-            Send(Owner, MakeHolder<NFq::TEvents::TEvDataStreamsReadRulesCreationResult>(std::move(issues)));
+            Send(Owner, std::make_unique<NFq::TEvents::TEvDataStreamsReadRulesCreationResult>(std::move(issues)));
             PassAway();
         }
     }

@@ -37,7 +37,7 @@ TConclusion<ITableStoreOperation::TPtr> TTableStoreManager::BuildOperation(
 }
 
 NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager::SendSchemeTx(
-    THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& request,
     const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) const {
     auto* actorSystem = context.GetActorSystem();
     if (!actorSystem) {
@@ -66,7 +66,7 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(operation.GetErrorMessage()));
     }
 
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     ev->Record.SetDatabaseName(context.GetExternalData().GetDatabase());
     if (context.GetExternalData().GetUserToken()) {
         ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
@@ -109,7 +109,7 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
         }
     }();
 
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     ev->Record.SetDatabaseName(context.GetDatabase());
     if (context.GetUserToken()) {
         ev->Record.SetUserToken(context.GetUserToken()->GetSerializedToken());

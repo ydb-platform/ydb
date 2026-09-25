@@ -49,7 +49,7 @@ struct TTestEnv {
     Tests::TServer::TPtr Server;
     TTestActorRuntime& Runtime;
     TActorId Sender;
-    THolder<TS3Mock> S3Mock;
+    std::unique_ptr<TS3Mock> S3Mock;
     ui16 S3Port = 0;
     ui64 NextTxId = 100;
 
@@ -587,7 +587,7 @@ Y_UNIT_TEST(CompactionAfterRestore) {
     // Restored data is a single SST part; force compaction of single-parted shards.
     {
         auto sender = env.Runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+        auto request = std::make_unique<TEvDataShard::TEvCompactTable>(tableId.PathId);
         request->Record.SetCompactSinglePartedShards(true);
         env.Runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
         auto ev = env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);

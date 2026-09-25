@@ -174,7 +174,7 @@ public:
         ActorId = ev->Sender;
         Generation = generation;
 
-        auto status = MakeHolder<TEvService::TEvStatus>();
+        auto status = std::make_unique<TEvService::TEvStatus>();
         auto& record = status->Record;
 
         for (const auto& [id, _] : Workers) {
@@ -326,7 +326,7 @@ public:
     void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
             const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds)
     {
-        auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
+        auto ev = std::make_unique<TEvService::TEvWorkerDataEnd>();
         auto& record = ev->Record;
 
         id.Serialize(*record.MutableWorker());
@@ -453,7 +453,7 @@ public:
 
 private:
     static void SendTxIdResult(IActorOps* ops, const TActorId& recipient, const TMap<TRowVersion, ui64>& result) {
-        auto ev = MakeHolder<TEvService::TEvTxIdResult>();
+        auto ev = std::make_unique<TEvService::TEvTxIdResult>();
 
         for (const auto& [version, txId] : result) {
             auto& item = *ev->Record.AddVersionTxIds();

@@ -166,7 +166,7 @@ namespace NKikimr {
 
 class TTestMkqlInvoker {
 
-    THolder<NMsgBusProxy::TBusRequest> Request;
+    std::unique_ptr<NMsgBusProxy::TBusRequest> Request;
     TVector<TString*> WriteResolvedKeysTo;
     TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal;
     TAutoPtr<NKikimrTxUserProxy::TEvProposeTransactionStatus> ProposalStatus;
@@ -240,7 +240,7 @@ class TTestMkqlInvoker {
 
 public:
 
-    TTestMkqlInvoker(NActors::TTestActorRuntime* runtime, THolder<NMsgBusProxy::TBusRequest> request)
+    TTestMkqlInvoker(NActors::TTestActorRuntime* runtime, std::unique_ptr<NMsgBusProxy::TBusRequest> request)
         : Request(std::move(request))
         , Runtime(runtime)
         , CompilationRetried(false)
@@ -463,12 +463,12 @@ namespace Tests {
         const auto nodeCount = StaticNodes() + DynamicNodes();
 
         if (Settings->AuditLogBackendLines) {
-            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
+            Runtime = std::make_unique<TTestBasicRuntime>(nodeCount,
                                                     Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
                                                     Settings->UseRealThreads,
                                                     CreateTestAuditLogBackends(*Settings->AuditLogBackendLines));
         } else {
-            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
+            Runtime = std::make_unique<TTestBasicRuntime>(nodeCount,
                                                     Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
                                                     Settings->UseRealThreads);
         }
@@ -859,7 +859,7 @@ namespace Tests {
         auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
         const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
 
-        auto evTx = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
+        auto evTx = std::make_unique<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
         transaction->SetWorkingDir("/");
@@ -881,7 +881,7 @@ namespace Tests {
             UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
         }
 
-        auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(1);
+        auto evSubscribe = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(1);
         runtime.SendToPipe(tid, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
         {
@@ -931,7 +931,7 @@ namespace Tests {
 
             ui32 nodeIndex = 0;
             auto ev =
-                MakeHolder<TEvHive::TEvCreateTablet>(tabletId, 0, TTabletTypes::PersQueue, BINDED_CHANNELS);
+                std::make_unique<TEvHive::TEvCreateTablet>(tabletId, 0, TTabletTypes::PersQueue, BINDED_CHANNELS);
 
             TActorId senderB = Runtime->AllocateEdgeActor(nodeIndex);
             ui64 hive = ChangeStateStorage(Tests::Hive, Settings->Domain);
@@ -997,7 +997,7 @@ namespace Tests {
         ui64 hostConfigGeneration = Settings->StorageGeneration;
         std::unordered_map<TString, ui64> poolsConfigGenerations;
         if (Settings->FetchActualGeneration) {
-            auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+            auto bsDescribeRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
             auto& request = *bsDescribeRequest->Record.MutableRequest();
             request.AddCommand()->MutableReadBox();
@@ -1040,7 +1040,7 @@ namespace Tests {
             }
         }
 
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto bsConfigureRequest = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
 
         auto& hostConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig();
         hostConfig.SetHostConfigId(nodeId);
@@ -1606,9 +1606,9 @@ namespace Tests {
 
         {
             if (Settings->EnableMetering) {
-                THolder<TFileLogBackend> fileBackend;
+                std::unique_ptr<TFileLogBackend> fileBackend;
                 try {
-                    fileBackend = MakeHolder<TFileLogBackend>(Settings->MeteringFilePath);
+                    fileBackend = std::make_unique<TFileLogBackend>(Settings->MeteringFilePath);
                     auto meteringActor = NMetering::CreateMeteringWriter(std::move(fileBackend));
                     TActorId meteringId = Runtime->Register(meteringActor.Release(), nodeIdx, Runtime->GetAppData(nodeIdx).IOPoolId);
                     Runtime->RegisterService(NMetering::MakeMeteringServiceID(), meteringId, nodeIdx);
@@ -2898,7 +2898,7 @@ namespace Tests {
 
     void TClient::RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx) {
         TActorId sender = runtime->AllocateEdgeActor(nodeIdx);
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(path);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -3134,7 +3134,7 @@ namespace Tests {
 
     ui32 TClient::FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt) {
         while (retryCnt--) {
-            THolder<NMsgBusProxy::TBusRequest> request = MakeHolder<NMsgBusProxy::TBusRequest>();
+            std::unique_ptr<NMsgBusProxy::TBusRequest> request = std::make_unique<NMsgBusProxy::TBusRequest>();
             {
                 auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
                 if (opts.IsQueryCompiled)
@@ -3464,7 +3464,7 @@ namespace Tests {
     }
 
     Ydb::StatusIds::StatusCode TClient::AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props) {
-        THolder<NKesus::TEvKesus::TEvAddQuoterResource> request = MakeHolder<NKesus::TEvKesus::TEvAddQuoterResource>();
+        std::unique_ptr<NKesus::TEvKesus::TEvAddQuoterResource> request = std::make_unique<NKesus::TEvKesus::TEvAddQuoterResource>();
         request->Record.MutableResource()->SetResourcePath(resourcePath);
         *request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig() = props;
 
@@ -3477,15 +3477,15 @@ namespace Tests {
         return record.GetError().GetStatus();
     }
 
-    THolder<NKesus::TEvKesus::TEvGetConfigResult> TClient::GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath) {
-        THolder<NKesus::TEvKesus::TEvGetConfig> request = MakeHolder<NKesus::TEvKesus::TEvGetConfig>();
+    std::unique_ptr<NKesus::TEvKesus::TEvGetConfigResult> TClient::GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath) {
+        std::unique_ptr<NKesus::TEvKesus::TEvGetConfig> request = std::make_unique<NKesus::TEvKesus::TEvGetConfig>();
 
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvGetConfigResult>(handle);
-        return THolder<NKesus::TEvKesus::TEvGetConfigResult>(handle->Release<NKesus::TEvKesus::TEvGetConfigResult>());
+        return std::unique_ptr<NKesus::TEvKesus::TEvGetConfigResult>(handle->Release<NKesus::TEvKesus::TEvGetConfigResult>());
     }
 
     bool IsServerRedirected() {

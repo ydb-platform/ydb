@@ -101,7 +101,7 @@ void IPersQueueGetReadSessionsInfoWorker::Answer(const TActorContext& ctx) {
         }
     }
 
-    THolder<TEvPersQueue::TEvResponse> result(new TEvPersQueue::TEvResponse());
+    std::unique_ptr<TEvPersQueue::TEvResponse> result(new TEvPersQueue::TEvResponse());
     result->Record.Swap(&response);
 
     ctx.Send(ParentId, result.Release());

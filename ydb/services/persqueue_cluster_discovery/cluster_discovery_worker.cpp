@@ -29,7 +29,7 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TClusterDiscoveryWorker(THolder<NGRpcService::TEvDiscoverPQClustersRequest> ev,
+    TClusterDiscoveryWorker(std::unique_ptr<NGRpcService::TEvDiscoverPQClustersRequest> ev,
                             TLabeledAddressClassifier::TConstPtr datacenterClassifier,
                             TLabeledAddressClassifier::TConstPtr cloudNetsClassifier,
                             TClustersList::TConstPtr clustersList,
@@ -269,7 +269,7 @@ public:
     }
 
 private:
-    THolder<TEvDiscoverPQClustersRequest> Request;
+    std::unique_ptr<TEvDiscoverPQClustersRequest> Request;
     TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
     TLabeledAddressClassifier::TConstPtr CloudNetsClassifier; // Special classifier instance for cloud networks detection. May be null
     TMaybe<TString> ClientDatacenterName; // Detected client datacenter
@@ -280,7 +280,7 @@ private:
     TClusterDiscoveryCounters::TPtr Counters;
 };
 
-IActor* CreateClusterDiscoveryWorker(THolder<NGRpcService::TEvDiscoverPQClustersRequest> ev,
+IActor* CreateClusterDiscoveryWorker(std::unique_ptr<NGRpcService::TEvDiscoverPQClustersRequest> ev,
                                      TLabeledAddressClassifier::TConstPtr datacenterClassifier,
                                      TLabeledAddressClassifier::TConstPtr cloudNetsClassifier,
                                      TClustersList::TConstPtr clustersList,

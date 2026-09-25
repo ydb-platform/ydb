@@ -494,13 +494,13 @@ void TQueueLeader::OnQueryPrepared(TSqsEvents::TEvExecute::TPtr& ev, const TSqsE
         RLOG_SQS_REQ_WARN(req.RequestId, "Request preparation error: "
                            << "status=" << status << ", "
                            << "record=" << record);
-        Send(req.Sender, MakeHolder<TSqsEvents::TEvExecuted>(record, req.Cb, req.Shard));
+        Send(req.Sender, std::make_unique<TSqsEvents::TEvExecuted>(record, req.Cb, req.Shard));
 
         for (const auto& def : query.Deferred) {
             RLOG_SQS_REQ_WARN(def->Get()->RequestId, "Request preparation error: "
                                                          << "status=" << status << ", "
                                                          << "record=" << record);
-            Send(def->Get()->Sender, MakeHolder<TSqsEvents::TEvExecuted>(record, def->Get()->Cb, def->Get()->Shard));
+            Send(def->Get()->Sender, std::make_unique<TSqsEvents::TEvExecuted>(record, def->Get()->Cb, def->Get()->Shard));
         }
         query.Deferred.clear();
 
@@ -571,7 +571,7 @@ void TQueueLeader::OnQueryExecuted(TSqsEvents::TEvExecute::TPtr& ev, const TSqsE
 
     if (!retried) {
         RLOG_SQS_REQ_DEBUG(req.RequestId, "Sending executed reply");
-        Send(req.Sender, MakeHolder<TSqsEvents::TEvExecuted>(record, req.Cb, req.Shard));
+        Send(req.Sender, std::make_unique<TSqsEvents::TEvExecuted>(record, req.Cb, req.Shard));
     }
 }
 
@@ -675,7 +675,7 @@ void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const T
 
     ++reqInfo.AnswersGot;
     if (reqInfo.AnswersGot == reqInfo.Statuses.size()) {
-        auto answer = MakeHolder<TSqsEvents::TEvSendMessageBatchResponse>();
+        auto answer = std::make_unique<TSqsEvents::TEvSendMessageBatchResponse>();
         answer->Statuses.swap(reqInfo.Statuses);
         ui64 bytesWritten = 0;
         for (auto& message : reqInfo.Event->Get()->Messages) {
@@ -1300,7 +1300,7 @@ void TQueueLeader::ProcessDeleteMessageBatch(TDeleteMessageBatchRequestProcessin
 
     if (!IsFifoQueue_) {
         for (const auto& messageReq : req->Get()->Messages) {
-            THolder<TInflyMessage> inflyMessage = Shards_[req->Get()->Shard].Infly->Delete(messageReq.Offset);
+            std::unique_ptr<TInflyMessage> inflyMessage = Shards_[req->Get()->Shard].Infly->Delete(messageReq.Offset);
             if (inflyMessage) {
                 reqInfo.InflyMessages.emplace_back(std::move(inflyMessage));
             } else {
@@ -1550,7 +1550,7 @@ void TQueueLeader::OnVisibilityChanged(const TString& requestId, ui64 shard, con
 }
 
 void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& req) {
-    auto resp = MakeHolder<TSqsEvents::TEvConfiguration>();
+    auto resp = std::make_unique<TSqsEvents::TEvConfiguration>();
 
     resp->RootUrl = RootUrl_;
     resp->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
@@ -1582,7 +1582,7 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
 }
 
 void TQueueLeader::AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev, bool queueRemoved) {
-    auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+    auto answer = std::make_unique<TSqsEvents::TEvConfiguration>();
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
     answer->QueueCounters = Counters_;
@@ -1679,7 +1679,7 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
 
             for (auto& req : GetConfigurationRequests_) {
                 RLOG_SQS_REQ_DEBUG(req->Get()->RequestId, "Queue [" << req->Get()->QueueName << "] was not found in Queues table for user [" << req->Get()->UserName << "]");
-                auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+                auto answer = std::make_unique<TSqsEvents::TEvConfiguration>();
                 answer->UserExists = true;
                 answer->QueueExists = false;
                 answer->RootUrl = RootUrl_;
@@ -1839,7 +1839,7 @@ void TQueueLeader::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
 
 void TQueueLeader::HandlePurgeQueue(TSqsEvents::TEvPurgeQueue::TPtr& ev) {
     CreateBackgroundActors();
-    Send(PurgeActor_, MakeHolder<TSqsEvents::TEvPurgeQueue>(*ev->Get()));
+    Send(PurgeActor_, std::make_unique<TSqsEvents::TEvPurgeQueue>(*ev->Get()));
 }
 
 void TQueueLeader::CheckStillDLQ() {
@@ -2209,7 +2209,7 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
             const ui32 receiveCount = message["ReceiveCount"];
             const TInstant maxVisibilityDeadline = TInstant::MilliSeconds(Max(visibilityDeadlineMs, delayDeadlineMs));
             LOG_SQS_TRACE("Adding message to infly struct for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": { Offset: " << offset << ", VisibilityDeadline: " << maxVisibilityDeadline << ", ReceiveCount: " << receiveCount << " }");
-            shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], maxVisibilityDeadline, receiveCount));
+            shardInfo.Infly->Add(std::make_unique<TInflyMessage>(offset, message["RandomId"], maxVisibilityDeadline, receiveCount));
         }
         LWPROBE(LoadInfly, UserName_, QueueName_, shard, list.Size());
         shardInfo.InflyVersion = val["inflyVersion"];
@@ -2314,7 +2314,7 @@ void TQueueLeader::OnAddedMessagesToInfly(ui64 shard, const TSqsEvents::TEvExecu
                 const ui64 offset = message["Offset"];
                 const ui32 receiveCount = 0; // as in transaction
                 LOG_SQS_TRACE("Adding message to infly struct for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": { Offset: " << offset << ", DelayDeadline: " << delayDeadline << ", ReceiveCount: " << receiveCount << " }");
-                shardInfo.Infly->Add(MakeHolder<TInflyMessage>(offset, message["RandomId"], delayDeadline, receiveCount));
+                shardInfo.Infly->Add(std::make_unique<TInflyMessage>(offset, message["RandomId"], delayDeadline, receiveCount));
             }
             LWPROBE(AddMessagesToInfly, UserName_, QueueName_, shard, list.Size());
             shardInfo.ReadOffset = val["readOffset"];
@@ -2371,7 +2371,7 @@ void TQueueLeader::FailMessageRequestsAfterInflyLoadFailure(ui64 shard) {
             const TString& requestId = reqId;
             requestsToDelete.emplace_back(requestId);
             RLOG_SQS_REQ_ERROR(requestId, "Failed to load infly for shard " << shard);
-            auto answer = MakeHolder<TSqsEvents::TEvSendMessageBatchResponse>();
+            auto answer = std::make_unique<TSqsEvents::TEvSendMessageBatchResponse>();
             answer->Statuses.resize(req.Event->Get()->Messages.size());
             for (auto& s : answer->Statuses) {
                 s.Status = TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::Failed;
@@ -2392,7 +2392,7 @@ void TQueueLeader::FailMessageRequestsAfterInflyLoadFailure(ui64 shard) {
                 failedDeleteRequests.emplace_back(reqIdAndShard);
                 const TString& requestId = reqIdAndShard.first;
                 RLOG_SQS_REQ_ERROR(requestId, "Failed to load infly for shard " << shard);
-                auto answer = MakeHolder<TSqsEvents::TEvDeleteMessageBatchResponse>();
+                auto answer = std::make_unique<TSqsEvents::TEvDeleteMessageBatchResponse>();
                 answer->Shard = shard;
                 answer->Statuses.resize(reqInfo.Event->Get()->Messages.size());
                 for (auto& status : answer->Statuses) {
@@ -2694,7 +2694,7 @@ void TQueueLeader::TSendMessageBatchRequestProcessing::Init(ui64 shardsCount) {
 
 TQueueLeader::TReceiveMessageBatchRequestProcessing::TReceiveMessageBatchRequestProcessing(TSqsEvents::TEvReceiveMessageBatch::TPtr&& ev)
     : Event(std::move(ev))
-    , Answer(MakeHolder<TSqsEvents::TEvReceiveMessageBatchResponse>())
+    , Answer(std::make_unique<TSqsEvents::TEvReceiveMessageBatchResponse>())
 {
     Answer->Messages.reserve(Event->Get()->MaxMessagesCount);
 }
@@ -2714,7 +2714,7 @@ void TQueueLeader::TReceiveMessageBatchRequestProcessing::Init(ui64 shardsCount)
 
 TQueueLeader::TDeleteMessageBatchRequestProcessing::TDeleteMessageBatchRequestProcessing(TSqsEvents::TEvDeleteMessageBatch::TPtr&& ev)
     : Event(std::move(ev))
-    , Answer(MakeHolder<TSqsEvents::TEvDeleteMessageBatchResponse>())
+    , Answer(std::make_unique<TSqsEvents::TEvDeleteMessageBatchResponse>())
 {
     Answer->Shard = Event->Get()->Shard;
     Answer->Statuses.resize(Event->Get()->Messages.size());
@@ -2723,7 +2723,7 @@ TQueueLeader::TDeleteMessageBatchRequestProcessing::TDeleteMessageBatchRequestPr
 
 TQueueLeader::TChangeMessageVisibilityBatchRequestProcessing::TChangeMessageVisibilityBatchRequestProcessing(TSqsEvents::TEvChangeMessageVisibilityBatch::TPtr&& ev)
     : Event(std::move(ev))
-    , Answer(MakeHolder<TSqsEvents::TEvChangeMessageVisibilityBatchResponse>())
+    , Answer(std::make_unique<TSqsEvents::TEvChangeMessageVisibilityBatchResponse>())
 {
     Answer->Statuses.resize(Event->Get()->Messages.size());
     Answer->Shard = Event->Get()->Shard;
@@ -2731,7 +2731,7 @@ TQueueLeader::TChangeMessageVisibilityBatchRequestProcessing::TChangeMessageVisi
 
 TQueueLeader::TGetRuntimeQueueAttributesRequestProcessing::TGetRuntimeQueueAttributesRequestProcessing(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr&& ev)
     : Event(std::move(ev))
-    , Answer(MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributesResponse>())
+    , Answer(std::make_unique<TSqsEvents::TEvGetRuntimeQueueAttributesResponse>())
 {
     Answer->CreatedTimestamp = TInstant::Max(); // for proper min operation
 }

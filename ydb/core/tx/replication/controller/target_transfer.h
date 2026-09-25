@@ -54,7 +54,7 @@ private:
     std::unique_ptr<TTransferCounters> Counters;
 
     TActorId StreamConsumerRemover;
-    THolder<NKikimrProto::NMetricsConfig::TMetricsConfig> MetricsConfig;
+    std::unique_ptr<NKikimrProto::NMetricsConfig::TMetricsConfig> MetricsConfig;
 
 }; // TTargetTransfer
 

@@ -12,7 +12,7 @@ class TRecursiveModel : public IModel
 public:
     typedef Context TCtx;
 private:
-    THolder<TCtx> GlobalCtx; // Special parent context for root
+    std::unique_ptr<TCtx> GlobalCtx; // Special parent context for root
 public:
     explicit TRecursiveModel(TSharePlanner* planner)
         : IModel(planner)

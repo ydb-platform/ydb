@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         for (ui64 ownerId = 0; ownerId <= 1; ++ownerId) {
             for (ui64 pathId = 0; pathId <= 1; ++pathId) {
                 auto id = TPathId(ownerId, pathId);
-                auto setPartitioning = MakeHolder<TEvSysView::TEvSetPartitioning>(domainKey, id, "");
+                auto setPartitioning = std::make_unique<TEvSysView::TEvSetPartitioning>(domainKey, id, "");
                 setPartitioning->ShardIndices.push_back(TShardIdx(ownerId * 3 + pathId, 0));
                 setPartitioning->ShardIndices.push_back(TShardIdx(ownerId * 3 + pathId, 1));
                 runtime.Send(new IEventHandle(collectorId, TActorId(), setPartitioning.Release()));
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
             TMaybe<ui64> toOwnerId, TMaybe<ui64> toPathId, TMaybe<ui64> toPartIdx, bool toInc,
             std::initializer_list<std::tuple<ui64, ui64, ui64>> check)
         {
-            auto get = MakeHolder<TEvSysView::TEvGetPartitionStats>();
+            auto get = std::make_unique<TEvSysView::TEvGetPartitionStats>();
             auto& record = get->Record;
             record.SetDomainKeyOwnerId(domainKey.OwnerId);
             record.SetDomainKeyPathId(domainKey.LocalPathId);
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
                     break;
                 }
 
-                get = MakeHolder<TEvSysView::TEvGetPartitionStats>();
+                get = std::make_unique<TEvSysView::TEvGetPartitionStats>();
                 auto& record = get->Record;
                 record.SetDomainKeyOwnerId(domainKey.OwnerId);
                 record.SetDomainKeyPathId(domainKey.LocalPathId);
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
 
         auto domainKey = TPathId(1, 1);
 
-        auto get = MakeHolder<TEvSysView::TEvGetPartitionStats>();
+        auto get = std::make_unique<TEvSysView::TEvGetPartitionStats>();
         auto& record = get->Record;
         record.SetDomainKeyOwnerId(domainKey.OwnerId);
         record.SetDomainKeyPathId(domainKey.LocalPathId);

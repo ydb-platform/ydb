@@ -13,7 +13,7 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
     using TPtr = TIntrusivePtr<TWriteRequestInfoImpl<TEvWrite>>;
 
     struct TUserWriteRequest {
-        THolder<TEvWrite> Write;
+        std::unique_ptr<TEvWrite> Write;
     };
 
     explicit TWriteRequestInfoImpl(ui64 cookie, NWilson::TSpan span)
@@ -40,7 +40,7 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
     std::deque<TUserWriteRequest> UserWriteRequests;
 
     // Partition write request
-    THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> PartitionWriteRequest;
+    std::unique_ptr<NPQ::TEvPartitionWriter::TEvWriteRequest> PartitionWriteRequest;
 
     // Formed write request's cookie
     ui64 Cookie;

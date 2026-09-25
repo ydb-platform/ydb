@@ -57,7 +57,7 @@ void UpdateJsonFeatureFlagsOnNodes(TKikimrRunner& kikimr, bool enableJsonIndex, 
         for (const auto& service : {
                 MakeKqpProxyID(nodeId),
                 MakeKqpCompileServiceID(nodeId)}) {
-            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
             *request->Record.MutableConfig() = config;
             runtime.Send(service, edgeActor, request.Release());
             auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(

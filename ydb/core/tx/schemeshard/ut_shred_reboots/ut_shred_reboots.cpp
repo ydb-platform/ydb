@@ -42,14 +42,14 @@ Y_UNIT_TEST_SUITE(ShredReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 {
-                    auto request = MakeHolder<TEvSchemeShard::TEvShredManualStartupRequest>();
+                    auto request = std::make_unique<TEvSchemeShard::TEvShredManualStartupRequest>();
                     runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
                 }
                 TDispatchOptions options;
                 options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
                 runtime.DispatchEvents(options);
 
-                auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
+                auto request = std::make_unique<TEvSchemeShard::TEvShredInfoRequest>();
                 runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
                 TAutoPtr<IEventHandle> handle;

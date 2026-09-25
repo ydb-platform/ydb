@@ -41,7 +41,7 @@ struct IStatsPartGroupIter {
     virtual ~IStatsPartGroupIter() = default;
 };
 
-THolder<IStatsPartGroupIter> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
+std::unique_ptr<IStatsPartGroupIter> CreateStatsPartGroupIterator(const TPart* part, IPages* env, NPage::TGroupId groupId, 
     ui64 rowCountResolution, ui64 dataSizeResolution, const TVector<TRowId>& splitPoints);
     
 }

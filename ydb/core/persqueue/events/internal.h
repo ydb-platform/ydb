@@ -1319,7 +1319,7 @@ struct TEvPQ {
         ui64 MessagesWrittenTotal;
         ui64 MessagesWrittenGrpc;
         TVector<ui64> MessagesSizes;
-        THolder<NPQ::TMultiBucketCounter> InputLags;
+        std::unique_ptr<NPQ::TMultiBucketCounter> InputLags;
         bool Discard = false;
     };
 

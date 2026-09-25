@@ -44,7 +44,7 @@ static bool FillDefaultValues(
     return true;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -118,7 +118,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -213,7 +213,7 @@ void FillRestoreEncryptionSettings(
     }
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -295,11 +295,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
+std::unique_ptr<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
     const TImportInfo& importInfo,
     TTxId restoreTxId
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
+    auto propose = std::make_unique<TEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
     record.SetTxId(importInfo.Id);
@@ -308,7 +308,7 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
     return propose;
 }
 
-THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
+std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -335,7 +335,7 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     }
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
-    auto propose = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
+    auto propose = std::make_unique<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
     auto& request = propose->Record;
     (*request.MutableOperationParams()->mutable_labels())["uid"] = uid;
     request.SetInternal(true);
@@ -343,16 +343,16 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     return propose;
 }
 
-THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
+std::unique_ptr<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     TSchemeShard* ss,
     const TImportInfo& importInfo,
     TTxId indexBuildId
 ) {
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
-    return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
+    return std::make_unique<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -432,7 +432,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -515,7 +515,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,

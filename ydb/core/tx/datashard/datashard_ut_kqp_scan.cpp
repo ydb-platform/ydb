@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         UNIT_ASSERT_VALUES_EQUAL(row.items().size(), 1);
                         receivedKeys.push_back(row.items(0).uint32_value());
                     }
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(
                         record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(8 << 20);
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
 
@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
 
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
 
@@ -831,7 +831,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         }
                     }
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
@@ -940,7 +940,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     ctx.Send(ev->Sender, resp.Release());
@@ -968,8 +968,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        TVector<THolder<IEventHandle>> blockedGets;
-        TVector<THolder<IEventHandle>> blockedSnapshots;
+        TVector<std::unique_ptr<IEventHandle>> blockedGets;
+        TVector<std::unique_ptr<IEventHandle>> blockedSnapshots;
         auto blockGetObserver = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse::EventType: {
@@ -1141,7 +1141,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).int64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));

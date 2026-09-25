@@ -31,7 +31,7 @@ private:
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
-    THolder<NYdbGrpc::TGlobalLimiter> Limiter;
+    std::unique_ptr<NYdbGrpc::TGlobalLimiter> Limiter;
 };
 
 }

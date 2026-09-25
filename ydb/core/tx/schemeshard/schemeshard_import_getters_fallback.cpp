@@ -61,7 +61,7 @@ public:
     }
 
     void Bootstrap() {
-        auto result = MakeHolder<TEvImport::TEvListObjectsInS3ExportResponse>();
+        auto result = std::make_unique<TEvImport::TEvListObjectsInS3ExportResponse>();
         result->Record.set_status(Ydb::StatusIds::UNSUPPORTED);
         result->Record.add_issues()->set_message("S3 listings are disabled");
         Send(Request->Sender, std::move(result));

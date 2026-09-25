@@ -163,7 +163,7 @@ private:
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpTxHashFuncPropagateTransformer(const TKikimrConfiguration::TPtr& config) {
-    return THolder<IGraphTransformer>(new TKqpTxHashFuncPropagateTransformer(config));
+    return std::unique_ptr<IGraphTransformer>(new TKqpTxHashFuncPropagateTransformer(config));
 }
 
 class TKqpTxsHashFuncPropagateTransformer : public TSyncTransformerBase {
@@ -242,7 +242,7 @@ private:
 } // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpTxsHashFuncPropagateTransformer(TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config) {
-    return THolder<IGraphTransformer>(new TKqpTxsHashFuncPropagateTransformer(typesCtx, config));
+    return std::unique_ptr<IGraphTransformer>(new TKqpTxsHashFuncPropagateTransformer(typesCtx, config));
 }
 
 } // namespace NKikimr::NKqp

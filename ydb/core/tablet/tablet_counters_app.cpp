@@ -10,34 +10,34 @@
 
 namespace NKikimr {
 
-THolder<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType type) {
+std::unique_ptr<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType type) {
     switch (type) {
     case TTabletTypes::SchemeShard:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return std::make_unique<TAppProtobufTabletCounters<
             NSchemeShard::ESimpleCounters_descriptor,
             NSchemeShard::ECumulativeCounters_descriptor,
             NSchemeShard::EPercentileCounters_descriptor
         >>();
     case TTabletTypes::DataShard:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return std::make_unique<TAppProtobufTabletCounters<
             NDataShard::ESimpleCounters_descriptor,
             NDataShard::ECumulativeCounters_descriptor,
             NDataShard::EPercentileCounters_descriptor
         >>();
     case TTabletTypes::Hive:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return std::make_unique<TAppProtobufTabletCounters<
             NHive::ESimpleCounters_descriptor,
             NHive::ECumulativeCounters_descriptor,
             NHive::EPercentileCounters_descriptor
         >>();
     case TTabletTypes::Kesus:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return std::make_unique<TAppProtobufTabletCounters<
             NKesus::ESimpleCounters_descriptor,
             NKesus::ECumulativeCounters_descriptor,
             NKesus::EPercentileCounters_descriptor
         >>();
     case TTabletTypes::GraphShard:
-        return MakeHolder<TAppProtobufTabletCounters<
+        return std::make_unique<TAppProtobufTabletCounters<
             NGraphShard::ESimpleCounters_descriptor,
             NGraphShard::ECumulativeCounters_descriptor,
             NGraphShard::EPercentileCounters_descriptor

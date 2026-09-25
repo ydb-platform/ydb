@@ -167,7 +167,7 @@ namespace NTest {
 
     class TForwardEnv : public IPages {
         struct TPartGroupLoadingQueue : private NFwd::IPageLoadingQueue {
-            TPartGroupLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 groupRoom, THolder<NFwd::IPageLoadingLogic> line)
+            TPartGroupLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 groupRoom, std::unique_ptr<NFwd::IPageLoadingLogic> line)
                 : GroupRoom(groupRoom)
                 , Store(std::move(store))
                 , PageLoadingLogic(std::move(line))
@@ -217,7 +217,7 @@ namespace NTest {
             TVector<TPageId> IndexFetch;
             TVector<TPageId> GroupFetch;
             TIntrusiveConstPtr<TStore> Store;
-            THolder<NFwd::IPageLoadingLogic> PageLoadingLogic;
+            std::unique_ptr<NFwd::IPageLoadingLogic> PageLoadingLogic;
             bool Grow = false;
         };
 
@@ -320,7 +320,7 @@ namespace NTest {
             }
         }
 
-        TPartGroupLoadingQueue* Settle(const TPartStore *part, ui16 room, THolder<NFwd::IPageLoadingLogic> line)
+        TPartGroupLoadingQueue* Settle(const TPartStore *part, ui16 room, std::unique_ptr<NFwd::IPageLoadingLogic> line)
         {
             if (line) {
                 GroupQueues.emplace_back(part->Store, room, std::move(line));
@@ -330,24 +330,24 @@ namespace NTest {
             }
         }
 
-        THolder<NFwd::IPageLoadingLogic> MakeExtern(const TPartStore *part) const
+        std::unique_ptr<NFwd::IPageLoadingLogic> MakeExtern(const TPartStore *part) const
         {
             if (auto &large = part->Large) {
                 Y_ENSURE(part->Blobs, "Part has frames but not blobs");
 
                 TVector<ui32> edges(large->Stats().Tags.size(), Edge);
 
-                return MakeHolder<NFwd::TBlobs>(large, TSlices::All(), edges, false);
+                return std::make_unique<NFwd::TBlobs>(large, TSlices::All(), edges, false);
             } else
                 return nullptr;
         }
 
-        THolder<NFwd::IPageLoadingLogic> MakeOuter(const TPart *part) const
+        std::unique_ptr<NFwd::IPageLoadingLogic> MakeOuter(const TPart *part) const
         {
             if (auto &small = part->Small) {
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
 
-                return MakeHolder<NFwd::TBlobs>(small, TSlices::All(), edge, false);
+                return std::make_unique<NFwd::TBlobs>(small, TSlices::All(), edge, false);
             } else
                 return nullptr;
         }

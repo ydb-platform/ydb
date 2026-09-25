@@ -38,7 +38,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxToggleConfigValidator",
             {"ev", rec.ShortDebugString()});
 
-        Response = MakeHolder<TEvConsole::TEvToggleConfigValidatorResponse>();
+        Response = std::make_unique<TEvConsole::TEvToggleConfigValidatorResponse>();
 
         const TString &name = rec.GetName();
         bool disable = rec.GetDisable();

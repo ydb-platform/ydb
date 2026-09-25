@@ -63,7 +63,7 @@ namespace NTests {
             std::shared_ptr<TLog> Log;
             std::vector<TString> GeneratedMessages;
 
-            THolder<TTopicWorkloadWriterProducer> CreateProducer();
+            std::unique_ptr<TTopicWorkloadWriterProducer> CreateProducer();
             TWriteSessionEvent::TAcksEvent CreateAckEvent(ui64 seqno);
             TTopicWorkloadWriterParams CreateParams();
             std::shared_ptr<TLog> CreateLogger();
@@ -71,8 +71,8 @@ namespace NTests {
             void InitContinuationToken(TTopicWorkloadWriterProducer& producer);
         };
 
-        THolder<TTopicWorkloadWriterProducer> TFixture::CreateProducer() {
-            auto producer = MakeHolder<TTopicWorkloadWriterProducer>(
+        std::unique_ptr<TTopicWorkloadWriterProducer> TFixture::CreateProducer() {
+            auto producer = std::make_unique<TTopicWorkloadWriterProducer>(
                 std::move(CreateParams()),
                 StatsCollector,
                 "my-test-producer",
@@ -137,7 +137,7 @@ namespace NTests {
         }
 
         std::shared_ptr<TLog> TFixture::CreateLogger() {
-            TLog log(THolder(new TStreamLogBackend(&LoggedData)));
+            TLog log(std::unique_ptr<TStreamLogBackend>(new TStreamLogBackend(&LoggedData)));
             return std::make_shared<TLog>(log);
         }
 

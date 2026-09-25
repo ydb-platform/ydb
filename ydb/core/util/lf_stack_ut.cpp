@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TLockFreeIntrusiveStackTest) {
         }
         std::atomic<size_t> totalCount{ 0 };
 
-        TVector<THolder<TWorkerThread>> workers(workersCount);
+        TVector<std::unique_ptr<TWorkerThread>> workers(workersCount);
         for (size_t i = 0; i < workersCount; ++i) {
             workers[i] = TWorkerThread::Spawn([&]() {
                 THPTimer timer;

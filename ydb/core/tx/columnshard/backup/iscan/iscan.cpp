@@ -162,7 +162,7 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
         return exp->CreateUploader(subscriberActorId, txId);
     };
 
-    THolder<NKikimr::NDataShard::NExportScan::IBuffer> buffer{ exp->CreateBuffer() };
+    std::unique_ptr<NKikimr::NDataShard::NExportScan::IBuffer> buffer{ exp->CreateBuffer() };
     std::unique_ptr<NTable::IScan> scan{ NDataShard::CreateExportScan(std::move(buffer), createUploader) };
 
     return scan;

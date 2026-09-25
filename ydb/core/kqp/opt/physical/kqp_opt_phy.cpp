@@ -877,7 +877,7 @@ private:
 } // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typesCtx) {
-    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
+    return std::unique_ptr<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
 }
 
 } // namespace NKikimr::NKqp::NOpt

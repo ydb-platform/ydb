@@ -13,7 +13,7 @@ public:
     static constexpr const char *GetName() { return "TStoragePoolsScan"; }
 
     TEvSysView::TEvGetStoragePoolsRequest *CreateQuery() {
-        auto request = MakeHolder<TEvSysView::TEvGetStoragePoolsRequest>();
+        auto request = std::make_unique<TEvSysView::TEvGetStoragePoolsRequest>();
         ConvertKeyRange<NKikimrSysView::TEvGetStoragePoolsRequest, ui64, ui64>(request->Record, TableRange);
         return request.Release();
     }
@@ -41,11 +41,11 @@ public:
     }
 };
 
-THolder<NActors::IActor> CreateStoragePoolsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateStoragePoolsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TStoragePoolsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TStoragePoolsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

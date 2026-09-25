@@ -123,7 +123,7 @@ namespace NKikimr::NBsController {
 
         void HandleWakeup() {
             if (UpdatedGroupIds) {
-                auto ev = MakeHolder<TEvControllerCommitGroupLatencies>();
+                auto ev = std::make_unique<TEvControllerCommitGroupLatencies>();
 
                 const bool scanLowerBound = UpdatedGroupIds.size() <= Groups.size() / 10;
                 auto it = Groups.begin();

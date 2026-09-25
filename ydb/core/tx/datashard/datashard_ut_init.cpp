@@ -43,7 +43,7 @@ TString GetTablePath(TTestActorRuntime &runtime,
                      ui64 tableId,
                      ui64 shard)
 {
-    auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+    auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
     const char *miniKQL =   R"___((
         (let row '('('Tid (Uint64 '%lu))))
         (let select '('Schema))

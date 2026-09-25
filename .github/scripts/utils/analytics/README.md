@@ -60,7 +60,7 @@ python3 .github/scripts/utils/analytics/ci_metrics.py send
 
 Что пишется из GitHub Actions:
 
-- `export_github_job_metrics.py`: queue / job / GHA-step по **всем активным** workflow (PR-check, Run-tests, nightly, …). Один файл: `--workflow pr_check.yml` или `CI_METRICS_WORKFLOW=pr_check.yml`. В `collect_analytics_fast.yml` это отдельный job — параллельно с ingest / issues / PR-blocked marts, чтобы scrape GitHub не держал остальные расчёты.
+- `export_github_job_metrics.py`: queue / job / GHA-step по **всем активным** workflow (PR-check, Run-tests, nightly, …). Один файл: `--workflow pr_check.yml` или `CI_METRICS_WORKFLOW=pr_check.yml`. В `collect_analytics_fast.yml` это отдельный job `GitHub job metrics` — параллельно с остальным сбором, чтобы scrape GitHub не держал витрины.
 - PR-check in-job: ya phases с раннера
 - Nightly-Build: `ydbd_cached_build`, `ydbd_size`, evlog + `build_info`
 - Build-analytics-run: clang time-trace + evlog

@@ -139,6 +139,7 @@ private:
             , FilteredRow(Columns.size())
             , DataPacker(Self.Config.MemoryQuotaManager, sizeof(ui64), Self.Counters.Desc.ReadGroupSubgroup)
             , ClientDataMemory(Self.Config.MemoryQuotaManager, "ClientDataMemory", Self.Counters.Desc.ReadGroupSubgroup)
+            , WatermarkGranularityUs(Client->GetWatermarkGranularityUs() ? Client->GetWatermarkGranularityUs() : 1)
         {
             ColumnsIds.reserve(Columns.size());
         }
@@ -268,7 +269,8 @@ private:
             if (!maybeWatermark) {
                 return;
             }
-            const auto watermark = TInstant::MicroSeconds(*maybeWatermark);
+            const auto watermarkUs = *maybeWatermark;
+            const auto watermark = TInstant::MicroSeconds(watermarkUs - (watermarkUs % WatermarkGranularityUs));
             if (Watermark < watermark) {
                 Watermark = watermark;
             }
@@ -419,6 +421,7 @@ private:
         TMaybe<TInstant> Watermark;
         TQueue<TDataBatch> ClientData;
         TMemoryQuota ClientDataMemory;
+        const ui64 WatermarkGranularityUs;
     };
 
 public:

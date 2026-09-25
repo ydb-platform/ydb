@@ -4239,6 +4239,7 @@ FROM (
         for (const bool inlineJoinFiltersAfterCBO : {false, true}) {
             TExplainPlanTestContext testContext(inlineJoinFiltersAfterCBO);
             const auto plan = ExecuteExplain(testContext.GetSession(), R"(
+                PRAGMA ydb.UseBlockHashJoin = "true";
                 PRAGMA YqlSelect = 'force';
                 PRAGMA ydb.CostBasedOptimizationLevel = '4';
                 PRAGMA ydb.OptimizerHints = 'JoinOrder(l (m r))';
@@ -4819,6 +4820,7 @@ FROM (
 
     Y_UNIT_TEST(LookupJoins_newRbo) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
@@ -6849,6 +6851,7 @@ FROM (
 
     Y_UNIT_TEST_TWIN(DecorrelationEqualNullsJoinKeys, EqualNullsJoinKeys) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -13130,6 +13133,7 @@ PRAGMA ydb.OptimizerHints = '
 
     Y_UNIT_TEST(ShuffleEliminationSimpleJoinKeysBothSides) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);

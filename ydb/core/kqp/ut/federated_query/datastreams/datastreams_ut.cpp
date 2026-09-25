@@ -904,6 +904,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_TWIN_F(ReplicatedFederativeWriting, UseColumnTable, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
         constexpr char pqSource[] = "pqSourceName";
@@ -1915,7 +1916,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(StreamingConstraintsValidation, TStreamingTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingConstraintsValidationSecondInputTopic";
@@ -2049,7 +2052,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(StreamingJoinConstraintsValidation, TStreamingTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         constexpr char input1[] = "streamingJoinConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingJoinConstraintsValidationSecondInputTopic";
@@ -2243,7 +2248,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(StreamingQueryJoinTypes, TStreamingTestFixture) {
         LogSettings.Freeze = true;
-        SetupAppConfig().MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         auto pqGateway = SetupMockPqGateway();
 
         const std::vector<TString> tableData = {"X", "TT", "X"};

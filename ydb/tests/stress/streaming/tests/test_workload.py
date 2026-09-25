@@ -30,6 +30,7 @@ class TestYdbWorkload(StressFixture):
                 'KQP_EXECUTER': LogLevels.DEBUG,
             },
             table_service_config={
+                "enable_htap_tx": True,
                 "enable_watermarks": True,
                 "enable_watermarks_advanced": True,
             },

@@ -1365,7 +1365,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     }
 
     Y_UNIT_TEST_TWIN(CompileCachePeerScanWarnings, Disconnect) {
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        NKikimrConfig::TAppConfig appConfig;
+        // Channel v1 can lose buffered rows when the scanner reports a nonfatal warning.
+        appConfig.MutableTableServiceConfig()->SetDqChannelVersion(2);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetUseRealThreads(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
         const ui32 liveNodeId = runtime.GetNodeId(0);

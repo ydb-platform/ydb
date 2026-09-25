@@ -60,7 +60,7 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
-                                                        "HashFunc": "HashV2",
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "SearchPhrase"
                                                         ],
@@ -331,7 +331,7 @@
                                                                                 "Plans": [
                                                                                     {
                                                                                         "CTE Name": "Filter-TableFullScan_9",
-                                                                                        "HashFunc": "HashV2",
+                                                                                        "HashFunc": "HashV1",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"

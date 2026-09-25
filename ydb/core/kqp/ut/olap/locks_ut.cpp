@@ -191,6 +191,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
     Y_UNIT_TEST(DropRowTableAfterUpsertSelectIntoColumnTable) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 

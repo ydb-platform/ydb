@@ -1975,6 +1975,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
@@ -2042,6 +2043,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
@@ -2377,6 +2379,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -2632,6 +2635,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -3004,6 +3008,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
@@ -3178,6 +3183,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
@@ -3226,6 +3232,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
@@ -3350,7 +3357,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(ExecuteWriteQuery) {
         using namespace fmt::literals;
 
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
 
         {   // Just generate table
@@ -3381,6 +3390,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
@@ -3496,6 +3506,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 

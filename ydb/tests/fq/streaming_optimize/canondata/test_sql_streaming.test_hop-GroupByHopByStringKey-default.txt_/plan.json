@@ -29,7 +29,7 @@
                                         "Node Type" : "Stage"
                                     }
                                 ],
-                                "HashFunc" : "HashV2",
+                                "HashFunc" : "HashV1",
                                 "Node Type" : "HashShuffle",
                                 "KeyColumns" : [
                                     "k"
@@ -87,7 +87,7 @@
                                 "Node Type" : "Read pq"
                             }
                         ],
-                        "HashFunc" : "HashV2",
+                        "HashFunc" : "HashV1",
                         "Node Type" : "HashShuffle",
                         "KeyColumns" : [
                             "k"

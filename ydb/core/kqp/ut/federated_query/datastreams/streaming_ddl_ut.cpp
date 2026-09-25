@@ -2528,6 +2528,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
@@ -2632,6 +2633,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryJoinRecalculationOnRetry, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         const auto pqGateway = SetupMockPqGateway();
 
         constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnRetryInputTopic";
@@ -2716,6 +2718,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryJoinRecalculationOnManualRestart, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartInputTopic";
         constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
@@ -2981,6 +2984,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithDifferentPrecomputeTypes, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char oltpTableName[] = "oltpTable";
         constexpr char olapTableName[] = "olapTable";
         ExecQuery(fmt::format(R"(
@@ -4732,6 +4736,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithMultipleWrites, TStreamingWithSchemaSecretsTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char inputTopic[] = "createStreamingQueryWithMultipleWritesInputTopic";
         constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
         constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
@@ -4904,6 +4909,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputRestart, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char inputTopic[] = "streamingQueryMultiOutputRestartInputTopic";
         constexpr char outputTopic1[] = "streamingQueryMultiOutputRestartOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputRestartOutputTopic2";
@@ -4954,6 +4960,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputCheckpointRecovery, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char inputTopic[] = "streamingQueryMultiOutputCheckpointRecoveryInputTopic";
         constexpr char outputTopic1[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic2";
@@ -5006,6 +5013,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryMultiOutputConsistencyOnRestart, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
         const auto pqGateway = SetupMockPqGateway();
 
         constexpr char inputTopic[] = "streamingQueryMultiOutputConsistencyInputTopic";

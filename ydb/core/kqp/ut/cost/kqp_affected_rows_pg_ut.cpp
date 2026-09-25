@@ -84,6 +84,23 @@ uint64_t GetAffectedRowsForTable(const NYdb::NQuery::TExecuteQueryResult& result
     return total;
 }
 
+uint64_t GetTableReadRows(const NYdb::NQuery::TExecuteQueryResult& result, const TString& tableName) {
+    auto stats = result.GetStats();
+    if (!stats) {
+        return 0;
+    }
+    const auto& proto = NYdb::TProtoAccessor::GetProto(*stats);
+    uint64_t total = 0;
+    for (const auto& phase : proto.query_phases()) {
+        for (const auto& tableAccess : phase.table_access()) {
+            if (tableAccess.name() == tableName) {
+                total += tableAccess.reads().rows();
+            }
+        }
+    }
+    return total;
+}
+
 bool HasAnyAffectedRows(const NYdb::NQuery::TExecuteQueryResult& result) {
     auto stats = result.GetStats();
     if (!stats) {
@@ -880,6 +897,48 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
             UNIT_ASSERT_C(!HasAnyAffectedRowsField(result),
                 "affected_rows field must be absent when collect_affected_rows is disabled");
         }
+    }
+
+    Y_UNIT_TEST(CollectAffectedRows_EraseExistenceReadIsAccounted) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        constexpr ui64 rowCount = 3;
+
+        auto insertRows = [&]() {
+            auto result = session.ExecuteQuery(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                VALUES (1u, "a", 0u, ""), (2u, "b", 0u, ""), (3u, "c", 0u, "");
+            )"), BeginReadCommittedRW(), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        auto deleteRows = [&](bool collectAffectedRows) {
+            auto result = session.ExecuteQuery(Q_(R"(
+                DELETE FROM `/Root/TestTable` WHERE Group <= 3u;
+            )"), BeginReadCommittedRW(),
+                collectAffectedRows ? GetQuerySettingsBasic() : GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return result;
+        };
+
+        insertRows();
+        const auto deleteOff = deleteRows(false);
+
+        insertRows();
+        const auto deleteOn = deleteRows(true);
+
+        const auto affectedRows = GetAffectedRowsForTable(deleteOn, "/Root/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, rowCount);
+
+        // The extra per-row existence check under collect_affected_rows is a real
+        // read and must be accounted in the reads stats, symmetric to UPDATE.
+        const auto readsOff = GetTableReadRows(deleteOff, "/Root/TestTable");
+        const auto readsOn = GetTableReadRows(deleteOn, "/Root/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(readsOn - readsOff, rowCount);
     }
 }
 

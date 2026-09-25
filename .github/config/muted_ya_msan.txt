@@ -34,6 +34,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPa
 ydb/library/actors/interconnect/ut InterconnectSessionV2.RepeatedDisconnectChurnUnderLoad
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ValidatingLoadVariedPayloads
 ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA

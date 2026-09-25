@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - 1 database with 1 pool that has 3 queries with demand 2
             - CPU limit is greater than sum of demands so each database and pool should have FairShare equal to demand,
               and each query gets the whole FairShare of the pool
-            - Demand for pools and databases is a sum of children's demands
+            - MaxDemand for pools and databases is a sum of children's max demands
         */
 
         constexpr ui64 kCpuLimit = 12;
@@ -85,12 +85,12 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->CpuDemand.load(), kNQueries * kQueryDemand);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->CpuMaxDemand.load(), kNQueries * kQueryDemand);
         UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kNQueries * kQueryDemand);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->CpuDemand.load(), kNQueries * kQueryDemand);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->CpuMaxDemand.load(), kNQueries * kQueryDemand);
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kNQueries * kQueryDemand);
     }
 
@@ -141,12 +141,12 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
-    Y_UNIT_TEST(DemandIsCutOffByLimit) {
+    Y_UNIT_TEST(MaxDemandIsCutOffByLimit) {
         /*
             Scenario:
-            - 1 database with 2 pool, each having 3 queries with demand 4
-            - CPU limit is less than sum of demands so the demand of databases and pools should be limited by it
-            - Checking the demand cut off on each level, not only on query -> pool
+            - 1 database with 2 pool, each having 3 queries with max demand 4
+            - CPU limit is less than sum of max demands so the max demand of databases and pools should be limited by it
+            - Checking the max demand cut off on each level, not only on query -> pool
             - The limited demands are equal, so the CPU limit is split between the pools equally
         */
         constexpr ui64 kCpuLimit = 10;
@@ -183,15 +183,15 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         auto* poolSnapshot1 = queries[0].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot1);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->CpuDemand.load(), kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->CpuMaxDemand.load(), kCpuLimit);
 
         auto* poolSnapshot2 = queries[1].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot2);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->CpuDemand.load(), kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->CpuMaxDemand.load(), kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot1->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->CpuDemand.load(), kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->CpuMaxDemand.load(), kCpuLimit);
 
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
         UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->FairShare, kCpuLimit / 2);
@@ -978,6 +978,239 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_GT(satisfaction("pool1"), 0);
     }
 
+    Y_UNIT_TEST(ActualDemandCountsWantingTasks) {
+        /*
+            Scenario:
+            - 1 pool with 1 query, which has max demand 4, and only 2 of its tasks want CPU - being throttled
+            - The tasks want CPU at the moment of the snapshot, so they are counted, even if their time is not accounted yet
+            - The actual demand is not used in the distribution of the fair-share yet
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto tasks = CreateDemandTasks(query, 4);
+        tasks.at(0)->IncreaseThrottle();
+        tasks.at(1)->IncreaseThrottle();
+
+        scheduler.UpdateFairShare();
+
+        auto* pool = query->GetSnapshot()->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(pool->CpuActualDemand, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(pool->GetParent()->CpuActualDemand, 2, "The database sums up the actual demands of its pools");
+        UNIT_ASSERT_VALUES_EQUAL_C(pool->FairShare, pool->CpuMaxDemand.load(), "The fair-share is still based on the max demand");
+    }
+
+    Y_UNIT_TEST(ParkedTasksWantNothing) {
+        /*
+            Scenario:
+            - 1 pool with 1 query, which has max demand 4, but none of its tasks is running or throttled - e.g. all of them
+              are parked on the network
+            - The actual demand of the query is 0, but the pool keeps at least 1 to be able to wake up
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto tasks = CreateDemandTasks(query, 4);
+
+        scheduler.UpdateFairShare();
+
+        auto querySnapshot = query->GetSnapshot();
+        UNIT_ASSERT_VALUES_EQUAL(querySnapshot->CpuActualDemand, 0);
+
+        auto* pool = querySnapshot->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL_C(pool->CpuActualDemand, 1, "The pool with tasks keeps at least 1 CPU");
+        UNIT_ASSERT_VALUES_EQUAL(pool->CpuMaxDemand.load(), 4);
+    }
+
+    Y_UNIT_TEST(ActualDemandCountsWantedTime) {
+        /*
+            Scenario:
+            - 1 pool with 1 query which has 2 tasks, none of them is running or throttled at the moment of the snapshot
+            - But during the period the tasks wanted CPU for a long time - so the actual demand is based on it,
+              and it is limited by the number of tasks
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto tasks = CreateDemandTasks(query, 1);
+
+        scheduler.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL_C(query->GetSnapshot()->GetParent()->CpuActualDemand, 1, "The pool with tasks keeps at least 1 CPU");
+
+        tasks.at(0)->IncreaseBurstThrottle(TDuration::Hours(1));
+
+        // The period between the snapshots shouldn't be zero
+        Sleep(TDuration::MilliSeconds(1));
+        scheduler.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(query->GetSnapshot()->GetParent()->CpuActualDemand, tasks.size(), "Every task is able to use at most one CPU");
+    }
+
+    Y_UNIT_TEST(ActualDemandIsSticky) {
+        /*
+            Scenario:
+            - 1 pool with 1 query which wants 4 CPUs, and then only 1
+            - The actual demand of the pool falls only after it stays low for two snapshots in a row,
+              so that the pool doesn't lose its share on a short pause between the bursts of work
+            - The actual demand grows immediately
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto tasks = CreateDemandTasks(query, 4);
+        for (size_t i = 0; i < 4; ++i) {
+            tasks.at(i)->IncreaseThrottle();
+        }
+
+        auto actualDemand = [&] {
+            scheduler.UpdateFairShare();
+            return query->GetSnapshot()->GetParent()->CpuActualDemand;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(actualDemand(), 4);
+
+        for (size_t i = 1; i < 4; ++i) {
+            tasks.at(i)->DecreaseThrottle();
+        }
+
+        // The previous actual demand is kept for one more snapshot
+        UNIT_ASSERT_VALUES_EQUAL(actualDemand(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(actualDemand(), 1);
+
+        // Grows immediately
+        tasks.at(1)->IncreaseThrottle();
+        tasks.at(2)->IncreaseThrottle();
+        UNIT_ASSERT_VALUES_EQUAL(actualDemand(), 3);
+    }
+
+    Y_UNIT_TEST(ActualDemandIsSmoothedPerQuery) {
+        /*
+            Scenario:
+            - 1 pool with 2 queries, the first one wants 4 CPUs, and then the second one wants 4 CPUs instead
+            - The actual demand is smoothed per query and summed up above, so that the actual demand of the pool
+              is always the sum of its queries' - and for one snapshot both queries keep their 4 CPUs
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 2);
+        auto tasks2 = CreateDemandTasks(query2, 2);
+
+        auto setWanting = [](std::vector<TSchedulableTaskPtr>& tasks, bool wanting) {
+            for (auto& task : tasks) {
+                wanting ? task->IncreaseThrottle() : task->DecreaseThrottle();
+            }
+        };
+
+        auto checkActualDemands = [&](ui64 expected1, ui64 expected2) {
+            scheduler.UpdateFairShare();
+
+            auto querySnapshot1 = query1->GetSnapshot();
+            auto querySnapshot2 = query2->GetSnapshot();
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot1->CpuActualDemand, expected1);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot2->CpuActualDemand, expected2);
+            UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot1->GetParent()->CpuActualDemand, expected1 + expected2,
+                "The actual demand of the pool is the sum of its queries'");
+        };
+
+        setWanting(tasks1, true);
+        checkActualDemands(4, 0);
+
+        setWanting(tasks1, false);
+        setWanting(tasks2, true);
+        checkActualDemands(4, 4); // the first query keeps its actual demand for one more snapshot
+        checkActualDemands(0, 4);
+    }
+
+    Y_UNIT_TEST(ThrottleTimeIsNotLostOnStop) {
+        /*
+            Scenario:
+            - The task fails to start because its pool has zero limit, and then stops without any other attempt
+            - The time it was throttled is accounted on the stop - there is no next attempt to account it
+        */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr auto kThrottleTime = TDuration::MilliSeconds(10);
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuLimit = 0});
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+
+        // The attempt is made in the past, so there is no need to wait
+        TSchedulableBase schedulable({.Query = query, .IsSchedulable = true});
+        UNIT_ASSERT_C(schedulable.TryStartExecution(TMonotonic::Now() - kThrottleTime), "Should be throttled with zero limit");
+        UNIT_ASSERT(schedulable.IsThrottled());
+
+        schedulable.StopExecution();
+
+        UNIT_ASSERT(!schedulable.IsThrottled());
+        UNIT_ASSERT_GE(query->CpuBurstThrottle.load(), kThrottleTime.MicroSeconds());
+    }
+
     Y_UNIT_TEST(StressTest) {
         constexpr ui64 kCpuLimit = 100;
 
@@ -1050,5 +1283,193 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
 }
 
-} // namespace NKikimr::NKqp::NScheduler
+namespace {
 
+    // The scheduler adds pools only right under the databases - so the deeper hierarchy is built from the tree itself:
+    //
+    //   root
+    //   └── db
+    //       ├── poolA
+    //       │   ├── poolA1: query1
+    //       │   └── poolA2: query2
+    //       └── poolB: query3
+    //
+    struct THierarchy {
+        explicit THierarchy(ui64 totalLimit, const NHdrf::TStaticAttributes& poolAttrs = {})
+            : Root(std::make_shared<NHdrf::NDynamic::TRoot>(MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>())))
+        {
+            Root->TotalLimit = totalLimit;
+
+            auto database = std::make_shared<NHdrf::NDynamic::TDatabase>("db");
+            Root->AddDatabase(database);
+
+            auto poolA = AddPool(database, "poolA", poolAttrs);
+            auto poolB = AddPool(database, "poolB");
+            Query1 = AddQuery(AddPool(poolA, "poolA1"), 1);
+            Query2 = AddQuery(AddPool(poolA, "poolA2"), 2);
+            Query3 = AddQuery(poolB, 3);
+        }
+
+        // The same as TComputeScheduler::UpdateFairShare() does
+        void UpdateFairShare() {
+            auto snapshot = NHdrf::NSnapshot::TRootPtr(Root->TakeSnapshot());
+            snapshot->Update(Root->GetSnapshot());
+            Root->SetSnapshot(snapshot);
+        }
+
+        NHdrf::NSnapshot::TPool* PoolA1() const { return Query1->GetSnapshot()->GetParent(); }
+        NHdrf::NSnapshot::TPool* PoolA2() const { return Query2->GetSnapshot()->GetParent(); }
+        NHdrf::NSnapshot::TPool* PoolA() const { return PoolA1()->GetParent(); }
+        NHdrf::NSnapshot::TPool* PoolB() const { return Query3->GetSnapshot()->GetParent(); }
+        NHdrf::NSnapshot::TPool* Database() const { return PoolA()->GetParent(); }
+        NHdrf::NSnapshot::TPool* RootSnapshot() const { return Database()->GetParent(); }
+
+        NHdrf::NDynamic::TRootPtr Root;
+        NHdrf::NDynamic::TQueryPtr Query1;
+        NHdrf::NDynamic::TQueryPtr Query2;
+        NHdrf::NDynamic::TQueryPtr Query3;
+
+    private:
+        static NHdrf::NDynamic::TPoolPtr AddPool(const NHdrf::NDynamic::TPoolPtr& parent, const TString& poolId, const NHdrf::TStaticAttributes& attrs = {}) {
+            auto pool = std::make_shared<NHdrf::NDynamic::TPool>(poolId, TIntrusivePtr<TKqpCounters>(), attrs); // no counters
+            parent->AddPool(pool);
+            return pool;
+        }
+
+        static NHdrf::NDynamic::TQueryPtr AddQuery(const NHdrf::NDynamic::TPoolPtr& parent, NHdrf::TQueryId queryId) {
+            auto query = std::make_shared<NHdrf::NDynamic::TQuery>(queryId, &kDefaultDelayParams, true);
+            parent->AddQuery(query);
+            return query;
+        }
+    };
+
+    void Throttle(std::vector<TSchedulableTaskPtr>& tasks, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            tasks.at(i)->IncreaseThrottle();
+        }
+    }
+
+    void Unthrottle(std::vector<TSchedulableTaskPtr>& tasks, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            tasks.at(i)->DecreaseThrottle();
+        }
+    }
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
+
+    Y_UNIT_TEST(ActualDemandIsSummedUp) {
+        /*
+            Scenario:
+            - query1 wants 2 CPUs, query2 has tasks but wants nothing, query3 wants 3 CPUs
+            - Every leaf pool gets the actual demand of its query - poolA2 keeps at least 1 CPU,
+              since it has tasks - and every element above gets the sum of its children's
+        */
+        THierarchy hierarchy(16);
+
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2);
+        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 2);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+        Throttle(tasks1, 2);
+        Throttle(tasks3, 3);
+
+        hierarchy.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA1()->CpuActualDemand, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(hierarchy.PoolA2()->CpuActualDemand, 1, "The pool with tasks keeps at least 1 CPU");
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA()->CpuActualDemand, 3);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolB()->CpuActualDemand, 3);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Database()->CpuActualDemand, 6);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.RootSnapshot()->CpuActualDemand, 6);
+    }
+
+    Y_UNIT_TEST(ActualDemandIsSmoothedAtTheBottom) {
+        /*
+            Scenario:
+            - query1 wants 4 CPUs, and then query3 in the other branch wants 4 CPUs instead, query2 has no tasks at all
+            - The actual demand is smoothed only per query, so for one snapshot both of them keep their 4 CPUs,
+              and every element above - up to the root - is the sum of its children's
+            - Then query1 wants nothing, but its pool keeps at least 1 CPU, and that is summed up as well
+        */
+        THierarchy hierarchy(16);
+
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+
+        auto check = [&](ui64 poolA1, ui64 poolB) {
+            hierarchy.UpdateFairShare();
+
+            UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA1()->CpuActualDemand, poolA1);
+            UNIT_ASSERT_VALUES_EQUAL_C(hierarchy.PoolA2()->CpuActualDemand, 0, "The pool without tasks wants nothing");
+            UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA()->CpuActualDemand, poolA1);
+            UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolB()->CpuActualDemand, poolB);
+            UNIT_ASSERT_VALUES_EQUAL(hierarchy.Database()->CpuActualDemand, poolA1 + poolB);
+            UNIT_ASSERT_VALUES_EQUAL(hierarchy.RootSnapshot()->CpuActualDemand, poolA1 + poolB);
+        };
+
+        Throttle(tasks1, 4);
+        check(4, 1);
+
+        Unthrottle(tasks1, 4);
+        Throttle(tasks3, 4);
+        check(4, 4); // query1 keeps its actual demand for one more snapshot
+        check(1, 4);
+    }
+
+    Y_UNIT_TEST(ActualDemandIsCutOffByIntermediateLimit) {
+        /*
+            Scenario:
+            - poolA has limit 2, while its children want 2 CPUs each
+            - The actual demand of poolA is cut off by its limit, so it's less than the sum of its children's -
+              and the elements above sum up the cut off value
+        */
+        THierarchy hierarchy(16, {.CpuLimit = 2});
+
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2);
+        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 2);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+        Throttle(tasks1, 2);
+        Throttle(tasks2, 2);
+        Throttle(tasks3, 1);
+
+        hierarchy.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA1()->CpuActualDemand, 2);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA2()->CpuActualDemand, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(hierarchy.PoolA()->CpuActualDemand, 2, "Cut off by the limit");
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolB()->CpuActualDemand, 1);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Database()->CpuActualDemand, 3);
+    }
+
+    Y_UNIT_TEST(FairShareIsDistributedDownTheHierarchy) {
+        /*
+            Scenario:
+            - The CPU limit is 8, query1 and query2 have max demand 4 each, query3 - max demand 2
+            - The database distributes by max-min: poolB takes its whole max demand 2, and poolA gets the rest 6
+            - poolA distributes its 6 between its children equally - 3 and 3
+            - Every query gets the whole fair-share of its pool
+        */
+        THierarchy hierarchy(8);
+
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 4);
+        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 4);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+
+        hierarchy.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.RootSnapshot()->FairShare, 8);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Database()->FairShare, 8);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolB()->FairShare, 2);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA()->FairShare, 6);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA1()->FairShare, 3);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA2()->FairShare, 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Query1->GetSnapshot()->FairShare, 3);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Query2->GetSnapshot()->FairShare, 3);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Query3->GetSnapshot()->FairShare, 2);
+    }
+
+}
+
+} // namespace NKikimr::NKqp::NScheduler

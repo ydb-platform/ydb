@@ -2406,34 +2406,43 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        // Generate a special part switch for removed row versions
+        // Limit the number of ranges per switch and verify the exact protobuf
+        // size below before passing it to the single-blob writer. Currently, one RemovedRanges element in
+        // RowVersionChanges takes at most 50 bytes in the protobuf wire format.
+        static constexpr size_t MaxRemovedRangesPerSwitch = 64 * 1024;
         for (auto& xpair : change->RemovedRowVersions) {
             const auto tableId = xpair.first;
+            const auto& ranges = xpair.second;
 
             CompactionLogic->ReflectRemovedRowVersions(tableId);
 
-            NKikimrExecutorFlat::TTablePartSwitch proto;
-            proto.SetTableId(tableId);
+            for (size_t offset = 0; offset < ranges.size();) {
+                NKikimrExecutorFlat::TTablePartSwitch proto;
+                proto.SetTableId(tableId);
 
-            auto *changesProto = proto.MutableRowVersionChanges();
-            changesProto->SetTable(tableId);
+                auto *changesProto = proto.MutableRowVersionChanges();
+                changesProto->SetTable(tableId);
 
-            for (auto& range : xpair.second) {
-                auto *rangeProto = changesProto->AddRemovedRanges();
+                const size_t end = Min(ranges.size(), offset + MaxRemovedRangesPerSwitch);
+                for (; offset < end; ++offset) {
+                    const auto& range = ranges[offset];
+                    auto *rangeProto = changesProto->AddRemovedRanges();
 
-                auto *lower = rangeProto->MutableLower();
-                lower->SetStep(range.Lower.Step);
-                lower->SetTxId(range.Lower.TxId);
+                    auto *lower = rangeProto->MutableLower();
+                    lower->SetStep(range.Lower.Step);
+                    lower->SetTxId(range.Lower.TxId);
 
-                auto *upper = rangeProto->MutableUpper();
-                upper->SetStep(range.Upper.Step);
-                upper->SetTxId(range.Upper.TxId);
+                    auto *upper = rangeProto->MutableUpper();
+                    upper->SetStep(range.Upper.Step);
+                    upper->SetTxId(range.Upper.TxId);
+                }
+
+                auto body = proto.SerializeAsString();
+                Y_DEBUG_ABORT_UNLESS(body.size() < NBlockIO::BlockSize);
+                auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+
+                Y_UNUSED(glob);
             }
-
-            auto body = proto.SerializeAsString();
-            auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
-
-            Y_UNUSED(glob);
         }
 
         for (auto num : xrange(change->Deleted.size())) {

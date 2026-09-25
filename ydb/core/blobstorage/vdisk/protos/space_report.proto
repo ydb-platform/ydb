@@ -79,6 +79,8 @@ message TVDiskSpaceReport {
     repeated TVDiskChunkKeeperSpace ChunkKeeper = 12;
     TVDiskSpaceComponent Unattributed = 13;
     TVDiskStripeHeapSpace StripeHeap = 14;
+    uint64 CollectionStartedAtUnixMs = 15;
+    uint64 CollectionCompletedAtUnixMs = 16;
 }
 
 message TGetVDiskSpaceReportResponse {

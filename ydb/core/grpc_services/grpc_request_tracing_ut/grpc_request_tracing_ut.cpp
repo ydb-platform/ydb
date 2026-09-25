@@ -188,7 +188,7 @@ public:
         return {};
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 

@@ -28,6 +28,71 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
+    Y_UNIT_TEST_TWIN(EvaluateExprQueryParameter, QueryService) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto params = TParamsBuilder().AddParam("$value").String("supplied").Build().Build();
+
+        for (const TString& expression : {
+            "$value",
+            "\"prefix_\" || $value",
+            "ListMap([\"prefix_\"], ($prefix) -> { RETURN $prefix || $value; })",
+        }) {
+            const TString sql = TStringBuilder()
+                << "DECLARE $value AS String; SELECT EvaluateExpr(" << expression << ");";
+            const auto checkError = [&sql](const TStatus& result) {
+                const TString issues = result.GetIssues().ToString();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, sql << "\n" << issues);
+                UNIT_ASSERT_C(!HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR), sql << "\n" << issues);
+                UNIT_ASSERT_C(!HasIssue(result.GetIssues(), NYql::TIssuesIds::UNEXPECTED), sql << "\n" << issues);
+                UNIT_ASSERT_C(issues.Contains("Cannot evaluate expression that depends on query parameter: $value"),
+                    sql << "\n" << issues);
+            };
+
+            if constexpr (QueryService) {
+                for (const auto mode : {EExecMode::Explain, EExecMode::Execute}) {
+                    checkError(db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), params,
+                        TExecuteQuerySettings().ExecMode(mode)).GetValueSync());
+                }
+            } else {
+                checkError(session.PrepareDataQuery(sql).GetValueSync());
+                checkError(session.ExecuteDataQuery(sql,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(EvaluateExprWithoutQueryParameterDependency, QueryService) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto params = TParamsBuilder().AddParam("$value").String("supplied").Build().Build();
+
+        for (const TString& expression : {
+            "IF(TRUE, \"constant\", $value)",
+            "Unwrap(ListHead(ListMap([\"constant\"], ($value) -> { RETURN $value; })))",
+        }) {
+            const TString sql = TStringBuilder() << "DECLARE $value AS String; SELECT EvaluateExpr("
+                << expression << ") AS evaluated, $value AS supplied;";
+            const auto checkResult = [&sql](const auto& result) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, sql << "\n" << result.GetIssues().ToString());
+                TResultSetParser parser(result.GetResultSet(0));
+                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("evaluated").GetString(), "constant");
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("supplied").GetString(), "supplied");
+            };
+
+            if constexpr (QueryService) {
+                checkResult(db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+            } else {
+                checkResult(session.ExecuteDataQuery(sql,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+            }
+        }
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";

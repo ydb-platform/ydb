@@ -1556,7 +1556,7 @@ bool IsAsTable(const TExprNode::TPtr input) {
 }
 
 TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
 
     auto sublinks = FindSublinks(node);
     YQL_CLOG(TRACE, ProviderKikimr) << "Sublinks size: " << sublinks.size();
@@ -1571,7 +1571,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newNode;
 
-        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
         auto sublinkType = sublink->Child(0)->Content();
 
         if (sublinkType == "expr") {
@@ -1615,12 +1615,62 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
         tableEffectInput = tableEffectInput->ChildPtr(0);
     }
 
-    Y_ENSURE(TKqpOpRoot::Match(tableEffectInput.Get()), "Only support subqueries as input to table effects operation");
-    TKqpOpRoot root(tableEffectInput);
+    TExprNode::TPtr newInput;
+
+    if (TCoMap::Match(tableEffectInput.Get()) && TKqpOpRoot::Match(tableEffectInput->ChildPtr(0).Get())) {
+        TCoMap map(tableEffectInput);
+        auto root = map.Input().Cast<TKqpOpRoot>();
+
+        auto lambda = map.Lambda();
+        auto asStruct = lambda.Body().Maybe<TCoAsStruct>();
+        Y_ENSURE(asStruct);
+
+        TVector<TExprNode::TPtr> mapElements;
+
+        for (auto ch : asStruct.Cast()) {
+            Y_ENSURE(ch.Size()==2);
+            auto name = ch.Item(0);
+            auto expr = ch.Item(1);
+
+            // clang-format off
+            mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
+                .Input(root.Input())
+                .Variable(name.Cast<TCoAtom>())
+                .Lambda<TCoLambda>()
+                    .Args({"_map_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(expr)
+                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                    .Build()
+                .Build()
+                .ForceOptional().Value("False").Build()
+            .Done().Ptr());
+            // clang-format on
+        }
+        
+        // clang-format off
+        newInput = Build<TKqpOpMap>(ctx, node->Pos())
+            .Input(root.Input())
+            .MapElements()
+                .Add(mapElements)
+            .Build()
+            .Project()
+                .Value("true")
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+
+    } else if (TKqpOpRoot::Match(tableEffectInput.Get())) {
+        TKqpOpRoot root(tableEffectInput);
+        newInput = root.Input().Ptr();
+    } else {
+        Y_ENSURE(false, "Only support subqueries as input to table effects operation");
+    }
 
     TString effectType = TString(node->Content());
 
     TKqlTableEffect tableEffect(node);
+    TVector<TExprNode::TPtr> emptyList;
 
     if (TKqlInsertRows::Match(node.Get()) || TKqlInsertRowsIndex::Match(node.Get())) {
         TKqlInsertRowsBase insert(node);
@@ -1629,7 +1679,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(insert.Columns())
@@ -1646,7 +1696,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1663,7 +1713,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1680,7 +1730,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(upsert.Columns())
@@ -1697,14 +1747,14 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
-                .Columns().Build()
+                .Columns().Add(emptyList).Build()
                 .ReturningColumns(deleteRows.ReturningColumns())
                 .IsBatch(deleteRows.IsBatch())
-                .DefaultColumns().Build()
-                .Settings(deleteRows.Settings())
+                .DefaultColumns().Add(emptyList).Build()
+                .Settings().Build()
                 .OnConflict().Build()
             .Build()
             .ColumnOrder(deleteRows.ReturningColumns())
@@ -1714,14 +1764,14 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
-                .Columns().Build()
+                .Columns().Add(emptyList).Build()
                 .ReturningColumns(deleteRows.ReturningColumns())
                 .IsBatch(deleteRows.IsBatch())
-                .DefaultColumns().Build()
-                .Settings(deleteRows.Settings())
+                .DefaultColumns().Add(emptyList).Build()
+                .Settings().Build()
                 .OnConflict().Build()
             .Build()
             .ColumnOrder(deleteRows.ReturningColumns())
@@ -1733,19 +1783,20 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
+                              bool generateRoot) {
 
     if(translated.contains(input.Get())) {
         return translated.at(input.Get());
     }
     TVector<TString> finalColumnOrder;
-    // Start from beggining for each proccesed select;
-    ui64 uniqueAggColumnId = 0;
+    // Generated column names must be unique across the whole query.
+    ui64& uniqueAggColumnId = uniqueColumnIdCounter;
 
     TExprNode::TPtr node = input;
 
     if (generateRoot) {
-        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated);
+        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated);
     }
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
@@ -1801,7 +1852,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     if (translated.contains(childExpr.Get())) {
                         subquery = translated.at(childExpr.Get());
                     } else {
-                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
                     }
 
                     // We need to rename all the IUs in the subquery to reflect the new alias

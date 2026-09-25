@@ -1,6 +1,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
@@ -703,6 +704,84 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::IndexesCount(0),
             NLs::CheckColumns("texts", {"pk", "text", "data"}, {}, {"pk"}, true)
         });
+    }
+
+    Y_UNIT_TEST(RowIdBuild_RetrySequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT(tablePartitions.size() == 1);
+            const ui64 textsTabletId = tablePartitions[0].GetDatashardId();
+
+            auto fnWriteRow = [&] (TString pk, TString text, TString data) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('pk   (Utf8   '"%s") ) ) )
+                        (let row '( '('text (String '"%s") )
+                                    '('data (String '"%s") ) ) )
+                        (return (AsList (UpdateRow '__user__texts key row) ))
+                    )
+                )", pk.c_str(), text.c_str(), data.c_str());
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, textsTabletId, writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            };
+
+            fnWriteRow("pone", "green apple", "one");
+            fnWriteRow("ptwo", "red apple and blue apple", "two");
+            fnWriteRow("pthree", "yellow apple", "three");
+            fnWriteRow("pfour", "red car", "four");
+        }
+
+        bool seen = false;
+        TActorId dsId;
+        ui64 cookie = 0;
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvNextValResult> seqBlocker(runtime, [&](const auto& ev) {
+            if (seen) {
+                return false;
+            }
+            seen = true;
+            dsId = ev->GetRecipientRewrite();
+            cookie = ev->Cookie;
+            return true;
+        });
+        ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        runtime.WaitFor("sequence allocate request", [&]{ return seqBlocker.size() > 0; });
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            NYql::TIssueManager issueManager;
+            issueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, "Sequence shard is unavailable"));
+            runtime.Send(new IEventHandle(
+                dsId,
+                sender,
+                new NSequenceProxy::TEvSequenceProxy::TEvNextValResult(Ydb::StatusIds::UNAVAILABLE, issueManager.GetIssues()),
+                0,
+                cookie
+            ));
+        }
+        seqBlocker.Stop();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
     }
 
     Y_UNIT_TEST(RowIdDisabled_RejectsCustomPkBuild) {

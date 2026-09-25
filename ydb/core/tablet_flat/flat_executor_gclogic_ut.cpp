@@ -93,7 +93,7 @@ struct THistoryCutEnv {
     TActorId Edge;
     ui32 Step = 0;
 
-    explicit THistoryCutEnv(TTabletTypes::EType tabletType = TTabletTypes::Coordinator)
+    explicit THistoryCutEnv(TTabletTypes::EType tabletType = TTabletTypes::Dummy, bool delegateChannels = true)
         : Info(new TTabletStorageInfo(TabletId, tabletType))
     {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
@@ -111,6 +111,11 @@ struct THistoryCutEnv {
         Runtime.RegisterService(MakeBlobStorageProxyID(101), Edge);
         Runtime.RegisterService(MakeBlobStorageProxyID(102), Edge);
         Logic = MakeHolder<TExecutorGCLogic>(Info, MakeGCCookies(*Info, Generation));
+        if (delegateChannels) {
+            for (const auto& channel : Info->Channels) {
+                Logic->InitializeChannel(channel.Channel);
+            }
+        }
         Logic->FollowersSyncComplete(true);
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
@@ -294,8 +299,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
 Y_UNIT_TEST_SUITE(THistoryCutter) {
     Y_UNIT_TEST(UnusedChannelsWithUnprovenOwnershipAreNotCollected) {
         for (const auto type : {TTabletTypes::KeyValue, TTabletTypes::ColumnShard,
-                TTabletTypes::BlobDepot, TTabletTypes::Dummy}) {
-            THistoryCutEnv env(type);
+                TTabletTypes::BlobDepot, TTabletTypes::Dummy, TTabletTypes::Coordinator}) {
+            THistoryCutEnv env(type, false);
             env.Snapshot();
             env.Snapshot();
             UNIT_ASSERT_C(env.Collects.empty(), "executor must not collect unowned channels");
@@ -304,7 +309,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
     }
 
     Y_UNIT_TEST(ExecutorOwnedKeyValueChannelIsCollected) {
-        THistoryCutEnv env(TTabletTypes::KeyValue);
+        THistoryCutEnv env(TTabletTypes::KeyValue, false);
         TGCBlobDelta delta;
         delta.Created.push_back(HistoryCutterUtBlob(THistoryCutEnv::TabletId, 15, 1));
         TGCLogEntry entry(TGCTime(15, 0), delta);
@@ -349,6 +354,8 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
     Y_UNIT_TEST(HardBarrierWithoutSoftGcCompletesCut) {
         THistoryCutEnv env;
         env.RestoreBarrier();
+        // Delegation during activation must preserve the recovered barrier.
+        env.Logic->InitializeChannel(THistoryCutEnv::Channel);
         env.Snapshot();
         UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
         env.CheckHardBarrier(0);

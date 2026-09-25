@@ -52,6 +52,11 @@ namespace NFlatExecutorSetup {
         return true;
     }
 
+    bool ITablet::IsExecutorGCChannel(ui32 channel) const {
+        Y_UNUSED(channel);
+        return false;
+    }
+
     void ITablet::OnYellowChannelsChanged() {
         // nothing by default
     }

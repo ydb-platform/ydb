@@ -502,6 +502,11 @@ void TExecutor::Active(const TActorContext &ctx) {
     Database = loadedState->Database;
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
+    for (const auto& channel : Owner->Info()->Channels) {
+        if (Owner->IsExecutorGCChannel(channel.Channel)) {
+            GcLogic->InitializeChannel(channel.Channel);
+        }
+    }
     LogicRedo = loadedState->Redo;
     LogicAlter = loadedState->Alter;
     BorrowLogic = loadedState->Loans;

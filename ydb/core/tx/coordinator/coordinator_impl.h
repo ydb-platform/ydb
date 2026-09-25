@@ -716,6 +716,10 @@ private:
         return true;
     }
 
+    bool IsExecutorGCChannel(ui32 channel) const override {
+        return channel != 0;
+    }
+
     void MaybeFlushAcquireReadStep(const TActorContext &ctx);
 
     // Attempts to restore missing processing params

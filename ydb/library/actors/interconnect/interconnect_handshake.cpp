@@ -968,9 +968,14 @@ namespace NActors {
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
                 request.SetRequestAllowDisablingPayloadChecksums(true);
-                // v2 session is incompatible with encryption; only request it when encryption is disabled locally
-                request.SetRequestSessionV2(Common->Settings.EnableInterconnectSessionV2 &&
-                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED);
+                // v2 session is incompatible with encryption and needs the io_uring data plane; only
+                // request it when encryption is disabled locally and the v2 engine is running here. The
+                // engine is absent when Settings.V2.Threads is zero or io_uring is unavailable, so testing
+                // it covers both; Enable is re-read on every handshake and may have changed since startup.
+                const bool requestSessionV2 = Common->Settings.V2.Enable &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
+                    Common->UringEngineV2;
+                request.SetRequestSessionV2(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -1372,9 +1377,11 @@ namespace NActors {
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
-                // v2 session is used only when both peers enabled it and encryption is not in effect
+                // v2 session is used only when both peers enabled it, encryption is not in effect, and
+                // this side has the v2 engine running (see the outgoing side above)
                 Params.UseSessionV2 = request.GetRequestSessionV2() &&
-                    Common->Settings.EnableInterconnectSessionV2 && !Params.Encryption;
+                    Common->Settings.V2.Enable && !Params.Encryption &&
+                    Common->UringEngineV2;
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1617,8 +1624,7 @@ namespace NActors {
                 if (err) {
                     TStringBuilder sb;
                     sb << hd;
-
-                    success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
+                    success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
                     YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
                         {"marker", "ICRDMA"},
                         {"err", err},

@@ -122,7 +122,10 @@ namespace NActors {
 
         void Start(TAsyncLowPriorityQueueAwaiter* awaiter) {
             auto selfId = awaiter->Actor->SelfId();
-            bool ok = selfId.Send(selfId, (Event = new TEvents::TEvResumeRunnable(this)));
+            bool ok = selfId.Send(
+                selfId,
+                (Event = new TEvents::TEvResumeRunnable(this)),
+                TEvents::TEvResumeRunnable::EventFlags);
             Y_ABORT_UNLESS(ok, "Unexpected failure to send an event to SelfId");
         }
 

@@ -1,10 +1,11 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
+#include "v2_event_serializer.h"
+#include "xdc_limits.h"
 #include "rdma/events.h"
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/util/datetime.h>
-#include <ydb/library/uring/liburing_compat.h>
 
 #include <variant>
 
@@ -344,221 +345,6 @@ namespace NActors {
         ReceiveData();
     }
 
-    void TInputSessionTCP::Handle(TEvUringRegisterResult::TPtr& ev) {
-        auto* msg = ev->Get();
-        UringContext = std::move(msg->Context);
-        MainRecvBufGroupId = msg->MainRecvBufGroupId;
-        XdcRecvBufGroupId = msg->XdcRecvBufGroupId;
-        StartRecvUring();
-    }
-
-    void TInputSessionTCP::StartRecvUring() {
-        if (!UringContext) {
-            return;
-        }
-        if (Socket && !MainRecvMultishotActive) {
-            if (UringContext->SubmitRecvMultishot((int)*Socket, MainRecvBufGroupId, EUringOpTag::MainRecv)) {
-                UringContext->IncrementPendingRecvs();
-                MainRecvMultishotActive = true;
-            }
-        }
-        UringContext->Flush();
-    }
-
-    void TInputSessionTCP::Handle(TEvUringRecvComplete::TPtr& ev) {
-        auto* msg = ev->Get();
-        EUringOpTag tag = static_cast<EUringOpTag>(msg->UserData & UringOpTagMask);
-
-        if (tag == EUringOpTag::XdcRecv) {
-            // Async XDC readv completion (Caveat 3).
-            UringXdcReadInFlight = false;
-            if (msg->Result > 0) {
-                if (UringXdcReadIsCatch) {
-                    ProcessXdcCatchBytesUring(msg->Result);
-                } else {
-                    ProcessXdcBytesUring(msg->Result);
-                }
-                LastReceiveTimestamp = TActivationContext::Monotonic();
-                ReceiveData();
-            } else if (msg->Result == 0) {
-                throw TExReestablishConnection{TDisconnectReason::EndOfStream()};
-            } else {
-                int err = -msg->Result;
-                if (err != ECANCELED) {
-                    throw TExReestablishConnection{TDisconnectReason::FromErrno(err)};
-                }
-            }
-            return;
-        }
-
-        // Main socket multishot recv completion.
-        if (msg->Result > 0) {
-            const size_t bytesRead = msg->Result;
-            BytesReadFromSocket += bytesRead;
-            ++UringMainRecvCompletions;
-            UringMainRecvBytes += bytesRead;
-            Metrics->AddInputChannelsIncomingTraffic(0, bytesRead);
-            IncomingData.Insert(IncomingData.End(), std::move(msg->Data));
-
-            if (!(msg->Flags & IORING_CQE_F_MORE)) {
-                MainRecvMultishotActive = false;
-                StartRecvUring();
-            }
-
-            LastReceiveTimestamp = TActivationContext::Monotonic();
-            ReceiveData();
-        } else if (msg->Result == 0) {
-            // EOF
-            MainRecvMultishotActive = false;
-            throw TExReestablishConnection{TDisconnectReason::EndOfStream()};
-        } else {
-            int err = -msg->Result;
-            MainRecvMultishotActive = false;
-            if (err == ENOBUFS) {
-                // Provided-buffer ring is momentarily exhausted. The terminal CQE has already
-                // woken the reaper, which recycles released buffers (DrainFreelist). Schedule a
-                // deferred re-arm so we retry once buffers are available rather than busy-looping.
-                TActivationContext::Schedule(TDuration::MicroSeconds(250),
-                    new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
-            } else if (err != ECANCELED) {
-                throw TExReestablishConnection{TDisconnectReason::FromErrno(err)};
-            }
-        }
-    }
-
-    void TInputSessionTCP::DriveXdcUring() {
-        if (!UringContext || !XdcSocket) {
-            return;
-        }
-        // Apply the catch stream as soon as it is fully read (idempotent), then keep a single
-        // XDC readv in flight while there is work to do.
-        ApplyXdcCatchStream();
-        SubmitXdcRecvUring();
-    }
-
-    bool TInputSessionTCP::SubmitXdcRecvUring() {
-        if (!UringContext || !XdcSocket || UringXdcReadInFlight) {
-            return false;
-        }
-
-        // Catch stream first: read into a throwaway buffer that is later scattered per channel.
-        if (XdcCatchStream.BytesPending) {
-            if (!XdcCatchStream.Buffer) {
-                XdcCatchStream.Buffer = TRcBuf::Uninitialized(64 * 1024);
-            }
-            const size_t numBytesToRead = Min<size_t>(XdcCatchStream.BytesPending, XdcCatchStream.Buffer.size());
-            struct iovec iov{XdcCatchStream.Buffer.GetDataMut(), numBytesToRead};
-            if (UringContext->SubmitReadv((int)*XdcSocket, &iov, 1, ++UringXdcReadSeqNo, EUringOpTag::XdcRecv)) {
-                UringXdcReadInFlight = true;
-                UringXdcReadIsCatch = true;
-                UringContext->Flush();
-                return true;
-            }
-            return false;
-        }
-
-        // Normal XDC stream: scatter read directly into the destination spans (zero-copy).
-        if (!XdcCatchStream.Applied || XdcInputQ.empty()) {
-            return false;
-        }
-
-        TStackVec<struct iovec, 64> buffs;
-        size_t size = 0;
-        for (auto& [channel, span] : XdcInputQ) {
-            buffs.push_back(iovec{span.data(), span.size()});
-            size += span.size();
-            if (buffs.size() == 64 || size >= 1024 * 1024) {
-                break;
-            }
-        }
-
-        if (UringContext->SubmitReadv((int)*XdcSocket, buffs.data(), buffs.size(), ++UringXdcReadSeqNo, EUringOpTag::XdcRecv)) {
-            UringXdcReadInFlight = true;
-            UringXdcReadIsCatch = false;
-            UringContext->Flush();
-            return true;
-        }
-        return false;
-    }
-
-    void TInputSessionTCP::ProcessXdcCatchBytesUring(ssize_t recvres) {
-        HandleXdcChecksum({XdcCatchStream.Buffer.data(), static_cast<size_t>(recvres)});
-
-        XdcCatchStream.BytesPending -= recvres;
-        XdcCatchStream.BytesProcessed += recvres;
-        BytesReadFromXdcSocket += recvres;
-
-        // scatter read data into per-channel catch buffers
-        const char *in = XdcCatchStream.Buffer.data();
-        while (recvres) {
-            Y_DEBUG_ABORT_UNLESS(!XdcCatchStream.Markup.empty());
-            auto& [channel, apply, bytes] = XdcCatchStream.Markup.front();
-            size_t bytesInChannel = Min<size_t>(recvres, bytes);
-            bytes -= bytesInChannel;
-            recvres -= bytesInChannel;
-
-            if (apply) {
-                auto& context = GetPerChannelContext(channel);
-                while (bytesInChannel) {
-                    const size_t offset = context.XdcCatchBytesRead % context.XdcCatchBuffer.size();
-                    TMutableContiguousSpan out = context.XdcCatchBuffer.GetContiguousSpanMut().SubSpan(offset, bytesInChannel);
-                    memcpy(out.data(), in, out.size());
-                    context.XdcCatchBytesRead += out.size();
-                    in += out.size();
-                    bytesInChannel -= out.size();
-                }
-            } else {
-                in += bytesInChannel;
-            }
-
-            if (!bytes) {
-                XdcCatchStream.Markup.pop_front();
-            }
-        }
-
-        ApplyXdcCatchStream();
-    }
-
-    void TInputSessionTCP::ProcessXdcBytesUring(ssize_t recvres) {
-        // calculate stream checksums over the destination spans that were just filled
-        {
-            size_t bytesToChecksum = recvres;
-            for (auto& [channel, span] : XdcInputQ) {
-                const size_t n = Min<size_t>(bytesToChecksum, span.size());
-                HandleXdcChecksum({span.data(), n});
-                bytesToChecksum -= n;
-                if (!bytesToChecksum) {
-                    break;
-                }
-            }
-        }
-
-        Metrics->AddTotalBytesRead(recvres);
-        BytesReadFromXdcSocket += recvres;
-
-        // cut the XdcInputQ deque
-        for (size_t bytesToCut = recvres; bytesToCut; ) {
-            Y_ABORT_UNLESS(!XdcInputQ.empty());
-            auto& [channel, span] = XdcInputQ.front();
-            size_t n = Min(bytesToCut, span.size());
-            bytesToCut -= n;
-            if (n == span.size()) {
-                XdcInputQ.pop_front();
-            } else {
-                span = span.SubSpan(n, Max<size_t>());
-                Y_ABORT_UNLESS(!bytesToCut);
-            }
-
-            Y_DEBUG_ABORT_UNLESS(n);
-            auto& context = GetPerChannelContext(channel);
-            context.DropFront(nullptr, n);
-            ProcessEvents(context);
-        }
-
-        // drop fully processed inbound packets
-        ProcessInboundPacketQ(recvres, 0);
-    }
-
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
             YDB_LOG_ERROR("Rdma IO failed",
@@ -618,27 +404,13 @@ namespace NActors {
             }
 
             // try to read more data into buffers
-            if (!UringContext) {
-                progress |= ReadMore();
-                progress |= ReadXdc(&numDataBytes);
-            }
+            progress |= ReadMore();
+            progress |= ReadXdc(&numDataBytes);
 
             if (!progress) { // no progress was made during this iteration
-                if (!UringContext) {
-                    PreallocateBuffers();
-                }
+                PreallocateBuffers();
                 break;
             }
-        }
-
-        if (UringContext) {
-            // Main recv multishot may have stopped (e.g. ENOBUFS or end of a multishot run);
-            // re-arm it now that we have drained the processable data.
-            if (Socket && !MainRecvMultishotActive) {
-                StartRecvUring();
-            }
-            // Submit/keep an XDC readv in flight if there is pending XDC target space.
-            DriveXdcUring();
         }
 
         if (enoughCpu) {
@@ -919,23 +691,7 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
-            if (alignment > 1) {
-                Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
-                // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base buffer,
-                // but headroom may still shift the visible data away from the requested alignment, so we always keep
-                // up to alignment - 1 bytes of extra slack and spend part of it as additional headroom.
-                const size_t extra = alignment - 1;
-                TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
-                const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
-                const size_t misalignment = ptr & (alignment - 1);
-                const size_t shift = misalignment ? alignment - misalignment : 0;
-                tailroom += extra - shift;
-                buffer.TrimFront(size + tailroom);
-                buffer.TrimBack(size);
-                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
-                return buffer;
-            }
-            return TRcBuf::Uninitialized(size, headroom, tailroom);
+            return AllocateXdcSectionBuffer(size, headroom, tailroom, alignment);
         }
     }
 
@@ -957,9 +713,26 @@ namespace NActors {
                             {"marker", "ICIS00"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
+                    if (!IsXdcSectionGeometryInRange(size, headroom, tailroom, alignment)) {
+                        YDB_LOG_CRIT("XDC section geometry out of range",
+                            {"marker", "ICIS20"},
+                            {"size", size},
+                            {"headroom", headroom},
+                            {"tailroom", tailroom},
+                            {"alignment", alignment});
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
 
                     if (!IgnorePayload) { // process command if packet is being applied
                         auto& pendingEvent = context.PendingEvents.back();
+                        if (!FitsXdcDeclaredLimit(size, pendingEvent.DeclaredSize, EventMaxByteSize)) {
+                            YDB_LOG_CRIT("XDC declared size exceeds the maximum event size",
+                                {"marker", "ICIS21"},
+                                {"declaredSize", pendingEvent.DeclaredSize},
+                                {"size", size});
+                            throw TExDestroySession{TDisconnectReason::FormatError()};
+                        }
+                        pendingEvent.DeclaredSize += size;
                         const bool isInline = cmd == EXdcCommand::DECLARE_SECTION_INLINE;
                         pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,
                             alignment, isInline});
@@ -1637,39 +1410,9 @@ namespace NActors {
         if (now >= LastReceiveTimestamp + DeadPeerTimeout) {
             ReceiveData();
             if (Socket && now >= LastReceiveTimestamp + DeadPeerTimeout) {
-                // Diagnostic snapshot: capture exactly why the input session believes the peer is
-                // dead. On the idle-keepalive failure this shows whether ANY recv completion ever
-                // arrived (peer truly silent / recv not armed) and whether the multishot is still
-                // active, plus the ring's submit accounting.
-                YDB_LOG_NOTICE("DeadPeer snapshot",
-                    {"marker", "ICIS30"},
-                    {"uring", (UringContext ? 1 : 0)},
-                    {"lastRecvAgeSeconds", (now - LastReceiveTimestamp).SecondsFloat()},
-                    {"bytesRead", BytesReadFromSocket},
-                    {"mainRecvCompletions", UringMainRecvCompletions},
-                    {"mainRecvBytes", UringMainRecvBytes},
-                    {"mainMsActive", (int)MainRecvMultishotActive},
-                    {"pendingRecvs", (UringContext ? UringContext->GetPendingRecvs() : 0)},
-                    {"submitCalls", (UringContext ? UringContext->GetSubmitCalls() : 0)},
-                    {"submitErrors", (UringContext ? UringContext->GetSubmitErrors() : 0)},
-                    {"submitPartials", (UringContext ? UringContext->GetSubmitPartials() : 0)},
-                    {"lastSubmitRet", (UringContext ? UringContext->GetLastSubmitRet() : 0)},
-                    {"sqeFull", (UringContext ? UringContext->GetSqeFull() : 0)});
                 // nothing has changed, terminate session
                 throw TExDestroySession{TDisconnectReason::DeadPeer()};
             }
-        }
-        // Recv-side heartbeat (DEBUG): fires roughly once per DeadPeerTimeout on a healthy idle
-        // session. Paired with the output ICS42 send heartbeat to confirm keepalives are flowing.
-        if (UringContext) {
-            YDB_LOG_DEBUG("Uring recv hb",
-                {"marker", "ICIS31"},
-                {"lastRecvAge", (now - LastReceiveTimestamp).SecondsFloat()},
-                {"bytesRead", BytesReadFromSocket},
-                {"mainRecvCompletions", UringMainRecvCompletions},
-                {"mainRecvBytes", UringMainRecvBytes},
-                {"mainMsActive", (int)MainRecvMultishotActive},
-                {"pendingRecvs", UringContext->GetPendingRecvs()});
         }
         Schedule(LastReceiveTimestamp + DeadPeerTimeout, new TEvCheckDeadPeer);
     }

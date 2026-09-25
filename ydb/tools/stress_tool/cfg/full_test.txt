@@ -149,3 +149,22 @@ PDiskTestList: {
     }
     EnableTrim: true
 }
+
+InterconnectTestList: {
+    InterconnectTestList: {
+        InterconnectLoad: {
+            Tag: 1
+            Name: "interconnect_smoke"
+            DurationSeconds: 30
+            DelayBeforeMeasurementsSeconds: 5
+            InFlyMax: 8
+            NodeHops: [1]
+            SizeMin: 4096
+            SizeMax: 4096
+            IntervalMinUs: 0
+            IntervalMaxUs: 0
+            SoftLoad: false
+            UseProtobufWithPayload: false
+        }
+    }
+}

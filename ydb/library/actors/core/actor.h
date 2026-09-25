@@ -589,7 +589,8 @@ namespace NActors {
         void UnregisterActorTask(TActorTask* task);
         void RegisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
         void UnregisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
-        bool HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
+        void HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev);
+        void HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
         bool HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev);
 
     public:
@@ -792,6 +793,7 @@ namespace NActors {
 
         void Describe(IOutputStream&) const override;
         bool Send(TAutoPtr<IEventHandle> ev) const noexcept;
+        bool SendActorLivenessCheck(const TActorId& target, ui64 cookie = 0) const noexcept;
         bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));

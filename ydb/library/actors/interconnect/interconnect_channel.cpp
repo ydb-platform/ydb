@@ -1,6 +1,7 @@
 #include "interconnect_channel.h"
 #include "interconnect_zc_processor.h"
 #include "rdma/mem_pool.h"
+#include "xdc_limits.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -174,7 +175,7 @@ namespace NActors {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
                         if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base);
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
@@ -188,6 +189,10 @@ namespace NActors {
                     if (!event.EventSerializedSize) {
                         State = EState::DESCRIPTOR;
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
+                        if (!IsXdcDeclareWithinLimit(*SerializationInfo, event.EventSerializedSize,
+                                MaxSerializedEventSize)) {
+                            throw TExSerializedEventTooLarge(event.Descr.Type);
+                        }
                         State = EState::SECTIONS;
                         SectionIndex = 0;
                         XXH3_64bits_reset(&RdmaCumulativeChecksumState);
@@ -310,12 +315,19 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
+                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
+                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
+                if (!limitRemain) {
+                    throw TExSerializedEventTooLarge(event.Descr.Type);
+                }
+
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
+                    .SubSpan(0, Min(PartLenRemain, limitRemain));
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size())) {
+                    addChunk(chunk.Buf, chunk.Size, false);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {

@@ -46,6 +46,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
     (ui32)NKikimrConsole::TConfigItem::HiveConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::InterconnectConfigItem,
     (ui32)NKikimrConsole::TConfigItem::LogConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,

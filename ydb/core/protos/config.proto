@@ -546,8 +546,71 @@ message TInterconnectConfig {
     optional bool CollectSubscriptionStackTrace = 59 [default = false];
     optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
-    optional bool UseUring = 62 [default = false];
-    optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
+    reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
+
+    message TV2Config {
+        // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config
+        // that is applied online: it is picked up from a cluster config update without restarting the node
+        // (see TInterconnectConfigurator), and affects new handshakes only -- sessions already established
+        // keep the version they negotiated. It has no effect unless the node was started with Threads > 0.
+        // Every other field here is read once, at startup, and needs a restart to change.
+        optional bool Enable = 1 [default = false];
+        optional bool ChecksumEvents = 2 [default = false];
+
+        // Use io_uring SQPOLL for v2 data-plane rings. If the kernel poller is saturated while shard workers
+        // still have CPU headroom, set this to false so submissions run on the worker threads instead.
+        optional bool EnableSQPOLL = 3 [default = true];
+
+        // If set, this enables event preserialization in IC actor system pool.
+        optional bool EnablePreserializeEvents = 4 [default = false];
+
+        // Number of worker threads of ICv2 thread pool (not counting uring internal ones). Zero -- the
+        // default -- means the v2 engine is not started at all on this node and v2 can never be negotiated,
+        // regardless of Enable. Changing it requires a restart, so a cluster that intends to switch to v2
+        // online is first rolled out with Threads set, and then flips Enable through a config update.
+        optional uint32 Threads = 5 [default = 0];
+
+        // io_uring rings per v2 shard worker (each ring may own a SQPOLL thread). Default 1 preserves legacy
+        // 1:1 ring/worker topology. Raise this when poller-bound; raise Threads when serializer-bound.
+        optional uint32 RingsPerShard = 6 [default = 1];
+
+        // SQPOLL kernel-thread idle timeout (ms) for v2 rings before the poller sleeps. Only effective when
+        // EnableSQPOLLv2 is set. Lower values save idle CPU; higher values keep the poller warm for latency.
+        optional uint32 SqThreadIdleMs = 7 [default = 2000];
+
+        // If enabled, rings of different threads share same kernel thread pools and SQ pollers (effectively creating
+        // RingsPerShard threads instead of RingsPerShard * Threads).
+        optional bool ShareRingsAmongThreads = 8 [default = false];
+
+        // Register session sockets into each ring's fixed-file table (IOSQE_FIXED_FILE) to avoid
+        // per-op process file-table refcount traffic. Falls back to plain fds if the kernel rejects
+        // the table or a ring runs out of slots. Requires sparse/update support (kernel >= 5.5; target 5.13+).
+        optional bool EnableFixedFiles = 9 [default = true];
+
+        // Size of the fixed-file table reserved per ring when EnableFixedFiles is on.
+        optional uint32 FixedFilesPerRing = 10 [default = 4096];
+
+        // Shared provided-buffer pool (buf_ring or provide_buffers) for sessions whose receive
+        // target is still at the minimum size. Falls back to per-session plain buffers.
+        optional bool EnableProvidedBuffers = 11 [default = true];
+
+        // Number of shared-pool buffers reserved per ring.
+        optional uint32 PoolBufCount = 12 [default = 128];
+
+        // Minimum and maximum write buffer size.
+        optional uint32 MinWriteBufferSizeKB = 13 [default = 4];
+        optional uint32 MaxWriteBufferSizeKB = 14 [default = 256];
+
+        // Minimum and maximum read buffer size.
+        optional uint32 MinReadBufferSizeKB = 15 [default = 4];
+        optional uint32 MaxReadBufferSizeKB = 16 [default = 256];
+
+        // Minimum and maximum serialization window size.
+        optional uint32 MinSerializeWindowSizeKB = 17 [default = 4];
+        optional uint32 MaxSerializeWindowSizeKB = 18 [default = 256];
+    }
+
+    optional TV2Config V2Config = 70;
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

@@ -352,6 +352,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
+            vdiskConfig->SpaceReportPeriodSeconds = SpaceReportPeriodSeconds;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

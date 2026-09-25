@@ -1235,6 +1235,73 @@ Y_UNIT_TEST_SUITE(Head) {
         UNIT_ASSERT(head.GetLastBatch().Blobs[0].IsBatch);
     }
 
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingSurvivesPack) {
+        THead head;
+        head.Offset = 100;
+        head.AddBatch(TBatch(100, 0));
+        head.AddBlob(MakeSimpleBlob("src", 1, "ordinary message"));
+
+        UNIT_ASSERT(!head.GetLastBatch().HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Pack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingIncludesLastPackedBatch) {
+        THead head;
+        head.Offset = 100;
+        // These are internal storage batches; every client message occupies one offset.
+        for (ui64 offset : {100u, 105u}) {
+            head.AddBatch(TBatch(offset, 0));
+            for (ui64 i = 0; i < 5; ++i) {
+                head.AddBlob(MakeSimpleBlob("src", offset + i, "ordinary message"));
+            }
+            UNIT_ASSERT(!head.GetLastBatch().HasOffsetDelta());
+            head.MutableLastBatch().Pack();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 10u);
+    }
+
+    void CheckOrdinaryMultipartOffsetDelta(bool includeFirstPart) {
+        THead head;
+        head.Offset = 100;
+        head.PartNo = includeFirstPart ? 0 : 1;
+        const auto ts = TInstant::Seconds(1);
+        if (includeFirstPart) {
+            head.AddBatch(TBatch(100, 0));
+            head.AddBlob(TClientBlob(
+                TString("src"), 1, TString(512_KB, 'x'), TPartData{0, 2, 1_MB},
+                ts, ts, 1_MB, "", ""));
+            head.MutableLastBatch().Pack();
+        }
+
+        // An internal batch may end with an intermediate part, but the head must
+        // end with a complete message before its offset delta is used.
+        head.AddBatch(TBatch(100, 1));
+        head.AddBlob(TClientBlob(
+            TString("src"), 1, TString(512_KB, 'x'), TPartData{1, 2, 1_MB},
+            ts, ts, 1_MB, "", ""));
+
+        UNIT_ASSERT(!head.GetLastBatch().HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Pack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartAcrossBatchesSurvivesPack) {
+        CheckOrdinaryMultipartOffsetDelta(true);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingLastPartSurvivesPack) {
+        CheckOrdinaryMultipartOffsetDelta(false);
+    }
+
     Y_UNIT_TEST(GetOffsetDeltaWithLMC) {
         THead head;
         head.Offset = 100;

@@ -432,6 +432,56 @@ namespace NKikimr::NGRpcService {
                 UNIT_ASSERT_C(found, name);
             }
         }
+
+        Y_UNIT_TEST(CdcReadSessionReturnsSubscribedAlias) {
+            TFixture fixture;
+            auto table = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
+            auto topic = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
+            const char* tablePath = "/alias/test";
+            const char* feedPath = "/alias/test/feed";
+
+            Ydb::Table::CreateTableRequest create;
+            create.set_path(tablePath);
+            auto* key = create.add_columns();
+            key->set_name("key");
+            key->mutable_type()->set_type_id(Ydb::Type::INT64);
+            create.add_primary_key("key");
+            Success(Call(*table, &TTable::CreateTable, create, "/alias"));
+
+            Ydb::Table::AlterTableRequest alter;
+            alter.set_path(tablePath);
+            auto* feed = alter.add_add_changefeeds();
+            feed->set_name("feed");
+            feed->set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
+            feed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            Success(Call(*table, &TTable::AlterTable, alter, "/alias"));
+
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/alias");
+            context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+            auto stream = topic->StreamRead(&context);
+            UNIT_ASSERT(stream);
+
+            Ydb::Topic::StreamReadMessage::FromClient request;
+            auto* settings = request.mutable_init_request()->add_topics_read_settings();
+            settings->set_path(feedPath);
+            settings->add_partition_ids(0);
+            UNIT_ASSERT(stream->Write(request));
+
+            Ydb::Topic::StreamReadMessage::FromServer response;
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, response.DebugString());
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
+                feedPath, response.DebugString());
+
+            context.TryCancel();
+            stream->Finish();
+        }
     } // Y_UNIT_TEST_SUITE(YdbPathAliasingIngress)
 
 } // namespace NKikimr::NGRpcService

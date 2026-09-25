@@ -32,13 +32,13 @@ TCompletionService::TCompletionService(NSQLComplete::ISqlCompletionEngine::TPtr 
 {
 }
 
-TCompletionList TCompletionService::Completion(TStringBuf text, const TCompletionParams& params) const {
-    size_t position = ToBytes(params.Position, text);
+TCompletionList TCompletionService::Completion(TTextDocument::TPtr document, const TCompletionParams& params) const {
+    size_t position = ToBytes(params.Position, document->Text());
 
-    const NSQLComplete::TCompletionInput input = {
-        .Text = text,
-        .CursorPosition = position,
-    };
+    NSQLComplete::TCompletionInput input;
+    input.Text = document->Text();
+    input.CursorPosition = position;
+    input.ParseTree = document;
 
     auto completion = Engine_->CompleteAsync(input).ExtractValueSync();
     return ToMessage(completion.Candidates);

@@ -270,6 +270,14 @@ public:
         NYql::TPosition tokenPos,
         std::function<bool(NSQLTranslation::TSQLHint)> pred);
 
+    const NSQLTranslation::TSQLHints& GetSqlHints() const {
+        return SqlHints_;
+    }
+
+    void SetSqlHints(NSQLTranslation::TSQLHints hints) {
+        SqlHints_ = std::move(hints);
+    }
+
     bool WarnUnusedHints();
 
     TScopedStatePtr CreateScopedState() const;

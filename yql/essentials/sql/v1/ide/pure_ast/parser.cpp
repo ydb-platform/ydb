@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "ansi.h"
 #include "parse_tree.h"
 
 #include <yql/essentials/parser/common/antlr4/depth_limiting_listener.h>
@@ -111,13 +112,29 @@ public:
     }
 };
 
+class TGenericParser: public IParser {
+public:
+    IParseTree::TPtr Parse(TStringBuf text) const override {
+        bool isAnsi = IsAnsiQuery(TString(text));
+        return isAnsi ? Ansi_->Parse(text) : Default_->Parse(text);
+    }
+
+private:
+    IParser::TPtr Default_ = MakeParser(/*isAnsiLexer=*/false);
+    IParser::TPtr Ansi_ = MakeParser(/*isAnsiLexer=*/true);
+};
+
 } // namespace
 
 IParser::TPtr MakeParser(bool isAnsiLexer) {
     if (isAnsiLexer) {
-        return MakeHolder<TParser<true>>();
+        return new TParser</*IsAnsiLexer=*/true>();
     }
-    return MakeHolder<TParser<false>>();
+    return new TParser</*IsAnsiLexer=*/false>();
+}
+
+IParser::TPtr MakeParser() {
+    return new TGenericParser();
 }
 
 void ClearParserCache() {

@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
+#include <util/generic/hash_set.h>
 
 
 namespace NYql::NDq {
@@ -382,6 +383,73 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
 }
 
 template <typename TPartition>
+bool TryCollectNarrowPartitionFields(
+    const TPartition& partition,
+    TVector<const TItemExprType*>& items)
+{
+    const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+    if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return false;
+    }
+    const auto& inputStruct = *itemType->template Cast<TStructExprType>();
+
+    const auto collect = [&](const TExprNode& root, THashSet<TStringBuf>& dst) {
+        VisitExpr(root, [&](const TExprNode& node) {
+            if (node.IsCallable("Member") && node.Tail().IsAtom() && inputStruct.FindItem(node.Tail().Content())) {
+                dst.emplace(node.Tail().Content());
+            }
+            return true;
+        });
+    };
+
+    // Condense1 is a full-frame aggregate. Chopper copies the whole row.
+    bool hasCondense = false;
+    bool hasChopper = false;
+    VisitExpr(partition.ListHandlerLambda().Ptr(), [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("Chopper")) {
+            hasChopper = true;
+            return false;
+        }
+        hasCondense = hasCondense || node->IsCallable({"Condense1", "WideCondense1"});
+        return true;
+    });
+    if (hasChopper || !hasCondense) {
+        return false;
+    }
+
+    THashSet<TStringBuf> used;
+    collect(partition.ListHandlerLambda().Ref(), used);
+    THashSet<TStringBuf> keys;
+    collect(partition.KeySelectorLambda().Ref(), keys);
+    for (const auto name : keys) {
+        used.emplace(name);
+    }
+    if (const auto sort = partition.SortKeySelectorLambda().template Maybe<TCoLambda>()) {
+        collect(sort.Cast().Ref(), used);
+    }
+
+    // Keys only: the any-join PartitionsByKeys on {joinKey, total} would drop total.
+    bool hasPayload = false;
+    for (const auto name : used) {
+        if (!keys.contains(name)) {
+            hasPayload = true;
+            break;
+        }
+    }
+    if (!hasPayload || used.empty() || used.size() >= inputStruct.GetSize()) {
+        return false;
+    }
+
+    items.clear();
+    for (const auto* item : inputStruct.GetItems()) {
+        if (used.contains(item->GetName())) {
+            items.push_back(item);
+        }
+    }
+    return !items.empty();
+}
+
+template <typename TPartition>
 TExprBase DqBuildPartitionsStageStub(
     TExprBase node,
     TExprContext& ctx,
@@ -487,6 +555,21 @@ TExprBase DqBuildPartitionsStageStub(
                 .Input(newConn.Cast())
                 .KeySelectorLambda(keyLambda)
                 .ListHandlerLambda(handlerLambda)
+                .Done();
+        }
+
+        if (TVector<const TItemExprType*> items; TryCollectNarrowPartitionFields(partition, items)) {
+            TExprNode::TListType members;
+            members.reserve(items.size());
+            for (const auto* item : items) {
+                members.push_back(ctx.NewAtom(partition.Pos(), item->GetName()));
+            }
+            return Build<TPartition>(ctx, node.Pos())
+                .InitFrom(partition)
+                .template Input<TCoExtractMembers>()
+                    .Input(dqUnion)
+                    .Members(ctx.NewList(partition.Pos(), std::move(members)))
+                    .Build()
                 .Done();
         }
 

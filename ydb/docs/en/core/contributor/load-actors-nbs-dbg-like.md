@@ -49,6 +49,8 @@ For explicit tablet-channel bindings, pass the `storage_pools` form field as a n
 
 Allocation persists across runs. Change it by deleting and recreating the load tablet.
 
+The tablet page pre-fills `NumDirectBlockGroups: 32`. The table below lists protobuf defaults, which apply when a field is omitted from a configuration message.
+
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `DDiskPoolName` | `"ddp1"` | BSC pool for DDisk data. |
@@ -122,6 +124,8 @@ An empty result array means that no completed result for that UUID is available 
 ### Workload Parameters {#workload-parameters}
 
 These fields belong to `NbsDbgLikeLoad.WorkloadConfig`.
+
+The tablet page pre-fills `MaxInFlight: 2048` and `MaxInflightLsns: 65536` for a run. The `tablet_run` HTTP endpoint uses the same values when these parameters are omitted. The tables below list protobuf defaults for configuration messages.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |

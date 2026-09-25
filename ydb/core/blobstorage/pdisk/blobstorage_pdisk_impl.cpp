@@ -1874,7 +1874,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetState(state);
         pDiskMetrics.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {
-            pDiskMetrics.SetSlotCount(ExpectedSlotCount);
+            pDiskMetrics.SetExpectedSlotCount(ExpectedSlotCount);
         }
         if (ExpectedSlotSize) {
             pDiskMetrics.SetExpectedSlotSize(ExpectedSlotSize);

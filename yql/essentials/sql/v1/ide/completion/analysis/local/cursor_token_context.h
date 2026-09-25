@@ -40,12 +40,12 @@ struct TCursorTokenContext {
 bool GetStatement(
     const ILexer::TPtr& lexer,
     const TMaterializedInput& input,
-    TCompletionInput& output,
+    NSQLPureAST::TCursorText& output,
     size_t& output_position);
 
 bool GetCursorTokenContext(
     const ILexer::TPtr& lexer,
-    TCompletionInput input,
+    NSQLPureAST::TCursorText input,
     TCursorTokenContext& context);
 
 } // namespace NSQLComplete

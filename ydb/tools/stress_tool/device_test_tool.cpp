@@ -164,6 +164,9 @@ int main(int argc, char **argv) {
     opts.AddLongOption("disable-ddisk-checksums",
             "disable DDisk and Persistent Buffer checksums (use on both client and server)")
         .StoreTrue(&disableDDiskChecksums);
+    opts.AddLongOption("ddisk-checksums-cache-size",
+            "DDisk checksum cache size per DDisk in MiB (default 64; 0 disables caching; set on server for client/server tests)")
+        .RequiredArgument("MiB");
     opts.AddLongOption("force-ddisk-pdisk-fallback",
             "force DDisk direct I/O through the PDisk actor instead of io_uring")
         .StoreTrue(&forcePDiskFallback);
@@ -286,6 +289,9 @@ int main(int argc, char **argv) {
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
             res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption,
             disableDDiskChecksums, forcePDiskFallback, logLevel);
+    if (res.Has("ddisk-checksums-cache-size")) {
+        config.DDiskChecksumsCacheBytes = ui64(res.Get<ui32>("ddisk-checksums-cache-size")) << 20;
+    }
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
 

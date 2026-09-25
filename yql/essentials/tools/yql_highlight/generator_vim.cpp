@@ -103,6 +103,14 @@ TString VimRangeEscaped(TString range) {
     return range;
 }
 
+TString ToVimEnd(const TRangePattern& range) {
+    TString end = VimRangeEscaped(range.EndPlain);
+    if (range.EndSuffixRegex) {
+        end += R"(\v)" + VimRangeEscaped(ToVim(*range.EndSuffixRegex));
+    }
+    return end;
+}
+
 void PrintRules(IOutputStream& out, const TUnit& unit) {
     TString name = ToVimName(unit.Kind);
 
@@ -112,7 +120,7 @@ void PrintRules(IOutputStream& out, const TUnit& unit) {
         if (range.EscapeRegex) {
             out << "skip=\"" << VimRangeEscaped(*range.EscapeRegex) << "\" ";
         }
-        out << "end=\"" << VimRangeEscaped(range.EndPlain) << "\"";
+        out << "end=\"" << ToVimEnd(range) << "\"";
         out << '\n';
     }
 

@@ -43,7 +43,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -59,7 +59,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -75,7 +75,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -91,7 +91,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -107,7 +107,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -123,7 +123,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -139,7 +139,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -155,7 +155,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -171,7 +171,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }

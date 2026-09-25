@@ -20,6 +20,15 @@ def default_env_defaults() -> Dict[str, Any]:
     return {"run_id": run_id} if run_id is not None else {}
 
 
+def _from_epoch(ts: float) -> datetime:
+    """Seconds, milliseconds, or YDB Timestamp microseconds."""
+    if ts > 1e14:
+        ts = ts / 1_000_000.0
+    elif ts > 1e11:
+        ts = ts / 1000.0
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
+
+
 def parse_datetime(value: Any) -> Optional[datetime]:
     if value is None or value == "":
         return None
@@ -29,18 +38,12 @@ def parse_datetime(value: Any) -> Optional[datetime]:
             return dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
     if isinstance(value, (int, float)):
-        ts = float(value)
-        if ts > 1e12:
-            ts = ts / 1000.0
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
+        return _from_epoch(float(value))
     text = str(value).strip()
     if not text:
         return None
     if EPOCH_STRING_RE.fullmatch(text):
-        ts = float(text)
-        if ts > 1e12:
-            ts = ts / 1000.0
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
+        return _from_epoch(float(text))
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
     try:

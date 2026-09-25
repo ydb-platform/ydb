@@ -204,7 +204,11 @@ def last_export_at(table_path: Optional[str] = None) -> Optional[datetime]:
         return None
     if not rows or not isinstance(rows[0], dict):
         return None
-    return parse_datetime(rows[0].get("last_export"))
+    try:
+        return parse_datetime(rows[0].get("last_export"))
+    except (OverflowError, OSError, ValueError) as exc:
+        print(f"Warning: export watermark is not a timestamp: {exc}")
+        return None
 
 
 def already_exported(run_id: Any, run_attempt: Any, exported: set) -> bool:

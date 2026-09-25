@@ -417,6 +417,9 @@ class CollectorValuesTest(unittest.TestCase):
             parse_datetime("2026-09-21T10:00:00Z"),
             datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc),
         )
+        usec = 1_758_792_003_000_000  # YDB Timestamp, microseconds
+        self.assertEqual(parse_datetime(usec), datetime.fromtimestamp(usec / 1_000_000, tz=timezone.utc))
+        self.assertEqual(parse_datetime(usec // 1000), datetime.fromtimestamp(usec / 1_000_000, tz=timezone.utc))
 
     def test_parse_labels(self):
         self.assertEqual(parse_labels(["cache_mode=none", "ya_attempt=2"])["cache_mode"], "none")

@@ -74,6 +74,7 @@ namespace NKikimr::NBlobDepot {
         ui32 BlocksPending = 0;
         ui32 RetryCount = 0;
         THashSet<ui32> NodesWaitingForPushResult;
+        THashSet<ui32> NodesWithBlockToDeliver; // agents whose BlockToDeliver entry is (still) owned by this actor
         std::weak_ptr<TToken> Token;
 
     public:
@@ -129,10 +130,13 @@ namespace NKikimr::NBlobDepot {
                     // enqueue push notification
                     const auto [it, inserted] = agent.BlockToDeliver.try_emplace(TabletId, BlockedGeneration, IssuerGuid, SelfId());
                     if (!inserted) {
+                        // an entry may be left over by a processor that stopped waiting when the agent's block lease
+                        // expired; CanSetNewBlock also lets the very same block be reissued, hence <= and not <
                         const auto& [currentBlockedGeneration, _1, _2] = it->second;
-                        Y_ABORT_UNLESS(currentBlockedGeneration < BlockedGeneration);
+                        Y_ABORT_UNLESS(currentBlockedGeneration <= BlockedGeneration);
                         it->second = {BlockedGeneration, IssuerGuid, SelfId()};
                     }
+                    NodesWithBlockToDeliver.insert(agentId);
 
                     // add node to wait list; also start timer to remove this node from the wait queue
                     NodesWaitingForPushResult.insert(agentId);
@@ -182,9 +186,11 @@ namespace NKikimr::NBlobDepot {
                 block.PerAgentInfo.erase(agentId);
 
                 TAgent& agent = Self->GetAgent(agentId);
-                const auto it = agent.BlockToDeliver.find(TabletId);
-                Y_ABORT_UNLESS(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
-                agent.BlockToDeliver.erase(it);
+                NodesWithBlockToDeliver.erase(agentId);
+                if (const auto it = agent.BlockToDeliver.find(TabletId); it != agent.BlockToDeliver.end() &&
+                        it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId())) {
+                    agent.BlockToDeliver.erase(it);
+                }
 
                 if (NodesWaitingForPushResult.empty()) {
                     Finish();
@@ -255,7 +261,21 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        // Entries we enqueued into agents that never answered (a disconnected agent, or one whose block lease has
+        // expired) are owned by nobody once this actor is gone; drop them here, or they pile up in TAgent forever
+        // and get pushed to the agent on every reconnect.
+        void DropPendingBlockNotifications() {
+            for (const ui32 agentId : std::exchange(NodesWithBlockToDeliver, {})) {
+                TAgent& agent = Self->GetAgent(agentId);
+                if (const auto it = agent.BlockToDeliver.find(TabletId); it != agent.BlockToDeliver.end() &&
+                        std::get<2>(it->second) == SelfId()) {
+                    agent.BlockToDeliver.erase(it);
+                }
+            }
+        }
+
         void Finish() {
+            DropPendingBlockNotifications();
             TActivationContext::Send(Response.release());
             PassAway();
         }

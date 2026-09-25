@@ -38,7 +38,7 @@ protected:
     void ConfigureProfile(const TString& profileName, std::shared_ptr<IProfileManager> profileManager,
                      TConfig& config, bool interactive, bool cmdLine);
 
-    TString ProfileName, Endpoint, Database, TokenFile, Oauth2KeyFile, YcTokenFile, SaKeyFile,
+    TString ProfileName, Endpoint, Database, TokenFile, Oauth2KeyFile, OidcConfigFile, YcTokenFile, SaKeyFile,
             IamTokenFile, IamEndpoint, User, PasswordFile, CaCertsFile, ClientCertFile, ClientCertPrivateKeyFile, ClientCertPrivateKeyPasswordFile;
 
     bool UseMetadataCredentials = false;

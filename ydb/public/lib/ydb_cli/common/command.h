@@ -3,6 +3,7 @@
 #include "build_info.h"
 #include "common.h"
 #include "client_command_options.h"
+#include "oidc.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -141,6 +142,7 @@ public:
         bool IsNetworkIntensive = false;
         bool UsePerChannelTcpConnection = false;
         TString Oauth2KeyFile;
+        TString OidcConfigFile;
         TString Oauth2KeyParams;
 
         ui32 VerbosityLevel = 0;
@@ -206,6 +208,9 @@ public:
             , TabletId(0)
         {
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
+                if (config.OidcConfigFile) {
+                    return CreateCliOidcCredentialsProviderFactory(config.OidcConfigFile);
+                }
                 if (config.SecurityToken) {
                     return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
                 }

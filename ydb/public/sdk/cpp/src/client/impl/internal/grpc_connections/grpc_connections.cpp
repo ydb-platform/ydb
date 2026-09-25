@@ -570,17 +570,35 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
             promise.SetValue(std::move(val));
         };
 
-    TRpcRequestSettings rpcSettings;
-    rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
-    rpcSettings.IncludeObservabilityInBuildInfo = true;
+    auto startRequest = [this, request = std::move(request), extractor, dbState]
+        (TCredentialsWaitResult status) mutable {
+            if (status.has_value()) {
+                extractor(nullptr, std::move(*status));
+                return;
+            }
 
-    RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
-        std::move(request),
-        extractor,
-        &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
-        dbState->shared_from_this(),
-        INITIAL_DEFERRED_CALL_DELAY,
-        rpcSettings);
+            // Interactive authentication has its own lifetime. Start the internal
+            // discovery RPC timeout only once credentials are available.
+            TRpcRequestSettings rpcSettings;
+            rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+            rpcSettings.IncludeObservabilityInBuildInfo = true;
+
+            RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
+                std::move(request),
+                extractor,
+                &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
+                dbState,
+                INITIAL_DEFERRED_CALL_DELAY,
+                rpcSettings);
+        };
+
+    TRpcRequestSettings authSettings;
+    IQueueClientContextPtr context;
+    if (auto ready = CredentialsReadyToWaitFor(dbState, authSettings, context); ready.Initialized()) {
+        DeferUntilCredentialsReady(authSettings, context, std::move(ready), std::move(startRequest));
+    } else {
+        startRequest(std::nullopt);
+    }
 
     std::weak_ptr<TDbDriverState> weakState = dbState;
 

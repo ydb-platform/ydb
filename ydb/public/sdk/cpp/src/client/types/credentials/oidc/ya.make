@@ -24,3 +24,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    file
+)

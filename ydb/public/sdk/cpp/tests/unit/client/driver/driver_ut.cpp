@@ -349,10 +349,56 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
 }
 
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
+    Y_UNIT_TEST(DiscoveryTimeoutStartsAfterCredentialsAreReady) {
+        TPortManager pm;
+        TMockTableService tableService;
+        const auto tablePort = pm.GetPort();
+        auto tableServer = StartGrpcServer(TStringBuilder() << "127.0.0.1:" << tablePort, tableService);
+
+        TMockDiscoveryService discoveryService;
+        auto* endpoint = discoveryService.MockResults["/Root/My/DB"].add_endpoints();
+        endpoint->set_address("127.0.0.1");
+        endpoint->set_port(tablePort);
+        const auto discoveryPort = pm.GetPort();
+        auto discoveryServer = StartGrpcServer(TStringBuilder() << "127.0.0.1:" << discoveryPort, discoveryService);
+
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto result = std::async(std::launch::async, [&] {
+            auto driver = TDriver(TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "127.0.0.1:" << discoveryPort)
+                .SetDatabase("/Root/My/DB")
+                .SetDiscoveryMode(EDiscoveryMode::Sync)
+                .SetCredentialsProviderFactory(factory));
+            return TTableClient(driver).CreateSession().GetValueSync().GetStatus();
+        });
+
+        // Interactive login can take longer than the internal ListEndpoints RPC timeout.
+        const auto beforeLogin = result.wait_for(std::chrono::seconds(11));
+        factory->SetReady();
+        UNIT_ASSERT(beforeLogin == std::future_status::timeout);
+        UNIT_ASSERT_VALUES_EQUAL(result.get(), EStatus::SUCCESS);
+    }
+
+    Y_UNIT_TEST(DriverStopCancelsDiscoveryCredentialsWait) {
+        auto factory = std::make_shared<TDeferredCredentialsFactory>();
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:100")
+            .SetDatabase("/Root/My/DB")
+            .SetDiscoveryMode(EDiscoveryMode::Async)
+            .SetCredentialsProviderFactory(factory));
+        auto result = TTableClient(driver).CreateSession();
+
+        driver.Stop(true);
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+        factory->SetReady();
+    }
+
     Y_UNIT_TEST(RequestWaitsForAuthInfo) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")
+            .SetDiscoveryMode(EDiscoveryMode::Async)
             .SetCredentialsProviderFactory(factory));
         auto result = TTableClient(driver).CreateSession();
 
@@ -366,6 +412,7 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")
+            .SetDiscoveryMode(EDiscoveryMode::Async)
             .SetCredentialsProviderFactory(factory));
         auto result = TTableClient(driver).CreateSession(
             TCreateSessionSettings().ClientTimeout(TDuration::MilliSeconds(100))).GetValueSync();
@@ -377,6 +424,7 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")
+            .SetDiscoveryMode(EDiscoveryMode::Async)
             .SetCredentialsProviderFactory(factory));
         auto result = TTableClient(driver).CreateSession();
 

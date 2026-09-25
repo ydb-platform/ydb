@@ -103,6 +103,9 @@ def get_ydb_config(request, enable_fq_connector=None):
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
             "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
+            "query_limits": {
+                "result_rows_limit": 20,
+            },
         },
         replication_config={
             "iam_service_control": {

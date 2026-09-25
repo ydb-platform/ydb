@@ -383,7 +383,7 @@ class TTtlVersions {
 private:
     struct TTableTtlData {
         std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>> Versions;
-        std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> LastSettingsProto;   // Last TTL settings proto as saved to DB (for carry-over on TRUNCATE)
+        std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> LastSettingsProto;
     };
 
     THashMap<TInternalPathId, TTableTtlData> Ttl;

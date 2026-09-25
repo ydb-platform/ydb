@@ -1124,8 +1124,7 @@ void TestEmptyDroppedTableCleanupWaitsForReadWindow(const bool enableSnapshotsLo
     const auto dropSnapshot = NOlap::TSnapshot(dropPlanStep, dropTxId);
     PlanSchemaTx(runtime, sender, dropSnapshot);
 
-    const auto pathId =
-        *controller->GetShard()->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(tableId), false);
+    const auto pathId = *controller->GetShard()->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(tableId), false);
     auto isPendingDrop = [&] {
         for (const auto& [_, pathIds] : controller->GetShard()->GetTablesManager().GetPathsToDrop()) {
             if (pathIds.contains(pathId)) {

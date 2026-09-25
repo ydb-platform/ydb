@@ -523,8 +523,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         // Step 2: Remove TTL via ALTER (empty TTableSpecials → Disabled).
         {
-            const auto alterBody =
-                TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/2, testTable.Schema, testTable.Pk, TTestSchema::TTableSpecials{});
+            const auto alterBody = TTestSchema::AlterTableTxBody(
+                pathId, /*standalone=*/true, /*version=*/2, testTable.Schema, testTable.Pk, TTestSchema::TTableSpecials{});
             auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
             PlanSchemaTx(runtime, sender, { planStep, txId });
         }

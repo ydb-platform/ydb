@@ -491,7 +491,6 @@ TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLoca
     }
 }
 
-
 bool TTablesManager::IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const {
     return HasPrimaryIndex() && HasTable(pathId, withDeleted);
 }

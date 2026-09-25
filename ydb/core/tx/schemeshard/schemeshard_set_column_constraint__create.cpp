@@ -3,7 +3,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
-#include "schemeshard_xxport__helpers.h"
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -47,8 +47,11 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams());
-        if (uid && Self->SetColumnConstraintOperationsByUid.contains(uid)) {
+        const TString& uid = GetUid(EOperationUidKind::SetColumnConstraint, request.GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::SetColumnConstraint, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Reject,
+            [&](const auto& key) { return Self->FindOperationByUid(key); });
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "SetColumnConstraint operation with uid '" << uid << "' already exists");
         }

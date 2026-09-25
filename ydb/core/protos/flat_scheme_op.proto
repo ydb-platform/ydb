@@ -1997,6 +1997,15 @@ message TSetColumnConstraintSettings {
 
 // End Set Column Constraints
 
+// Idempotency metadata for an operation submission. Child operations must
+// retain their parent's operation identity rather than admit this key again.
+message TOperationIdempotency {
+    optional string Uid = 1 [(Ydb.sensitive) = true];
+    optional bytes OriginalDdl = 2 [(Ydb.sensitive) = true];
+    // Read retained identity without admitting an operation on a miss.
+    optional bool LookupOnly = 3 [default = false];
+}
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -2006,6 +2015,7 @@ message TModifyScheme {
     optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
     optional bool ReplaceIfExists = 91 [default = false];
     optional bool AllowAccessToPrivatePaths = 53 [default = false];
+    optional TOperationIdempotency OperationIdempotency = 97;
 
     optional TMkDir MkDir = 3;
     optional TTableDescription CreateTable = 4;

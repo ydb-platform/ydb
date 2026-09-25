@@ -5388,7 +5388,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             OperationParams {
               labels {
                 key: "uid"
-                value: "foo"
+                value: "ключ with spaces/and?symbols!"
               }
             }
             ImportFromS3Settings {
@@ -5405,12 +5405,33 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImport(runtime, ++txId, "/MyRoot", request);
         const ui64 importId = txId;
         // create operation again with same uid
-        TestImport(runtime, ++txId, "/MyRoot", request);
+        TString differentBody = request;
+        SubstGlobal(differentBody, "/MyRoot/Table", "/MyRoot/OtherTable");
+        TestImport(runtime, ++txId, "/MyRoot", differentBody);
         // new operation was not created
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         // check previous operation
         TestGetImport(runtime, importId, "/MyRoot");
         env.TestWaitNotification(runtime, importId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestImport(runtime, ++txId, "/MyRoot", differentBody);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        // Legacy retries allow an omitted or unresolved database, but reject
+        // a different resolved path before validating a new request.
+        for (const TString& database : {TString(), TString("/MissingDatabase")}) {
+            TestImport(runtime, ++txId, database, differentBody);
+            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+        TestImport(runtime, ++txId, "/MyRoot/Table", differentBody, "", "", Ydb::StatusIds::ALREADY_EXISTS);
+
+        TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestImport(runtime, ++txId, "/MyRoot", differentBody);
+        TestGetImport(runtime, txId, "/MyRoot");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST_FLAG(ImportStartTime, EnableDataShardDirectPartImport) {

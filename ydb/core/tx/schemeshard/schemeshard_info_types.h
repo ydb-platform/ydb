@@ -4094,6 +4094,12 @@ struct TIncrementalRestoreState {
 
     EState State = EState::Running;
 
+    TString Uid;
+    TString OriginalDdl;
+    TString UserSID;
+    // UID metadata exists at admission, before the initial restore is done.
+    bool AwaitingInitialRestore = false;
+
     TPathId BackupCollectionPathId;
     ui64 OriginalOperationId = 0;
 
@@ -4360,6 +4366,8 @@ struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
         }
     };
 
+    TString Uid;
+    TString OriginalDdl;
     ui64 Id;
     EState State;
     TPathId DomainPathId;
@@ -4431,6 +4439,8 @@ struct TFullBackupInfo : public TSimpleRefCount<TFullBackupInfo> {
         }
     };
 
+    TString Uid;
+    TString OriginalDdl;
     ui64 Id;
     EState State;
     TPathId DomainPathId;

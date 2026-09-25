@@ -2296,6 +2296,13 @@ struct Schema : NIceDb::Schema {
         // Persisted so post-reboot entry routes to HandleRetryPath.
         struct RetryNeeded : Column<11, NScheme::NTypeIds::Bool> {};
 
+        struct Uid : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct OriginalDdl : Column<13, NScheme::NTypeIds::String> {};
+        struct UserSID : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct BackupCollectionPathOwnerId : Column<15, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct BackupCollectionPathId : Column<16, NScheme::NTypeIds::Uint64> {};
+        struct AwaitingInitialRestore : Column<17, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2308,7 +2315,14 @@ struct Schema : NIceDb::Schema {
             CurrentStageStartedAt,
             RetryScheduled,
             NextRetryAttemptAt,
-            RetryNeeded>;
+            RetryNeeded,
+            Uid,
+            OriginalDdl,
+            UserSID,
+            BackupCollectionPathOwnerId,
+            BackupCollectionPathId,
+            AwaitingInitialRestore
+        >;
     };
 
     // Deprecated: kept for compatibility
@@ -2340,6 +2354,9 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<6, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<7, NScheme::NTypeIds::Uint64> {};
 
+        struct Uid : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct OriginalDdl : Column<9, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -2348,7 +2365,9 @@ struct Schema : NIceDb::Schema {
             DomainPathId,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            Uid,
+            OriginalDdl
         >;
     };
 
@@ -2606,6 +2625,9 @@ struct Schema : NIceDb::Schema {
         // Source-of-truth for item count after reboot; item rows are written lazily.
         struct ExpectedItemCount : Column<11, NScheme::NTypeIds::Uint32> {};
 
+        struct Uid : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct OriginalDdl : Column<13, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -2618,7 +2640,9 @@ struct Schema : NIceDb::Schema {
             FinalIssues,
             BackupCollectionPathOwnerId,
             BackupCollectionLocalPathId,
-            ExpectedItemCount
+            ExpectedItemCount,
+            Uid,
+            OriginalDdl
         >;
     };
 
@@ -2668,6 +2692,7 @@ struct Schema : NIceDb::Schema {
 
         struct DomainOwnerId :          Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct DomainLocalId :          Column<17, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct Uid :                    Column<18, NScheme::NTypeIds::Utf8>   {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -2687,7 +2712,8 @@ struct Schema : NIceDb::Schema {
             IsCancelled,
             CancellationReason,
             DomainOwnerId,
-            DomainLocalId
+            DomainLocalId,
+            Uid
         >;
     };
 

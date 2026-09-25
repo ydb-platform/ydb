@@ -22,6 +22,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
@@ -32,7 +33,6 @@
 #include <arrow/ipc/reader.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr {
 

@@ -23,8 +23,9 @@
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

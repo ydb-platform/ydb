@@ -1,4 +1,5 @@
 #include "abstract.h"
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr {

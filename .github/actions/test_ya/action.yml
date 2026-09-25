@@ -158,11 +158,11 @@ runs:
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
-        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py "$BUILD_PRESET" || true)
+        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py || true)
         job_id="${resolved%%$'\t'*}"
         job_title="${resolved#*$'\t'}"
         if [ -z "$job_id" ] || [ "$job_id" = "$resolved" ]; then
-          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for preset ${BUILD_PRESET}; metrics will be dropped" >&2
+          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for runner ${RUNNER_NAME}; metrics will be dropped" >&2
         else
           echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
         fi

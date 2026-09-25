@@ -14,64 +14,32 @@ add_product_paths(ANALYTICS)
 import os
 import unittest
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from github_actions.export_github_job_metrics import (
-    ALL_WORKFLOWS,
-    DEFAULT_WORKFLOWS,
+    already_exported,
     attach_pull_requests,
-    is_all_workflows,
-    last_export_at,
+    created_since,
     pull_refs_from_commit_pulls,
     pull_requests_have_target,
-    resolve_created_since,
-    resolve_workflows,
-    split_workflows,
-    workflow_file_name,
-    workflows_from_github_payload,
+    selected_workflows,
 )
 
 
-class SplitWorkflowsTest(unittest.TestCase):
-    def test_comma_and_repeats(self):
+class WorkflowNamesTest(unittest.TestCase):
+    def test_explicit_and_repeats(self):
         self.assertEqual(
-            split_workflows(["pr_check.yml,nightly_build.yml", "pr_check.yml"]),
+            selected_workflows(["pr_check.yml,nightly_build.yml", "pr_check.yml"]),
             ["pr_check.yml", "nightly_build.yml"],
         )
-
-    def test_empty(self):
-        self.assertEqual(split_workflows(None), [])
-        self.assertEqual(split_workflows(""), [])
-        self.assertEqual(split_workflows("  ,  "), [])
-
-
-class ResolveWorkflowsTest(unittest.TestCase):
-    def test_explicit_wins(self):
-        self.assertEqual(resolve_workflows(["ydbd_clean_build.yml"]), ["ydbd_clean_build.yml"])
+        self.assertEqual(selected_workflows(["run_tests.yml"]), ["run_tests.yml"])
 
     def test_default_is_all(self):
         old = os.environ.get("CI_METRICS_WORKFLOW")
         try:
             os.environ.pop("CI_METRICS_WORKFLOW", None)
-            self.assertEqual(resolve_workflows(None), [ALL_WORKFLOWS])
-            self.assertEqual(resolve_workflows(None), list(DEFAULT_WORKFLOWS))
-            self.assertTrue(is_all_workflows(resolve_workflows(None)))
-        finally:
-            if old is None:
-                os.environ.pop("CI_METRICS_WORKFLOW", None)
-            else:
-                os.environ["CI_METRICS_WORKFLOW"] = old
-
-    def test_explicit_all(self):
-        self.assertTrue(is_all_workflows(["all"]))
-        self.assertTrue(is_all_workflows(["ALL"]))
-        self.assertFalse(is_all_workflows(["pr_check.yml"]))
-
-    def test_env_override(self):
-        old = os.environ.get("CI_METRICS_WORKFLOW")
-        try:
-            os.environ["CI_METRICS_WORKFLOW"] = "pr_check.yml,nightly_build.yml"
-            self.assertEqual(resolve_workflows(None), ["pr_check.yml", "nightly_build.yml"])
+            self.assertEqual(selected_workflows(None), ["all"])
+            self.assertEqual(selected_workflows(["ALL"]), ["all"])
         finally:
             if old is None:
                 os.environ.pop("CI_METRICS_WORKFLOW", None)
@@ -109,53 +77,21 @@ class PullRefsTest(unittest.TestCase):
         self.assertIs(attach_pull_requests("ydb-platform", "ydb", run), run)
 
 
-class ListWorkflowsTest(unittest.TestCase):
-    def test_file_name_from_path(self):
-        self.assertEqual(workflow_file_name(".github/workflows/pr_check.yml"), "pr_check.yml")
-        self.assertEqual(workflow_file_name("run_tests.yml"), "run_tests.yml")
-
-    def test_skips_disabled_and_sorts(self):
-        self.assertEqual(
-            workflows_from_github_payload(
-                {
-                    "workflows": [
-                        {"path": ".github/workflows/run_tests.yml", "state": "active"},
-                        {"path": ".github/workflows/pr_check.yml", "state": "active"},
-                        {"path": ".github/workflows/old.yml", "state": "disabled_manually"},
-                        {"path": "README.md", "state": "active"},
-                    ]
-                }
-            ),
-            ["pr_check.yml", "run_tests.yml"],
-        )
+class CreatedSinceTest(unittest.TestCase):
+    def test_since_is_now_minus_hours(self):
+        since = created_since(36)
+        delta = datetime.now(timezone.utc) - since
+        self.assertGreater(delta.total_seconds(), 36 * 3600 - 5)
+        self.assertLess(delta.total_seconds(), 36 * 3600 + 5)
 
 
-class WatermarkTest(unittest.TestCase):
-    def test_falls_back_to_hours_when_no_last_export(self):
-        original = last_export_at
-        import github_actions.export_github_job_metrics as exp
-
-        exp.last_export_at = lambda table_path=None: None
-        try:
-            since = resolve_created_since(2)
-            delta = datetime.now(timezone.utc) - since
-            self.assertGreater(delta.total_seconds(), 2 * 3600 - 5)
-            self.assertLess(delta.total_seconds(), 2 * 3600 + 5)
-        finally:
-            exp.last_export_at = original
-
-    def test_uses_last_export_minus_15m_when_recent(self):
-        import github_actions.export_github_job_metrics as exp
-
-        last = datetime.now(timezone.utc) - timedelta(minutes=10)
-        original = exp.last_export_at
-        exp.last_export_at = lambda table_path=None: last
-        try:
-            since = resolve_created_since(2)
-            expected = last - timedelta(minutes=15)
-            self.assertLess(abs((since - expected).total_seconds()), 2)
-        finally:
-            exp.last_export_at = original
+class AlreadyExportedTest(unittest.TestCase):
+    def test_skips_known_run_and_keeps_new(self):
+        exported = {10, 11}
+        self.assertTrue(already_exported(10, exported))
+        self.assertTrue(already_exported("11", exported))
+        self.assertFalse(already_exported(12, exported))
+        self.assertFalse(already_exported(None, exported))
 
 
 if __name__ == "__main__":

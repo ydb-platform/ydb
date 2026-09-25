@@ -162,36 +162,51 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     return [row for row in rows if row is not None]
 
 
-def last_export_at(table_path: Optional[str] = None) -> Optional[datetime]:
+def created_since(hours: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(hours=hours)
+
+
+def already_exported(run_id: Any, exported: set) -> bool:
+    try:
+        return int(run_id) in exported
+    except (TypeError, ValueError):
+        return False
+
+
+def exported_run_ids(since: datetime, table_path: Optional[str] = None) -> set:
+    """Run ids that already have a github_job row in this window.
+
+    The GitHub `created` filter stays at `since`. A failed query exports the
+    whole window again; upsert is idempotent.
+    """
     if not has_send_credentials():
-        return None
+        return set()
+    ts = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         with _open_ydb_wrapper() as wrapper:
             if not wrapper.check_credentials():
-                return None
+                return set()
             path = table_path or resolve_table_path(wrapper)
             rows = wrapper.execute_scan_query(
                 f"""
-                SELECT MAX(exported_at) AS last_export
+                SELECT run_id
                 FROM `{path}`
-                WHERE source IN ("github_job", "github_step")
+                WHERE event_ts >= Timestamp("{ts}")
+                  AND source = "github_job"
+                  AND name = "job"
                 """
             )
-    except Exception as exc:  # noqa: BLE001 — fall back to --hours
+    except Exception as exc:  # noqa: BLE001 — re-export the window
         print(f"Warning: export watermark query failed: {exc}")
-        return None
-    if not rows:
-        return None
-    value = rows[0].get("last_export") if isinstance(rows[0], dict) else None
-    return parse_datetime(value)
-
-
-def resolve_created_since(hours: int, table_path: Optional[str] = None) -> datetime:
-    floor = datetime.now(timezone.utc) - timedelta(hours=hours)
-    last = last_export_at(table_path)
-    if last is None:
-        return floor
-    return max(last - timedelta(minutes=15), floor)
+        return set()
+    ids = set()
+    for row in rows or []:
+        if isinstance(row, dict):
+            try:
+                ids.add(int(row["run_id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return ids
 
 
 def upload_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) -> int:
@@ -215,67 +230,27 @@ def upload_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) ->
 
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"
-ALL_WORKFLOWS = "all"
-DEFAULT_WORKFLOWS = (ALL_WORKFLOWS,)
 
 
-def split_workflows(raw: Any) -> List[str]:
-    """Accept a string, comma-separated string, or list of workflow file names."""
-    if raw is None:
-        return []
-    if isinstance(raw, (list, tuple)):
-        items = list(raw)
-    else:
-        items = [raw]
-    result: List[str] = []
-    seen = set()
-    for item in items:
+def selected_workflows(explicit: Optional[List[str]] = None) -> List[str]:
+    raw: List[Any] = list(explicit or [])
+    if not raw:
+        env_value = os.environ.get("CI_METRICS_WORKFLOW")
+        raw = [env_value] if env_value else ["all"]
+    names: List[str] = []
+    for item in raw:
         for part in str(item).split(","):
             name = part.strip()
-            if not name or name in seen:
+            if not name:
                 continue
-            seen.add(name)
-            result.append(name)
-    return result
+            if name.lower() == "all":
+                return ["all"]
+            if name not in names:
+                names.append(name)
+    return names or ["all"]
 
 
-def resolve_workflows(explicit: Optional[List[str]] = None) -> List[str]:
-    if explicit:
-        workflows = split_workflows(explicit)
-        if workflows:
-            return workflows
-    env_value = os.environ.get("CI_METRICS_WORKFLOW")
-    workflows = split_workflows(env_value) if env_value else []
-    return workflows or list(DEFAULT_WORKFLOWS)
-
-
-def is_all_workflows(workflows: List[str]) -> bool:
-    if not workflows:
-        return True
-    return len(workflows) == 1 and workflows[0].lower() == ALL_WORKFLOWS
-
-
-def workflow_file_name(path: str) -> str:
-    name = str(path or "").rsplit("/", 1)[-1].strip()
-    return name
-
-
-def workflows_from_github_payload(payload: Any) -> List[str]:
-    names: List[str] = []
-    seen = set()
-    for item in (payload or {}).get("workflows") or []:
-        if not isinstance(item, dict) or item.get("state") != "active":
-            continue
-        name = workflow_file_name(str(item.get("path") or ""))
-        if not name.endswith((".yml", ".yaml")) or name in seen:
-            continue
-        seen.add(name)
-        names.append(name)
-    names.sort()
-    return names
-
-
-def list_active_workflow_files(org: str, repo: str) -> List[str]:
+def active_workflow_files(org: str, repo: str) -> List[str]:
     names: List[str] = []
     seen = set()
     page = 1
@@ -284,14 +259,15 @@ def list_active_workflow_files(org: str, repo: str) -> List[str]:
             f"https://api.github.com/repos/{org}/{repo}/actions/workflows",
             params={"per_page": 100, "page": page},
         )
-        batch = workflows_from_github_payload(payload)
-        for name in batch:
-            if name in seen:
+        batch = payload.get("workflows") or []
+        for item in batch:
+            if not isinstance(item, dict) or item.get("state") != "active":
                 continue
-            seen.add(name)
-            names.append(name)
-        workflows = payload.get("workflows") or []
-        if len(workflows) < 100:
+            name = str(item.get("path") or "").rsplit("/", 1)[-1].strip()
+            if name.endswith((".yml", ".yaml")) and name not in seen:
+                seen.add(name)
+                names.append(name)
+        if len(batch) < 100:
             break
         page += 1
         time.sleep(0.2)
@@ -299,11 +275,11 @@ def list_active_workflow_files(org: str, repo: str) -> List[str]:
     return names
 
 
-def expand_workflows(org: str, repo: str, explicit: Optional[List[str]] = None) -> List[str]:
-    resolved = resolve_workflows(explicit)
-    if is_all_workflows(resolved):
-        return list_active_workflow_files(org, repo)
-    return resolved
+def workflows_to_export(org: str, repo: str, explicit: Optional[List[str]] = None) -> List[str]:
+    names = selected_workflows(explicit)
+    if names == ["all"]:
+        return active_workflow_files(org, repo)
+    return names
 
 
 def iter_workflow_runs(
@@ -400,12 +376,19 @@ def attach_pull_requests(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, 
     return enriched
 
 
-def collect_rows(org: str, repo: str, workflow: str, created_since: datetime) -> List[Dict[str, Any]]:
+def collect_rows(
+    org: str,
+    repo: str,
+    workflow: str,
+    created_since: datetime,
+    exported: Optional[set] = None,
+) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     run_count = 0
+    exported = exported or set()
     for run in iter_workflow_runs(org, repo, workflow, created_since):
         run_id = run.get("id")
-        if run_id is None:
+        if run_id is None or already_exported(run_id, exported):
             continue
         try:
             jobs = list_run_jobs(org, repo, int(run_id))
@@ -429,8 +412,7 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--workflow",
         action="append",
         default=None,
-        help="Workflow file name (repeatable or comma-separated). "
-        "Default: all active workflows. Use a file name to export one, e.g. pr_check.yml.",
+        help="Workflow file (repeatable or comma-separated). Default: all active workflows.",
     )
     parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours (default 24)")
     parser.add_argument("--table-path", default=None)
@@ -440,16 +422,17 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
-        workflows = expand_workflows(args.org, args.repo, args.workflow)
-        created_since = resolve_created_since(args.hours, table_path=args.table_path)
+        workflows = workflows_to_export(args.org, args.repo, args.workflow)
+        since = created_since(args.hours)
+        exported = exported_run_ids(since, table_path=args.table_path)
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
-            f"since {created_since.isoformat()}"
+            f"since {since.isoformat()} skip={len(exported)}"
         )
         rows: List[Dict[str, Any]] = []
         for workflow in workflows:
             try:
-                rows.extend(collect_rows(args.org, args.repo, workflow, created_since))
+                rows.extend(collect_rows(args.org, args.repo, workflow, since, exported))
             except Exception as exc:  # noqa: BLE001 — keep other workflows
                 print(f"Warning: failed to export workflow {workflow}: {exc}")
         if not rows:

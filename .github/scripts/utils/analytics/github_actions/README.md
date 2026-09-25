@@ -6,7 +6,7 @@
 
 PK: `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`. Без `github_job_id` / `run_attempt` / `span_id` строка в YDB не уходит. TTL — 1 год. `CREATE TABLE` на flush не вызывается (`ensure_table=False`).
 
-Связка с GitHub job: в labels пишется `parent_span_id=job-{github_job_id}` (то же у export `queue`/`step`). Job id резолвится скриптом `.github/scripts/analytics/resolve_github_job_id.py` с пагинацией jobs API.
+Связка с GitHub job: в labels пишется `parent_span_id=job-{github_job_id}` (то же у export `queue`/`step`). Job id — строка jobs API, у которой `runner_name` равен `$RUNNER_NAME` (скрипт `resolve_github_job_id.py`, страницы по 100).
 
 ## CLI в job
 
@@ -57,7 +57,7 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
   --hours 2
 ```
 
-Окно: `MAX(exported_at)` по `github_job`/`github_step` минус 15 минут, но не старше `--hours` (fallback 2ч, если watermark нет). `--workflow pr_check.yml` (можно несколько) или все active workflows. `--org` / `--repo` / `--table-path` по желанию.
+Окно GitHub `created` всегда `--hours` (в cron — 36), его watermark не сужает. Уже записанные `github_job` с `event_ts` в этом окне пропускаются. Ошибка запроса — выгружаем окно целиком, upsert идемпотентный. По умолчанию все active workflows. `--workflow pr_check.yml` ограничивает список. `--org` / `--repo` / `--table-path` по желанию.
 
 ```bash
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py'

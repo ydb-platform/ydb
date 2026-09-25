@@ -12,37 +12,40 @@ add_product_paths(Path(__file__).resolve().parents[4] / "analytics")
 
 import unittest
 
-from resolve_github_job_id import job_name_matches_preset, list_run_jobs, pick_job, resolve_github_job
+from resolve_github_job_id import list_run_jobs, pick_job, resolve_github_job
 
 
-class JobNameMatchTest(unittest.TestCase):
-    def test_preset_at_end_and_middle(self):
-        self.assertTrue(job_name_matches_preset("Build and test relwithdebinfo", "relwithdebinfo"))
-        self.assertTrue(job_name_matches_preset("linux relwithdebinfo extra", "relwithdebinfo"))
-        self.assertFalse(job_name_matches_preset("check-running-allowed", "relwithdebinfo"))
+class PickJobTest(unittest.TestCase):
+    def test_same_preset_different_runners(self):
+        jobs = [
+            {"id": 1, "name": "Build and test relwithdebinfo on main", "runner_name": "runner-a"},
+            {"id": 2, "name": "Build and test relwithdebinfo on stable", "runner_name": "runner-b"},
+        ]
+        self.assertEqual(pick_job(jobs, "runner-b")["id"], 2)
+        self.assertIsNone(pick_job(jobs, "runner-missing"))
+        self.assertIsNone(pick_job(jobs, ""))
 
 
 class PaginationTest(unittest.TestCase):
-    def test_lists_two_pages_and_picks_preset(self):
+    def test_lists_two_pages_and_picks_runner(self):
         pages = {
-            1: {"jobs": [{"id": 1, "name": "other"}, {"id": 2, "name": "setup"}]},
-            2: {"jobs": [{"id": 9, "name": "Build and test relwithdebinfo"}]},
+            1: {"jobs": [{"id": 1, "name": "other", "runner_name": "a"}, {"id": 2, "name": "setup", "runner_name": "b"}]},
+            2: {"jobs": [{"id": 9, "name": "Build and test relwithdebinfo", "runner_name": "this-runner"}]},
         }
 
-        def get_json(url, token, params=None):
+        def get_json(url, params, *, token=None):
             return pages[params["page"]]
 
         jobs = list_run_jobs("ydb-platform/ydb", "1", "tok", get_json=get_json, per_page=2)
         self.assertEqual(len(jobs), 3)
-        picked = pick_job(jobs, "relwithdebinfo")
-        self.assertEqual(picked["id"], 9)
+        self.assertEqual(pick_job(jobs, "this-runner")["id"], 9)
 
     def test_resolve_uses_injected_fetch(self):
-        def get_json(url, token, params=None):
-            return {"jobs": [{"id": 77, "name": "Postcommit · Build and test release-asan"}]}
+        def get_json(url, params, *, token=None):
+            return {"jobs": [{"id": 77, "name": "Build and test release-asan", "runner_name": "mine"}]}
 
         job = resolve_github_job(
-            "release-asan",
+            "mine",
             repository="ydb-platform/ydb",
             run_id="5",
             token="t",

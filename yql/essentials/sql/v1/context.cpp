@@ -24,6 +24,26 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
+TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
+    if (prefixPath.empty()) {
+        return path.Build();
+    }
+
+    if (path.GetLiteral()) {
+        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
+    }
+
+    auto pathNode = path.Build();
+    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", {pathNode});
+    auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath));
+
+    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", {prefixNode, pathNode});
+
+    TDeferredAtom result;
+    MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
+    return result.Build();
+}
+
 using TPragmaField = bool TContext::*;
 
 // TODO(vityaman): register thsese names automatically using TABLE_ELEM macro.
@@ -85,6 +105,7 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     : Lexers(std::move(lexers))
     , Parsers(std::move(parsers))
     , ClusterMapping_(settings.ClusterMapping)
+    , PathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
     , SqlHints_(std::move(hints))
     , Settings(settings)
@@ -392,25 +413,17 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    if (path.GetLiteral()) {
-        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(service, cluster, *path.GetLiteral()));
+    TStringBuf prefixPath = GetPrefixPath(service, cluster);
+    if (Settings.NormalizePath && cluster.GetLiteral() && path.GetLiteral()) {
+        return AddTablePathPrefix(*this, prefixPath, TDeferredAtom(path.Build()->GetPos(), Settings.NormalizePath(*cluster.GetLiteral(), *path.GetLiteral())));
     }
-    const auto prefixPath = GetPrefixPath(service, cluster);
-    if (prefixPath.empty()) {
-        return path.Build();
+    if (prefixPath) {
+        return AddTablePathPrefix(*this, prefixPath, path);
     }
-
-    auto pathNode = path.Build();
-    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", {pathNode});
-    auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), prefixPath);
-    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", {prefixNode, pathNode});
-
-    TDeferredAtom result;
-    MakeTableFromExpression(Pos(), *this, buildPathNode, result);
-    return result.Build();
+    return path.Build();
 }
 
-TString TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
+TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
     if (IsDynamicCluster(cluster)) {
         return {};
     }
@@ -418,26 +431,16 @@ TString TContext::GetPrefixPath(const TString& service, const TDeferredAtom& clu
                               ? ClusterPathPrefixes_.FindPtr(*cluster.GetLiteral())
                               : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
-        return NormalizePath(service, cluster, *clusterPrefix);
+        return *clusterPrefix;
+    } else {
+        auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
+        if (providerPrefix && !providerPrefix->empty()) {
+            return *providerPrefix;
+        } else if (!PathPrefix_.empty()) {
+            return PathPrefix_;
+        }
+        return {};
     }
-    auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
-    if (providerPrefix && !providerPrefix->empty()) {
-        return NormalizePath(service, cluster, *providerPrefix);
-    }
-    return PathPrefix_ ? NormalizePath(service, cluster, *PathPrefix_) : Settings.PathPrefix;
-}
-
-TString TContext::NormalizePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const {
-    if (Settings.NormalizePath && cluster.GetLiteral()) {
-        return Settings.NormalizePath(service, *cluster.GetLiteral(), path);
-    }
-    return TString(path);
-}
-
-TString TContext::BuildTablePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const {
-    // Prefixes from the request database have already been normalized at ingress.
-    return NYql::BuildTablePath(GetPrefixPath(service, cluster),
-                                NormalizePath(service, cluster, path));
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {

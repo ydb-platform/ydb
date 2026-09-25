@@ -9,6 +9,8 @@
 #include <util/system/event.h>
 #include <util/system/thread.h>
 
+#include <atomic>
+
 namespace NYdb::NBS {
 
 using namespace NThreading;
@@ -73,6 +75,17 @@ public:
         Queue.Enqueue(task.release());
     }
 
+    // Destroy tasks that were queued after the stop signal. Call this only
+    // after the executor thread has left Execute: task destructors may drop
+    // the last owner of the executor.
+    void DropQueuedTasks()
+    {
+        ITask* task = nullptr;
+        while (Queue.TryDequeue(&task)) {
+            delete task;
+        }
+    }
+
 private:
     void Dispatch(TCont* c)
     {
@@ -104,6 +117,21 @@ private:
         }
 
         executor->Abort();
+
+        // Abort cancels coroutines that are already waiting. A resumed
+        // coroutine may block in WaitFor again. Cancel those waits too, and
+        // leave this coroutine only after the others have finished.
+        // Otherwise a blocked coroutine keeps the executor's owner alive,
+        // ~TExecutor never runs, and LeakSanitizer reports the TContExecutor
+        // allocated in ThreadProc.
+        while (executor->TotalConts() > 1) {
+            // The running dispatcher is counted as waiting. More than one
+            // waiter means some other coroutine is blocked.
+            if (executor->TotalWaitingConts() > 1) {
+                executor->Abort();
+            }
+            c->Yield();
+        }
     }
 };
 
@@ -119,6 +147,9 @@ private:
     const size_t ContStackSize;
 
     TManualEvent StartEvent;
+    // Set when ~TExecutor runs on this thread. ThreadProc then deletes
+    // itself after Execute returns; joining from here would deadlock.
+    std::atomic<bool> DeleteSelf{false};
 
 public:
     std::unique_ptr<TContExecutor> Executor;
@@ -136,6 +167,13 @@ public:
         StartEvent.WaitI();
     }
 
+    // The executor thread owns this object from here on and deletes it
+    // after Execute returns.
+    void Orphan()
+    {
+        DeleteSelf.store(true);
+    }
+
     void* ThreadProc() override
     {
         TAffinityGuard affinityGuard(Affinity);
@@ -149,6 +187,17 @@ public:
         StartEvent.Signal();
 
         Executor->Execute();
+
+        if (DeleteSelf.load()) {
+            // Execute has returned, so the coroutine runtime is idle.
+            // Detach before delete: ~TThread joins, and this is that thread.
+            if (Dispatcher) {
+                Dispatcher->DropQueuedTasks();
+            }
+            Detach();
+            delete this;
+            return nullptr;
+        }
         return nullptr;
     }
 };
@@ -171,10 +220,27 @@ void TExecutor::Start()
 
 void TExecutor::Stop()
 {
-    if (Thread->Dispatcher) {
-        Thread->Dispatcher->Stop();
-        Thread->Join();
+    if (!Thread || !Thread->Dispatcher) {
+        return;
     }
+
+    auto dispatcher = Thread->Dispatcher;
+    dispatcher->Stop();
+
+    if (Thread->Id() == Thread->CurrentThreadId()) {
+        // A task on this thread dropped the last reference. Join would
+        // fail with EDEADLK. Let ThreadProc delete the thread after
+        // Execute returns.
+        Thread->Orphan();
+        Thread.release();
+        return;
+    }
+
+    Thread->Join();
+    // The queue destructor drops raw ITask pointers. Delete them on this
+    // thread, after the executor thread is gone, so owners are released
+    // without joining the executor from itself.
+    dispatcher->DropQueuedTasks();
 }
 
 void TExecutor::Enqueue(ITaskPtr task)

@@ -1701,16 +1701,24 @@ void TDirectBlockGroup::DoEstablishConnection(
 
     auto futures = StorageTransport->Connect(connection.HostConnection);
     if (connectionType == EConnectionType::DDisk) {
+        // Do not capture the executor. The disconnect promise lives in the
+        // transport owned by this group; a strong executor ref would keep the
+        // group alive after the last external owner is gone.
         futures.DisconnectFuture.Subscribe(
-            [hostIndex, weakSelf = weak_from_this(), executor = Executor]   //
+            [hostIndex, weakSelf = weak_from_this()]   //
             (const TFuture<ui32>& f)
             {
-                executor->ExecuteSimple(
+                auto self = weakSelf.lock();
+                if (!self) {
+                    return;
+                }
+
+                self->Executor->ExecuteSimple(
                     [hostIndex, nodeId = f.GetValue(), weakSelf]   //
                     () mutable -> void
                     {
-                        if (auto self = weakSelf.lock()) {
-                            self->OnNodeDisconnected(hostIndex, nodeId);
+                        if (auto locked = weakSelf.lock()) {
+                            locked->OnNodeDisconnected(hostIndex, nodeId);
                         }
                     });
             });
@@ -1718,13 +1726,17 @@ void TDirectBlockGroup::DoEstablishConnection(
 
     futures.ConnectFuture.Subscribe(
         [weakSelf = weak_from_this(),
-         executor = Executor,
          connectionType = connection.HostConnection.ConnectionType,
          hostIndex,
          actualSeqNo]   //
         (const TFuture<TEvConnectResult>& f) mutable
         {
-            executor->ExecuteSimple(
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
+            }
+
+            self->Executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf),
                  connectionType,
                  hostIndex,
@@ -1732,8 +1744,8 @@ void TDirectBlockGroup::DoEstablishConnection(
                  actualSeqNo]   //
                 () mutable
                 {
-                    if (auto self = weakSelf.lock()) {
-                        self->OnConnectResponse(
+                    if (auto locked = weakSelf.lock()) {
+                        locked->OnConnectResponse(
                             connectionType,
                             hostIndex,
                             actualSeqNo,

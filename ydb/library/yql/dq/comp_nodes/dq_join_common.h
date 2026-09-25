@@ -480,19 +480,36 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
     struct DumpRestOfPages {
         DumpRestOfPages(Self& self, std::unordered_map<int, TSpilledBucket>&& base,
-                        TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>>&& futures)
+                        TMKQLVector<TValueAndLocation<TPackResult>>&& pages)
             : AlreadyDumped(std::move(base))
-            , Futures(std::move(futures))
+            , Pages(std::move(pages))
         {
+            const int pageCount = Pages.size();
+            StartNextBatch(*self.Spiller_);
+            self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", pageCount));
+        }
+
+        void StartNextBatch(ISpiller& spiller) {
+            MKQL_ENSURE(Futures.empty(), "previous spilling batch is not finished");
+            MKQL_ENSURE(!Pages.empty(), "no pages to spill");
+
+            const int batchSize = std::min<int>(Settings.SpillingPagesAtTime, Pages.size());
+            Futures.reserve(batchSize);
+            for (int index = 0; index < batchSize; ++index) {
+                auto page = *GetBackOrNull(Pages);
+                Futures.push_back({.Val = SpillPage(spiller, std::move(page.Val)), .Side = page.Side,
+                                   .BucketIndex = page.BucketIndex});
+            }
+
             NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wg;
             for (auto& future : Futures) {
                 wg.Add(future.Val);
             }
             All = std::move(wg).Finish();
-            self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", Futures.size()));
         }
 
         DumpedBuckets AlreadyDumped;
+        TMKQLVector<TValueAndLocation<TPackResult>> Pages;
         TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> Futures;
         NThreading::TFuture<void> All;
     };
@@ -754,7 +771,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                     }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
-                    TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> futures;
+                    auto pages = std::move(state.Spiller.GetState().InMemoryPages);
                     for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
                         if (state.Spiller.IsBucketSpilled(index)) {
                             TSides<TBucket>& thisPair = *std::get_if<TSides<TBucket>>(&state.Spiller.GetState().Buckets[index]);
@@ -763,8 +780,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 thisBucket.DetatchBuildingPage();
                                 for( TPackResult& page: thisBucket.DetatchPages()){
 
-                                    futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
-                                        .Val = SpillPage(*Spiller_, std::move(page)), .Side = side,
+                                    pages.push_back(TValueAndLocation<TPackResult>{
+                                        .Val = std::move(page), .Side = side,
                                         .BucketIndex = index});
                                 }
                                 alreadyDumped[index].SelectSide(side) = std::move(*thisBucket.SpilledPages);
@@ -772,14 +789,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                         }
                     }
-                    for (auto& page : state.Spiller.GetState().InMemoryPages) {
-                        futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
-                            .Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
-                            .BucketIndex = page.BucketIndex});
-                    }
-                    state.Spiller.GetState().InMemoryPages.clear();
-                    state.Spiller.GetState().InMemoryPages.shrink_to_fit();
-                    if (futures.empty()) {
+                    if (pages.empty()) {
                         if (alreadyDumped.empty()) {
                             State_ = Finish{};
                         } else {
@@ -788,7 +798,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     } else {
 
                         MKQL_ENSURE(!alreadyDumped.empty(), "0 dumped buckets but have some parts in memory?");
-                        State_ = DumpRestOfPages{*this, std::move(alreadyDumped), std::move(futures)};
+                        State_ = DumpRestOfPages{*this, std::move(alreadyDumped), std::move(pages)};
                     }
                 }
             } else {
@@ -843,7 +853,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     MKQL_ENSURE(it != state.AlreadyDumped.end(), "bucket with this index is processed already");
                     it->second.SelectSide(future.Side).push_back(ExtractReadyFuture(std::move(future.Val)));
                 }
-                State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
+                state.Futures.clear();
+                if (state.Pages.empty()) {
+                    State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
+                } else {
+                    state.StartNextBatch(*Spiller_);
+                }
 
             } else {
                 return WaitWhileSpilling();

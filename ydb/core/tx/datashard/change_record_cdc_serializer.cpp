@@ -371,7 +371,7 @@ protected:
         }
 
         for (const auto& [tag, column] : schema->Columns) {
-            table["columns"][column.Name] = NScheme::TypeName(column.Type, column.TypeMod);
+            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
         }
 
         SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});

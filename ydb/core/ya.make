@@ -45,6 +45,7 @@ RECURSE(
     memory_controller
     nbs
     node_whiteboard
+    path_aliasing
     persqueue
     public_http
     quoter

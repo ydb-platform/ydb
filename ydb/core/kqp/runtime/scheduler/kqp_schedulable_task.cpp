@@ -10,11 +10,11 @@ TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
     : Query(query)
 {
     Y_ENSURE(query);
-    ++Query->CpuDemand;
+    ++Query->CpuMaxDemand;
 }
 
 TSchedulableTask::~TSchedulableTask() {
-    --Query->CpuDemand;
+    --Query->CpuMaxDemand;
 }
 
 void TSchedulableTask::RegisterForResume(const TActorId& actorId) {
@@ -36,10 +36,10 @@ bool TSchedulableTask::TryIncreaseUsage() {
         fairShare = snapshot->FairShare;
         poolOrQuery = Query->GetParent();
 
-        // Special case for zero demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
-        if (fairShare == 0 && snapshot->CpuDemand == 0) {
-            auto prevDemand = snapshot->CpuDemand.fetch_add(1);
-            if (prevDemand == 0) {
+        // Special case for zero max demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
+        if (fairShare == 0 && snapshot->CpuMaxDemand == 0) {
+            auto prevMaxDemand = snapshot->CpuMaxDemand.fetch_add(1);
+            if (prevMaxDemand == 0) {
                 fairShare = Query->AllowMinFairShare;
             }
         }
@@ -65,7 +65,7 @@ bool TSchedulableTask::TryIncreaseUsage() {
         }
     }
 
-    Query->UpdateActualDemand();
+    Query->UpdatePeakDemand();
 
     return true;
 }
@@ -76,7 +76,7 @@ void TSchedulableTask::IncreaseUsage() {
     }
 }
 
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usageType) {
+void TSchedulableTask::DecreaseUsage(TDuration burstUsage, EUsageType usageType) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->CpuUsage;
         switch(usageType) {
@@ -103,7 +103,7 @@ size_t TSchedulableTask::GetSpareUsage() const {
     return 0;
 }
 
-void TSchedulableTask::IncreaseBurstThrottle(const TDuration& burstThrottle) {
+void TSchedulableTask::IncreaseBurstThrottle(TDuration burstThrottle) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         parent->CpuBurstThrottle += burstThrottle.MicroSeconds();
     }
@@ -114,7 +114,7 @@ void TSchedulableTask::IncreaseThrottle() {
         (*Iterator)->second = true;
     }
 
-    Query->UpdateActualDemand();
+    Query->UpdatePeakDemand();
 
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->CpuThrottle;

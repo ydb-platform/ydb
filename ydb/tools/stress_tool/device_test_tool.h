@@ -636,6 +636,8 @@ struct TPerfTestConfig {
     bool DisableDDiskChecksums;
     ui64 DDiskChecksumsCacheBytes = NDDisk::TDDiskConfig().IntegrityChecksumCacheBytes;
     bool ForcePDiskFallback;
+    // Zero preserves the legacy user-accessible chunk sizing.
+    ui32 PhysicalChunkSize = 0;
     // Used as both the maximum and initial PB chunk count by DDisk-based tests.
     ui32 PersistentBufferChunks = 512;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;

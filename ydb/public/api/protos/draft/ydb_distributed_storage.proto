@@ -461,6 +461,10 @@ message SafetyOptions {
     bool ignore_degraded_groups = 1;
     // Skip the group failure-model check. The operation may cause data loss.
     bool ignore_group_failure_model = 2;
+    // Allow VDisk reassignment to leave an incorrect physical group layout, even
+    // if the layout was already incorrect. Target eligibility and space checks
+    // still apply. Other operations do not use this option.
+    bool ignore_group_layout_checks = 3;
 }
 
 message ReassignVDiskOptions {

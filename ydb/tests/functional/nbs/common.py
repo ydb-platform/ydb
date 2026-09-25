@@ -35,19 +35,20 @@ class NbsTestBase:
     @pytest.fixture(autouse=True)
     def setup(self):
         nbs_database_name = "/Root/NBS"
-        self.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                enable_nbs=True,
-                nbs_database_name=nbs_database_name,
-                additional_log_configs={
-                    'NBS_PARTITION': LogLevels.INFO,
-                    'NBS2_LOAD_TEST': LogLevels.DEBUG,
-                    'NBS_VOLUME': LogLevels.DEBUG,
-                    'NBS_SS_PROXY': LogLevels.DEBUG,
-                },
-            )
+        configurator = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            enable_nbs=True,
+            nbs_database_name=nbs_database_name,
+            additional_log_configs={
+                'NBS_PARTITION': LogLevels.INFO,
+                'NBS2_LOAD_TEST': LogLevels.DEBUG,
+                'NBS_VOLUME': LogLevels.DEBUG,
+                'NBS_SS_PROXY': LogLevels.DEBUG,
+            },
         )
+        # These load-actor/vhost tests are not limited to a single disk.
+        configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {'enabled': False}
+        self.cluster = KiKiMR(configurator)
         self.cluster.start()
         self.start_nbs(nbs_database_name)
 

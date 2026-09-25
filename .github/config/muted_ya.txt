@@ -1,6 +1,8 @@
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/pdisk/ut TPDiskTest.ChunkForgetTransitionalRejectionsPreserveStateAndSeverity
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointOffsets-SharedReading+CommittedAhead
@@ -8,8 +10,12 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading-FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerRewindDispositions+SharedReading
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReadFromConsumerRewind+SharedReading+FromTimestamp
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReadFromConsumerRewind-SharedReading+FromTimestamp
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess-EnableKqpConstraintsTransformer
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoin+WithFeatureFlag+WithFullscanFlag
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoinShuffleMode-WithFeatureFlag
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoinShuffleModeHash
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
@@ -26,6 +32,8 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]
@@ -46,7 +54,10 @@ ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_dynamic_udf
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_cascade_hopping_window[2-no_shared-False]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks_kqp_slj[kikimr0-False-2-no_shared]
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
+ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_from_time[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_apply_committed_config
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
@@ -61,3 +72,4 @@ ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
+ydb/tools/mnc/viewer/ut py3test.sole chunk

@@ -215,6 +215,7 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
+        AFL_ENSURE(txManager->HasShard(shardId));
         const auto& reattachState = txManager->GetReattachState(shardId);
         if (reattachState.Cookie != ev->Cookie) {
             return std::nullopt;
@@ -244,6 +245,10 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
+        // Restarts are only signaled after PREPARE started, so the shard must
+        // still be registered: a reroute (which erases the shard) cannot happen
+        // past that point.
+        AFL_ENSURE(txManager->HasShard(shardId));
         switch (txManager->GetState(shardId)) {
             case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
             case NKikimr::NKqp::IKqpTransactionManager::EXECUTING: {
@@ -291,6 +296,12 @@ struct IKqpTableWriterCallbacks {
         Y_UNUSED(shardId);
         OnError(statusCode, std::move(issues));
     }
+
+    // ONLY FOR READ COMMITTED!
+    // A RefreshPartitioning() round (pre-prepare re-resolve) has finished for this
+    // actor: the resolve completed and all in-flight (re-routed) batches were
+    // acknowledged, so it is safe to switch the actor to PREPARE mode.
+    virtual void OnResolveCompleted() {}
 };
 
 struct TKqpTableWriterStatistics {
@@ -414,6 +425,68 @@ struct TKqpTableWriterStatistics {
         AffectedPartitions.clear();
     }
 };
+
+// Compute the shards of `newPartitioning` that now cover the key range of `deadShardId`
+// in `oldPartitioning`. Used on split/merge: the removed shard's pending batches are
+// re-routed to these shards, and its TxManager participant state (locks, flags) is
+// moved to them. Range boundaries come from the neighbor partitions' EndKeyPrefix
+// (the first partition starts at the min key); the intersection with the new
+// partitioning yields exactly the covering shards.
+TVector<ui64> FindCoveringShards(
+        const TPartitioning::TCPtr& oldPartitioning,
+        const TPartitioning::TCPtr& newPartitioning,
+        const ui64 deletedShardId,
+        const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
+    AFL_ENSURE(oldPartitioning);
+    AFL_ENSURE(newPartitioning);
+
+    const auto& oldPartitions = oldPartitioning->GetTablePartitioning();
+    size_t deletedIndex = oldPartitions.size();
+    for (size_t index = 0; index < oldPartitions.size(); ++index) {
+        if (oldPartitions[index].ShardId == deletedShardId) {
+            deletedIndex = index;
+            break;
+        }
+    }
+    // The removed shard must exist in the old partitioning; a miss means a cache
+    // desync and re-homing would silently break the commit — fail closed instead.
+    AFL_ENSURE(deletedIndex < oldPartitions.size());
+    AFL_ENSURE(oldPartitions[deletedIndex].Range.Defined());
+
+    const auto makeBoundaryCells = [](const TKeyDesc::TPartitionRangeInfo& range) {
+        return range.EndKeyPrefix.GetCells();
+    };
+
+    // The dead shard's range start: end of the previous partition (exclusive if that
+    // boundary was inclusive, inclusive otherwise); the first partition starts at
+    // the min key (null cells, same convention as ResolveShards' full range).
+    TVector<TCell> from(keyColumnTypes.size());
+    bool inclusiveFrom = true;
+    if (deletedIndex > 0) {
+        AFL_ENSURE(oldPartitions[deletedIndex - 1].Range.Defined());
+        const auto& prevRange = *oldPartitions[deletedIndex - 1].Range;
+        const auto cells = makeBoundaryCells(prevRange);
+        from.assign(cells.begin(), cells.end());
+        inclusiveFrom = !prevRange.IsInclusive;
+    }
+
+    const auto& deadRange = *oldPartitions[deletedIndex].Range;
+    const auto to = makeBoundaryCells(deadRange);
+    const bool inclusiveTo = deadRange.IsInclusive || deadRange.IsPoint;
+    const TTableRange deadTableRange(from, inclusiveFrom, to, inclusiveTo);
+
+    auto intersections = newPartitioning->GetIntersectionWithRange(
+        keyColumnTypes, deadTableRange);
+    // The removed shard's range must remain covered by the new partitioning; an empty
+    // intersection means a desync — fail closed.
+    AFL_ENSURE(!intersections.empty());
+    TVector<ui64> result;
+    result.reserve(intersections.size());
+    for (const auto& intersection : intersections) {
+        result.push_back(intersection.ShardId);
+    }
+    return result;
+}
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
@@ -876,6 +949,15 @@ public:
     }
 
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
+        if (!ShardedWriteController->HasShard(shardId)) {
+            // The shard was removed by a reroute after a split/merge: a late
+            // TEvOverloadReady for the dead tablet (sent after an overload wait that
+            // outlived the reroute) is stale.
+            YDB_LOG_INFO("Ignoring TEvOverloadReady for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", shardId});
+            return;
+        }
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             YDB_LOG_DEBUG("Retry Overloaded",
@@ -922,6 +1004,20 @@ public:
             {"txId", ev->Get()->Record.GetTxId()},
             {"locks", txLocks},
             {"cookie", ev->Cookie});
+
+        if (Mode != EMode::COMMIT && !ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
+            // A late TEvWriteResult for a shard removed by a reroute: its pending
+            // batches were re-sent to the covering shards, so a result from the dead
+            // tablet is expected and harmless. COMMIT mode is exempt: its completions
+            // (cookie 0) arrive from every participant shard, including lock-only ones
+            // without a controller record (see the comment below).
+            // TODO: in future don't ignore non-retryable errors and fail immediately
+            YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
+            return;
+        }
 
         // Each outbound message carries its own cookie (see SendDataToShard), so only the
         // answer echoing the cookie of the shard's last sent message is meaningful:
@@ -1394,8 +1490,9 @@ public:
         // IsFinal/OperationsCount reflect the message about to be sent.
         const auto metadata = ShardedWriteController->PrepareMessageMetadata(shardId);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
-        // (AttachWriteSeqNum) or when the write is inconsistent.
-        YQL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
+        // without the flag a resend would break the write order, so fail loudly.
+        AFL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
         if (metadata.SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
@@ -1596,18 +1693,6 @@ public:
                         << " attempts. Table `" << TablePath << "`.");
                 return;
             }
-            if (!InconsistentTx) {
-                // TODO: support for resolve for inconsistent transactions
-                TxManager->SetError(shardId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder()
-                        << "Failed to deliver write to shard " << shardId
-                        << " after " << MessageSettings.MaxWriteAttempts * MessageSettings.MaxRetryResolvesPerShard
-                        << " attempts. Table `" << TablePath << "`.");
-                return;
-            }
             ++resolveCount;
             // Reset the send attempts so the pending batches are picked up again by the
             // next FlushToShards() once the re-resolve finishes (a same-shard-set resolve has
@@ -1635,12 +1720,24 @@ public:
 
     void Handle(TEvPrivate::TEvShardRetry::TPtr& ev) {
         const auto& msg = ev->Get();
+
+        if (!ShardedWriteController->HasShard(msg->ShardId)) {
+            // The shard was removed by a reroute after a split/merge (its batches were
+            // re-sent to the covering shards): a late retry for the dead tablet is
+            // expected and harmless.
+            YDB_LOG_INFO("Ignoring TEvShardRetry for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", msg->ShardId});
+            return;
+        }
+
         const auto metadata = ShardedWriteController->GetMessageMetadata(msg->ShardId);
         if (!metadata || metadata->Cookie != msg->Cookie) {
             // The batch was acknowledged (its cookie advanced) or is no longer
             // pending: nothing to resend.
             return;
         }
+        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         // The resend budget is enforced in SendDataToShard: once the attempts are
         // exhausted it routes to the re-resolve path instead of sending again.
         SendDataToShard(msg->ShardId);
@@ -1653,6 +1750,16 @@ public:
 
         if (!LinkedPipeCache) {
             YDB_LOG_WARN("Ignoring TEvDeliveryProblem from tablet after pipe unlink.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->TabletId});
+            return;
+        }
+
+        if (!ShardedWriteController->HasShard(ev->Get()->TabletId)) {
+            // The shard was removed by a reroute after a split/merge (its batches were
+            // re-sent to the covering shards): a late delivery problem for the dead
+            // tablet is expected and harmless.
+            YDB_LOG_INFO("Ignoring TEvDeliveryProblem for a shard removed by a reroute.",
                 {"logPrefix", this->LogPrefix},
                 {"tabletId", ev->Get()->TabletId});
             return;
@@ -1762,6 +1869,8 @@ public:
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+
+        AFL_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -1800,7 +1909,77 @@ public:
             ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
         } else {
             YQL_ENSURE(Partitioning);
+            // The controller's Partitioning member is overwritten by
+            // OnPartitioningChanged: it still holds the pre-update partitioning here,
+            // needed to compute the covering shards of the removed shards.
+            const auto oldPartitioning = ShardedWriteController->GetPartitioning();
             ShardedWriteController->OnPartitioningChanged(Partitioning);
+
+            const auto deletedShards = ShardedWriteController->GetDeletedShards();
+            if (!deletedShards.empty() && (InconsistentTx || AttachWriteSeqNum)) {
+                // A split/merge removed shards while this table had pending writes:
+                // re-route their batches to the shards now covering their key ranges
+                // (preserving WriteSeqNum / OriginalShard) and transfer the removed shards'
+                // TxManager participant state (locks, flags) to those shards so the
+                // commit survives. Row tables only: column tables can't change sharding.
+                AFL_ENSURE(!IsOlap);
+                AFL_ENSURE(oldPartitioning);
+                TVector<std::pair<ui64, TVector<ui64>>> transferTargets;
+                if (AttachWriteSeqNum) {
+                    // The inconsistent-tx TxManager is collect-only: nothing to transfer.
+                    transferTargets.reserve(deletedShards.size());
+                    for (const ui64 shardId : deletedShards) {
+                        transferTargets.emplace_back(shardId, FindCoveringShards(oldPartitioning, Partitioning, shardId, KeyColumnTypes));
+                    }
+                    THashMap<ui64, ui32> sourcesPerTarget;
+                    for (const auto& [shardId, targets] : transferTargets) {
+                        for (const ui64 target : targets) {
+                            ++sourcesPerTarget[target];
+                        }
+                    }
+                    for (const auto& [target, sources] : sourcesPerTarget) {
+                        if (sources > 1) {
+                            YDB_LOG_ERROR("Shard merge detected while re-routing consistent tx writes.",
+                                {"logPrefix", this->LogPrefix},
+                                {"targetShardId", target},
+                                {"mergedShards", sources},
+                                {"tablePath", TablePath});
+                            RuntimeError(
+                                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                TStringBuilder()
+                                    << "Shards of table `" << TablePath
+                                    << "` were merged to shard " << target
+                                    << " during the transaction; cannot preserve the write order.");
+                            return;
+                        }
+                    }
+                }
+                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
+                UpdateShards();
+                bool locksConsistent = true;
+                for (const auto& [shardId, targets] : transferTargets) {
+                    // Every covering shard must join the commit: it holds the
+                    // DataShard-side transferred chain of the removed shard even when
+                    // no rows/locks were transferred to it. The empty record guarantees a
+                    // covering prepare at commit time (without it such a target would
+                    // be an unreachable commit participant and the prepare would wait
+                    // for it forever).
+                    ShardedWriteController->EnsureShards(targets);
+                    locksConsistent &= TxManager->MoveShardTo(shardId, targets);
+                }
+                if (!locksConsistent) {
+                    // A transferred ancestor lock merged inconsistently with a lock
+                    // already stored on a target: the transaction cannot proceed.
+                    // Abort here — an earlier AddLock failure does the same, and
+                    // proceeding to prepare would hit the BrokenLocks assumption of
+                    // StartPrepare.
+                    AFL_ENSURE(TxManager->BrokenLocks());
+                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
+                    return;
+                }
+            }
+
             Partitioning.reset();
         }
 
@@ -1809,6 +1988,18 @@ public:
             YQL_ENSURE(ShardedWriteController);
             YQL_ENSURE(ShardedWriteController->IsAllWritesClosed());
             ShardedWriteController->Close();
+        }
+
+        if (std::exchange(PrePrepareResolve, false)) {
+            // A pre-prepare re-resolve round was requested for this actor. The round
+            // always starts with an empty controller (the Read Committed data executer
+            // flushes all its changes before the commit executer runs), and the
+            // round's reroute can only push fragments for dead shards with pending
+            // batches — none exist at commit time — so emptiness is preserved and the
+            // completion is immediate.
+            AFL_ENSURE(ShardedWriteController->IsEmpty());
+            AFL_ENSURE(ShardedWriteController->ExtractShardUpdates().empty());
+            Callbacks->OnResolveCompleted();
         }
 
         Callbacks->OnReady();
@@ -1861,6 +2052,32 @@ public:
         return NeedToFlushBeforeCommit;
     }
 
+    bool AttachesWriteSeqNum() const {
+        return AttachWriteSeqNum;
+    }
+
+    // ONLY READ COMMITTED!
+    // Entry of the pre-prepare re-resolve round (Read Committed): re-resolve the
+    // table's partitioning before the distributed commit starts, so a quiet
+    // split/merge that happened after all writes were acknowledged is observed and
+    // the removed shards' state is transferred (reroute + MoveShardTo) before prepare.
+    // Runs in the same reroute window (EMode::WRITE) as the regular resolve; if a
+    // resolve is already in flight (retry path), the completion fires after it.
+    void RefreshPartitioning() {
+        AFL_ENSURE(Mode == EMode::WRITE);
+        AFL_ENSURE(AttachWriteSeqNum && !IsOlap);
+        // All write data of the transaction is flushed and acknowledged by the time
+        // the round starts: the Read Committed data executer flushes per statement
+        // (sent and acknowledged before its result is returned), and the commit's
+        // Flush path drains the rest before OnFlushed. Otherwise echo locks could be
+        // lost on the mode switch to PREPARE.
+        AFL_ENSURE(ShardedWriteController->IsEmpty());
+        PrePrepareResolve = true;
+        if (!ResolvingInProgress) {
+            Resolve();
+        }
+    }
+
 private:
     void ClearMkqlData() {
         if (Alloc && ShardedWriteController) {
@@ -1906,6 +2123,10 @@ private:
     ui64 ResolveAttempts = 0;
     bool ResolvingInProgress = false;
     THashMap<ui64, ui32> RetryResolveByShard;
+
+    // ONLY READ COMMITTED!
+    // Pre-prepare re-resolve round: requested but not finished yet.
+    bool PrePrepareResolve = false;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
@@ -3634,6 +3855,28 @@ public:
         }
     }
 
+    // TEMPORARY ONLY FOR READ COMMITTED!
+    // The pre-prepare resolve round (Read Committed): the distributed commit decision
+    // is already made, but the write actors are re-resolving partitionings (and
+    // possibly re-routing/reroute-draining) before StartPrepare. The round completes
+    // via OnResolveCompleted() callbacks; errors terminate the transaction through
+    // OnError as usual. Note: unlike StateWaitTasks there is no task-finish branch,
+    // so Process() must not re-enter OnAllTasksFinised during the round.
+    STFUNC(StateResolveRound) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
+            default:
+                AFL_ENSURE(false)("StateResolveRound: unknown message", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitError();
+        } catch (...) {
+            ReplyCurrentExceptionError();
+        }
+    }
+
     STFUNC(StateFlush) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -4760,6 +5003,9 @@ public:
         });
 
         if (!TxManager->NeedCommit()) {
+            ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+                AFL_ENSURE(actor->IsEmpty());
+            });
             Rollback(std::move(traceId), /* waitForResult */ true);
             return;
         }
@@ -4772,8 +5018,20 @@ public:
                 std::move(issues));
             return;
         } else if ((!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->CanUseImmediateCommit()) {
-            TxManager->StartExecute();
-            ImmediateCommit();
+            if (NeedResolveBeforeCommit()) {
+                // Read Committed single-shard commit: a quiet split since the last
+                // ack would otherwise land the commit message on the dead tablet
+                // (RetryShard refuses to re-resolve in commit mode). Re-resolve
+                // first; TxId is needed by the distributed Prepare fallback in
+                // OnResolveCompleted if the resolve round reveals a split.
+                AFL_ENSURE(txId);
+                TxId = txId;
+                PendingResolveRoundImmediateCommit = true;
+                StartResolveRound();
+            } else {
+                TxManager->StartExecute();
+                ImmediateCommit();
+            }
         } else {
             AFL_ENSURE(txId);
             TxId = txId;
@@ -4785,6 +5043,80 @@ public:
 
             if (needToFlushBeforeCommit) {
                 Flush({});
+            } else if (NeedResolveBeforeCommit()) {
+                StartResolveRound();
+            } else {
+                TxManager->StartPrepare();
+                Prepare();
+            }
+        }
+    }
+
+    // Read Committed only: survive a quiet split/merge that happened after all writes
+    // were acknowledged but before the commit (no in-flight traffic would trigger the
+    // regular retry/reroute path).
+    //
+    // TODO: read-only participants are out of scope here. Shards registered via
+    // AddAction(READ) from read sets/lookups (no write-actor batches) participate in
+    // the commit (ParticipatesInCommit) but are never re-resolved: their tables have
+    // no write actor, so a quiet split/merge removing such a shard still fails the
+    // prepare with UNAVAILABLE. Transferring them needs a buffer-actor-driven
+    // re-resolve of the read tables' partitioning at commit time.
+    bool NeedResolveBeforeCommit() const {
+        if (TxManager->GetIsolationLevel() != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+            return false;
+        }
+        bool hasRowWriteActors = false;
+        ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            hasRowWriteActors |= actor->AttachesWriteSeqNum();
+        });
+        return hasRowWriteActors;
+    }
+
+    // Pre-prepare re-resolve round: every row write actor of the transaction
+    // re-resolves its table's partitioning while still in WRITE mode, re-routes
+    // batches of shards removed by a split/merge and transfers their TxManager state.
+    // Completes when every actor reported OnResolveCompleted (resolve done and all
+    // in-flight batches acknowledged); only then does the commit proceed — either
+    // the distributed prepare, or the immediate commit if the round was started
+    // from the immediate-commit branch and the transaction is still single-shard.
+    void StartResolveRound() {
+        // ONLY READ COMMITTED
+        AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+            || CurrentStateFunc() == &TThis::StateFlush);
+        YDB_LOG_DEBUG("Start pre-prepare resolve round",
+            {"logPrefix", this->LogPrefix});
+        Become(&TThis::StateResolveRound);
+        PendingResolveRoundActors = 0;
+        ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
+            if (actor->AttachesWriteSeqNum()) {
+                ++PendingResolveRoundActors;
+                actor->RefreshPartitioning();
+            }
+        });
+        AFL_ENSURE(PendingResolveRoundActors > 0);
+    }
+
+    void OnResolveCompleted() override {
+        // ONLY READ COMMITTED
+        AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        if (CurrentStateFunc() == &TThis::StateError || CurrentStateFunc() == &TThis::StateRollback) {
+            YDB_LOG_WARN("Ignoring late OnResolveCompleted: the transaction has already failed.",
+                {"logPrefix", this->LogPrefix});
+            return;
+        }
+        AFL_ENSURE(CurrentStateFunc() == &TThis::StateResolveRound);
+        AFL_ENSURE(PendingResolveRoundActors > 0);
+        if (--PendingResolveRoundActors == 0) {
+            const bool immediateCommit = std::exchange(PendingResolveRoundImmediateCommit, false);
+            if (immediateCommit && TxManager->CanUseImmediateCommit()) {
+                // The resolve round confirmed a still-single-shard transaction:
+                // commit immediately as before, just one resolve hop later. If the
+                // resolve revealed a split, CanUseImmediateCommit() is false and
+                // the distributed prepare path below takes over (TxId is set).
+                TxManager->StartExecute();
+                ImmediateCommit();
             } else {
                 TxManager->StartPrepare();
                 Prepare();
@@ -4799,7 +5131,8 @@ public:
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
         AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
-            || CurrentStateFunc() == &TThis::StateFlush);
+            || CurrentStateFunc() == &TThis::StateFlush
+            || CurrentStateFunc() == &TThis::StateResolveRound);
         Become(&TThis::StatePrepare);
 
         PendingPrepareShards = CountParticipatingShards();
@@ -4826,7 +5159,8 @@ public:
 
         YDB_LOG_DEBUG("Start immediate commit",
             {"logPrefix", this->LogPrefix});
-        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+            || CurrentStateFunc() == &TThis::StateResolveRound);
         Become(&TThis::StateCommit);
         PendingCommitShards = CountParticipatingShards();
 
@@ -5417,6 +5751,8 @@ public:
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+
+        AFL_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -6137,6 +6473,15 @@ public:
         });
 
         if (TxId) {
+            if (NeedResolveBeforeCommit()) {
+                // The commit went through the Flush path (e.g. INSERT affected-rows
+                // flush): run the same pre-prepare re-resolve round as the direct
+                // path, so a split that happened while the flush was in flight (or
+                // between its last ack and this point) still transfers the removed
+                // shards before the distributed prepare.
+                StartResolveRound();
+                return;
+            }
             TxManager->StartPrepare();
             Prepare();
             return;
@@ -6586,6 +6931,15 @@ private:
     };
 
     std::optional<TAfterWaitTasksState> AfterWaitTasksState;
+
+    // ONLY READ COMMITTED
+    // Pre-prepare resolve round: how many actors have not reported
+    // OnResolveCompleted yet.
+    ui64 PendingResolveRoundActors = 0;
+    // Set when the resolve round was started from the immediate-commit branch of
+    // Commit(): OnResolveCompleted then commits immediately (if the transaction
+    // is still single-shard) instead of falling through to the distributed prepare.
+    bool PendingResolveRoundImmediateCommit = false;
 
     // The buffer actor owns this phase span and closes it at phase transitions, success, or error.
     NWilson::TSpan BufferWriteActorStateSpan;

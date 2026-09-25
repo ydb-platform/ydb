@@ -1,3 +1,4 @@
+#include "utils/controlled_spiller.h"
 #include "utils/dq_factories.h"
 #include "utils/dq_setup.h"
 #include "utils/preallocated_spiller.h"
@@ -14,6 +15,8 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
 #include <arrow/util/bit_util.h>
+
+#include <numeric>
 
 namespace NKikimr::NMiniKQL {
 
@@ -1161,6 +1164,27 @@ TJoinTestData SpillingTestData() {
     return td;
 }
 
+TJoinTestData FinalDumpSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int rows = 50000;
+    TVector<ui64> leftKeys(rows, 1);
+    TVector<ui64> leftValues(rows);
+    TVector<ui64> rightKeys(rows, 1);
+    TVector<ui64> rightValues(rows);
+    std::iota(leftValues.begin(), leftValues.end(), 0);
+    std::iota(rightValues.begin(), rightValues.end(), 0);
+
+    TVector<ui64> empty;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, empty, empty);
+    td.Kind = EJoinKind::LeftOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    return td;
+}
+
 TJoinTestData SmallStringsTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -2279,6 +2303,53 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     }
 }
 
+void RunFinalDumpSpillingIsBatchedTest() {
+    auto testData = FinalDumpSpillingTestData();
+    auto descr = MakeJoinDescription(testData);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+    THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+        testData.Kind, ETestedJoinAlgo::kBlockHash, descr, true, testData.JoinSettings);
+    auto spillerFactory = std::make_shared<TControlledWriteSpillerFactory>(
+        std::make_shared<TPreallocatedSpillerFactory>(32_MB));
+    graph->GetContext().SpillerFactory = spillerFactory;
+
+    const size_t tupleWidth = testData.Renames.size() + 1;
+    std::vector<NUdf::TUnboxedValue> output(tupleWidth);
+    auto stream = graph->GetValue();
+    i64 outputRows = 0;
+    bool stoppedRegularSpilling = false;
+
+    while (true) {
+        const auto status = stream.WideFetch(output.data(), tupleWidth);
+        if (status == NYql::NUdf::EFetchStatus::Finish) {
+            break;
+        }
+        if (status == NYql::NUdf::EFetchStatus::Ok) {
+            outputRows += ArrowScalarAsInt(TArrowBlock::From(output.back()));
+            continue;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NYql::NUdf::EFetchStatus::Yield);
+        const size_t pendingPuts = spillerFactory->PendingPuts();
+        if (pendingPuts == 0) {
+            continue;
+        }
+        UNIT_ASSERT_LE(pendingPuts, static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime));
+        if (!stoppedRegularSpilling) {
+            // Leave enough pages in memory for the end-of-input dump. Before the batching fix that dump
+            // submitted all of them at once, exceeding SpillingPagesAtTime.
+            descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+            stoppedRegularSpilling = true;
+        }
+        spillerFactory->CompletePendingPuts();
+    }
+
+    UNIT_ASSERT(stoppedRegularSpilling);
+    UNIT_ASSERT_VALUES_EQUAL(outputRows, 0);
+    UNIT_ASSERT_GT(spillerFactory->TotalPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime * 2));
+    UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime));
+}
+
 // The mock spiller resolves every future at once, so the states that wait for spilling are only
 // reached with a spiller that completes its operations later.
 void TestWithSlowSpiller(TJoinTestData testData, bool blockJoin) {
@@ -2710,6 +2781,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBlockSpilling) { 
         Test(SpillingTestData(), true);
+    }
+    Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
+        RunFinalDumpSpillingIsBatchedTest();
     }
 
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {

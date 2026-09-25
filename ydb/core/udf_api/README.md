@@ -17,8 +17,7 @@ Native is recognized but returns PRECONDITION_FAILED; no native data is publishe
 
 For CI, poll describe, verify module.uid equals the returned upload uid, and require
 nonempty platforms with every status ready. Fail on any failed platform, a changed uid,
-or timeout. Global compile_status is not a readiness guarantee. Platforms combine
-artifact tables and the compile controller; READY requires a stored artifact for this uid.
+or timeout. Compile state belongs to each platform artifact; READY requires a stored artifact for this uid.
 This indicates compiled code, not that every node has loaded it. There is no server-side wait.
 
 Errors are YDB Operation statuses; handled application errors use gRPC OK:

@@ -1796,6 +1796,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ShrinkPool\";' style='width:138px'>Shrink Pool</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:50px'>";
@@ -4949,7 +4952,12 @@ public:
                 byTablet[entry.Tablet].push_back(&entry);
             }
             out << "<h4>" << name << "</h4>";
-            out << "<p>inactive groups: " << pool.InactiveGroups.size() << " &middot; remaining entries: " << pool.RemainingHistory.size()
+            out << "<p>inactive groups: " << pool.InactiveGroups.size();
+            for (size_t i = 0; i < pool.InactiveGroups.size(); ++i) {
+                out << (i ? ", " : " (") << pool.InactiveGroups[i];
+            }
+            out << (pool.InactiveGroups.empty() ? "" : ")")
+                << " &middot; remaining entries: " << pool.RemainingHistory.size()
                 << " &middot; tablets: " << byTablet.size() << " &middot; waiting for tenant: " << (pool.NeedShrinkFromTenant ? "yes" : "no")
                 << "</p>";
             out << "<table class='table simple-table'>";

@@ -757,12 +757,14 @@ public:
     ui32 SizeChunks;
     bool ForHousekeeping;
     bool IsDDisk;
+    NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
         , ForHousekeeping(ev.ForHousekeeping)
         , IsDDisk(ev.IsDDisk)
+        , RefuseAtColor(ev.RefuseAtColor)
     {}
 
     ERequestType GetType() const override {

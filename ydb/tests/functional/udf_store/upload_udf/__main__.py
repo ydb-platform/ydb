@@ -152,7 +152,6 @@ def _upsert_module_row(
     chunk_count: int = 0,
     manifest: str = "",
     version: int = 1,
-    compile_status: str = "",
 ) -> None:
     full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
     params = {
@@ -175,11 +174,6 @@ def _upsert_module_row(
         "DECLARE $version AS Uint64; "
         "DECLARE $chunk_count AS Uint64; "
     )
-    if module_type in ("WASM", "LIBRARY"):
-        params["$compile_status"] = compile_status or "pending"
-        decls += "DECLARE $compile_status AS Utf8; "
-        columns += ", compile_status"
-        values += ", $compile_status"
     if module_type in ("WASM", "LIBRARY"):
         params["$manifest"] = _json(manifest)
         decls += "DECLARE $manifest AS Json; "
@@ -222,7 +216,6 @@ def _upsert_wasm_or_library(
         chunk_count=len(chunks),
         manifest=manifest,
         version=version,
-        compile_status="pending",
     )
     return uid
 

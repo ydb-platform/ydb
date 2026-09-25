@@ -7,6 +7,7 @@ import signal
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.request import urlopen
 
 import pytest
 import yatest.common
@@ -137,6 +138,43 @@ def _set_default_log_level(config_path, level):
         + section[level_match.end():]
     )
     config_path.write_text(content[:section_match.end()] + section + content[section_end:])
+
+
+def _set_shared_actor_threads(config_path, enabled):
+    content = config_path.read_text()
+    setting = '  use_shared_threads: {}'.format(str(enabled).lower())
+    existing = re.search(r'(?m)^  use_shared_threads: (?:true|false)$', content)
+    if existing:
+        content = content[:existing.start()] + setting + content[existing.end():]
+    else:
+        header = 'actor_system_config:\n'
+        assert content.count(header) == 1
+        content = content.replace(header, header + setting + '\n', 1)
+    config_path.write_text(content)
+
+
+def _actor_pool_names(local_ydb):
+    prefix = '--mon-port='
+    ports = [
+        argument[len(prefix):]
+        for argument in local_ydb._first_node()['command']
+        if argument.startswith(prefix)
+    ]
+    assert len(ports) == 1
+    url = 'http://localhost:{}/viewer/json/sysinfo'.format(ports[0])
+    deadline = time.monotonic() + 30
+    names = None
+    while time.monotonic() < deadline:
+        try:
+            with urlopen(url, timeout=5) as response:
+                nodes = json.load(response)['SystemStateInfo']
+            names = {pool['Name'] for pool in nodes[0]['PoolStats']}
+        except (OSError, json.JSONDecodeError, IndexError, KeyError):
+            pass
+        if names:
+            return names
+        time.sleep(0.5)
+    raise AssertionError('Actor pool stats did not become available')
 
 
 class LocalYdb:
@@ -469,6 +507,24 @@ def test_modified_config_is_applied_after_restart(local_ydb):
     assert _json_rows(result) == ['{"id":1}', '{"id":2}', '{"id":3}']
     local_ydb.stop()
     assert ' INFO:' in local_ydb.logs_since(log_offsets)
+
+
+def test_actor_system_config_changes_after_restart(local_ydb):
+    local_ydb.deploy()
+    local_ydb.wait_for_query('SELECT 1;')
+    default_pools = _actor_pool_names(local_ydb)
+
+    local_ydb.stop()
+    _set_shared_actor_threads(local_ydb.config_path, False)
+    local_ydb.start()
+    local_ydb.wait_for_query('SELECT 1;')
+    assert _actor_pool_names(local_ydb) != default_pools
+
+    local_ydb.stop()
+    _set_shared_actor_threads(local_ydb.config_path, True)
+    local_ydb.start()
+    local_ydb.wait_for_query('SELECT 1;')
+    assert _actor_pool_names(local_ydb) == default_pools
 
 
 def test_generated_tls_bundle_is_reused_from_read_only_directory(

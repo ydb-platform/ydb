@@ -200,17 +200,7 @@ const TVector<TString>& SharedValidationInputs() {
 TVector<TVector<TString>> ValidationGroups(
     NFyaml::TDocument& doc, const TVector<TVector<TString>>& dependencies)
 {
-    TSet<TString> present;
-    const auto model = ParseConfig(doc);
-    auto collect = [&](NFyaml::TNodeRef config) {
-        for (auto pair : config.Map()) {
-            present.insert(TString("/") + pair.Key().Scalar());
-        }
-    };
-    collect(model.Config);
-    for (const auto& selector : model.Selectors) {
-        collect(selector.Config);
-    }
+    auto present = CollectConfigSections(doc);
     TVector<TVector<TString>> groups;
     TVector<TSet<TString>> connected;
     for (const auto& dependency : dependencies) {

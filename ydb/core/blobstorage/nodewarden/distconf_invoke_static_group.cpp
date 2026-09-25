@@ -53,6 +53,8 @@ namespace NKikimr::NStorage {
             .BaseConfig = baseConfig,
             .ConvertToDonor = command.GetConvertToDonor(),
             .IgnoreVSlotQuotaCheck = command.GetIgnoreVSlotQuotaCheck(),
+            .LayoutPolicy = NBsController::TGroupLayoutPolicy::FromFlags(command.GetIgnoreGroupLayoutChecks(),
+                                                                         !command.GetFromSelfHeal()),
             .AllowUnusableDisks = command.GetAllowUnusableDisks(),
             .SettleOnlyOnOperationalDisks = command.GetSettleOnlyOnOperationalDisks(),
             .IsSelfHealReasonDecommit = command.GetIsSelfHealReasonDecommit(),

@@ -15,17 +15,17 @@ private:
 
     enum class EStep {
         ReadLibrarySource,
+        EnsurePending,
         MarkCompiling,
         ReadLibraryChunks,
         DeleteArtifactChunks,
         WriteArtifactChunk,
         UpsertArtifact,
-        UpdateMetaReady,
         VerifyStillCurrent,
         DeleteStaleArtifactChunks,
         DeleteStaleArtifacts,
         ConfirmStillCurrent,
-        UpdateMetaFailed,
+        MarkArtifactFailed,
     };
 
     NActors::TActorId ReplyTo_;

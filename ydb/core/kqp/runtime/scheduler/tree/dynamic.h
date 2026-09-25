@@ -32,7 +32,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     struct TTreeElement : public virtual NHdrf::TTreeElementBase<ETreeType::DYNAMIC> {
         std::atomic<ui64> CpuUsage = 0;
-        std::atomic<ui64> CpuDemand = 0;
+        std::atomic<ui64> CpuMaxDemand = 0;
         std::atomic<ui64> CpuThrottle = 0;
 
         std::atomic<ui64> CpuBurstUsage = 0;
@@ -40,7 +40,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CpuBurstThrottle = 0;
         std::atomic<ui64> ReadBurstUsage = 0;
 
-        std::atomic<ui64> CpuActualDemand = 0;
+        std::atomic<ui64> CpuPeakDemand = 0;
 
         // TODO: implement Read resource - for now it's only per datashard.
 
@@ -63,7 +63,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
         ui32 ResumeTasks(ui32 count);
 
-        void UpdateActualDemand();
+        void UpdatePeakDemand();
 
     public:
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
@@ -74,7 +74,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         const bool AllowMinFairShare; // tasks should look at this in case of missing snapshot
 
     private:
-        // used to calculate adjusted satisfaction between snapshots
+        // used to calculate adjusted satisfaction and actual demand between snapshots
         ui64 PrevCpuBurstUsage = 0;
         ui64 PrevCpuBurstThrottle = 0;
 

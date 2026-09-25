@@ -34,15 +34,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPa
 ydb/library/actors/interconnect/ut InterconnectSessionV2.RepeatedDisconnectChurnUnderLoad
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ValidatingLoadVariedPayloads
 ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
-ydb/library/actors/interconnect/ut OutgoingStream.PacketBuilderUsesPreallocatedRdmaMemoryForInternalStream
-ydb/library/actors/interconnect/ut OutgoingStream.PublicMethodsLatencyBenchmark
-ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemory
-ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
-ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
-ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientJsonApiPath
-ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientUsesCreatedConfiguration
-ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
-ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA

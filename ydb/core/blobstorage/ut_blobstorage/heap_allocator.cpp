@@ -1,6 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompact.h>
 
 namespace {
 
@@ -222,6 +224,38 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
             const ui64 collectedTabletId = 1001;
             auto deadline = [&] { return env.Runtime->GetClock() + TDuration::Minutes(1); };
 
+            // With projection, the block and the garbage collection are admitted against chunks reserved for their
+            // Fresh segments. The metadata SSTs go into heap stripes instead, so those chunks are never written, and
+            // they have to go back to PDisk once the compactions are over.
+            bool admitting = true;
+            std::set<ui32> admitted;
+            std::set<ui32> forgotten;
+            ui32 metadataChunkCommits = 0;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::EvChunkReserveResult:
+                        if (const auto* msg = ev->Get<NPDisk::TEvChunkReserveResult>();
+                                admitting && msg->Status == NKikimrProto::OK) {
+                            admitted.insert(msg->ChunkIds.begin(), msg->ChunkIds.end());
+                        }
+                        break;
+                    case TEvBlobStorage::EvChunkForget: {
+                        const auto& chunks = ev->Get<NPDisk::TEvChunkForget>()->ForgetChunks;
+                        forgotten.insert(chunks.begin(), chunks.end());
+                        break;
+                    }
+                    case TEvBlobStorage::EvHullChange:
+                        if (const auto* msg = dynamic_cast<THullChange<TKeyBlock, TMemRecBlock>*>(ev->GetBase())) {
+                            metadataChunkCommits += msg->CommitChunks.size();
+                        } else if (const auto* msg = dynamic_cast<THullChange<TKeyBarrier, TMemRecBarrier>*>(
+                                ev->GetBase())) {
+                            metadataChunkCommits += msg->CommitChunks.size();
+                        }
+                        break;
+                }
+                return true;
+            };
+
             TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
             env.Runtime->WrapInActorContext(edge, [&] {
                 SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(blockedTabletId,
@@ -238,6 +272,9 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
             auto gc = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false, deadline());
             UNIT_ASSERT(gc);
             UNIT_ASSERT_VALUES_EQUAL(gc->Get()->Status, NKikimrProto::OK);
+            admitting = false;
+            // One chunk for the Blocks segment, one for the Barriers segment.
+            UNIT_ASSERT_VALUES_EQUAL(admitted.size(), enableProjection ? 2 : 0);
 
             // CompactVDisk() covers LogoBlobs only. Both metadata databases need a HugeKeeper destination
             // to allocate their SST stripes, even when Fresh space projection is disabled.
@@ -249,6 +286,11 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
                     << (db == EHullDbType::Blocks ? "Blocks" : "Barriers")
                     << " projection# " << enableProjection);
             }
+            UNIT_ASSERT_VALUES_EQUAL(metadataChunkCommits, 0);
+            for (const ui32 chunk : admitted) {
+                UNIT_ASSERT_C(forgotten.contains(chunk), "chunk# " << chunk << " reserved for Fresh was never returned");
+            }
+            env.Runtime->FilterFunction = {};
             env.Runtime->DestroyActor(edge);
 
             env.RestartNode(vdiskActorId.NodeId());

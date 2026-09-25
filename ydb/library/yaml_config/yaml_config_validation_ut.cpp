@@ -47,6 +47,25 @@ void CheckValidation(const TString& yaml, bool rejected) {
     CheckValidation(doc, rejected, validator.get());
 }
 
+void CheckResolveValidation(const TString& yaml, bool rejected) {
+    using TValidate = void (*)(NFyaml::TDocument&);
+    const TValidate validators[] = {
+        ValidateResolve,
+        [](NFyaml::TDocument& doc) { ResolveUniqueDocs(doc, [](TDocumentConfig&&) {}); },
+        [](NFyaml::TDocument& doc) { ResolveAll(doc); },
+    };
+    for (auto validate : validators) {
+        auto doc = NFyaml::TDocument::Parse(yaml);
+        TString error;
+        try {
+            validate(doc);
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(!error.empty(), rejected, error);
+    }
+}
+
 TString ProjectionKey(NFyaml::TNodeRef config, const TVector<TString>& sections) {
     TStringStream result;
     for (const auto& section : sections) {
@@ -77,6 +96,101 @@ selector_config:
 }
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(YamlConfigResolveValidation) {
+    Y_UNIT_TEST(EmptyConfigAndExternalAnchor) {
+        CheckResolveValidation("config: {}", false);
+        CheckResolveValidation(R"(
+defaults: &defaults {value: base}
+config: {custom_config: *defaults}
+)", false);
+    }
+
+    Y_UNIT_TEST(SectionsIntroducedBySelectorsAreChecked) {
+        for (bool rejected : {false, true}) {
+            CheckResolveValidation(TStringBuilder() << R"(
+config: {}
+allowed_labels:
+  a: {type: string}
+selector_config:
+- description: introduce a section
+  selector: {a: selected}
+  config:
+    custom_config: )" << (rejected ? "scalar" : "{}") << R"(
+- description: inherit the introduced section
+  selector: {a: selected}
+  config:
+    custom_config: !inherit {value: updated}
+)", rejected);
+        }
+    }
+
+    Y_UNIT_TEST(MergeErrorsForOtherLabelValuesAreRejected) {
+        for (const TStringBuf patch : {"!inherit {}", "!append [item]"}) {
+            CheckResolveValidation(TStringBuilder() << R"(
+config: {custom_config: scalar}
+allowed_labels:
+  a: {type: string}
+selector_config:
+- description: invalid merge for an unlisted label value
+  selector: {a: {not_in: [known, '']}}
+  config:
+    custom_config: )" << patch, true);
+        }
+    }
+
+    Y_UNIT_TEST(IncompatibilityRulesExcludeInvalidMerges) {
+        for (bool excludeInvalid : {false, true}) {
+            TStringBuilder yaml;
+            yaml << R"(
+config: {custom_config: {value: base}, unrelated: value}
+allowed_labels:
+  a: {type: string}
+  b: {type: string}
+)";
+            if (excludeInvalid) {
+                yaml << R"(
+incompatibility_overrides:
+  custom_rules:
+  - name: exclude_invalid_merge
+    patterns:
+    - {label: a, value: selected}
+    - {label: b, value: selected}
+)";
+            }
+            yaml << R"(
+selector_config:
+- description: replace mapping with scalar
+  selector: {a: selected}
+  config: {custom_config: scalar}
+- description: invalid only when both selectors match
+  selector: {b: selected}
+  config:
+    custom_config: !inherit {value: updated}
+- description: later replacement cannot repair an earlier merge error
+  selector: {a: selected, b: selected}
+  config: {custom_config: {value: repaired}}
+)";
+            CheckResolveValidation(yaml, !excludeInvalid);
+        }
+    }
+
+    Y_UNIT_TEST(IndependentSectionsDoNotEnumerateFullConfigurations) {
+        TStringBuilder yaml;
+        yaml << "config: {}\nallowed_labels:\n";
+        constexpr size_t sections = 32;
+        for (size_t i = 0; i < sections; ++i) {
+            yaml << "  label" << i << ": {type: string}\n";
+        }
+        yaml << "selector_config:\n";
+        for (size_t i = 0; i < sections; ++i) {
+            yaml << "- description: independent section\n  selector: {label" << i << ": selected}\n"
+                 << "  config: {section" << i << ": {value: selected}}\n";
+        }
+        auto doc = NFyaml::TDocument::Parse(yaml);
+        ValidateResolve(doc);
+    }
+}
 
 Y_UNIT_TEST_SUITE(YamlConfigValidation) {
     Y_UNIT_TEST(ConfigV2AndGrpcPreserveCorrelations) {

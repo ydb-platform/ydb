@@ -10,11 +10,13 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb
+    ydb/core/blobstorage/vdisk/ingress
 )
 
 SRCS(
     hullds_sst_it_all_ut.cpp
     blobstorage_hullwritesst_ut.cpp
+    blobstorage_hullwritesst_estimate_ut.cpp
 )
 
 END()

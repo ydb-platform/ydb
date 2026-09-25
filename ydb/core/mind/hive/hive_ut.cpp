@@ -10642,6 +10642,29 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_C(page, "the ShrinkPool page never answered");
         UNIT_ASSERT_STRING_CONTAINS(page->Html, "def1");
         UNIT_ASSERT_STRING_CONTAINS(page->Html, ToString(tabletId));
+        // The count alone does not say which groups are going away, so the ids must be rendered too.
+        const size_t groupsAt = page->Html.find("inactive groups: ");
+        UNIT_ASSERT_C(groupsAt != TString::npos, "the page does not report inactive groups at all");
+        const size_t summaryEnd = page->Html.find("&middot;", groupsAt);
+        UNIT_ASSERT_C(summaryEnd != TString::npos, "the inactive-groups summary is malformed");
+        const TString groupsPart = page->Html.substr(groupsAt, summaryEnd - groupsAt);
+        UNIT_ASSERT_C(groupsPart.Contains('('), "inactive groups are counted but not listed: " << groupsPart);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_GET);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            runtime.SendToPipe(hiveTablet, senderA, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        }
+        TAutoPtr<IEventHandle> mainHandle;
+        const auto* mainPage = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(mainHandle, TDuration::Seconds(10));
+        UNIT_ASSERT_C(mainPage, "the Hive main page never answered");
+        // A diagnostic page nobody can navigate to is as good as absent.
+        UNIT_ASSERT_STRING_CONTAINS_C(mainPage->Html, "page=ShrinkPool",
+            "the Hive main page has no link to the ShrinkPool page");
 
         for (int attempt = 0; attempt < 10 && !done; ++attempt) {
             for (ui32 channel = 0; channel < 3; ++channel) {

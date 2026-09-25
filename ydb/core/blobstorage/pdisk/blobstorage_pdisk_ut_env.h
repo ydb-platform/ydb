@@ -383,6 +383,19 @@ struct TVDiskMock {
         commited.clear();
     }
 
+    // Like DeleteCommitedChunks(), but with DeleteToDecommitted: PDisk keeps the chunks
+    // owned until they are explicitly forgotten. The state change itself completes in
+    // OnLogCommitDone(), which may still be pending when this returns.
+    void DecommitCommitedChunks() {
+        auto& commited = Chunks[EChunkState::COMMITTED];
+        NPDisk::TCommitRecord rec;
+        rec.DeleteChunks = TVector<TChunkIdx>(commited.begin(), commited.end());
+        rec.DeleteToDecommitted = true;
+        SendEvLogImpl(1, rec);
+        Chunks[EChunkState::DELETED].insert(commited.begin(), commited.end());
+        commited.clear();
+    }
+
     ui64 ReadLog(bool quietStopOnError = false, std::function<void(const NPDisk::TLogRecord&)> logResCallback = {}) {
         ui64 logRecordsRead = 0;
 

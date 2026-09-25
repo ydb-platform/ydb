@@ -117,7 +117,7 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             // YQL AST rewriting
             if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
                 THashMap<const TExprNode*, TExprNode::TPtr> translated;
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, UniqueColumnIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else if (TKqlTableEffect::Match(node.Get())) {
@@ -149,8 +149,6 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     TOptimizeExprSettings settings(&TypeCtx);
     settings.VisitTuples = true;
 
-    YQL_CLOG(TRACE, CoreDq) << "Input: " << PrintRBOExpression(input, ctx);
-
     // At first step convert KqpOps to RBO Ops.
     auto status = OptimizeExpr(
         output, output,
@@ -162,15 +160,18 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> roots;
                 for (const auto& child : node->Children()) {
                     if (!child->IsList() || child->ChildrenSize()==0) {
-                        return node;
+                        continue;
                     }
+                    TExprNode::TPtr queryColumns;
+                    if (child->ChildrenSize() >=2) {
+                        queryColumns = child->ChildPtr(1);
+                    }
+
                     if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
-                        roots.push_back(std::make_pair(child->ChildPtr(0)->ChildPtr(0), child->ChildPtr(1)));
+                        roots.push_back(std::make_pair(child->ChildPtr(0)->ChildPtr(0), queryColumns));
                     }
                     else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
-                        roots.push_back(std::make_pair(child->ChildPtr(0), child->ChildPtr(1)));
-                    } else {
-                        return node;
+                        roots.push_back(std::make_pair(child->ChildPtr(0), queryColumns));
                     }
                 }
 
@@ -371,18 +372,21 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
 
             // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
             if (node->IsList()) {
+                bool emptyPreamble = false;
                 TVector<TExprNode::TPtr> roots;
                 for (const auto& child : node->Children()) {
-                    if (!child->IsList() || child->ChildrenSize()==0) {
-                        return node;
+                    if (!child->IsList()) {
+                        continue;
+                    }
+                    if(child->ChildrenSize()==0) {
+                        emptyPreamble = true;
+                        continue;
                     }
                     if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
                         roots.push_back(child->ChildPtr(0));
                     }
                     else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
                         roots.push_back(child->ChildPtr(0));
-                    } else {
-                        return node;
                     }
                 }
 
@@ -391,6 +395,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                 }
 
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+                rboCtx.EmptyPreamble = emptyPreamble;
                 TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(Roots, rboCtx);
                 traceOutput.Flush();

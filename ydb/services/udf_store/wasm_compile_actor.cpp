@@ -37,14 +37,9 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 Name_,
                 TUdfModule::TypeToString(EUdfType::WASM));
             break;
+        case EStep::EnsurePending:
         case EStep::MarkCompiling:
-            NTableQuery::SetUpdateCompileStatusParams(
-                request,
-                Name_,
-                TUdfModule::TypeToString(EUdfType::WASM),
-                ModuleSource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
-                "");
+            NTableQuery::SetSelectArtifactParams(request, Name_, ModuleKind_, ModuleSource_.Uid);
             break;
         case EStep::ReadModuleChunks:
             NTableQuery::SetSelectSourceChunksParams(request, ModuleSource_.Uid, SourceChunks_.size());
@@ -75,15 +70,6 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 chunk.Data);
             break;
         }
-        case EStep::UpdateMetaReady:
-            NTableQuery::SetUpdateCompileStatusParams(
-                request,
-                Name_,
-                TUdfModule::TypeToString(EUdfType::WASM),
-                ModuleSource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Ready),
-                "");
-            break;
         case EStep::VerifyStillCurrent:
         case EStep::ConfirmStillCurrent:
             NTableQuery::SetSelectModuleByNameParams(
@@ -100,14 +86,9 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 ModuleSource_.Uid,
                 TUdfModule::TypeToString(EUdfType::WASM));
             break;
-        case EStep::UpdateMetaFailed:
-            NTableQuery::SetUpdateCompileStatusParams(
-                request,
-                Name_,
-                TUdfModule::TypeToString(EUdfType::WASM),
-                ModuleSource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Failed),
-                ErrorMessage_);
+        case EStep::MarkArtifactFailed:
+            NTableQuery::SetMarkArtifactFailedParams(
+                request, Name_, ModuleKind_, ModuleSource_.Uid, ErrorMessage_);
             break;
     }
 
@@ -135,7 +116,7 @@ void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed:
     const TString message = TStringBuilder()
         << "YQL request failed at compile step " << static_cast<int>(Step_)
         << ": " << ev->Get()->GetErrorMessage();
-    if (Step_ == EStep::UpdateMetaFailed) {
+    if (Step_ == EStep::MarkArtifactFailed) {
         // A failure to persist must terminate instead of recursively retrying
         // the same update, and must keep the original compilation error.
         ReplyError(TStringBuilder() << ErrorMessage_ << "; failed to persist error: " << message);
@@ -162,8 +143,13 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                         << " does not match manifest module_name=" << ParsedManifest_.ModuleName);
                     return;
                 }
+                Step_ = EStep::EnsurePending;
+                ExecuteQuery(NTableQuery::BuildEnsurePendingArtifactQuery(ArtifactTablePath_), false);
+                return;
+            }
+            case EStep::EnsurePending: {
                 Step_ = EStep::MarkCompiling;
-                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+                ExecuteQuery(NTableQuery::BuildMarkArtifactCompilingQuery(ArtifactTablePath_), false);
                 return;
             }
             case EStep::MarkCompiling: {
@@ -226,15 +212,6 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 return;
             }
             case EStep::UpsertModuleArtifact: {
-                Step_ = EStep::UpdateMetaReady;
-                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
-                return;
-            }
-            case EStep::UpdateMetaReady: {
-                // The status update is scoped by uid, so it silently does
-                // nothing when the module was re-uploaded while this compile
-                // was running. Read the row back to tell that case apart from
-                // a real success before anyone loads the artifact.
                 Step_ = EStep::VerifyStillCurrent;
                 ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
                 return;
@@ -303,7 +280,7 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 ReplySuccess();
                 return;
             }
-            case EStep::UpdateMetaFailed:
+            case EStep::MarkArtifactFailed:
                 ReplyError(ErrorMessage_);
                 return;
         }
@@ -496,8 +473,8 @@ void TWasmCompileActor::FailAndPersist(const TString& message) {
         ReplyError(message);
         return;
     }
-    Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+    Step_ = EStep::MarkArtifactFailed;
+    ExecuteQuery(NTableQuery::BuildMarkArtifactFailedQuery(ArtifactTablePath_), false);
 }
 
 void TWasmCompileActor::ReplyError(const TString& message) {

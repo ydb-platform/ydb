@@ -121,5 +121,5 @@ namespace NKikimr::NKqp {
     NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(
         const NMonitoring::TDynamicCounterPtr& counters,
         const NKikimrConfig::TAppConfig& appConfig);
-    IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod);
+    IActor* CreateKqpComputeSchedulerService(TDuration updateFairSharePeriod);
 }

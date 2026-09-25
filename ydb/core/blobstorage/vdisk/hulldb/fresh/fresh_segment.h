@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "fresh_appendix.h"
+#include "fresh_output_estimate.h"
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_glue.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h>
@@ -81,6 +82,7 @@ namespace NKikimr {
         ui64 ElementsInserted() const { return Inserts; }
         ui64 GetMemDataSize() const { return MemDataSize; }
         ui64 GetHugeDataSize() const { return HugeDataSize; }
+        const TFreshOutputEstimate& GetOutputEstimate() const { return OutputEstimate; }
 
         // put newly received item into fresh segment
         void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
@@ -127,6 +129,8 @@ namespace NKikimr {
         ui64 MemDataSize = 0;
         ui64 HugeDataSize = 0;
         ui64 Inserts = 0;
+        // What compacting these records writes, charged as each one arrives.
+        TFreshOutputEstimate OutputEstimate;
 
         void PutPrepared(ui64 lsn, const TKey &key, const TMemRec &memRec);
     };
@@ -214,6 +218,7 @@ namespace NKikimr {
         TFreshSegment(THullCtxPtr hullCtx, ui64 compThreshold, TInstant startTime, std::shared_ptr<TRopeArena> arena)
             : CompThreshold(Max<ui64>(hullCtx->ChunkSize, compThreshold))
             , ChunkSize(hullCtx->ChunkSize)
+            , OutputGeometry(MakeOutputGeometry(*hullCtx))
             , StartTime(startTime)
             , IndexAndData(MakeIntrusive<TFreshIndexAndData>(hullCtx, std::move(arena)))
             , AppendixTree(hullCtx, AppendixTreeStagingCapacity)
@@ -235,6 +240,47 @@ namespace NKikimr {
                 + AppendixTree.SizeApproximation();
             return TSatisfactionRank::MkRatio(inPlaceSizeApproximation, CompThreshold);
         }
+        // Upper bound on what compacting this segment writes. Appendix records are sync metadata, one
+        // index entry each; the appendix tree's own compaction only ever merges them.
+        TFreshOutputEstimate GetOutputEstimate() const {
+            TFreshOutputEstimate estimate = IndexAndData->GetOutputEstimate();
+            estimate.Merge(AppendixEstimate);
+            return estimate;
+        }
+        const TFreshOutputGeometry& GetOutputGeometry() const { return OutputGeometry; }
+        ui64 GetOutputChunks() const { return GetOutputEstimate().GetChunks(OutputGeometry); }
+
+        // DATA_RESERVED chunks held for compacting this segment. They stay with the segment when it
+        // rotates out of Cur, so its compaction writes into chunks that were taken before its records
+        // were accepted.
+        const TVector<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
+        void AddReservedChunks(const TVector<TChunkIdx>& chunks) {
+            ReservedChunks.insert(ReservedChunks.end(), chunks.begin(), chunks.end());
+        }
+        // The chunks held beyond what this segment's own content needs.
+        TVector<TChunkIdx> TakeSurplusReservedChunks() {
+            const ui64 needed = GetOutputChunks();
+            TVector<TChunkIdx> surplus;
+            while (ReservedChunks.size() > needed) {
+                surplus.push_back(ReservedChunks.back());
+                ReservedChunks.pop_back();
+            }
+            return surplus;
+        }
+        TVector<TChunkIdx> TakeReservedChunks() {
+            return std::exchange(ReservedChunks, {});
+        }
+
+        static TFreshOutputGeometry MakeOutputGeometry(const THullCtx& hullCtx) {
+            return {
+                .ChunkSize = hullCtx.ChunkSize,
+                .AppendBlockSize = hullCtx.AppendBlockSize,
+                .ChunksPerSst = hullCtx.HullSstSizeInChunksFresh,
+                .TotalPartCount = hullCtx.VCtx->Top->GType.TotalPartCount(),
+                .IndexRecordBytes = sizeof(TIndexRecord<TKey, TMemRec>),
+            };
+        }
+
         bool NeedsCompactionBySize() const {
             const ui64 inPlaceSizeApproximation = IndexAndData->InPlaceSizeApproximation()
                 + AppendixTree.SizeApproximation();
@@ -251,6 +297,7 @@ namespace NKikimr {
         const TRope& GetLogoBlobData(const TMemPart& memPart) const { return IndexAndData->GetLogoBlobData(memPart); }
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec) { return IndexAndData->Put(lsn, key, memRec); }
         void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
+            AppendixEstimate.AddIndexOnly(a->GetSize());
             AppendixTree.AddAppendix(std::move(a), firstLsn, lastLsn);
         }
         void OutputHtml(const TString &which, IOutputStream &str) const;
@@ -277,10 +324,13 @@ namespace NKikimr {
     private:
         const ui64 CompThreshold;
         const ui64 ChunkSize;
+        const TFreshOutputGeometry OutputGeometry;
         TInstant StartTime;
         TIntrusivePtr<TFreshIndexAndData> IndexAndData;
         // FIXME: implement TIntrusivePtr with deletion in batch pool
         TFreshAppendixTree<TKey, TMemRec> AppendixTree;
+        TFreshOutputEstimate AppendixEstimate;
+        TVector<TChunkIdx> ReservedChunks;
 
         TCompactionJob MkCompactJob(std::shared_ptr<ISTreeCompaction> &&job) {
             if (job) {

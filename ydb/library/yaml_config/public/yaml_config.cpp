@@ -1733,6 +1733,31 @@ void EnumerateDistinctProjections(
     }
 }
 
+TSet<TString> CollectConfigSections(NFyaml::TDocument& doc) {
+    TSet<TString> sections;
+    const auto model = ParseConfig(doc);
+    auto collect = [&](NFyaml::TNodeRef config) {
+        for (auto pair : config.Map()) {
+            sections.insert(TString("/") + pair.Key().Scalar());
+        }
+    };
+    collect(model.Config);
+    for (const auto& selector : model.Selectors) {
+        collect(selector.Config);
+    }
+    return sections;
+}
+
+void ValidateResolve(NFyaml::TDocument& doc) {
+    auto sections = CollectConfigSections(doc);
+    if (sections.empty()) {
+        sections.insert("/");
+    }
+    for (const auto& section : sections) {
+        EnumerateDistinctProjections(doc, {section}, [](NFyaml::TNodeRef) {});
+    }
+}
+
 size_t Hash(const TResolvedConfig& config)
 {
     size_t configsHash = 0;

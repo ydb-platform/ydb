@@ -34,7 +34,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(req->destination_path());
+            destinationPathPair = SplitPath(Request_->NormalizePath(req->destination_path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -50,7 +50,7 @@ private:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         auto create = modifyScheme->MutableCreateTable();
         create->SetName(name);
-        create->SetCopyFromTable(req->source_path());
+        create->SetCopyFromTable(Request_->NormalizePath(req->source_path()));
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 };

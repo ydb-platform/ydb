@@ -208,9 +208,13 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
         TSetStatusFunc<TEvResponse> setStatusFunc, const TActorContext& ctx,
         TDataShard::ELogThrottlerType logThrottlerType)
 {
-    LOG_LOG_S_THROTTLE(self->GetLogThrottler(logThrottlerType), ctx, NActors::NLog::PRI_NOTICE, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
-        << ": tablet# " << self->TabletID()
-        << ", error# " << rejectDescription);
+    if (self->GetLogThrottler(logThrottlerType).Kick()) {
+        YDB_LOG_NOTICE_CTX(ctx, "Rejecting request on datashard",
+            {"txDesc", txDesc},
+            {"tabletId", self->TabletID()},
+            {"error", rejectDescription}
+        );
+    }
 
     auto response = MakeHolder<TEvResponse>();
     setStatusFunc(*response);

@@ -28,23 +28,31 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMi
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
 
-    // Take the average of original demand and actual demand, but keep at least 1 if original demand not zero.
-    const auto demand = CpuDemand.load();
-    newQuery->CpuDemand = (demand + CpuActualDemand.load()) >> 1;
-    if (newQuery->CpuDemand == 0 && demand > 0) {
-        newQuery->CpuDemand = 1;
+    // Take the average of the number of tasks and the peak of wanting ones, but keep at least 1 if there are any tasks.
+    const auto tasks = CpuMaxDemand.load();
+    newQuery->Tasks = tasks;
+    newQuery->CpuMaxDemand = (tasks + CpuPeakDemand.load()) >> 1;
+    if (newQuery->CpuMaxDemand == 0 && tasks > 0) {
+        newQuery->CpuMaxDemand = 1;
     }
-    CpuActualDemand = 0;
+    CpuPeakDemand = 0;
 
-    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+    // The actual demand is smoothed with the one of the previous snapshot.
+    if (const auto prevQuery = GetSnapshot()) {
+        newQuery->PrevRawCpuActualDemand = prevQuery->RawCpuActualDemand;
+    }
+
+    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction and actual demand
     const auto burstUsage = CpuBurstUsage.load() + CpuBurstUsageResume.load() + ReadBurstUsage.load();
     const auto burstThrottle = CpuBurstThrottle.load();
-    newQuery->CpuBurstUsage += burstUsage - PrevCpuBurstUsage;
+    newQuery->CpuBurstUsage = burstUsage - PrevCpuBurstUsage;
     newQuery->CpuBurstThrottle = burstThrottle - PrevCpuBurstThrottle;
     PrevCpuBurstUsage = burstUsage;
     PrevCpuBurstThrottle = burstThrottle;
 
     newQuery->CpuUsage = CpuUsage.load();
+    newQuery->CpuThrottle = CpuThrottle.load();
+
     return newQuery;
 }
 
@@ -104,11 +112,12 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     return run;
 }
 
-void TQuery::UpdateActualDemand() {
+void TQuery::UpdatePeakDemand() {
     auto demand = CpuUsage + CpuThrottle + 1;
-    auto actualDemand = CpuActualDemand.load();
-    while (actualDemand < demand && !CpuActualDemand.compare_exchange_weak(actualDemand, demand)) {}
+    auto peakDemand = CpuPeakDemand.load();
+    while (peakDemand < demand && !CpuPeakDemand.compare_exchange_weak(peakDemand, demand)) {}
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // TPool
@@ -130,6 +139,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters = TPoolCounters();
     Counters->Limit        = group->GetCounter("Limit",        false);
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
+    Counters->ActualDemand = group->GetCounter("ActualDemand", true);  // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
     Counters->Queries      = group->GetCounter("Queries",      false);

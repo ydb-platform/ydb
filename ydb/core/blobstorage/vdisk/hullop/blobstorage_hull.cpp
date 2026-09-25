@@ -99,10 +99,6 @@ namespace NKikimr {
 
     THull::~THull() = default;
 
-    TFreshSpaceDebt THull::GetFreshSpaceDebt() const {
-        return HullDs->LogoBlobs->GetFreshSpaceDebt();
-    }
-
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
@@ -759,6 +755,105 @@ namespace NKikimr {
     void THull::ApplyHugeBlobSize(ui32 minHugeBlobInBytes, const TActorContext& ctx) {
         Fields->MinHugeBlobInBytes = minHugeBlobInBytes;
         ctx.Send(HullDs->LogoBlobs->LIActor, new TEvMinHugeBlobSizeUpdate(minHugeBlobInBytes));
+    }
+
+    template <typename TFunc>
+    void THull::ForEachFreshRecord(const TFreshAdmission& admission, TFunc&& func) const {
+        if (!admission.LogoBlobs.Empty()) {
+            func(*HullDs->LogoBlobs, admission.LogoBlobs, EHullDbType::LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            func(*HullDs->Blocks, admission.Blocks, EHullDbType::Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            func(*HullDs->Barriers, admission.Barriers, EHullDbType::Barriers);
+        }
+    }
+
+    void THull::CompactFreshDbIfRequired(EHullDbType type, const TActorContext& ctx) {
+        switch (type) {
+            case EHullDbType::LogoBlobs:
+                CompactFreshLogoBlobsIfRequired(ctx);
+                break;
+            case EHullDbType::Blocks:
+                CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0,
+                    Fields->BlocksRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+                break;
+            case EHullDbType::Barriers:
+                CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0,
+                    Fields->BarriersRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+                break;
+            default:
+                Y_ABORT("unexpected database type");
+        }
+    }
+
+    bool THull::IsFreshRotationPending(const TFreshAdmission& admission) const {
+        bool pending = false;
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate&, EHullDbType) {
+            pending |= levelIndex.IsFreshRotationPending();
+        });
+        return pending;
+    }
+
+    bool THull::PrepareFreshForAdmission(const TFreshAdmission& admission, const TActorContext& ctx) {
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
+            if (levelIndex.FreshWouldOutgrowSst(record) && levelIndex.CanRotateFreshCur()) {
+                levelIndex.RequestFreshSizeRotation();
+                // starts the compaction that rotates Cur out, unless records are in flight
+                CompactFreshDbIfRequired(type, ctx);
+            }
+        });
+        return !IsFreshRotationPending(admission);
+    }
+
+    TFreshShortfall THull::GetFreshReservationShortfall(const TFreshAdmission& admission) const {
+        TFreshShortfall shortfall;
+        if (!admission.LogoBlobs.Empty()) {
+            shortfall.LogoBlobs = HullDs->LogoBlobs->GetFreshReservationShortfall(admission.LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            shortfall.Blocks = HullDs->Blocks->GetFreshReservationShortfall(admission.Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            shortfall.Barriers = HullDs->Barriers->GetFreshReservationShortfall(admission.Barriers);
+        }
+        return shortfall;
+    }
+
+    void THull::AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks) {
+        Y_VERIFY_S(chunks.size() == split.Total(), HullDs->HullCtx->VCtx->VDiskLogPrefix
+            << "reserved# " << chunks.size() << " requested# " << split.Total());
+        auto it = chunks.begin();
+        auto give = [&](auto& levelIndex, ui64 count) {
+            if (count) {
+                levelIndex->AddFreshReservedChunks(TVector<TChunkIdx>(it, it + count));
+                it += count;
+            }
+        };
+        give(HullDs->LogoBlobs, split.LogoBlobs);
+        give(HullDs->Blocks, split.Blocks);
+        give(HullDs->Barriers, split.Barriers);
+    }
+
+    void THull::AdmitToFresh(const TFreshAdmission& admission) {
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType) {
+            levelIndex.AdmitToFresh(record);
+        });
+    }
+
+    void THull::LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx) {
+        // A compaction that was due and only held off for records in flight is started as soon as they have
+        // landed, rather than at the next scheduled check, since admission waits for it meanwhile. Nothing
+        // else is started here: whether and when a compaction is due stays exactly as without admission (a small
+        // blob, for one, never triggers one on insert).
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
+            const bool pending = levelIndex.IsFreshRotationPending();
+            levelIndex.LandInFresh(record);
+            if (pending) {
+                CompactFreshDbIfRequired(type, ctx);
+            }
+        });
     }
 
     void THull::CompactFreshLogoBlobsIfRequired(const TActorContext& ctx) {

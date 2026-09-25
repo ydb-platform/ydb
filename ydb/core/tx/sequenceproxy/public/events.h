@@ -55,7 +55,7 @@ namespace NSequenceProxy {
             { }
         };
 
-        struct TEvNextValResult : public TEventLocal<TEvNextValResult, EvNextVal> {
+        struct TEvNextValResult : public TEventLocal<TEvNextValResult, EvNextValResult> {
             Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
             TPathId PathId;

@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -1252,7 +1253,23 @@ private:
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
             for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                *graphParams.AddTasks() = task.GetDqTask();
+                auto& checkpointTask = *graphParams.AddTasks();
+                checkpointTask = task.GetDqTask();
+                checkpointTask.ClearSecureParams();
+
+                auto& requestContext = *checkpointTask.MutableRequestContext();
+                requestContext["Database"] = Database;
+                requestContext["UserSID"] = UserToken ? UserToken->GetUserSID() : TString();
+                requestContext["UserGroupSIDs"] = SequenceToJsonString(UserToken ? UserToken->GetGroupSIDs() : TVector<NACLib::TSID>{});
+
+                const auto& stageInfo = TasksGraph.GetStageInfo(TasksGraph.GetTask(checkpointTask.GetId()).StageId);
+                for (const auto& output : stageInfo.Meta.GetStage(stageInfo.Id).GetSinks()) {
+                    const auto& externalSink = output.GetExternalSink();
+                    NYql::NPq::NProto::TDqPqTopicSink sink;
+                    if (externalSink.GetType() == "PqSink" && externalSink.GetSettings().UnpackTo(&sink) && sink.GetDeferredPublicationExtIdPrefix()) {
+                        (*checkpointTask.MutableSecureParams())[sink.GetToken().GetName()] = CreateStructuredTokenParser(externalSink.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
+                    }
+                }
             }
         }
 

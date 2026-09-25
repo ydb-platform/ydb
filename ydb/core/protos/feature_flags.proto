@@ -408,4 +408,12 @@ message TFeatureFlags {
     // Enables CDC schema records for newly created asynchronous replication streams.
     // Existing streams retain their legacy data-only protocol.
     optional bool EnableAsyncReplicationSchemaChanges = 338 [default = false];
+    optional bool EnableColumnshardMoveData = 339 [default = false];
+    optional bool EnableColumnshardCutHistory = 340 [default = false];
+    // Treats a block with generation Max<ui32>() (the complete tablet deletion tombstone written by
+    // Hive) as enough to drop all the tablet's data and barrier records in VDisk and BlobDepot,
+    // without waiting for the hard barrier that follows it. Turning it off after it has been on is
+    // safe, but may leave some garbage of already deleted tablets until it is turned on again.
+    optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
+    optional bool EnableKqpRuntimeStats = 342 [default = false];
 }

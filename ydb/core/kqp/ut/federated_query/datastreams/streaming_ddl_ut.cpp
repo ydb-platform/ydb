@@ -3234,7 +3234,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& issues = GetStreamingQueryIssues(queryName);
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'test_consumer'");
+            return issues.contains("no read rule provided for consumer 'test_consumer'")
+                || issues.contains("no consumer 'test_consumer' in topic");
         });
 
         ExecExternalQuery(fmt::format(R"(
@@ -4439,6 +4440,181 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessages("rewindOutput", expected);
         CheckpointAndStopConsumerQuery(2);
         EnsureTopicEndOffset("rewindOutput", expected.size());
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFromConsumerRewind, SharedReading, FromTimestamp, TConsumerRewindFixture) {
+        // Keep checkpoint commits from advancing the offset again before we observe the rewind.
+        CheckpointPeriod = TDuration::Hours(1);
+        InitConsumerRewind(SharedReading);
+        WriteTopicMessage("rewindInput", "first");
+        WriteTopicMessage("rewindInput", "second");
+
+        const std::string readFrom = FromTimestamp
+            ? "CurrentUtcTimestamp() - Interval(\"PT1H\")"
+            : "EARLIEST";
+        std::vector<std::string> expected;
+        for (const bool alter : {false, true}) {
+            CommitConsumer(2);
+            WaitConsumerOffset(2);
+
+            if (alter) {
+                ExecQuery(fmt::format("ALTER STREAMING QUERY rewindQuery SET (RUN = TRUE, READ_FROM = {});", readFrom));
+            } else {
+                ExecQuery(fmt::format(R"(
+                    CREATE STREAMING QUERY rewindQuery WITH (READ_FROM = {read_from}) AS DO BEGIN
+                        PRAGMA pq.Consumer = "test_consumer";
+                        INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
+                    END DO;)", "read_from"_a = readFrom));
+            }
+
+            CheckReadingMode(SharedReading);
+            WaitConsumerOffset(0);
+            expected.insert(expected.end(), {"first", "second"});
+            ReadTopicMessages("rewindOutput", expected);
+            WaitConsumerOffset(0);
+            StopConsumerQuery();
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryReadFromDisabled, TStreamingWithSchemaSecretsTestFixture) {
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryDisposition(true);
+        featureFlags->SetEnableStreamingQueryReadFrom(false);
+        CreateTopic("readFromDisabledInput");
+        CreateTopic("readFromDisabledOutput");
+        CreatePqSource("sourceName");
+
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+            ExecQuery(TStringBuilder() << R"(
+                CREATE STREAMING QUERY my_query WITH (RUN = FALSE, READ_FROM = )" << value << R"() AS DO BEGIN
+                    INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
+                END DO;)", EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        }
+
+        ExecQuery(R"(
+            CREATE STREAMING QUERY my_query WITH (RUN = FALSE, STREAMING_DISPOSITION = OLDEST) AS DO BEGIN
+                INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
+            END DO;)");
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+            ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY my_query SET (READ_FROM = " << value << ");",
+                EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        }
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFrom, WithConsumer, LocalTopics, TStreamingWithSchemaSecretsTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        // READ_FROM is independent of the legacy syntax flag.
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryReadFrom(true);
+        featureFlags->SetEnableStreamingQueryDisposition(false);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        constexpr char inputTopic[] = "readFromInput";
+        constexpr char outputTopic[] = "readFromOutput";
+        CreateTopic(inputTopic, std::nullopt, LocalTopics);
+        CreateTopic(outputTopic, std::nullopt, LocalTopics);
+        if constexpr (!LocalTopics) {
+            CreatePqSource("sourceName");
+        }
+
+        WriteTopicMessage(inputTopic, "data1", 0, LocalTopics);
+        Sleep(TDuration::Seconds(1));
+        const auto readFrom = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "data2", 0, LocalTopics);
+
+        if constexpr (WithConsumer) {
+            const auto status = GetTopicClient(LocalTopics)->CommitOffset(inputTopic, 0, "test_consumer", 2).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        const auto describeConsumer = [&]() {
+            const auto result = GetTopicClient(LocalTopics)->DescribeConsumer(inputTopic, "test_consumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            const auto& stats = partitions.front().GetPartitionConsumerStats();
+            UNIT_ASSERT(stats);
+            return *stats;
+        };
+        const auto waitCommitted = [&](ui64 offset) {
+            if constexpr (WithConsumer) {
+                WaitFor(TDuration::Seconds(30), "Wait consumer offset committed", [&](TString& error) {
+                    const auto stats = describeConsumer();
+                    error = TStringBuilder() << "Committed offset: " << stats.GetCommittedOffset();
+                    return stats.GetCommittedOffset() == offset;
+                });
+            }
+        };
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY my_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
+                {consumer}
+                INSERT INTO {source}readFromOutput SELECT * FROM {source}readFromInput
+            END DO;)",
+            "consumer"_a = WithConsumer ? "PRAGMA pq.Consumer = 'test_consumer';" : "",
+            "source"_a = LocalTopics ? "" : "sourceName."
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        ReadTopicMessages(outputTopic, {"data1", "data2"}, TInstant::Zero(), false, LocalTopics);
+        waitCommitted(2);
+        auto writeFrom = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY my_query SET (READ_FROM = Timestamp("{timestamp}"));)",
+            "timestamp"_a = readFrom.ToString()));
+        CheckScriptExecutionsCount(2, 1);
+        ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            $timestamp = Timestamp("{timestamp}");
+            ALTER STREAMING QUERY my_query SET (READ_FROM = $timestamp + Interval("PT1S"));)",
+            "timestamp"_a = (readFrom - TDuration::Seconds(1)).ToString()));
+        CheckScriptExecutionsCount(3, 1);
+        ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = EARLIEST);");
+        CheckScriptExecutionsCount(4, 1);
+        ReadTopicMessages(outputTopic, {"data1", "data2"}, writeFrom, false, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        const auto previousReadSessionId = WithConsumer ? describeConsumer().GetReadSessionId() : std::string{};
+        ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = LATEST);");
+        CheckScriptExecutionsCount(4, 1);
+        Sleep(TDuration::Seconds(1));
+        if constexpr (WithConsumer) {
+            WaitFor(TDuration::Seconds(30), "Wait latest consumer session", [&](TString& error) {
+                const auto stats = describeConsumer();
+                error = TStringBuilder() << "Read session: " << stats.GetReadSessionId();
+                if (stats.GetReadSessionId().empty() || stats.GetReadSessionId() == previousReadSessionId) {
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetCommittedOffset(), 2);
+                return true;
+            });
+        }
+        WriteTopicMessage(inputTopic, "data3", 0, LocalTopics);
+        ReadTopicMessage(outputTopic, "data3", writeFrom, LocalTopics);
+        waitCommitted(3);
+
+        // A normal restart must resume from its checkpoint after a rewind.
+        const auto checkpointId = GetStreamingQueryCheckpointId("my_query");
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+        ExecQuery("ALTER STREAMING QUERY my_query SET (RUN = FALSE);");
+        CheckScriptExecutionsCount(4, 0);
+        WriteTopicMessage(inputTopic, "data4", 0, LocalTopics);
+        writeFrom = TInstant::Now();
+        ExecQuery("ALTER STREAMING QUERY my_query SET (RUN = TRUE);");
+        CheckScriptExecutionsCount(4, 1);
+        ReadTopicMessage(outputTopic, "data4", writeFrom, LocalTopics);
+        waitCommitted(4);
     }
 
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {

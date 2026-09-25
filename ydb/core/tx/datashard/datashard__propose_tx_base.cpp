@@ -54,8 +54,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
-                    "Errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
+                if (Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute).Kick()) {
+                    YDB_LOG_ERROR_CTX(ctx, "Errors while proposing transaction",
+                        {"txId", TxId},
+                        {"tabletId", Self->TabletID()},
+                        {"status", status},
+                        {"error", errMessage});
+                }
 
                 auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
                 auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);

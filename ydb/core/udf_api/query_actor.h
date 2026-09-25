@@ -13,9 +13,8 @@ NActors::IActor* CreateListModulesActor(
     const NActors::TActorId& replyTo,
     const Ydb::Udf::ListModulesRequest& request);
 
-//! Reads one module plus the per-platform readiness of its current upload.
-//! The `modules.compile_status` column is cluster-wide and lags behind, so the
-//! authoritative answer comes from the artifact table of each platform.
+//! Reads one module plus the persisted compile state of its current upload in
+//! the artifact table of every known platform.
 NActors::IActor* CreateDescribeModuleActor(
     const NActors::TActorId& replyTo,
     const Ydb::Udf::DescribeModuleRequest& request,

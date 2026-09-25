@@ -89,6 +89,7 @@ PEERDIR(
     ydb/core/mon
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
     ydb/core/protos

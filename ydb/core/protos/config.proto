@@ -819,12 +819,18 @@ message TCompositeConveyorConfig {
         optional double Weight = 2;
     }
 
+    message THeavyLimit {
+        optional uint64 CpuLimitUs = 1;
+        optional uint32 ThreadLimit = 2;
+    }
+
     message TWorkersPool {
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
+        repeated THeavyLimit HeavyLimits = 6;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -2046,6 +2052,13 @@ message TImmediateControlsConfig {
             Description: "Enable checksum calculation and validation on VDisk write path",
             MinValue: 0,
             MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
             DefaultValue: 0,
         }];
     }
@@ -3551,6 +3564,21 @@ message TUdfStoreConfig {
     optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
+// Local path-prefix aliases. Rules are ordered and take effect on node restart.
+message TPathRewriteConfig {
+    message TRule {
+        // Nonempty absolute prefixes; trailing Src slashes are ignored.
+        // First path-component match wins. Rewritten paths collapse repeated '/'
+        // and drop trailing '/' except for the root path.
+        optional string Src = 1;
+        optional string Dst = 2;
+    }
+
+    // First matching prefix wins; results are not rematched.
+    // Relative and unmatched inputs remain unchanged.
+    repeated TRule Rules = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3674,6 +3702,7 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
+    optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
 }
 
 message TYdbVersion {

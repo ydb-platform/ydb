@@ -374,6 +374,11 @@ namespace NKikimr {
                 Throttler = std::make_shared<TEventsQuoter>();
             }
         }
+
+        // Before the actor starts: chunks the Fresh segment reserved for this compaction in advance.
+        void AddPreReservedChunks(const TVector<TChunkIdx>& chunks) {
+            Worker.AddPreReservedChunks(chunks);
+        }
     };
 
 } // NKikimr

@@ -1477,7 +1477,8 @@ void TPDisk::ChunkUnlock(TChunkUnlock &evChunkUnlock) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
-        bool forHousekeeping) {
+        bool forHousekeeping, NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor,
+        NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor) {
     // chunkIdx = 0 is deprecated and will not be soon removed
     TGuard<TMutex> guard(StateMutex);
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
@@ -1486,6 +1487,9 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
     auto color = Keeper.EstimateAllocationColor(req->Owner, count, forHousekeeping, &occupancy);
+    if (estimatedColor) {
+        *estimatedColor = color;
+    }
 
     auto makeError = [&](TString info) {
         guard.Release();
@@ -1496,6 +1500,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             << " sharedFree# " << sharedFree
             << " ownerFree# " << ownerFree
             << " forHousekeeping# " << forHousekeeping
+            << " refuseAtColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(refuseAtColor)
             << " estimatedColor after allocation# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color)
             << " occupancy after allocation# " << occupancy
             << " " << info
@@ -1505,7 +1510,10 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             {"marker", "BPD01"});
     };
 
-    if (sharedFree <= count || color == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) {
+    // The colour has to stay strictly better than the caller's bound. With the default
+    // BLACK this is exactly the historical `color == BLACK` test, since no colour is
+    // worse than BLACK.
+    if (sharedFree <= count || color >= refuseAtColor) {
         makeError("");
         return {};
     }
@@ -1549,8 +1557,9 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
 
     THolder<NPDisk::TEvChunkReserveResult> result;
     TString allocateError;
+    NKikimrBlobStorage::TPDiskSpaceColor::E estimatedColor = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     TVector<TChunkIdx> chunks = AllocateChunkForOwner(&evChunkReserve, evChunkReserve.SizeChunks, allocateError,
-        evChunkReserve.ForHousekeeping);
+        evChunkReserve.ForHousekeeping, evChunkReserve.RefuseAtColor, &estimatedColor);
     errorReason << allocateError;
 
     if (chunks.empty()) {
@@ -1565,6 +1574,7 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     // Reported after the allocation, so the owner learns what it has left rather
     // than what it had before asking.
     result->Headroom = Keeper.GetSpaceHeadroom(evChunkReserve.Owner);
+    result->EstimatedColor = estimatedColor;
 
     guard.Release();
     PCtx->ActorSystem->Send(evChunkReserve.Sender, result.Release(), 0, evChunkReserve.Cookie);
@@ -1625,16 +1635,20 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
     TStringStream errorReason;
     TGuard<TMutex> guard(StateMutex);
 
-    if (evChunkForget.IsDDisk) {
-        // Preprocessing can precede owner reinitialization. Revalidate at execution so
-        // a delayed forget from an older incarnation cannot free current reservations.
+    {
+        // Preprocessing does not check the round, and may precede owner reinitialization
+        // anyway. Check at execution, so that a delayed forget from an older incarnation
+        // cannot free the current one's reservations: YardInit hands the older incarnation's
+        // uncommitted reservations back to the free pool, where the current one may reserve
+        // the very same chunks again.
         auto status = CheckOwnerAndRound(&evChunkForget, errorReason);
         if (!IsOwnerUser(evChunkForget.Owner)) {
             status = NKikimrProto::INVALID_OWNER;
         }
         if (status != NKikimrProto::OK) {
             PCtx->ActorSystem->Send(evChunkForget.Sender,
-                new NPDisk::TEvChunkForgetResult(status, 0, errorReason.Str()), 0, evChunkForget.Cookie);
+                new NPDisk::TEvChunkForgetResult(status, 0, errorReason.Str()), 0,
+                evChunkForget.IsDDisk ? evChunkForget.Cookie : 0);
             Mon.ChunkForget.CountResponse();
             return;
         }
@@ -2254,6 +2268,61 @@ void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitRes
 #endif
 }
 
+// A reservation that was never committed leaves no persistent trace: WriteSysLogRestorePoint
+// records an owner only for DATA_COMMITTED* chunks. An owner coming back on a new round has no
+// memory of such a chunk either, so nothing can legitimately reference it any more. Hand it back
+// here; otherwise it stays DATA_RESERVED and keeps consuming the owner's quota until the PDisk
+// itself restarts, and the VDisk can only report it as leaked (see VerifyOwnedChunks). Returns
+// how many chunks were released. StateMutex must be held by the caller.
+ui32 TPDisk::ReleaseUncommittedChunks(TOwner owner) {
+    ui32 released = 0;
+    bool isDirtyMarked = false;
+    for (TChunkIdx chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
+        TChunkState &state = ChunkState[chunkIdx];
+        if (state.OwnerId != owner || state.CommitState != TChunkState::DATA_RESERVED) {
+            continue;
+        }
+        if (state.CommitsInProgress) {
+            // A commit record for this chunk is already on its way to the log and will make it
+            // genuinely owned; the owner finds it there on recovery.
+            continue;
+        }
+        // The chunk goes back to the free pool, so from now on it must be treated as holding
+        // someone else's data. DATA_RESERVED chunks were never marked.
+        if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
+            state.IsDirty = true;
+            isDirtyMarked = true;
+        }
+        Mon.UncommitedDataChunks->Dec();
+        if (state.OperationsInProgress) {
+            // I/O of the previous incarnation has not drained yet. Same handling as in ChunkForget:
+            // quarantine releases the chunk through ForceDeleteChunk() once it has, and a commit
+            // still to come for it is refused, the chunk no longer being DATA_RESERVED.
+            state.CommitState = TChunkState::DATA_ON_QUARANTINE;
+            QuarantineChunks.push_back(chunkIdx);
+        } else {
+            state.OwnerId = OwnerUnallocated;
+            state.CommitState = TChunkState::FREE;
+            // Drop the nonces along with the ownership, exactly as ChunkForget does: the next owner
+            // gets a freshly allocated nonce range, so whatever was written here stops validating.
+            state.Nonce = 0;
+            state.CurrentNonce = 0;
+            Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+        }
+        ++released;
+    }
+    if (isDirtyMarked) {
+        WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
+    }
+    if (released) {
+        YDB_LOG_P_LOG(PRI_NOTICE, "Released uncommitted reservations of a restarted owner",
+            {"marker", "BPD01"},
+            {"ownerId", (ui32)owner},
+            {"releasedChunks", released});
+    }
+    return released;
+}
+
 bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     // Just register cut log id and reply with starting points.
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
@@ -2271,10 +2340,15 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 
     ownerData.OwnerRound = evYardInit.OwnerRound;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
+    // The owner is starting over, so anything it reserved but never committed is unreachable.
+    // Release it before reporting what it owns, or it would come back as a leak it cannot fix.
+    ReleaseUncommittedChunks(owner);
     TVector<TChunkIdx> ownedChunks;
     ownedChunks.reserve(ChunkState.size());
     for (TChunkIdx chunkId = 0; chunkId < ChunkState.size(); ++chunkId) {
-        if (ChunkState[chunkId].OwnerId == owner) {
+        // A chunk on quarantine was given up by its owner and only waits for its I/O to drain.
+        if (ChunkState[chunkId].OwnerId == owner
+                && ChunkState[chunkId].CommitState != TChunkState::DATA_ON_QUARANTINE) {
             ownedChunks.push_back(chunkId);
         }
     }

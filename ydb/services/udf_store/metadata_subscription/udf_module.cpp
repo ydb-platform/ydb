@@ -13,11 +13,7 @@ TUdfModule::TDecoder::TDecoder(const Ydb::ResultSet& rawData) {
     ManifestIdx = GetFieldIndex(rawData, ManifestColName);
     VersionIdx = GetFieldIndex(rawData, VersionColName);
     ChunkCountIdx = GetFieldIndex(rawData, ChunkCountColName);
-    CompileStatusIdx = GetFieldIndex(rawData, CompileStatusColName);
-    CompileErrorIdx = GetFieldIndex(rawData, CompileErrorColName);
     CreatedAtIdx = GetFieldIndex(rawData, CreatedAtColName);
-    CompileStartedAtIdx = GetFieldIndex(rawData, CompileStartedAtColName);
-    CompileFinishedAtIdx = GetFieldIndex(rawData, CompileFinishedAtColName);
 }
 
 bool TUdfModule::TDecoder::Read(const i32 columnIdx, EUdfType& result, const Ydb::Value& r) const {
@@ -160,25 +156,8 @@ bool TUdfModule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value
     if (decoder.GetChunkCountIdx() >= 0) {
         decoder.Read(decoder.GetChunkCountIdx(), ChunkCount, rawValue);
     }
-    if (decoder.GetCompileStatusIdx() >= 0) {
-        ECompileStatus status = ECompileStatus::Pending;
-        if (decoder.Read(decoder.GetCompileStatusIdx(), status, rawValue)) {
-            CompileStatus = status;
-        }
-    } else if (Type == EUdfType::WASM || Type == EUdfType::LIBRARY) {
-        CompileStatus = ECompileStatus::Pending;
-    }
-    if (decoder.GetCompileErrorIdx() >= 0) {
-        decoder.Read(decoder.GetCompileErrorIdx(), CompileError, rawValue);
-    }
     if (decoder.GetCreatedAtIdx() >= 0) {
         decoder.Read(decoder.GetCreatedAtIdx(), CreatedAt, rawValue);
-    }
-    if (decoder.GetCompileStartedAtIdx() >= 0) {
-        decoder.Read(decoder.GetCompileStartedAtIdx(), CompileStartedAt, rawValue);
-    }
-    if (decoder.GetCompileFinishedAtIdx() >= 0) {
-        decoder.Read(decoder.GetCompileFinishedAtIdx(), CompileFinishedAt, rawValue);
     }
     return true;
 }
@@ -197,7 +176,6 @@ TString TUdfModule::SerializeToString() const {
         << ", Manifest: " << Manifest
         << ", Version: " << Version
         << ", ChunkCount: " << ChunkCount
-        << ", CompileStatus: " << CompileStatusToString(CompileStatus)
         << "}";
 }
 

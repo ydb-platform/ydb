@@ -72,8 +72,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
 
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
-
+        if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute).Kick()) {
+            YDB_LOG_ERROR_CTX(ctx, err);
+        }
         return EExecutionStatus::Executed;
     }
 
@@ -98,7 +99,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
                             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
 
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+                            if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute).Kick()) {
+                               YDB_LOG_ERROR_CTX(ctx, err);
+                            }
 
                             return EExecutionStatus::Executed;
                         }

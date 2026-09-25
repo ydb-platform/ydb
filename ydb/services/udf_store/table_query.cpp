@@ -144,7 +144,7 @@ TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
         << "DECLARE $type AS Utf8; "
-           << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error, manifest FROM `"
+        << "SELECT uid, md5, name, type, version, size, chunk_count, manifest FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE name = $name AND type = $type;";
 }
@@ -176,11 +176,6 @@ bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& respo
     ReadUint64Column(resultSet, "version", row.Version);
     ReadUint64Column(resultSet, "size", row.Size);
     ReadUint64Column(resultSet, "chunk_count", row.ChunkCount);
-    TString compileStatus;
-    if (ReadUtf8Column(resultSet, "compile_status", compileStatus)) {
-        TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
-    }
-    ReadUtf8Column(resultSet, "compile_error", row.CompileError);
     ReadUtf8Column(resultSet, "manifest", row.Manifest);
     return true;
 }
@@ -217,6 +212,100 @@ TString BuildSelectArtifactQuery(const TString& tablePath) {
         << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+}
+
+TString BuildEnsurePendingArtifactQuery(const TString& tablePath) {
+    const auto path = EscapeTablePath(tablePath);
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "$existing = SELECT id FROM `" << path
+        << "` WHERE id = $id AND kind = $kind AND uid = $uid; "
+        << "$pending = SELECT $id AS id, $kind AS kind, $uid AS uid, CAST('pending' AS Utf8) AS compile_status, "
+        << "CAST('' AS Utf8) AS compile_error; "
+        << "INSERT INTO `" << path << "` (id, kind, uid, compile_status, compile_error) "
+        << "SELECT id, kind, uid, compile_status, compile_error FROM $pending "
+        << "WHERE NOT EXISTS (SELECT id FROM $existing);";
+}
+
+TString BuildMarkArtifactCompilingQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "UPDATE `" << EscapeTablePath(tablePath)
+        << "` SET compile_status = CAST('compiling' AS Utf8), compile_error = CAST('' AS Utf8), "
+        << "compile_started_at = CurrentUtcTimestamp(), compile_finished_at = NULL "
+        << "WHERE id = $id AND kind = $kind AND uid = $uid "
+        << "AND compile_status IN ('pending', 'failed');";
+}
+
+TString BuildMarkArtifactFailedQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "DECLARE $error AS Utf8; "
+        << "UPDATE `" << EscapeTablePath(tablePath)
+        << "` SET compile_status = CAST('failed' AS Utf8), compile_error = $error, "
+        << "compile_finished_at = CurrentUtcTimestamp() "
+        << "WHERE id = $id AND kind = $kind AND uid = $uid AND compile_status = 'compiling';";
+}
+
+void SetMarkArtifactFailedParams(Ydb::Table::ExecuteDataQueryRequest& request,
+    const TString& id, const TString& kind, const TString& uid, const TString& error)
+{
+    SetSelectArtifactParams(request, id, kind, uid);
+    (*request.mutable_parameters())["$error"] = MakeUtf8Param(error);
+}
+
+TString BuildSelectArtifactCompileStateQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
+        << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+}
+
+bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
+    TMaybe<TArtifactCompileState>& state)
+{
+    Ydb::Table::ExecuteQueryResult result;
+    if (!ExtractQueryResult(response, result)) {
+        return false;
+    }
+    const auto& rows = result.result_sets(0);
+    if (rows.truncated() || rows.rows_size() > 1) {
+        return false;
+    }
+    if (rows.rows().empty()) {
+        state.Clear();
+        return true;
+    }
+    TArtifactCompileState parsed;
+    TString status;
+    if (!ReadUtf8Column(rows, "compile_status", status)
+        || !TUdfModule::CompileStatusFromString(status, parsed.Status)
+        || !ReadUtf8Column(rows, "compile_error", parsed.Error))
+    {
+        return false;
+    }
+    auto readTimestamp = [&](const TString& name, TMaybe<TInstant>& value) {
+        const i32 index = FindColumnIndex(rows, name);
+        if (index < 0 || index >= rows.rows(0).items_size()) {
+            return false;
+        }
+        const auto& item = rows.rows(0).items(index);
+        if (item.has_null_flag_value()) {
+            return true;
+        }
+        if (!item.has_uint64_value()) {
+            return false;
+        }
+        value = TInstant::MicroSeconds(item.uint64_value());
+        return true;
+    };
+    if (!readTimestamp("compile_started_at", parsed.StartedAt)
+        || !readTimestamp("compile_finished_at", parsed.FinishedAt))
+    {
+        return false;
+    }
+    state = std::move(parsed);
+    return true;
 }
 
 void SetSelectArtifactParams(
@@ -347,9 +436,11 @@ TString BuildUpsertArtifactQuery(const TString& tablePath) {
         << "UPSERT INTO `"
         << EscapeTablePath(tablePath)
         << "` (id, kind, uid, version, format, "
-        << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count, compiled_at) "
+        << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count, compiled_at, "
+        << "compile_status, compile_error, compile_finished_at) "
         << "VALUES ($id, $kind, $uid, $version, $format, "
-        << "$wasm_data_size, $wasm_data_chunk_count, $object_code_size, $object_code_chunk_count, CurrentUtcTimestamp());";
+        << "$wasm_data_size, $wasm_data_chunk_count, $object_code_size, $object_code_chunk_count, "
+        << "CurrentUtcTimestamp(), CAST('ready' AS Utf8), CAST('' AS Utf8), CurrentUtcTimestamp());";
 }
 
 void SetUpsertArtifactParams(
@@ -467,43 +558,6 @@ void SetUpsertArtifactChunkParams(
     (*request.mutable_parameters())["$blob_kind"] = MakeUtf8Param(blobKind);
     (*request.mutable_parameters())["$chunk_idx"] = MakeUint64Param(chunkIdx);
     (*request.mutable_parameters())["$data"] = MakeStringParam(data);
-}
-
-TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
-    // Compiles run per node against a shared table, so a compile started for
-    // one upload may finish after the module has been re-uploaded over the
-    // same name. The name identifies the module, and uid identifies the upload
-    // behind the row right now: without it in the predicate a stale compile
-    // would publish its verdict over content it never looked at.
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "DECLARE $type AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $compile_status AS Utf8; "
-        << "DECLARE $compile_error AS Utf8; "
-        << "UPDATE `"
-        << EscapeTablePath(tablePath)
-        << "` SET compile_status = $compile_status, "
-        << "compile_error = $compile_error, "
-        << "compile_started_at = IF($compile_status = 'compiling', CurrentUtcTimestamp(), compile_started_at), "
-        << "compile_finished_at = IF($compile_status = 'ready' OR $compile_status = 'failed', "
-        << "CurrentUtcTimestamp(), compile_finished_at) "
-        << "WHERE name = $name AND type = $type AND uid = $uid;";
-}
-
-void SetUpdateCompileStatusParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& type,
-    const TString& uid,
-    const TString& status,
-    const TString& errorMessage)
-{
-    (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
-    (*request.mutable_parameters())["$type"] = MakeUtf8Param(type);
-    (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
-    (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
-    (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
 }
 
 } // namespace NKikimr::NUdfStore::NTableQuery

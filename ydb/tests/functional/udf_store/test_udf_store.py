@@ -50,6 +50,28 @@ def _wait_for_condition(condition_fn, timeout_seconds=60, poll_interval=1, descr
     return False
 
 
+def _module_compile_ready(endpoint, database, name):
+    import grpc
+    from ydb.public.api.grpc.ydb_udf_v1_pb2_grpc import UdfServiceStub
+    from ydb.public.api.protos import ydb_udf_pb2 as udf
+
+    target = endpoint.removeprefix("grpc://")
+    try:
+        with grpc.insecure_channel(target) as channel:
+            response = UdfServiceStub(channel).DescribeModule(
+                udf.DescribeModuleRequest(name=name),
+                metadata=(("x-ydb-database", database),),
+                timeout=30,
+            )
+        result = udf.DescribeModuleResult()
+        if not response.operation.result.Unpack(result) or not result.platforms:
+            return False
+        return all(platform.status == udf.READY for platform in result.platforms)
+    except Exception as error:
+        logger.debug("module %s compile state not ready yet: %s", name, error)
+        return False
+
+
 def _kv_volume_tool():
     return yatest.common.binary_path(os.environ["YDB_KV_VOLUME_TOOL_PATH"])
 
@@ -424,7 +446,6 @@ def test_ydb_udf_rpc_validation_and_pagination():
             upload([header(manifest(), expected_md5="0" * 32), data], StatusIds.PRECONDITION_FAILED)
             first = upload([header(manifest()), data], StatusIds.SUCCESS)
             assert first.md5 == hashlib.md5(body).hexdigest()
-            assert first.compile_status == udf.PENDING
 
             def describe():
                 response = stub.DescribeModule(udf.DescribeModuleRequest(name=first.name), metadata=metadata, timeout=60)
@@ -605,21 +626,7 @@ def test_using_wasm_udf(source_size):
         )
 
         def _wasm_compile_ready():
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=udf_name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("WASM compile status not ready yet: %s", e)
-                return False
+            return _module_compile_ready(endpoint, database, udf_name)
 
         assert _wait_for_condition(
             _wasm_compile_ready,
@@ -666,38 +673,72 @@ def test_using_wasm_udf(source_size):
 
 @pytest.mark.parametrize("module_type", ["WASM", "LIBRARY"])
 def test_wasm_chunk_query_error_is_persisted(module_type):
+    import grpc
+    from ydb.public.api.grpc.ydb_udf_v1_pb2_grpc import UdfServiceStub
+    from ydb.public.api.protos import ydb_udf_pb2 as udf
+
     database = "/Root/test"
     cluster = _make_cluster(enable_udf_store=True, enable_wasm_udf=True)
     db_nodes = _create_database(cluster, database)
     try:
-        node = cluster.nodes[1]
+        node = db_nodes[0]
         config = ydb.DriverConfig(endpoint="%s:%s" % (node.host, node.port), database=database)
         assert _wait_for_condition(lambda: _table_exists(config, database))
         chunks_path = ".metadata/udf_store/module_chunks"
         assert _wait_for_condition(lambda: _table_exists(config, database, chunks_path))
-        # Publish metadata after removing the source table: ReadModuleChunks /
-        # ReadLibraryChunks must fail as a query, before parsing or compiling.
-        _run_query(config, f"DROP TABLE `{database}/{chunks_path}`")
         manifest_path = yatest.common.source_path(
             "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
         )
         with open(manifest_path) as manifest_file:
             manifest = json.dumps(manifest_file.read())
-        _run_query(config, f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
-            (name, type, uid, md5, size, chunk_count, version, manifest, compile_status, created_at)
-            VALUES ("LocalUdf", "{module_type}", "missing-chunks", "00000000000000000000000000000000",
-                    1ul, 1ul, 1ul, CAST({manifest} AS Json), "pending", CurrentUtcTimestamp());''')
-        observed = {}
 
-        def failed():
-            result = _run_query(config, f'''SELECT compile_status, compile_error
-                FROM `{database}/{UDF_TABLE_MODULES_PATH}` WHERE name = "LocalUdf"''')
-            observed.update(result[0].rows[0])
-            return observed["compile_status"] == "failed"
+        def publish(uid):
+            _run_query(config, f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
+                (name, type, uid, md5, size, chunk_count, version, manifest, created_at)
+                VALUES ("LocalUdf", "{module_type}", "{uid}", "00000000000000000000000000000000",
+                        1ul, 1ul, 1ul, CAST({manifest} AS Json), CurrentUtcTimestamp());''')
 
-        assert _wait_for_condition(failed, timeout_seconds=60), observed
+        with grpc.insecure_channel("%s:%s" % (node.host, node.port)) as channel:
+            stub = UdfServiceStub(channel)
+
+            def describe():
+                response = stub.DescribeModule(
+                    udf.DescribeModuleRequest(name="LocalUdf"),
+                    metadata=(("x-ydb-database", database),),
+                    timeout=30,
+                )
+                result = udf.DescribeModuleResult()
+                assert response.operation.result.Unpack(result), response.operation
+                return result
+
+            # Database creation returns before its compile controller is always
+            # available. First let a harmless corrupt-source attempt prove that
+            # the controller and worker are connected; otherwise dropping the
+            # chunks table can race startup and no compile is ever assigned.
+            publish("controller-probe")
+            assert _wait_for_condition(
+                lambda: any(platform.status == udf.FAILED for platform in describe().platforms),
+                timeout_seconds=180,
+                description="compile controller readiness",
+            )
+
+            # Publish a new uid after removing the source table: ReadModuleChunks /
+            # ReadLibraryChunks must fail as a query, before parsing or compiling.
+            _run_query(config, f"DROP TABLE `{database}/{chunks_path}`")
+            publish("missing-chunks")
+            observed = {}
+
+            def failed():
+                result = describe()
+                failed_platforms = [platform for platform in result.platforms if platform.status == udf.FAILED]
+                if not failed_platforms:
+                    return False
+                observed["compile_error"] = failed_platforms[0].compile_error
+                return True
+
+            assert _wait_for_condition(failed, timeout_seconds=60), observed
         assert "YQL request failed" in observed["compile_error"], observed
-        assert "step 2" in observed["compile_error"], observed
+        assert "step 3" in observed["compile_error"], observed
     finally:
         cluster.remove_database(database)
         cluster.unregister_and_stop_slots(db_nodes)
@@ -743,21 +784,7 @@ def test_using_wasm_bridge_dict():
         _run_upload_library(endpoint, database, sdk_path, "sdk")
 
         def _library_compile_ready(name):
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}" AND type = "LIBRARY"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("library %s compile status not ready yet: %s", name, e)
-                return False
+            return _module_compile_ready(endpoint, database, name)
 
         assert _wait_for_condition(
             lambda: _library_compile_ready("sdk"),
@@ -770,21 +797,7 @@ def test_using_wasm_bridge_dict():
         )
 
         def _wasm_compile_ready():
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=udf_name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("WASM compile status not ready yet: %s", e)
-                return False
+            return _module_compile_ready(endpoint, database, udf_name)
 
         assert _wait_for_condition(
             _wasm_compile_ready,
@@ -866,21 +879,7 @@ def test_using_wasm_udf_with_sdk_and_library(large_library):
         _run_upload_library(endpoint, database, helpers_path, "helpers")
 
         def _library_compile_ready(name):
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}" AND type = "LIBRARY"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("library %s compile status not ready yet: %s", name, e)
-                return False
+            return _module_compile_ready(endpoint, database, name)
 
         assert _wait_for_condition(
             lambda: _library_compile_ready("sdk"),
@@ -898,21 +897,7 @@ def test_using_wasm_udf_with_sdk_and_library(large_library):
         )
 
         def _wasm_compile_ready():
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=udf_name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("WASM compile status not ready yet: %s", e)
-                return False
+            return _module_compile_ready(endpoint, database, udf_name)
 
         assert _wait_for_condition(
             _wasm_compile_ready,
@@ -989,21 +974,7 @@ def test_delete_wasm_udf_and_library():
         _run_upload_library(endpoint, database, helpers_path, "helpers")
 
         def _library_compile_ready(name):
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}" AND type = "LIBRARY"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("library %s compile status not ready yet: %s", name, e)
-                return False
+            return _module_compile_ready(endpoint, database, name)
 
         assert _wait_for_condition(
             lambda: _library_compile_ready("sdk"),
@@ -1021,21 +992,7 @@ def test_delete_wasm_udf_and_library():
         )
 
         def _wasm_compile_ready():
-            try:
-                result = _run_query(
-                    driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
-                        database=database,
-                        path=UDF_TABLE_MODULES_PATH,
-                        name=udf_name,
-                    ),
-                )
-                if not result or not result[0].rows:
-                    return False
-                return list(result[0].rows[0].values())[0] == "ready"
-            except Exception as e:
-                logger.debug("WASM compile status not ready yet: %s", e)
-                return False
+            return _module_compile_ready(endpoint, database, udf_name)
 
         assert _wait_for_condition(
             _wasm_compile_ready,

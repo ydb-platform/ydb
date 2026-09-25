@@ -39,6 +39,7 @@ namespace NYql {
                     EFlag::FlatMapOverOptionals | // To pushdown REGEXP over Utf8 column
                     EFlag::ToStringFromStringExpressions // To pushdown REGEXP over Utf8 column
                 );
+                EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }
         };
 

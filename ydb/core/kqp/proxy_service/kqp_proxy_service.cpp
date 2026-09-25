@@ -1,5 +1,6 @@
-#include "kqp_proxy_service_impl.h"
 #include "kqp_proxy_service.h"
+#include "kqp_proxy_service_impl.h"
+#include "kqp_query_text_cache_service.h"
 #include "kqp_script_executions.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -15,7 +16,6 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -24,16 +24,13 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
-#include <ydb/services/workload_manager/query_classifier.h>
-#include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -42,37 +39,34 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/security/util.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
-
 #include <ydb/library/aclib/user_context.h>
-#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+#include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/query_classifier.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
-#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
@@ -2128,7 +2122,9 @@ private:
             "cs",
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,
-            Counters->GetKqpCounters()->GetSubgroup("subsystem", "checkpoints_storage_service"));
+            Counters->GetKqpCounters()->GetSubgroup("subsystem", "checkpoints_storage_service"),
+            {{TString(NYql::PqProviderName), CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)}}
+        );
 
         CheckpointStorageService = TActivationContext::Register(service.release());
         TActivationContext::ActorSystem()->RegisterLocalService(

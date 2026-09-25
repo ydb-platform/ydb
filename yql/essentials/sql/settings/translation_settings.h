@@ -90,8 +90,8 @@ struct TTranslationSettings {
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::None;
     THashMap<TString, TString> ClusterMapping;
     TString PathPrefix;
-    // Optional literal path rewrite for (provider, cluster, path).
-    std::function<TString(TStringBuf, TStringBuf, TStringBuf)> NormalizePath;
+    // Optional literal path rewrite for (cluster, path), before prefixing.
+    std::function<TString(TStringBuf, TStringBuf)> NormalizePath;
     // keys (cluster name) should be normalized
     THashMap<TString, TString> ClusterPathPrefixes;
     THashMap<TString, TString> ModuleMapping;

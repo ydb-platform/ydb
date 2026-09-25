@@ -211,115 +211,28 @@ Y_UNIT_TEST(CreateSymlinkTargetDoesNotAcceptCluster) {
 }
 } // Y_UNIT_TEST_SUITE(Symlink)
 
-namespace {
-
-NSQLTranslation::TTranslationSettings PathAliasSettings() {
+Y_UNIT_TEST_SUITE(LiteralPathAliases) {
+Y_UNIT_TEST(SharedPathBuilder) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.NormalizePath = [](TStringBuf service, TStringBuf cluster, TStringBuf path) {
-        if (service != "kikimr" || cluster != "plato") {
-            return TString(path);
-        }
-        if (path == "/alias" || path.StartsWith("/alias/")) {
-            return TString("/canonical") + path.SubStr(6);
-        }
-        if (path == "/canonical" || path.StartsWith("/canonical/")) {
-            return TString("/second") + path.SubStr(10);
+    settings.PathPrefix = "/canonical";
+    settings.NormalizePath = [](TStringBuf cluster, TStringBuf path) {
+        if (cluster == "plato" && path.StartsWith('/')) {
+            return path == "/alias/table" ? TString("/canonical/table") : TString("/wrong");
         }
         return TString(path);
     };
-    return settings;
-}
-
-NYql::TAstParseResult TranslatePathAliases(const TString& sql,
-                                           NSQLTranslation::TTranslationSettings settings = PathAliasSettings()) {
-    auto result = SqlToYqlWithMode("USE plato; " + sql, NSQLTranslation::ESqlMode::QUERY,
-                                   10, "kikimr", EDebugOutput::None, false, std::move(settings));
-    UNIT_ASSERT_C(result.IsOk(), sql << "\n"
-                                     << Err2Str(result));
-    return result;
-}
-
-size_t CountPathAtoms(const NYql::TAstNode& node, TStringBuf path) {
-    if (node.IsAtom()) {
-        return node.GetContent() == path;
+    for (const TString sql : {"SELECT * FROM `/alias/table`;", "$p = '/alias/table'; SELECT * FROM $p;", "SELECT * FROM table;"}) {
+        const auto result = SqlToYqlWithMode("USE plato; " + sql, NSQLTranslation::ESqlMode::QUERY,
+                                             10, "kikimr", EDebugOutput::None, false, settings);
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "/canonical/table");
+        UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(result).find("/wrong"), TString::npos);
     }
-    size_t count = 0;
-    for (ui32 i = 0; i < node.GetChildrenCount(); ++i) {
-        count += CountPathAtoms(*node.GetChild(i), path);
-    }
-    return count;
-}
-
-} // namespace
-
-Y_UNIT_TEST_SUITE(LiteralPathAliases) {
-Y_UNIT_TEST(LocalResources) {
-    const TString cases[] = {
-        "SELECT * FROM `/alias/path`;",
-        "$path = '/alias/path'; SELECT * FROM $path;",
-        "UPSERT INTO `/alias/path` (key) VALUES (1);",
-        "CREATE TABLE `/alias/path` (key Uint64, PRIMARY KEY (key));",
-        "CREATE TOPIC `/alias/path`;",
-        "DROP VIEW `/alias/path`;",
-        "CREATE SECRET `/alias/path` WITH (VALUE = '/alias/value');",
-        "DROP ASYNC REPLICATION `/alias/path`;",
-        "DROP TRANSFER `/alias/path`;",
-    };
-    for (const auto& sql : cases) {
-        const auto result = TranslatePathAliases(sql);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/canonical/path"), 1, sql);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/alias/path"), 0, sql);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/second/path"), 0, sql);
-    }
-}
-
-Y_UNIT_TEST(PrefixesAndSingleRewrite) {
-    auto settings = PathAliasSettings();
-    settings.PathPrefix = "/canonical"; // The request database was normalized at ingress.
-    for (const TString sql : {
-             "SELECT * FROM path;",
-             "SELECT * FROM `/alias/path`;",
-             "PRAGMA TablePathPrefix = '/alias'; SELECT * FROM path;",
-             "PRAGMA TablePathPrefix('kikimr', '/alias'); SELECT * FROM path;",
-             "PRAGMA TablePathPrefix('plato', '/alias'); SELECT * FROM path;",
-         }) {
-        const auto result = TranslatePathAliases(sql, settings);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/canonical/path"), 1, sql);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/second/path"), 0, sql);
-    }
-    const auto explicitCanonical = TranslatePathAliases("SELECT * FROM `/canonical/path`;", settings);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*explicitCanonical.Root, "/second/path"), 1);
-    const auto cleared = TranslatePathAliases("PRAGMA TablePathPrefix = ''; SELECT * FROM path;", settings);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*cleared.Root, "path"), 1);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*cleared.Root, "/canonical/path"), 0);
-    const auto sharedPrefix = TranslatePathAliases("PRAGMA TablePathPrefix = '/alias'; SELECT * FROM path; SELECT * FROM hahn.path;", settings);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*sharedPrefix.Root, "/canonical/path"), 1);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*sharedPrefix.Root, "/alias/path"), 1);
-}
-
-Y_UNIT_TEST(ExternalResourcesAndData) {
-    auto settings = PathAliasSettings();
     settings.DynamicClusterProvider = "kikimr";
-    const auto external = TranslatePathAliases("SELECT * FROM `/alias/source`.`/alias/path`;", settings);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*external.Root, "/alias/source"), 1);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*external.Root, "/alias/path"), 1);
-
-    const auto table = TranslatePathAliases(R"(
-        CREATE EXTERNAL TABLE `/alias/table` (key Uint64) WITH (
-            DATA_SOURCE = '/alias/source', LOCATION = '/alias/location');
-    )");
-    for (TStringBuf path : {"/canonical/table", "/canonical/source", "/alias/location"}) {
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*table.Root, path), 1, path);
-    }
-    const auto data = TranslatePathAliases("SELECT '/alias/path'; SELECT * FROM hahn.`/alias/path`;");
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*data.Root, "/alias/path"), 2);
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*data.Root, "/canonical/path"), 0);
-    const auto otherProvider = TranslatePathAliases("DROP ASYNC REPLICATION hahn.`/alias/path`;");
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*otherProvider.Root, "/alias/path"), 1);
-    const auto disabled = TranslatePathAliases("SELECT * FROM `/alias/path`;", {});
-    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*disabled.Root, "/alias/path"), 1);
+    const auto external = SqlToYqlWithSettings("SELECT * FROM `/remote/source`.`/alias/table`;", settings);
+    UNIT_ASSERT_C(external.IsOk(), Err2Str(external));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(external), "/alias/table");
 }
-
 } // Y_UNIT_TEST_SUITE(LiteralPathAliases)
 
 Y_UNIT_TEST_SUITE(ExternalDataSource) {

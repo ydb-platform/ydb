@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _paths import ANALYTICS, add_product_paths
 
 add_product_paths(ANALYTICS)
@@ -25,6 +25,7 @@ from collector import (
     normalize_metric,
     read_pending_spans,
     start,
+    timed,
     track,
     write_send_offset,
 )
@@ -34,21 +35,38 @@ class CollectorNormalizeTest(unittest.TestCase):
     def test_generic_row_has_no_github_columns(self):
         row = normalize_metric(
             {
-                "name": "llm_call",
+                "name": "my_step",
                 "kind": "info",
-                "source": "arcadia",
+                "source": "my_job",
                 "run_id": 42,
+                "span_id": "span-1",
                 "event_ts": "2026-09-21T10:00:00Z",
                 "labels": {"model": "foo", "tokens": 12},
             }
         )
         self.assertIsNotNone(row)
-        self.assertEqual(row["name"], "llm_call")
-        self.assertEqual(row["source"], "arcadia")
+        self.assertEqual(row["name"], "my_step")
+        self.assertEqual(row["source"], "my_job")
         self.assertEqual(row["run_id"], 42)
         self.assertNotIn("github_job_id", row)
         self.assertNotIn("workflow", row)
         self.assertEqual(json.loads(row["labels"])["tokens"], 12)
+
+    def test_skips_missing_source_or_timestamp(self):
+        self.assertIsNone(normalize_metric({"name": "my_step", "run_id": 1, "event_ts": "2026-09-21T10:00:00Z"}))
+        self.assertIsNone(normalize_metric({"name": "my_step", "run_id": 1, "source": "my_job"}))
+
+    def test_skips_missing_span_id(self):
+        self.assertIsNone(
+            normalize_metric(
+                {
+                    "name": "my_step",
+                    "run_id": 1,
+                    "source": "my_job",
+                    "event_ts": "2026-09-21T10:00:00Z",
+                }
+            )
+        )
 
 
 class CollectorLifecycleTest(unittest.TestCase):
@@ -66,7 +84,7 @@ class CollectorLifecycleTest(unittest.TestCase):
                 os.environ[key] = value
 
     def test_attach_context_is_not_github(self):
-        record = attach_context({"name": "llm_call"})
+        record = attach_context({"name": "my_step"})
         self.assertEqual(record["run_id"], 99)
         self.assertNotIn("workflow", record)
         labels = record.get("labels") or {}
@@ -90,7 +108,7 @@ class CollectorLifecycleTest(unittest.TestCase):
                     main(
                         [
                             "start",
-                            "llm_call",
+                            "my_step",
                             "--file",
                             path,
                             "--source",
@@ -127,10 +145,10 @@ class CollectorLifecycleTest(unittest.TestCase):
                 with open(path, encoding="utf-8") as handle:
                     rows = [json.loads(line) for line in handle if line.strip()]
                 names = {row["name"]: row for row in rows}
-                self.assertEqual(names["llm_call"]["kind"], "duration")
-                self.assertEqual(names["llm_call"]["value"], 3000.0)
-                self.assertEqual(names["llm_call"]["source"], "arcadia")
-                self.assertEqual(names["llm_call"]["labels"]["tokens"], "12")
+                self.assertEqual(names["my_step"]["kind"], "duration")
+                self.assertEqual(names["my_step"]["value"], 3000.0)
+                self.assertEqual(names["my_step"]["source"], "arcadia")
+                self.assertEqual(names["my_step"]["labels"]["tokens"], "12")
                 self.assertEqual(sends, [path])
         finally:
             client.flush_file = original
@@ -138,10 +156,10 @@ class CollectorLifecycleTest(unittest.TestCase):
     def test_track_sets_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")
-            track("llm_call", {"value": 1, "kind": "count", "tokens": 3}, file=path, source="llm_eval")
+            track("my_step", {"value": 1, "kind": "count", "tokens": 3}, file=path, source="llm_eval")
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
-            self.assertEqual(row["name"], "llm_call")
+            self.assertEqual(row["name"], "my_step")
             self.assertEqual(row["source"], "llm_eval")
             self.assertEqual(row["labels"]["tokens"], 3)
             self.assertNotIn("github.sha", row["labels"])
@@ -149,7 +167,7 @@ class CollectorLifecycleTest(unittest.TestCase):
     def test_track_without_github_env(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")
-            track("llm_call", {"model": "foo"}, file=path, source="arcadia", kind="event")
+            track("my_step", {"model": "foo"}, file=path, source="arcadia", kind="event")
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["kind"], "event")
@@ -159,7 +177,7 @@ class CollectorLifecycleTest(unittest.TestCase):
     def test_ignores_github_run_id(self):
         os.environ.pop("ANALYTICS_RUN_ID", None)
         os.environ["GITHUB_RUN_ID"] = "123"
-        record = attach_context({"name": "llm_call"})
+        record = attach_context({"name": "my_step"})
         self.assertNotIn("run_id", record)
 
     def test_enrich_adds_url_without_changing_duration(self):
@@ -190,12 +208,28 @@ class CollectorLifecycleTest(unittest.TestCase):
             end("ya_make_try_1", file=path, conclusion="success")
             start("ya_make_try_2", {"ya_attempt": "2"}, file=path, source="ya_phase")
             end("ya_make_try_2", file=path, conclusion="failure")
-            enrich("ya_make_try_1", {"ya_attempt": "1", "report_url": "try1"}, file=path)
+            enrich(
+                "ya_make_try_1",
+                {"match_labels": {"ya_attempt": "1"}, "report_url": "try1"},
+                file=path,
+            )
             with open(path, encoding="utf-8") as handle:
                 rows = [json.loads(line) for line in handle if line.strip()]
             by_name = {row["name"]: row for row in rows}
             self.assertEqual(by_name["ya_make_try_1"]["labels"]["report_url"], "try1")
             self.assertNotIn("report_url", by_name["ya_make_try_2"]["labels"])
+
+    def test_timed_records_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "analytics.jsonl")
+            with self.assertRaises(RuntimeError):
+                with timed("boom", file=path, source="my_job"):
+                    raise RuntimeError("nope")
+            with open(path, encoding="utf-8") as handle:
+                record = json.loads(handle.readline())
+            self.assertEqual(record["name"], "boom")
+            self.assertEqual(record["conclusion"], "failure")
+            self.assertGreaterEqual(record["value"], 0)
 
     def test_start_without_name_returns_error(self):
         self.assertEqual(main(["start"]), 1)
@@ -205,9 +239,9 @@ class CollectorLifecycleTest(unittest.TestCase):
     def test_enrich_via_functions(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")
-            start("llm_call", file=path, source="llm_eval", started_epoch="1000")
-            self.assertEqual(end("llm_call", file=path, conclusion="success", finished_epoch="1002"), 1)
-            self.assertEqual(enrich("llm_call", {"report_url": "https://s3.example/x"}, file=path), 1)
+            start("my_step", file=path, source="llm_eval", started_epoch="1000")
+            self.assertEqual(end("my_step", file=path, conclusion="success", finished_epoch="1002"), 1)
+            self.assertEqual(enrich("my_step", {"report_url": "https://s3.example/x"}, file=path), 1)
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["value"], 2000.0)
@@ -261,7 +295,7 @@ class CollectorLifecycleTest(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 path = os.path.join(tmp, "analytics.jsonl")
-                track("llm_call", {"value": 1, "kind": "count"}, file=path, source="arcadia")
+                track("my_step", {"value": 1, "kind": "count"}, file=path, source="arcadia")
                 uploaded = flush_file(path, ydb_wrapper_factory=factory)
             self.assertEqual(uploaded, 1)
             self.assertEqual(len(created), 1)

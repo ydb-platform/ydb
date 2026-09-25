@@ -140,8 +140,8 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         if [ -z "${CI_METRICS_FILE:-}" ]; then
-          echo "CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
-          CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl
+          echo "CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
+          CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl
         fi
         mkdir -p "$(dirname "$CI_METRICS_FILE")"
         touch "$CI_METRICS_FILE"
@@ -167,10 +167,10 @@ runs:
         job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .id' | head -1 || true)
         job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .name' | head -1 || true)
         if [ -z "$job_id" ]; then
-          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for preset ${BUILD_PRESET}" >&2
-          exit 1
+          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for preset ${BUILD_PRESET}; metrics will be dropped" >&2
+        else
+          echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
         fi
-        echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
         echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
     - name: Setup cache
@@ -615,6 +615,8 @@ runs:
           record_ci_start fail_checker "$RETRY"
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+          python3 "$CI_METRICS_PY" track-tests --report "$CURRENT_REPORT" --source ya_phase \
+            --label "ya_attempt=${RETRY}" || true
           if [ $TESTS_RESULT = 0 ]; then
             record_ci_end fail_checker success
             record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --label "tests_status=passed"

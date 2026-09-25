@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from _paths import ANALYTICS, add_product_paths
 
 add_product_paths(ANALYTICS)
@@ -42,7 +42,6 @@ from github_actions.ci_metrics import (
     start,
     end,
     enrich,
-    timed,
     track,
 )
 from github_actions.runner_info import INVENTORY_LABEL, USAGE_LABEL
@@ -76,6 +75,20 @@ class NormalizeMetricTest(unittest.TestCase):
             )
         )
 
+    def test_requires_run_attempt(self):
+        self.assertIsNone(
+            normalize_metric(
+                {
+                    "name": "job",
+                    "source": "ya_phase",
+                    "run_id": 1,
+                    "github_job_id": 2,
+                    "span_id": "span-1",
+                    "event_ts": "2026-09-21T10:00:00Z",
+                }
+            )
+        )
+
     def test_duration_from_epoch_and_labels(self):
         row = normalize_metric(
             {
@@ -86,6 +99,9 @@ class NormalizeMetricTest(unittest.TestCase):
                 "duration_ms": 45000,
                 "conclusion": "success",
                 "labels": {"cache_mode": "dist_cache", "ya_attempt": 1},
+                "github_job_id": 555,
+                "run_attempt": 1,
+                "span_id": "span-ya",
             }
         )
         self.assertIsNotNone(row)
@@ -95,38 +111,38 @@ class NormalizeMetricTest(unittest.TestCase):
         self.assertEqual(row["value"], 45000.0)
         self.assertEqual(row["unit"], "ms")
         self.assertEqual(row["date"], datetime.fromtimestamp(1726900000, tz=timezone.utc).date())
-        self.assertEqual(row["github_job_id"], 0)
+        self.assertEqual(row["github_job_id"], 555)
         labels = json.loads(row["labels"])
         self.assertEqual(labels["cache_mode"], "dist_cache")
         self.assertEqual(labels["ya_attempt"], 1)
         self.assertEqual(row["source"], "ya_phase")
 
-    def test_finished_epoch_and_unknown_source(self):
+    def test_finished_epoch_needs_source_and_job_id(self):
+        self.assertIsNone(
+            normalize_metric(
+                {
+                    "name": "s3_sync_try",
+                    "run_id": 7,
+                    "started_at": "1000",
+                    "finished_epoch": "1010",
+                }
+            )
+        )
         row = normalize_metric(
             {
                 "name": "s3_sync_try",
+                "source": "ya_phase",
                 "run_id": 7,
+                "github_job_id": 9,
+                "run_attempt": 1,
+                "span_id": "span-s3",
                 "started_at": "1000",
                 "finished_epoch": "1010",
             }
         )
         self.assertEqual(row["value"], 10000.0)
-        self.assertEqual(row["source"], "unknown")
-
-    def test_build_info_snapshot(self):
-        row = normalize_metric(
-            {
-                "name": "build_info",
-                "kind": "info",
-                "source": "nightly_build",
-                "run_id": 11,
-                "event_ts": "2026-09-21T03:00:00Z",
-                "labels": {"payload": {"nodes": [{"name": "a.cpp", "duration_ms": 10}]}},
-            }
-        )
-        self.assertEqual(row["kind"], "info")
-        self.assertIsNone(row["value"])
-        self.assertEqual(json.loads(row["labels"])["payload"]["nodes"][0]["name"], "a.cpp")
+        self.assertEqual(row["source"], "ya_phase")
+        self.assertEqual(row["github_job_id"], 9)
 
     def test_gauge(self):
         row = normalize_metric(
@@ -137,6 +153,9 @@ class NormalizeMetricTest(unittest.TestCase):
                 "unit": "bytes",
                 "source": "clean_build",
                 "run_id": 9,
+                "github_job_id": 3,
+                "run_attempt": 1,
+                "span_id": "span-size",
                 "event_ts": "2026-09-21T03:00:00Z",
             }
         )
@@ -162,7 +181,16 @@ class JsonlRowsTest(unittest.TestCase):
                 "",
             ]
         )
-        rows = rows_from_jsonl(io.StringIO(payload), defaults={"run_id": 99, "build_preset": "relwithdebinfo"})
+        rows = rows_from_jsonl(
+            io.StringIO(payload),
+            defaults={
+                "run_id": 99,
+                "github_job_id": 1,
+                "run_attempt": 1,
+                "span_id": "span-jsonl",
+                "build_preset": "relwithdebinfo",
+            },
+        )
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["run_id"], 99)
         self.assertEqual(rows[0]["build_preset"], "relwithdebinfo")
@@ -232,6 +260,18 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertEqual(queue_row["value"], 60 * 1000)
         self.assertEqual(queue_row["event_ts"], datetime(2026, 9, 21, 10, 4, tzinfo=timezone.utc))
 
+    def test_skips_job_without_id(self):
+        run = {"id": 1, "event": "push", "run_attempt": 1, "created_at": "2026-09-21T10:00:00Z"}
+        jobs = [
+            {
+                "name": "Build and test relwithdebinfo",
+                "started_at": "2026-09-21T10:01:00Z",
+                "completed_at": "2026-09-21T10:02:00Z",
+                "conclusion": "success",
+            }
+        ]
+        self.assertEqual(metrics_from_workflow_run(run, jobs), [])
+
     def test_queue_falls_back_to_run_created_when_job_created_missing(self):
         run = {
             "id": 1,
@@ -239,6 +279,7 @@ class WorkflowRunMetricsTest(unittest.TestCase):
             "name": "PR-check",
             "head_sha": "abc",
             "head_branch": "main",
+            "run_attempt": 1,
             "created_at": "2026-09-21T10:00:00Z",
         }
         jobs = [
@@ -261,6 +302,7 @@ class WorkflowRunMetricsTest(unittest.TestCase):
             "name": "PR-check",
             "head_sha": "abc",
             "head_branch": "feature",
+            "run_attempt": 1,
             "created_at": "2026-09-21T10:00:00Z",
         }
         jobs = [
@@ -283,6 +325,7 @@ class WorkflowRunMetricsTest(unittest.TestCase):
             "name": "PR-check",
             "head_sha": "abc",
             "head_branch": "main",
+            "run_attempt": 1,
             "created_at": "2026-09-21T10:00:00Z",
             "pull_requests": [{"number": 10, "base": {"ref": "main"}}],
         }
@@ -306,7 +349,7 @@ class SchemaTest(unittest.TestCase):
         sql = build_create_table_sql(DEFAULT_TABLE_PATH)
         self.assertIn(DEFAULT_TABLE_PATH, sql)
         self.assertIn("STORE = COLUMN", sql)
-        self.assertIn("TTL = Interval", sql)
+        self.assertIn('TTL = Interval("PT525600M")', sql)
         self.assertIn("ON event_ts", sql)
         self.assertIn("PRIMARY KEY (`event_ts`", sql)
         for key in PRIMARY_KEYS:
@@ -419,9 +462,6 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             self.assertEqual(record["event_name"], "pull_request_target")
             self.assertEqual(record["commit"], "abc123def")
             self.assertEqual(record["workflow"], "PR-check")
-            labels = record.get("labels") or {}
-            self.assertNotIn("github.event.number", labels)
-            self.assertNotIn("cicd.pipeline.name", labels)
             self.assertNotIn("github_job_id", record)
         finally:
             for key, value in old.items():
@@ -540,18 +580,6 @@ class RecordApiTest(unittest.TestCase):
             self.assertEqual(second["name"], "ydbd_size")
             self.assertEqual(second["kind"], "gauge")
             self.assertEqual(second["value"], 42.0)
-
-    def test_timed_records_failure(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            with self.assertRaises(RuntimeError):
-                with timed("boom", file=path, source="test"):
-                    raise RuntimeError("nope")
-            with open(path, encoding="utf-8") as handle:
-                record = json.loads(handle.readline())
-            self.assertEqual(record["name"], "boom")
-            self.assertEqual(record["conclusion"], "failure")
-            self.assertGreaterEqual(record["value"], 0)
 
     def test_append_record_creates_parent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -787,9 +815,9 @@ class ParseLabelsTest(unittest.TestCase):
         self.assertEqual(labels["ya_attempt"], "2")
         self.assertEqual(labels["nproc"], 8)
 
-    def test_invalid_extra_kept_raw(self):
+    def test_invalid_extra_ignored(self):
         labels = parse_labels([], "not-json")
-        self.assertEqual(labels["extra"], "not-json")
+        self.assertNotIn("extra", labels)
 
 
 class RunnerFlagsTest(unittest.TestCase):

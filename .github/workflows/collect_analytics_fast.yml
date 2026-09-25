@@ -140,7 +140,6 @@ jobs:
       uses: ./.github/actions/setup_collect_analytics
       with:
         commit_sha: ${{ inputs.commit_sha }}
-        extra_packages: requests
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Export GitHub job metrics

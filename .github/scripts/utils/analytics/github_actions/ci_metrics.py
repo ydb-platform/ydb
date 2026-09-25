@@ -13,14 +13,9 @@ import json
 import os
 import re
 import sys
-import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from typing import Any, Dict, Iterable, List, Optional
 
 _ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
 if str(_ANALYTICS_ROOT) not in sys.path:
@@ -67,7 +62,8 @@ COLUMNS_SCHEMA = [
     ("build_preset", "Utf8", True),
     ("pr_number", "Uint64", True),
     ("commit", "Utf8", True),
-    ("run_attempt", "Uint64", True),
+    ("run_attempt", "Uint64", False),
+    ("span_id", "Utf8", False),
     ("value", "Double", True),
     ("unit", "Utf8", True),
     ("conclusion", "Utf8", True),
@@ -75,11 +71,20 @@ COLUMNS_SCHEMA = [
     ("run_url", "Utf8", True),
     ("exported_at", "Timestamp", True),
 ]
-PRIMARY_KEYS = ("event_ts", "date", "run_id", "github_job_id", "source", "name", "kind")
+PRIMARY_KEYS = (
+    "event_ts",
+    "date",
+    "run_id",
+    "github_job_id",
+    "run_attempt",
+    "source",
+    "name",
+    "kind",
+    "span_id",
+)
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
 )
-RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
 
 def default_metrics_file() -> str:
@@ -171,51 +176,6 @@ def github_env_defaults() -> Dict[str, Any]:
         "run_attempt": _as_uint(os.environ.get("GITHUB_RUN_ATTEMPT")),
         "run_url": run_url,
     }
-
-
-def github_headers() -> Dict[str, str]:
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise RuntimeError("GITHUB_TOKEN environment variable is required")
-    return {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-
-
-def github_get(url: str, params: Optional[Dict[str, Any]] = None, retries: int = 5, timeout: int = 60) -> Any:
-    query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
-    full = f"{url}?{query}" if query else url
-    backoff = 2.0
-    last_error: Optional[BaseException] = None
-    for attempt in range(1, retries + 1):
-        try:
-            request = Request(full, headers=github_headers())
-            with urlopen(request, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            last_error = exc
-            snippet = ""
-            try:
-                snippet = exc.read()[:300].decode("utf-8", errors="replace")
-            except Exception:  # noqa: BLE001
-                snippet = str(exc)
-            if exc.code in RETRYABLE_STATUS and attempt < retries:
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                sleep_for = float(retry_after) if retry_after and str(retry_after).isdigit() else backoff
-                print(f"GitHub API {exc.code} for {url}, retry {attempt}/{retries} in {sleep_for:.0f}s")
-                time.sleep(sleep_for)
-                backoff = min(backoff * 2, 30)
-                continue
-            raise RuntimeError(f"GitHub API {exc.code} for {url}: {snippet}") from exc
-        except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            last_error = exc
-            if attempt >= retries:
-                break
-            time.sleep(backoff)
-            backoff = min(backoff * 2, 30)
-    raise RuntimeError(f"GitHub API request failed for {url}: {last_error}")
 
 
 def attach_context(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -320,6 +280,14 @@ def enrich(
     path = file or default_metrics_file()
     extras.pop("runner", None)
     extras.pop("usage", None)
+    ya_attempt = extras.get("ya_attempt")
+    extra_labels = extras.get("labels")
+    if ya_attempt in (None, "") and isinstance(extra_labels, dict):
+        ya_attempt = extra_labels.get("ya_attempt")
+    if ya_attempt in (None, "") and isinstance(props.get("labels"), dict):
+        ya_attempt = props["labels"].get("ya_attempt")
+    if ya_attempt not in (None, ""):
+        extras["match_labels"] = {"ya_attempt": ya_attempt}
     return collector_enrich(name, props, file=path, **extras)
 
 
@@ -375,7 +343,6 @@ def send(
     merged.update(extras)
     path = file or default_metrics_file()
     table_path = merged.pop("table_path", None)
-    merged.pop("info_name", None)
     merged.pop("flush", None)
     return collector_send(
         name,
@@ -388,24 +355,17 @@ def send(
     )
 
 
-@contextmanager
-def timed(name: str, **kwargs: Any) -> Iterator[None]:
-    file = kwargs.pop("file", None)
-    start(name, file=file, **kwargs)
-    try:
-        yield
-    except Exception:
-        end(name, file=file, conclusion="failure")
-        raise
-    else:
-        end(name, file=file, conclusion="success")
-
-
 def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     row = collector_normalize_metric(raw, now=now)
     if row is None:
         return None
-    row["github_job_id"] = _as_uint(raw.get("github_job_id")) or 0
+    job_id = _as_uint(raw.get("github_job_id"))
+    if job_id is None:
+        return None
+    attempt = _as_uint(raw.get("run_attempt"))
+    if attempt is None:
+        return None
+    row["github_job_id"] = job_id
     row["workflow"] = raw.get("workflow") or None
     row["job_name"] = raw.get("job_name") or None
     row["event_name"] = raw.get("event_name") or None
@@ -413,7 +373,7 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
     row["build_preset"] = raw.get("build_preset") or None
     row["pr_number"] = _as_uint(raw.get("pr_number"))
     row["commit"] = raw.get("commit") or None
-    row["run_attempt"] = _as_uint(raw.get("run_attempt"))
+    row["run_attempt"] = attempt
     row["run_url"] = raw.get("run_url") or None
     return row
 
@@ -499,6 +459,8 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     workflow = run.get("name")
     commit = run.get("head_sha")
     run_attempt = _as_uint(run.get("run_attempt"))
+    if run_attempt is None:
+        return []
     html_url = run.get("html_url")
     branch = run.get("head_branch")
     pr_number = None
@@ -508,7 +470,9 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
 
     rows: List[Dict[str, Any]] = []
     for job in jobs:
-        job_id = _as_uint(job.get("id")) or 0
+        job_id = _as_uint(job.get("id"))
+        if job_id is None:
+            continue
         job_name = job.get("name") or ""
         job_started = parse_datetime(job.get("started_at"))
         job_completed = parse_datetime(job.get("completed_at"))
@@ -539,6 +503,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
                 normalize_metric(
                     {
                         **common,
+                        "span_id": f"job-{job_id}",
                         "name": "job",
                         "source": "github_job",
                         "started_at": job_started,
@@ -555,6 +520,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
                     normalize_metric(
                         {
                             **common,
+                            "span_id": f"queue-{job_id}",
                             "name": "queue",
                             "source": "github_job",
                             "started_at": job_created,
@@ -565,7 +531,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
                         now=now,
                     )
                 )
-        for step in job.get("steps") or []:
+        for step_index, step in enumerate(job.get("steps") or [], start=1):
             step_name = (step.get("name") or "").strip()
             step_started = parse_datetime(step.get("started_at"))
             if not step_name or step_started is None:
@@ -575,6 +541,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
                 normalize_metric(
                     {
                         **common,
+                        "span_id": f"step-{job_id}-{step_index}",
                         "name": step_name,
                         "source": "github_step",
                         "started_at": step_started,
@@ -626,13 +593,31 @@ def parse_args(argv=None) -> argparse.Namespace:
     flush_p = sub.add_parser("flush", help="Export completed events only")
     flush_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
     flush_p.add_argument("--table-path", default=None)
+    tests_p = sub.add_parser("track-tests", help="Count pass/fail/skip/muted from a ya report")
+    tests_p.add_argument("--report", required=True, help="orig/transformed ya report JSON")
+    tests_p.add_argument("--source", default="ya_phase")
+    tests_p.add_argument("--file", default=None)
+    tests_p.add_argument("--label", action="append", default=[], help="key=value")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     try:
+        args = parse_args(argv)
+        if args.command == "track-tests":
+            from collector import parse_labels
+            from github_actions.test_counts import track_report_counts
+
+            labels = parse_labels(args.label)
+            track_report_counts(
+                args.report,
+                file=args.file or default_metrics_file(),
+                source=args.source,
+                labels=labels or None,
+            )
+            return 0
         return run_cli(
-            parse_args(argv),
+            args,
             start_fn=start,
             end_fn=end,
             track_fn=track,

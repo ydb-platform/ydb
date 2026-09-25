@@ -1,10 +1,8 @@
 LIBRARY()
 
 SRCS(
-    cloud_resolver.cpp
     events.h
     iam_actor_base.h
-    iam_delegated_token_service.cpp
     iam_delegation_service.cpp
     services.h
     settings.cpp

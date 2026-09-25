@@ -11,12 +11,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
-    ydb/library/ycloud/impl
 )
-
-# The IamDelegationLive probes run against a real IAM installation and are compiled only on request:
-#   ya make -tA --cflags=-DIAM_LIVE_TESTS ydb/core/security/iam_delegation/ut -F 'IamDelegationLive::*'
-# with the environment described next to the suite.
 
 YQL_LAST_ABI_VERSION()
 

@@ -5,8 +5,6 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <util/datetime/base.h>
-#include <util/digest/multi.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NIamDelegation {
@@ -44,22 +42,6 @@ struct TDelegationResult {
     }
 };
 
-// Key of a cached token: the delegated service account within a resource container (cloud).
-struct TTokenKey {
-    TString ServiceAccountId;
-    TString CloudId;
-
-    bool operator==(const TTokenKey&) const = default;
-
-    size_t Hash() const {
-        return MultiHash(ServiceAccountId, CloudId);
-    }
-
-    TString ToString() const {
-        return TStringBuilder() << CloudId << "/" << ServiceAccountId;
-    }
-};
-
 struct TEvIamDelegation {
     enum EEv {
         // delegation service
@@ -67,10 +49,6 @@ struct TEvIamDelegation {
         EvSetupDelegationResult,
         EvRevokeDelegation,
         EvRevokeDelegationResult,
-
-        // token service
-        EvGetToken,
-        EvGetTokenResult,
 
         // system token service
         EvGetSystemToken,
@@ -115,27 +93,6 @@ struct TEvIamDelegation {
         {}
     };
 
-    // Returns the current token for the key, minting one if needed. The reply carries the cookie of the request.
-    struct TEvGetToken : NActors::TEventLocal<TEvGetToken, EvGetToken> {
-        TTokenKey Key;
-
-        explicit TEvGetToken(TTokenKey key)
-            : Key(std::move(key))
-        {}
-    };
-
-    struct TEvGetTokenResult : NActors::TEventLocal<TEvGetTokenResult, EvGetTokenResult> {
-        TTokenKey Key;
-        TString Token;
-        TInstant ExpiresAt;
-        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
-        NYql::TIssues Issues;
-
-        bool IsSuccess() const {
-            return Status == Ydb::StatusIds::SUCCESS;
-        }
-    };
-
     // Request of the system token service: answered with TEvSystemTokenReady to the sender, with the cookie.
     struct TEvGetSystemToken : NActors::TEventLocal<TEvGetSystemToken, EvGetSystemToken> {
     };
@@ -153,10 +110,3 @@ struct TEvIamDelegation {
 };
 
 } // namespace NKikimr::NIamDelegation
-
-template <>
-struct THash<NKikimr::NIamDelegation::TTokenKey> {
-    size_t operator()(const NKikimr::NIamDelegation::TTokenKey& key) const {
-        return key.Hash();
-    }
-};

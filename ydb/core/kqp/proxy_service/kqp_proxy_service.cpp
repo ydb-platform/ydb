@@ -25,7 +25,6 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/security/iam_delegation/iam_delegated_token_service.h>
 #include <ydb/core/security/iam_delegation/iam_delegation_service.h>
 #include <ydb/core/security/iam_delegation/services.h>
 #include <ydb/core/security/iam_delegation/settings.h>
@@ -2123,16 +2122,12 @@ private:
             MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
     }
 
-    // IAM delegation secrets: the delegated token service (tokens of delegated service accounts) and
-    // the node-local delegation service (SetupDelegation/RevokeDelegation for CREATE/ALTER/DROP SECRET),
-    // both behind the system token service (the token of YDB's own service account).
+    // IAM delegation secrets: the node-local delegation service (SetupDelegation/RevokeDelegation for
+    // CREATE/ALTER/DROP SECRET) behind the system token service (the token of YDB's own service account).
     //
-    // Minting a token needs only the IAM token service, while setting a delegation up also needs the IAM
-    // control plane, so a cluster configured without the control plane endpoint keeps reading the
-    // delegation secrets it already has and only loses the ability to create new ones. Runs at bootstrap
-    // and on every config notification, so that turning the feature flag on takes effect at once: a service
-    // not running yet is started. Turning the flag off, or changing IamConfig, takes effect at the next
-    // start of the node: a running service is never stopped or restarted.
+    // Runs at bootstrap and on every config notification, so that turning the feature flag on takes effect
+    // at once: a service not running yet is started. Turning the flag off, or changing IamConfig, takes effect
+    // at the next start of the node: a running service is never stopped or restarted.
     void InitIamDelegationServices() {
         if (!FeatureFlags.GetEnableIamDelegationSecrets()) {
             return;
@@ -2141,12 +2136,12 @@ private:
         const auto running = [actorSystem](const TActorId& serviceId) {
             return bool(actorSystem->LookupLocalService(serviceId));
         };
-        if (running(NIamDelegation::MakeIamDelegatedTokenServiceId()) && running(NIamDelegation::MakeIamDelegationServiceId())) {
+        if (running(NIamDelegation::MakeIamDelegationServiceId())) {
             return;
         }
         const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(AppData()->IamConfig, AppData()->ReplicationConfig);
-        if (const TString error = settings.Validate()) {
-            YDB_LOG_WARN("IAM delegation services are not started", {"reason", error});
+        if (const TString error = settings.ValidateForDelegation()) {
+            YDB_LOG_WARN("IAM delegation service is not started", {"reason", error});
             return;
         }
         if (!running(NIamDelegation::MakeIamSystemTokenServiceId())) {
@@ -2155,19 +2150,8 @@ private:
                 TActivationContext::Register(NIamDelegation::CreateIamSystemTokenService(
                     AppData()->AuthConfig.HasLocalMetadataService() ? metadata.GetHost() : TString(), metadata.GetPort())));
         }
-        if (!running(NIamDelegation::MakeIamDelegatedTokenServiceId())) {
-            actorSystem->RegisterLocalService(NIamDelegation::MakeIamDelegatedTokenServiceId(),
-                TActivationContext::Register(NIamDelegation::CreateIamDelegatedTokenService(settings, NIamDelegation::MakeIamSystemTokenServiceId())));
-        }
-        if (const TString error = settings.ValidateForDelegation()) {
-            YDB_LOG_WARN("IAM delegation service is not started, new IAM delegation secrets cannot be created;"
-                " the existing ones keep working", {"reason", error});
-            return;
-        }
-        if (!running(NIamDelegation::MakeIamDelegationServiceId())) {
-            actorSystem->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(),
-                TActivationContext::Register(NIamDelegation::CreateIamDelegationService(settings, NIamDelegation::MakeIamSystemTokenServiceId())));
-        }
+        actorSystem->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(),
+            TActivationContext::Register(NIamDelegation::CreateIamDelegationService(settings, NIamDelegation::MakeIamSystemTokenServiceId())));
     }
 
     void InitAccessServiceService() {

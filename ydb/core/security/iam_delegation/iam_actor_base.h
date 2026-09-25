@@ -23,7 +23,6 @@
 #include <util/generic/yexception.h>
 
 #include <concepts>
-#include <functional>
 
 namespace NKikimr::NIamDelegation {
 
@@ -168,19 +167,13 @@ enum class ENotFound {
 };
 
 // What authorizes an IAM call: the token of YDB's own (system) service account, asked from the system token
-// service actor before every attempt, or a token given as is (the user's own token for the lookups made on
-// the user's behalf).
+// service actor before every attempt.
 struct TIamCallCredentials {
     static TIamCallCredentials SystemToken(const NActors::TActorId& service) {
         return {.SystemTokenService = service};
     }
 
-    static TIamCallCredentials Token(TString token) {
-        return {.GivenToken = std::move(token)};
-    }
-
     NActors::TActorId SystemTokenService;
-    TString GivenToken;
 };
 
 // The coroutines below are nested ones and must be awaited from a coroutine of the calling actor.
@@ -193,11 +186,8 @@ inline NActors::async<TEvIamDelegation::TEvSystemTokenReady::TPtr> WaitSystemTok
     co_return co_await NActors::ActorWaitForEvent<TEvIamDelegation::TEvSystemTokenReady>(cookie);
 }
 
-// The token of the next call: the one given as is, or the system service account's from the service.
+// The token of the next call: the system service account's from the service.
 inline NActors::async<TString> GetIamCallToken(const TIamDelegationSettings& settings, const TIamCallCredentials& credentials) {
-    if (!credentials.GivenToken.empty()) {
-        co_return credentials.GivenToken;
-    }
     if (!credentials.SystemTokenService) {
         throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "no system token service to obtain the system service account token from";
     }
@@ -295,16 +285,6 @@ NActors::async<typename TResponseEv::TPtr> IamCallWithRetry(const TIamDelegation
     }
 }
 
-// The longest one call with all its retries can take: the attempts themselves plus the backoff between them.
-inline TDuration MaxIamCallDuration(const TIamDelegationSettings& settings) {
-    TDuration total;
-    TBackoff backoff = IamCallBackoff(settings);
-    while (backoff.HasMore()) {
-        total += backoff.Next();
-    }
-    return (settings.RequestTimeout * 2 + TDuration::Seconds(1)) * settings.MaxRetries + total;
-}
-
 // Common part of the IAM delegation service actors: their calls are authorized with the system service
 // account token asked from the system token service, and an exception that escapes a handler or a
 // top-level coroutine is logged and the actor lives on (the request it was serving is lost, its sender
@@ -332,20 +312,6 @@ protected:
     template <CIamRequestEvent TRequestEv, CIamResponseEvent TResponseEv, CIamRequestFiller<TRequestEv> TFill>
     NActors::async<typename TResponseEv::TPtr> CallWithRetry(NActors::TActorId client, TStringBuf method, TFill fill, ENotFound notFound = ENotFound::IsError) {
         co_return co_await IamCallWithRetry<TRequestEv, TResponseEv>(Settings, Credentials, client, method, std::move(fill), notFound);
-    }
-
-    TDuration MaxCallDuration() const {
-        return MaxIamCallDuration(Settings);
-    }
-
-    // Starts a task of the actor: the async coroutine callback(args...) runs concurrently with the
-    // handlers, resumed by its own events, and is cancelled at PassAway. Awaiting the same coroutine
-    // inline would run it as a part of the current handler instead. (A void coroutine of an actor is
-    // such a task by itself; this is the explicit way to start one.)
-    template <class TCallback, class... TArgs>
-        requires NActors::IsSpecificAsyncCoroutineCallable<TCallback, void, TArgs...>
-    void Spawn(TCallback callback, TArgs... args) {
-        co_await std::invoke(callback, args...);
     }
 
 protected:

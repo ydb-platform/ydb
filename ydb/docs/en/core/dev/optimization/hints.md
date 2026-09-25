@@ -1,4 +1,4 @@
-# Optimizer Hints
+# Optimizer hints
 
 Optimizer hints allow you to influence the behavior of the cost-based optimizer when planning the execution of SQL queries. {{ydb-short-name}} supports four types of hints for managing joins and statistics.
 

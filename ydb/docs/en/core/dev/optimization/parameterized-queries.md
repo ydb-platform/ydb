@@ -45,7 +45,7 @@ Cache size and settings, the `KeepInCache` flag, [`DECLARE`](../../yql/reference
 
 ## See also
 
-- [Using query plans for query optimization](plans.md)
+- [Query execution plan](plans.md)
 - [Query compile cache](../system-views.md#compile-cache-queries)
 - [Parameterized queries](../../reference/ydb-sdk/parameterized_queries.md) (SDK reference)
 - [Executing parameterized queries](../../reference/ydb-cli/parameterized-query-execution.md) (CLI reference)

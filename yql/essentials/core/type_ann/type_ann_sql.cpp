@@ -2644,6 +2644,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     bool scanColumnsOnly = true;
+    const bool allowDuplicateColumns = isYql && HasSetting(options, "allow_duplicate_columns");
     const TStructExprType* outputRowType;
     bool hasAggregations = false;
     TProjectionOrders projectionOrders;
@@ -2709,6 +2710,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                 }
                 else if (optionName == "unknowns_allowed") {
                     hasUnknownsAllowed = true;
+                }
+                else if (optionName == "allow_duplicate_columns") {
+                    if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 }
                 else if (optionName == "ext_types" || optionName == "final_ext_types") {
                     if (pass != 2) {
@@ -2827,6 +2833,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
                         const auto& column = data.Child(index);
                         YQL_ENSURE(column->Tail().IsLambda());
+                        if (allowDuplicateColumns) {
+                            hasStar = false;
+                            hasColumnRef = false;
+                        }
                         const auto& lambda = column->Tail();
                         THashSet<TString> refs;
                         THashMap<TString, THashSet<TString>> qualifiedRefs;
@@ -3112,7 +3122,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
 
                         for (auto& e: outputItems) {
                             const TItemExprType* renamed = RenameOnOrder(ctx.Expr, order, e);
-                            if (isYql && renamed != e) {
+                            if (isYql && renamed != e && !allowDuplicateColumns) {
                                 ctx.Expr.AddError(
                                     TIssue(ctx.Expr.GetPosition(input->Pos()),
                                     TStringBuilder() << "Unable to use duplicate column names. "
@@ -3371,7 +3381,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     type = inputStructType->GetItems()[i]->GetItemType();
                                 }
 
-                                newStructItems.push_back(ctx.Expr.MakeType<TItemExprType>(p->Child(2)->Child(i)->Content(), type));
+                                const TStringBuf name = allowDuplicateColumns
+                                    ? newOrder->at(i).PhysicalName
+                                    : p->Child(2)->Child(i)->Content();
+                                newStructItems.push_back(ctx.Expr.MakeType<TItemExprType>(name, type));
                             }
 
                             auto newStructType = ctx.Expr.MakeType<TStructExprType>(newStructItems);

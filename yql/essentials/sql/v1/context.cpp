@@ -419,7 +419,7 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
     TStringBuf prefixPath = GetPrefixPath(service, cluster);
     if (path.GetLiteral() && Settings.NormalizePath && IsLocalCluster(service, cluster)) {
-        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
+        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(service, cluster, *path.GetLiteral()));
     }
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
@@ -455,9 +455,10 @@ TString TContext::NormalizePath(TStringBuf path) const {
     return Settings.NormalizePath && path.StartsWith('/') ? Settings.NormalizePath(path) : TString(path);
 }
 
-TString TContext::BuildTablePath(TStringBuf prefixPath, TStringBuf path) const {
+TString TContext::BuildTablePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const {
     // Prefixes from the request database have already been normalized at ingress.
-    return NYql::BuildTablePath(prefixPath, NormalizePath(path));
+    return NYql::BuildTablePath(GetPrefixPath(service, cluster),
+        IsLocalCluster(service, cluster) ? NormalizePath(path) : TString(path));
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {

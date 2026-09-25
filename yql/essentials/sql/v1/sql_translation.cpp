@@ -6180,12 +6180,7 @@ TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref&
         Error() << "'@' is not allowed prefix for object name";
         return Nothing();
     }
-    if (!useTablePrefix) {
-        return TDeferredAtom(Ctx_.Pos(), objectId);
-    }
-    const auto prefix = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
-    return TDeferredAtom(Ctx_.Pos(), Ctx_.IsLocalCluster(context.ServiceId, context.Cluster)
-        ? Ctx_.BuildTablePath(prefix, objectId) : BuildTablePath(prefix, objectId));
+    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? Ctx_.BuildTablePath(context.ServiceId, context.Cluster, objectId) : objectId);
 }
 
 TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context) {
@@ -6214,9 +6209,7 @@ TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_
             Error() << "Temporary object is not supported";
             return {};
         }
-        const auto prefix = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
-        result = TDeferredAtom(Ctx_.Pos(), Ctx_.IsLocalCluster(context.ServiceId, context.Cluster)
-            ? Ctx_.BuildTablePath(prefix, objectId) : BuildTablePath(prefix, objectId));
+        result = TDeferredAtom(Ctx_.Pos(), Ctx_.BuildTablePath(context.ServiceId, context.Cluster, objectId));
     } else {
         // (cluster_expr DOT)? COMMAT? bind_parameter
         TString bindName;

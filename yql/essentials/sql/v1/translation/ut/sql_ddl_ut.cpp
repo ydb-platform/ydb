@@ -305,6 +305,8 @@ Y_UNIT_TEST(ExternalResourcesAndData) {
     const auto data = TranslatePathAliases("SELECT '/alias/path'; SELECT * FROM hahn.`/alias/path`;");
     UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*data.Root, "/alias/path"), 2);
     UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*data.Root, "/canonical/path"), 0);
+    const auto otherProvider = TranslatePathAliases("DROP ASYNC REPLICATION hahn.`/alias/path`;");
+    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*otherProvider.Root, "/alias/path"), 1);
     const auto disabled = TranslatePathAliases("SELECT * FROM `/alias/path`;", {});
     UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*disabled.Root, "/alias/path"), 1);
 }

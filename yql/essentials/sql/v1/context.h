@@ -173,7 +173,6 @@ public:
     }
 
     bool IsDynamicCluster(const TDeferredAtom& cluster) const;
-    bool IsLocalCluster(const TString& service, const TDeferredAtom& cluster) const;
     bool HasNonYtProvider(const ISource& source) const;
     bool UseUnordered(const ISource& source) const;
     bool UseUnordered(const TTableRef& table) const;
@@ -182,8 +181,7 @@ public:
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
-    TString NormalizePath(TStringBuf path) const;
-    TString BuildTablePath(TStringBuf prefixPath, TStringBuf path) const;
+    TString BuildTablePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const;
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
@@ -293,6 +291,9 @@ public:
     bool EnsureAvailable(TPosition position, const NYql::TFeature& feature);
 
 private:
+    bool IsLocalCluster(const TString& service, const TDeferredAtom& cluster) const;
+    TString NormalizePath(TStringBuf path) const;
+
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
         NYql::TIssueCode code,

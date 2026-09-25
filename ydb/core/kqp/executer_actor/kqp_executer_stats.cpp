@@ -1239,6 +1239,9 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
     if (taskId) {
+        // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
+        // FillStats then sends empty Tasks. Do not ENSURE — that would mask
+        // the real failure issues from COMPUTE_STATE_FAILURE.
         AFL_ENSURE(taskId <= TaskCount);
         CurrentTaskStats.resize(TaskCount);
         auto& current = CurrentTaskStats[taskId - 1];

@@ -326,25 +326,30 @@ Y_UNIT_TEST_SUITE(KqpCurrentExecutionStats) {
 
 using namespace NYql::NDqProto;
 
-    Y_UNIT_TEST(CurrentQueryStatsWindowReportsRateAndStaleness) {
-        TCurrentQueryStatsWindow window(TMonotonic::Seconds(10));
-        TCurrentQueryStats::TSnapshot snapshot;
-        snapshot.ReadIngressBytes = 600;
+    Y_UNIT_TEST(CurrentQueryStatsPublisherReportsRateAndStaleness) {
+        TCurrentQueryStatsPublisher publisher(TMonotonic::Seconds(10), TDuration::Seconds(30));
+        TCurrentExecStatsReport report;
+        report.Stats.ReadIngressBytes = 600;
+        report.SequenceNo = 1;
 
-        window.MarkUpdated();
-        auto first = window.Publish(snapshot, TMonotonic::Seconds(30));
-        UNIT_ASSERT(first.Snapshot.ReadIngressBytesRate);
-        UNIT_ASSERT_VALUES_EQUAL(*first.Snapshot.ReadIngressBytesRate, 30);
-        UNIT_ASSERT(first.ScheduleStaleCheck);
+        UNIT_ASSERT(publisher.Update(report));
+        auto first = publisher.Publish(TMonotonic::Seconds(30));
+        UNIT_ASSERT(first);
+        UNIT_ASSERT(first->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*first->Stats.ReadIngressBytesRate, 30);
+        UNIT_ASSERT(first->ScheduleNextPublish);
 
-        auto stale = window.Publish(snapshot, TMonotonic::Seconds(60));
-        UNIT_ASSERT(!stale.Snapshot.ReadIngressBytesRate);
-        UNIT_ASSERT(!stale.ScheduleStaleCheck);
+        auto stale = publisher.Publish(TMonotonic::Seconds(60));
+        UNIT_ASSERT(stale);
+        UNIT_ASSERT(!stale->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT(!stale->ScheduleNextPublish);
 
-        window.MarkUpdated();
-        auto zero = window.Publish(snapshot, TMonotonic::Seconds(90));
-        UNIT_ASSERT(zero.Snapshot.ReadIngressBytesRate);
-        UNIT_ASSERT_VALUES_EQUAL(*zero.Snapshot.ReadIngressBytesRate, 0);
+        report.SequenceNo = 2;
+        UNIT_ASSERT(publisher.Update(report));
+        auto zero = publisher.Publish(TMonotonic::Seconds(90));
+        UNIT_ASSERT(zero);
+        UNIT_ASSERT(zero->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*zero->Stats.ReadIngressBytesRate, 0);
     }
 
 TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBytes, ui64 sourceBytes) {
@@ -360,17 +365,29 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
     return report;
 }
 
-void Init(TQueryExecutionStats& stats) {
+    void Init(TQueryExecutionStats& stats) {
     stats.TaskCount = 2;
     stats.TaskCount4 = 4;
     stats.ComputeCpuTimeUs.Resize(4);
     stats.StartTs = TInstant::Seconds(10);
-}
+    }
+
+    Y_UNIT_TEST(RuntimeStatsAreDisabledByDefault) {
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        Init(stats);
+        stats.UpdateTaskStats(1, 1, MakeReport(1, 100, 4096, 1000, 700), nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+
+        const auto snapshot = stats.GetCurrentQueryResources();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 100);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ObservedPeakComputeMemoryBytes, 0);
+    }
 
     Y_UNIT_TEST(CollectWithoutFullProfile) {
         for (auto mode : {Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
                           Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC}) {
-            TQueryExecutionStats stats(mode, nullptr, nullptr, 0);
+            TQueryExecutionStats stats(mode, nullptr, nullptr, 0, true);
             Init(stats);
             auto first = MakeReport(1, 100, 4096, 1000, 700);
             auto second = MakeReport(2, 200, 8192, 2000, 1400);
@@ -400,7 +417,7 @@ void Init(TQueryExecutionStats& stats) {
     }
 
     Y_UNIT_TEST(UpdateTotalsFromPartialReports) {
-        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(stats);
         auto first = MakeReport(1, 100, 4096, 1000, 700);
         auto* extra = first.MutableTasks(0)->AddTables();
@@ -438,7 +455,7 @@ void Init(TQueryExecutionStats& stats) {
     }
 
     Y_UNIT_TEST(FinalReportIncludesPeakWithoutProgressDelivery) {
-        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(stats);
         auto report = MakeReport(1, 100, 4096, 1000, 700);
         stats.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
@@ -457,8 +474,8 @@ void Init(TQueryExecutionStats& stats) {
     Y_UNIT_TEST(AggregatePhysicalExecutions) {
         TCurrentQueryStats query;
         UNIT_ASSERT(!query.Get());
-        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
-        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(first);
         Init(second);
         auto report = MakeReport(1, 100, 4096, 1000, 700);
@@ -478,7 +495,7 @@ void Init(TQueryExecutionStats& stats) {
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
-        TQueryExecutionStats third(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats third(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(third);
         third.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         query.Update(thirdSource, third.TakeCurrentStats());
@@ -491,14 +508,14 @@ void Init(TQueryExecutionStats& stats) {
         TCurrentQueryStats query;
         TCurrentQueryStats::TSourceState source;
 
-        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(first);
         auto report = MakeReport(1, 100, 4096, 1000, 700);
         first.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         UNIT_ASSERT(query.Update(source, first.TakeCurrentStats()));
         UNIT_ASSERT(query.Finish(source));
 
-        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(second);
         second.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         const auto next = second.TakeCurrentStats();
@@ -509,7 +526,7 @@ void Init(TQueryExecutionStats& stats) {
     }
 
     Y_UNIT_TEST(FailureWithoutTaskStatsReleasesMemory) {
-        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC, nullptr, nullptr, 0);
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC, nullptr, nullptr, 0, true);
         Init(stats);
         auto report = MakeReport(1, 100, 4096, 1000, 700);
         stats.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());

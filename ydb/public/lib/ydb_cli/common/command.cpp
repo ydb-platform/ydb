@@ -2,6 +2,7 @@
 #include "build_info.h"
 #include "command_utils.h"
 #include "normalize_path.h"
+#include "oidc.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
@@ -93,6 +94,32 @@ TClientCommand::TClientCommand(
 }
 
 
+TClientCommand::TConfig::TConfig(int argc, char** argv)
+    : ArgC(argc)
+    , ArgV(argv)
+    , InitialArgC(argc)
+    , InitialArgV(argv)
+    , Opts(nullptr)
+    , ParseResult(nullptr)
+    , HelpCommandVerbosityLevel(ParseHelpCommandVerbosity(argc, argv))
+    , TabletId(0)
+{
+    CredentialsGetter = [](const TClientCommand::TConfig& config) {
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
+        }
+        if (config.SecurityToken) {
+            return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
+        }
+        if (config.UseOauth2TokenExchange) {
+            if (config.Oauth2KeyFile) {
+                return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
+            }
+        }
+        return CreateInsecureCredentialsProviderFactory();
+    };
+}
+
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosity(int argc, char** argv) {
     size_t cnt = 0;
     for (int i = 0; i < argc; ++i) {
@@ -176,6 +203,8 @@ TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
 
     if (SkipDiscovery) {
         driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+    } else if (Oidc.IsConfigured()) {
+        driverConfig.SetDiscoveryMode(EDiscoveryMode::Async);
     }
 
     driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);

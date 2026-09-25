@@ -147,18 +147,10 @@ void TWorkloadCommand::Config(TConfig& config) {
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
     SetRandomSeed(Now().MicroSeconds());
 
-    auto driverConfig = TDriverConfig()
-        .SetEndpoint(config.Address)
-        .SetDatabase(config.Database)
-        .SetBalancingPolicy(EBalancingPolicy::UseAllNodes)
-        .SetCredentialsProviderFactory(config.CredentialsGetter(config));
+    auto driverConfig = config.CreateDriverConfigWithBuildInfo()
+        .SetBalancingPolicy(EBalancingPolicy::UseAllNodes);
 
     Verbose = config.IsVerbose();
-    if (config.EnableSsl) {
-        driverConfig.UseSecureConnection(config.CaCerts);
-    }
-
-    AppendYdbCliBuildInfo(driverConfig, config.GetBuildInfo(), config.GetBuildInfoCommandTag());
 
     Driver = std::make_unique<TScopedDriver>(TDriver(driverConfig));
     auto tableClientSettings = NTable::TClientSettings()

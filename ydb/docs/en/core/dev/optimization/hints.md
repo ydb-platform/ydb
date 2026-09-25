@@ -1,15 +1,18 @@
 # Optimizer Hints
 
-Optimizer hints allow you to influence the behavior of the cost-based optimizer when planning the execution of SQL queries. {{ ydb-short-name }} supports four types of hints for managing joins and statistics.
+Optimizer hints allow you to influence the behavior of the cost optimizer when planning the execution of SQL queries. {{ ydb-short-name }} supports four types of hints for managing joins and statistics.
 
 ## Usage
 
 Hints are specified via the `PRAGMA ydb.OptimizerHints` pragma at the beginning of the SQL query.
-If the optimizer is unable to apply at least one of the specified hints to the query, the user will be notified via a warning.
+If the optimizer fails to apply at least one of the specified hints to the query, the user will be notified via a warning.
 
 ## Syntax
 
 Hints are specified as a string containing an array of expressions of one of four types:
+
+Operator context:
+Continue the last saved translation. Each link has boundaries with the same pair-id and OPEN/CLOSE roles. Keep each pair separate: do not nest, merge, or rearrange links.
 
 ```text
 JoinType(TableList JoinType)
@@ -17,21 +20,24 @@ Rows(TableList Op Value)
 Bytes(TableList Op Value)
 JoinOrder(JoinTree)
 
-where:
-TableList - a list of table names or aliases from the query
-Op - operation:
-  - `#` - set an absolute value
-  - `*` - multiply by the value
-  - `/` - divide by the value
-  - `+` - add the value
-  - `-` - subtract the value
-  - `Number` - a numeric value
-Value - a numeric value
-JoinTree - a binary tree represented using parentheses, for example: (R S) (T U)
+где:
+TableList - перечисление названий таблиц или элиасов из запроса
+Op - операция:
+  - `#` - задать абсолютное значение
+  - `*` - умножить на значение
+  - `/` - разделить на значение
+  - `+` - прибавить значение
+  - `-` - вычесть значение
+  - `Number` - числовое значение
+Value - числовое значение
+JoinTree - представление бинарного дерева с помощью скобок, например: (R S) (T U)
 ```
 
-For example, the following query uses three hints `Rows` that specify [cardinality](../../concepts/glossary.md#cardinality), as well as a full join order hint `JoinOrder` and a join algorithm selection hint `JoinType`:
+For example, the following query uses three hints `Rows`, which specify [cardinality](../../concepts/glossary.md#cardinality), as well as a hint for the full order of joins `JoinOrder` and a hint for selecting a join algorithm `JoinType`:
 
+
+Operator context:
+Continue the last saved translation. Each link has the same pair-id at the boundaries and the roles OPEN/CLOSE. Keep each pair separate: do not nest, do not merge, and do not rearrange the links.
 ```sql
 PRAGMA ydb.OptimizerHints =
 '
@@ -48,11 +54,11 @@ SELECT * FROM
         INNER JOIN  U   on  T.id = U.id;
 ```
 
-## Requirements for CBO (Cost Based Optimizer)
+## Requirements for the CBO (Cost Based Optimizer)
 
 {% note info %}
 
-All hints (`Rows`, `Bytes`, `JoinOrder`) work only with the **enabled** [cost-based optimizer](../../concepts/query_execution/optimizer.md), except for `JoinType` — it can be specified even when CBO is disabled.
+All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost-based optimizer](../../concepts/query_execution/optimizer.md), except for `JoinType` — it can be specified even when the CBO is disabled.
 
 {% endnote %}
 
@@ -60,15 +66,14 @@ All hints (`Rows`, `Bytes`, `JoinOrder`) work only with the **enabled** [cost-ba
 
 ### 1. JoinType — Join Algorithm
 
-Allows you to forcefully set the join algorithm for certain tables.
+Allows you to force a specific join algorithm for certain tables.
 
-{{ ydb-short-name }} currently supports three types of join algorithms:
+Currently, {{ ydb-short-name }} supports three types of join algorithms:
 
-- BroadcastJoin is a type of join where one of the datasets is small enough to be copied (broadcast) to all necessary nodes in the cluster. This allows each node to perform the join locally without transmitting data over the network.
-
+- BroadcastJoin — this is a type of join where one of the datasets is small enough to be copied (broadcast) to all necessary nodes in the cluster. This allows each node to perform the join locally without transferring data over the network.
 {% note info %}
 
-If the join order is not fixed by a separate hint, the optimizer will build both versions of the plans: where the left and right inputs of the join are sent. If the join order is fixed by a hint, the right side of the join will be sent.
+If the order of joins is not specified by a separate hint, the optimizer will build both versions of the plans: where the left and right inputs of the join are shuffled. If the order of joins is specified by a hint, the right side of the join will be shuffled.
 
 {% endnote %}
 
@@ -83,26 +88,26 @@ JoinType(t1 t2 ... tn Broadcast | Shuffle | Lookup)
 
 #### Parameters
 
-- `t1 t2 ... tn` — tables involved in the join
+- `t1 t2 ... tn` — tables participating in the join
 - Algorithm:
   - `Broadcast` — select the BroadcastJoin algorithm
   - `Shuffle` — select the ShuffleJoin algorithm
   - `Lookup` — select the LookupJoin algorithm
 
-#### Principle of Operation
+#### Operating principle
 
-If the query plan includes a [join operator](../../concepts/glossary.md#operator) that joins only the tables listed in the list, the optimizer will select the specified join algorithm if it is applicable (for example, the LookupJoin algorithm cannot be applied to [columnar tables](../../concepts/datamodel/table.md#column-oriented-table)). If the algorithm cannot be applied, the user will be notified via a warning.
+If the query plan includes a [join operator](../../concepts/glossary.md#operator) that connects only the tables listed in the list, the optimizer will select the specified join algorithm if it is applicable (for example, the LookupJoin algorithm cannot be applied to [columnar tables](../../concepts/datamodel/table.md#column-oriented-table)). If the algorithm cannot be applied, the user will be notified via a warning.
 
 #### Examples
 
 ```sql
--- Use Broadcast to join the nation and region tables
+-- Использовать Broadcast для соединения таблиц nation, region
 JoinType(nation region Broadcast)
 
--- Use ShuffleJoin for a join whose subtree contains only the customers, orders, and products tables
+-- Использовать ShuffleJoin для соединения, в поддереве которого будут только таблицы customers, orders, products
 JoinType(customers orders products Shuffle)
 
--- Use LookupJoin to join the nation and region tables
+-- Использовать LookupJoin для соединения таблиц nation, region
 JoinType(nation region Lookup)
 ```
 
@@ -150,16 +155,16 @@ You can view the query execution plan using the [CLI](../../reference/ydb-cli/co
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Since the query optimizer can change the order of joins during the optimization process, the hint should reflect the exact list of tables that are being joined.
-For example, in this query, it is assumed that the order of joins will be: R with S, then T, and finally U. Specifying a different join algorithm may change the order of joins in the plan, and some hints may not be applied. In such a case, you can add an additional hint for the join order.
+Since the optimizer can change the order of joins during query optimization, the hint should reflect the exact list of tables that are joined.
+For example, in this query, it is assumed that the order of joins will be: R with S, then T, and finally U. Specifying a different join algorithm may change the order of joins in the plan, and some hints may not be applied. In such a case, you can add an additional hint for the order of joins.
 
-### 2. Rows — hints for [cardinality](../../concepts/glossary.md#cardinality)
+### 2. Rows — hints on [cardinality](../../concepts/glossary.md#cardinality)
 
-Allows you to change the expected number of rows (optimizer's estimate) for a join or individual tables.
+Allows you to change the expected number of rows (optimizer estimate) for a join or individual tables.
 
-#### Operating principle
+#### How it works
 
-The optimizer will change its estimate of the number of rows for a join operation that connects only those tables listed in the list.
+The optimizer will change its estimate of the number of rows for a join operation that connects only the tables listed in the list.
 
 #### Syntax
 
@@ -181,20 +186,20 @@ Rows(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Multiply the expected row count by 2 for a join whose subtree contains only the users, orders, and yandex tables
+-- Умножить ожидаемое количество строк на 2 для соединения, в поддереве которого есть только таблицы users orders yandex
 Rows(users orders yandex * 2.0)
 
--- Replace the expected row count of the products table with 1.3e6
+-- Заменить ожидаемое число строк таблицы products на 1.3e6
 Rows(products # 1.3e6)
 
--- Decrease the expected row count by a factor of 228
+-- Уменьшить ожидаемое количество строк в 228 раз
 Rows(filtered_table / 228)
 
--- Add 5,000 rows to the expected result
+-- Добавить 5000 строк к ожидаемому результату
 Rows(table1 table2 + 5000)
 ```
 
-Let's run the query without cardinality [hints](../../concepts/glossary.md#cardinality) and then see how the hints change the query plan.
+Let's run the query without [cardinality hints](../../concepts/glossary.md#cardinality) and then see how the hints change the query plan.
 
 ```sql
 SELECT * FROM
@@ -217,7 +222,7 @@ Without hints, the optimizer builds the following plan:
 └────────┴────────┴────────┴───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-If you apply the following hints:
+If we apply the following hints:
 ```sql
 PRAGMA ydb.OptimizerHints =
 '
@@ -232,7 +237,7 @@ SELECT * FROM
         INNER JOIN  T   on  R.id = T.id;
 ```
 
-It will result in the following plan:
+The following plan will be obtained:
 
 ```text
 ┌───────────┬────────┬────────┬─────────────────────────────────────────────────────────────────────────────────┐
@@ -253,7 +258,7 @@ Alerts will also be returned:
 Warning: Unapplied hint: Rows(R S # 10e8)
 ```
 
-Here you can see that after applying the hints [cardinality](../../concepts/glossary.md#cardinality) of the base tables, the order of joins has changed, and one of the hints could not be applied because there is no such join in the plan.
+Here you can see that after applying the hints [cardinality](../../concepts/glossary.md#cardinality) of the base tables, the order of joins has changed, and one of the hints could not be applied because such a join is not in the plan.
 
 ### 3. Bytes — hints for data size
 
@@ -270,16 +275,16 @@ Bytes(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Multiply the expected data size by 1.5
+-- Умножить ожидаемый размер данных на 1.5
 Bytes(large_table * 1.5)
 
--- Replace the data size for the join with 1 GB
+-- Заменить размер данных для соединения на 1GB
 Bytes(table1 table2 # 1073741824)
 
--- Decrease the expected size by a factor of 2
+-- Уменьшить ожидаемый размер в 2 раза
 Bytes(compressed_table / 2)
 
--- Add 100 MB to the expected size
+-- Добавить 100MB к ожидаемому размеру
 Bytes(temp_table + 104857600)
 ```
 
@@ -306,16 +311,16 @@ The optimizer will only consider those plans that include the specified partial 
 #### Examples
 
 ```sql
--- Force joining users with orders first, then with products
+-- Принудительно соединить сначала users с orders, затем с products
 JoinOrder((users orders) products)
 
--- A more complex join order
+-- Более сложный порядок соединений
 JoinOrder(((customers orders) products) shipping)
 
--- Join grouping
+-- Группировка соединений
 JoinOrder((table1 table2) (table3 table4))
 
--- Multilevel structure
+-- Многоуровневая структура
 JoinOrder((users (orders products)) (addresses phones))
 ```
 

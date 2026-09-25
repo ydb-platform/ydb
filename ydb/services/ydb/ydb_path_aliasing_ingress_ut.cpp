@@ -433,6 +433,42 @@ namespace NKikimr::NGRpcService {
             }
         }
 
+        Y_UNIT_TEST(RegularTopicReadSessionPreservesRelativePath) {
+            TFixture fixture;
+            auto topic = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
+
+            Ydb::Topic::CreateTopicRequest create;
+            create.set_path("/alias/regular_topic");
+            create.mutable_partitioning_settings()->set_min_active_partitions(1);
+            Success(Call(*topic, &TTopic::CreateTopic, create, "/alias"));
+
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/alias");
+            context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+            auto stream = topic->StreamRead(&context);
+            UNIT_ASSERT(stream);
+
+            Ydb::Topic::StreamReadMessage::FromClient request;
+            auto* settings = request.mutable_init_request()->add_topics_read_settings();
+            settings->set_path("/alias/regular_topic");
+            settings->add_partition_ids(0);
+            UNIT_ASSERT(stream->Write(request));
+
+            Ydb::Topic::StreamReadMessage::FromServer response;
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, response.DebugString());
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
+                "regular_topic", response.DebugString());
+
+            context.TryCancel();
+            stream->Finish();
+        }
+
         Y_UNIT_TEST(CdcReadSessionReturnsSubscribedAlias) {
             TFixture fixture;
             auto table = Ydb::Table::V1::TableService::NewStub(fixture.Channel);

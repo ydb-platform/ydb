@@ -389,14 +389,17 @@
             </select>
             <label for="nbs2-tablets-filter" class="mr-2">Filter</label>
             <input id="nbs2-tablets-filter" type="text" class="form-control mr-3" placeholder="Tablet or disk id">
+            <label for="nbs2-tablets-group-degrade" class="mr-2">Group by degrade</label>
+            <input id="nbs2-tablets-group-degrade" type="checkbox" class="mr-3" checked>
             <label for="nbs2-tablets-sort" class="mr-2">Sort by</label>
             <select id="nbs2-tablets-sort" class="form-control mr-3">
+              <option value="degrade" selected>Degrade</option>
               <option value="tablet">Tablet Id</option>
               <option value="last_changed_at">Last changed</option>
               <option value="groups_count">Groups count</option>
             </select>
             <label for="nbs2-tablets-sort-desc" class="mr-2">Desc</label>
-            <input id="nbs2-tablets-sort-desc" type="checkbox" class="mr-3">
+            <input id="nbs2-tablets-sort-desc" type="checkbox" class="mr-3" checked>
             <label for="nbs2-tablets-problems" class="mr-2">Only problems</label>
             <input id="nbs2-tablets-problems" type="checkbox" class="mr-2">
             <button id="nbs2-tablets-refresh" class="btn btn-secondary ml-2">Refresh</button>

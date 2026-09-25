@@ -109,8 +109,8 @@ void TUdfStoreInitializer::HandleTableCreated(TEvTableCreator::TEvCreateTableRes
             << "failed to create UDF store table at step "
             << static_cast<int>(InitStep_)
             << ": " << ev->Get()->Issues.ToString();
-        YDB_LOG_ERROR("",
-            {"TUdfStoreInitializer", errorMessage});
+        YDB_LOG_ERROR("TUdfStoreInitializer",
+            {"errorMessage", errorMessage});
         Send(ParentId, new TEvStoreInitFailed(errorMessage));
         PassAway();
         return;
@@ -141,8 +141,8 @@ void TUdfStoreInitializer::HandleKvVolumeCreated(
 void TUdfStoreInitializer::HandleRequestFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
     const TString errorMessage = TStringBuilder()
         << "failed to create KV volume: " << ev->Get()->GetErrorMessage();
-    YDB_LOG_ERROR("",
-        {"TUdfStoreInitializer", errorMessage});
+    YDB_LOG_ERROR("TUdfStoreInitializer",
+        {"errorMessage", errorMessage});
     Send(ParentId, new TEvStoreInitFailed(errorMessage));
     PassAway();
 }

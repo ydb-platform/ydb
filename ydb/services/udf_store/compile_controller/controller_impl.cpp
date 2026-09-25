@@ -153,7 +153,7 @@ void TWasmCompileController::SubscribeForConfigChanges(const TActorContext& ctx)
 void TWasmCompileController::HandleConfig(
     NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&)
 {
-    YDB_LOG_INFO("TWasmCompileController[ subscribed for config changes",
+    YDB_LOG_INFO("TWasmCompileController subscribed for config changes",
         {"tabletID", TabletID()});
 }
 
@@ -260,7 +260,7 @@ void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberDa
         ModuleIndex[MakeArtifactKey(entry.Name, entry.Kind, entry.Uid)] = index;
     }
 
-    YDB_LOG_INFO("TWasmCompileController[ snapshot with compilable modules",
+    YDB_LOG_INFO("TWasmCompileController snapshot with compilable modules",
         {"tabletID", TabletID()},
         {"modulesSize", Modules.size()});
 
@@ -636,7 +636,7 @@ void TWasmCompileController::ScheduleAssignments() {
             proto.SetUid(libraryUid);
         }
 
-        YDB_LOG_INFO("TWasmCompileController[ assign to node as",
+        YDB_LOG_INFO("TWasmCompileController assign to node as",
             {"tabletID", TabletID()},
             {"key", key},
             {"nodeId", worker->NodeId},
@@ -686,7 +686,7 @@ void TWasmCompileController::ReleaseAssignment(const TGapKey& key, TStringBuf re
     // No decrement here: the next scheduling round recounts the budget from
     // `Assignments`, and decrementing a count this assignment may never have
     // been part of is what used to drive it below the truth.
-    YDB_LOG_INFO("TWasmCompileController[ release",
+    YDB_LOG_INFO("TWasmCompileController release",
         {"tabletID", TabletID()},
         {"key", key},
         {"reason", reason});
@@ -700,7 +700,7 @@ void TWasmCompileController::CollectExpiredAssignments(TStateUpdate& update) {
     for (auto& [nodeId, worker] : Workers) {
         if (worker.Alive && now - worker.LastHeartbeat > HeartbeatTimeout) {
             worker.Alive = false;
-            YDB_LOG_WARN("TWasmCompileController[ worker node missed heartbeats",
+            YDB_LOG_WARN("TWasmCompileController worker node missed heartbeats",
                 {"tabletID", TabletID()},
                 {"nodeId", nodeId});
         }
@@ -761,7 +761,7 @@ void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
         if (it == Workers.end()) {
             continue;
         }
-        YDB_LOG_INFO("TWasmCompileController[ forgetting node of cpu_spec",
+        YDB_LOG_INFO("TWasmCompileController forgetting node of cpu_spec",
             {"tabletID", TabletID()},
             {"nodeId", nodeId},
             {"cpuSpec", it->second.CpuSpec});
@@ -818,7 +818,7 @@ void TWasmCompileController::Handle(TEvCompileController::TEvRegister::TPtr& ev)
     response->Record.SetControllerGeneration(Executor()->Generation());
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 
-    YDB_LOG_INFO("TWasmCompileController[ node registered with cpu_spec",
+    YDB_LOG_INFO("TWasmCompileController node registered with cpu_spec",
         {"tabletID", TabletID()},
         {"nodeId", nodeId},
         {"cpuSpec", worker.CpuSpec});
@@ -929,7 +929,7 @@ void TWasmCompileController::Handle(TEvCompileController::TEvCompileFailed::TPtr
     if (record.GetStale()) {
         // A stale report means a re-upload won the race, not that this module
         // is broken, so it must not bring the poison pill any closer.
-        YDB_LOG_INFO("TWasmCompileController[ is stale",
+        YDB_LOG_INFO("TWasmCompileController is stale",
             {"tabletID", TabletID()},
             {"key", key});
     } else {
@@ -982,7 +982,7 @@ void TWasmCompileController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
         }
     }
 
-    YDB_LOG_INFO("TWasmCompileController[ node disconnected",
+    YDB_LOG_INFO("TWasmCompileController node disconnected",
         {"tabletID", TabletID()},
         {"nodeId", nodeId});
 

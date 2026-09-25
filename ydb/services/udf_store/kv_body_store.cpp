@@ -110,8 +110,8 @@ void TKvBodyReadActor::SendNextChunkRead() {
     req->Record.set_offset(CurrentOffset);
     req->Record.set_size(ReadChunkSize);
     NTabletPipe::SendData(SelfId(), PipeClient, req.release());
-    YDB_LOG_DEBUG("TKvBodyReadActor: sending read for key='",
-        {"name", Name},
+    YDB_LOG_DEBUG("TKvBodyReadActor: sending read",
+        {"keyName", Name},
         {"offset", CurrentOffset},
         {"size", ReadChunkSize});
 }
@@ -227,7 +227,7 @@ void TKvBodyReadActor::FinalizeAndSave() {
         return;
     }
 
-    YDB_LOG_INFO("TKvBodyReadActor: saved UDF bytes)",
+    YDB_LOG_INFO("TKvBodyReadActor: saved UDF",
         {"name", Name},
         {"currentOffset", CurrentOffset},
         {"finalPath", finalPath});
@@ -255,7 +255,7 @@ bool TKvBodyReadActor::LoadUdfIntoRegistry(const TString& finalPath) const {
     }
 
     if (modules.empty()) {
-        YDB_LOG_ERROR("TKvBodyReadActor: no UDF modules were registered from",
+        YDB_LOG_ERROR("TKvBodyReadActor: no UDF modules were registered",
             {"finalPath", finalPath});
         return false;
     }

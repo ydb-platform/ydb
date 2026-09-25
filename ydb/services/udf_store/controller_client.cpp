@@ -64,7 +64,7 @@ void TUdfStoreService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TP
     }
     const auto& entry = navigate->ResultSet.front();
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !entry.DomainInfo) {
-        YDB_LOG_WARN("TUdfStoreService: failed to resolve the compile controller, status",
+        YDB_LOG_WARN("TUdfStoreService: failed to resolve the compile controller",
             {"status", (ui32)entry.Status});
         return;
     }
@@ -191,7 +191,7 @@ void TUdfStoreService::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
 void TUdfStoreService::Handle(TEvCompileController::TEvRegisterResult::TPtr& ev) {
     const ui64 generation = ev->Get()->Record.GetControllerGeneration();
     ControllerGeneration = Max(ControllerGeneration, generation);
-    YDB_LOG_INFO("TUdfStoreService: registered with compile controller, generation",
+    YDB_LOG_INFO("TUdfStoreService: registered with compile controller",
         {"generation", generation});
     // Assignments held from a previous leader are re-declared right away so
     // that it does not wait for the first periodic heartbeat to learn of them.
@@ -288,7 +288,7 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
     if (key.GetCpuSpec() != LocalCpuSpec) {
         // Object code is only valid on the platform that produced it, so an
         // assignment for another one can only be a stale route.
-        YDB_LOG_WARN("TUdfStoreService: rejecting assignment for cpu_spec local cpu_spec is",
+        YDB_LOG_WARN("TUdfStoreService: rejecting assignment for cpu_spec",
             {"cpuSpec", key.GetCpuSpec()},
             {"localCpuSpec", LocalCpuSpec});
         RejectAssignment(record, "cpu_spec mismatch");

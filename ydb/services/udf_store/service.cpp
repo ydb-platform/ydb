@@ -176,12 +176,12 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSna
             return;
         }
     } catch (const std::exception& ex) {
-        YDB_LOG_ERROR("TUdfStoreService: skipping WASM load for due to invalid",
+        YDB_LOG_ERROR("TUdfStoreService: skipping WASM load due to invalid",
             {"name", name},
             {"manifest", ex.what()});
         return;
     } catch (...) {
-        YDB_LOG_ERROR("TUdfStoreService: skipping WASM load for due to unknown manifest parse error",
+        YDB_LOG_ERROR("TUdfStoreService: skipping WASM load due to unknown manifest parse error",
             {"name", name});
         return;
     }
@@ -278,7 +278,7 @@ void TUdfStoreService::EnsureArtifactTable() {
 
 void TUdfStoreService::Handle(TEvStoreInitialized::TPtr& ev) {
     KvVolumePath = ev->Get()->KvVolumePath;
-    YDB_LOG_INFO("TUdfStoreService: infrastructure initialized, KV Volume local",
+    YDB_LOG_INFO("TUdfStoreService: infrastructure initialized",
         {"path", KvVolumePath},
         {"cpuSpec", LocalCpuSpec});
     if (EnableWasmUdfFlag) {
@@ -694,7 +694,7 @@ void TUdfStoreService::Handle(TEvReadBodyResponse::TPtr& ev) {
         ui32& retryCount = FetchRetryCounts[name];
         if (retryCount < MaxFetchRetries) {
             ++retryCount;
-            YDB_LOG_ERROR("TUdfStoreService: failed to load UDF (retry ",
+            YDB_LOG_ERROR("TUdfStoreService: failed to load UDF",
                 {"name", name},
                 {"retryCount", retryCount},
                 {"maxFetchRetries", MaxFetchRetries},

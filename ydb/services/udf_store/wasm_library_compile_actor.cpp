@@ -100,7 +100,7 @@ void TWasmLibraryCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequest
     if (Step_ == EStep::DeleteStaleArtifactChunks || Step_ == EStep::DeleteStaleArtifacts) {
         // Leftover rows of replaced uploads are not worth failing over, but
         // still confirm we own the modules row before reporting ready.
-        YDB_LOG_WARN("TWasmLibraryCompileActor: failed to drop stale artifacts of",
+        YDB_LOG_WARN("TWasmLibraryCompileActor: failed to drop stale artifacts",
             {"libraryName", LibraryName_},
             {"errorMessage", ev->Get()->GetErrorMessage()});
         Step_ = EStep::ConfirmStillCurrent;
@@ -326,8 +326,8 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {
-    YDB_LOG_ERROR("",
-        {"TWasmLibraryCompileActor", message});
+    YDB_LOG_ERROR("TWasmLibraryCompileActor",
+        {"errorMessage", message});
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, message));
     PassAway();
 }
@@ -341,7 +341,7 @@ void TWasmLibraryCompileActor::ReplyDeferred(const TString& reason) {
 }
 
 void TWasmLibraryCompileActor::ReplySuccess() {
-    YDB_LOG_INFO("TWasmLibraryCompileActor: compiled library for cpu_spec='",
+    YDB_LOG_INFO("TWasmLibraryCompileActor: compiled library",
         {"libraryName", LibraryName_},
         {"cpuSpec", CpuSpec_});
     Send(ReplyTo_, new TEvLibraryCompileResponse(true, LibraryName_));

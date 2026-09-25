@@ -352,7 +352,7 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
             TStringBuilder() << "wasm:" << Name_,
             Name_,
             std::move(module));
-        YDB_LOG_INFO("TWasmArtifactLoadActor: registered wasm UDF with libraries=[",
+        YDB_LOG_INFO("TWasmArtifactLoadActor: registered wasm UDF with libraries",
             {"name", Name_},
             {"requiredLibraries", JoinSeq(",", ParsedManifest_.RequiredLibraries)});
         Send(ReplyTo_, new TEvReadBodyResponse(true, Name_, EUdfType::WASM));
@@ -363,8 +363,8 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
 }
 
 void TWasmArtifactLoadActor::ReplyError(const TString& message) {
-    YDB_LOG_ERROR("",
-        {"TWasmArtifactLoadActor", message});
+    YDB_LOG_ERROR("TWasmArtifactLoadActor",
+        {"message", message});
     Send(ReplyTo_, new TEvReadBodyResponse(false, Name_, EUdfType::WASM, message));
     PassAway();
 }

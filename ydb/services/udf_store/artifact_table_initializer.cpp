@@ -60,8 +60,8 @@ void TWasmArtifactTableInitializer::HandleTableCreated(TEvTableCreator::TEvCreat
         const TString errorMessage = TStringBuilder()
             << "failed to create wasm artifact table '" << tablePath
             << "': " << ev->Get()->Issues.ToString();
-        YDB_LOG_ERROR("",
-            {"TWasmArtifactTableInitializer", errorMessage});
+        YDB_LOG_ERROR("TWasmArtifactTableInitializer",
+            {"errorMessage", errorMessage});
         Send(ParentId_, new TEvStoreInitFailed(errorMessage));
         PassAway();
         return;
@@ -73,7 +73,7 @@ void TWasmArtifactTableInitializer::HandleTableCreated(TEvTableCreator::TEvCreat
         return;
     }
 
-    YDB_LOG_INFO("TWasmArtifactTableInitializer: artifact tables ready at and",
+    YDB_LOG_INFO("TWasmArtifactTableInitializer: artifact tables ready",
         {"artifactTablePath", ArtifactTablePath_},
         {"artifactChunksTablePath", ArtifactChunksTablePath_});
     Send(ParentId_, new TEvArtifactTableInitialized(ArtifactTablePath_));

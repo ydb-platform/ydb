@@ -108,7 +108,7 @@ void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed:
     if (Step_ == EStep::DeleteStaleArtifactChunks || Step_ == EStep::DeleteStaleArtifacts) {
         // Leftover rows of replaced uploads are not worth failing over, but
         // still confirm we own the modules row before anyone loads us.
-        YDB_LOG_WARN("TWasmCompileActor: failed to drop stale artifacts of",
+        YDB_LOG_WARN("TWasmCompileActor: failed to drop stale artifacts",
             {"name", Name_},
             {"errorMessage", ev->Get()->GetErrorMessage()});
         Step_ = EStep::ConfirmStillCurrent;
@@ -480,8 +480,8 @@ void TWasmCompileActor::FailAndPersist(const TString& message) {
 }
 
 void TWasmCompileActor::ReplyError(const TString& message) {
-    YDB_LOG_ERROR("",
-        {"TWasmCompileActor", message});
+    YDB_LOG_ERROR("TWasmCompileActor",
+        {"errorMessage", message});
     Send(ReplyTo_, new TEvWasmCompileResponse(false, Name_, message));
     PassAway();
 }
@@ -495,7 +495,7 @@ void TWasmCompileActor::ReplyDeferred(const TString& reason) {
 }
 
 void TWasmCompileActor::ReplySuccess() {
-    YDB_LOG_INFO("TWasmCompileActor: compiled WASM UDF for cpu_spec='",
+    YDB_LOG_INFO("TWasmCompileActor: compiled WASM UDF",
         {"name", Name_},
         {"cpuSpec", CpuSpec_});
     Send(ReplyTo_, new TEvWasmCompileResponse(true, Name_));

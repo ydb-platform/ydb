@@ -94,9 +94,11 @@ ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingRow
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnViaSelect
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningAllColumns
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
@@ -137,6 +139,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndex
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpScheme.CreateAndAlterTopicYqlSettings+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpWarmup.WarmupLoadsOtherUsersQueriesWithRestrictedAdmins+LegacyMetadata
@@ -462,6 +465,7 @@ ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSe
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Int8]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[JsonDocument]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Timestamp64]
+ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[UUID]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Uint16]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Uint8]
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_idempotent_cycle

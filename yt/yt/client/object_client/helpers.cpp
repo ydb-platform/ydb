@@ -113,6 +113,7 @@ bool IsVersionedType(EObjectType type)
         case EObjectType::TabletActionMap:
         case EObjectType::CellOrchidNode:
         case EObjectType::AreaMap:
+        case EObjectType::MasterCellGroupMap:
         case EObjectType::ChaosCellMap:
         case EObjectType::VirtualChaosCellMap:
         case EObjectType::ChaosCellBundleMap:

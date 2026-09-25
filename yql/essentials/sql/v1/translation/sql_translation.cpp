@@ -16,6 +16,7 @@
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/algorithm.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
@@ -72,6 +73,21 @@ bool BuildContextRecreationQuery(TContext& context, TStringBuilder& query) {
         query << statements[id] << '\n';
     }
     return true;
+}
+
+TNodeResult TryYqlSelect(
+    TContext& context,
+    EYqlSelect mode,
+    const std::function<TNodeResult()>& yqlSelect)
+{
+    auto issues = context.Issues;
+    const bool hasPendingErrors = context.HasPendingErrors;
+    auto result = yqlSelect();
+    if (!result && result.error() == ESQLError::UnsupportedYqlSelect && mode == EYqlSelect::Auto) {
+        context.Issues = std::move(issues);
+        context.HasPendingErrors = hasPendingErrors;
+    }
+    return result;
 }
 
 // ensures that the parsing mode is restored to the original value
@@ -2446,10 +2462,13 @@ bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSql
     return true;
 }
 
-bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
+bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, std::optional<TIdentifier>& objectKeyPrefix, TTranslation& txc) {
     switch (from.GetAltCase()) {
         case TRule_ttl_tier_action::kAltTtlTierAction1:
             storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id5(), txc);
+            if (from.GetAlt_ttl_tier_action1().HasBlock6()) {
+                objectKeyPrefix = IdEx(from.GetAlt_ttl_tier_action1().GetBlock6().GetRule_an_id2(), txc);
+            }
             break;
         case TRule_ttl_tier_action::kAltTtlTierAction2:
             storageName.reset();
@@ -2477,10 +2496,11 @@ bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<T
                 tiers.emplace_back(firstInterval);
             } else {
                 std::optional<TIdentifier> firstStorageName;
-                if (!FillTierAction(tiersLiteral.GetBlock2().GetRule_ttl_tier_action1(), firstStorageName, txc)) {
+                std::optional<TIdentifier> firstObjectKeyPrefix;
+                if (!FillTierAction(tiersLiteral.GetBlock2().GetRule_ttl_tier_action1(), firstStorageName, firstObjectKeyPrefix, txc)) {
                     return false;
                 }
-                tiers.emplace_back(firstInterval, firstStorageName);
+                tiers.emplace_back(firstInterval, firstStorageName, firstObjectKeyPrefix);
 
                 for (const auto& tierLiteral : tiersLiteral.GetBlock2().GetBlock2()) {
                     TNodePtr intervalExpr;
@@ -2488,10 +2508,11 @@ bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<T
                         return false;
                     }
                     std::optional<TIdentifier> storageName;
-                    if (!FillTierAction(tierLiteral.GetRule_ttl_tier_action3(), storageName, txc)) {
+                    std::optional<TIdentifier> objectKeyPrefix;
+                    if (!FillTierAction(tierLiteral.GetRule_ttl_tier_action3(), storageName, objectKeyPrefix, txc)) {
                         return false;
                     }
-                    tiers.emplace_back(intervalExpr, storageName);
+                    tiers.emplace_back(intervalExpr, storageName, objectKeyPrefix);
                 }
             }
 
@@ -6036,59 +6057,87 @@ TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_
     return result;
 }
 
-bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
-    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value | streaming_query_settings)
-
-    const auto& id = to_lower(Id(node.GetRule_an_id_or_type1(), *this));
-    if (id.StartsWith(TStreamingQuerySettings::RESERVED_FEATURE_PREFIX)) {
-        Error() << "Streaming query parameter name should not start with prefix '" << TStreamingQuerySettings::RESERVED_FEATURE_PREFIX << "': " << to_upper(id);
-        return false;
+bool TSqlTranslation::BuildStreamingQueryNestedSetting(TNodePtr value, TObjectFeatureNodePtr& settings) {
+    const auto& items = value->GetTupleNode() ? value->GetTupleNode()->Elements() : TVector<TNodePtr>{value};
+    if (items.empty()) {
+        return true;
     }
 
-    YQL_ENSURE(settings.Features);
-    const auto [feature, inserted] = settings.Features->AddFeature(id, Ctx_.Pos());
-    if (!inserted) {
-        Error() << "Found duplicated parameter: " << to_upper(id);
-        return false;
+    // Check structure: (key_1 = expr_1, key_2 = expr_2, …, key_N = expr_N)
+
+    for (const auto& item : items) {
+        const auto* call = item->GetCallNode();
+        if (!call || call->GetOpName() != "==") {
+            return true;
+        }
+
+        const auto& args = call->GetArgs();
+        if (args.size() != 2) {
+            return true;
+        }
+
+        const auto& nameArg = args[0];
+        const auto* source = nameArg->GetSourceName();
+        if (!nameArg->GetColumnName() || (source && !source->empty())) {
+            return true;
+        }
     }
 
-    const auto& valueNode = node.GetRule_streaming_query_setting_value3();
-    switch (valueNode.GetAltCase()) {
-        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue1: {
-            const auto& value = Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this);
-            feature = BuildQuotedAtom(Ctx_.Pos(), value);
-            break;
+    settings = new TObjectFeatureNode(value->GetPos());
+    for (const auto& item : items) {
+        const auto& args = item->GetCallNode()->GetArgs();
+        if (!BuildStreamingQuerySettingValue(*args[0]->GetColumnName(), args[1], args[0]->GetPos(), *settings)) {
+            return false;
         }
-        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue2: {
-            const auto& strToken = Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value2().GetToken1());
-            const auto& strValue = StringContent(Ctx_, Ctx_.Pos(), strToken);
-            if (!strValue) {
-                return false;
-            }
-
-            feature = BuildQuotedAtom(Ctx_.Pos(), strValue->Content);
-            break;
-        }
-        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue3: {
-            const auto& alt = valueNode.GetAlt_streaming_query_setting_value3();
-            const auto& token = Ctx_.Token(alt.GetRule_bool_value1().GetToken1());
-            feature = BuildLiteralBool(Ctx_.Pos(), FromString<bool>(token));
-            break;
-        }
-        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue4: {
-            TStreamingQuerySettings settings;
-            if (!ParseStreamingQuerySettings(valueNode.GetAlt_streaming_query_setting_value4().GetRule_streaming_query_settings1(), settings)) {
-                return false;
-            }
-
-            feature = settings.Features;
-            break;
-        }
-        case TRule_streaming_query_setting_value::ALT_NOT_SET:
-            YQL_ENSURE(false, "Unreachable");
     }
 
     return true;
+}
+
+bool TSqlTranslation::BuildStreamingQuerySettingValue(TStringBuf name, TNodePtr value, TPosition pos, TObjectFeatureNode& features) {
+    if (!value) {
+        return false;
+    }
+
+    const auto id = to_lower(TString(name));
+    if (id.StartsWith(TStreamingQuerySettings::RESERVED_FEATURE_PREFIX)) {
+        Ctx_.Error(pos) << "Streaming query parameter name should not start with prefix '" << TStreamingQuerySettings::RESERVED_FEATURE_PREFIX << "': " << to_upper(id);
+        return false;
+    }
+
+    const auto [feature, inserted] = features.AddFeature(id, pos);
+    if (!inserted) {
+        Ctx_.Error(pos) << "Found duplicated parameter: " << to_upper(id);
+        return false;
+    }
+
+    if (TObjectFeatureNodePtr nestedFeatures; !BuildStreamingQueryNestedSetting(value, nestedFeatures)) {
+        return false;
+    } else if (nestedFeatures) {
+        feature = nestedFeatures;
+        return true;
+    }
+
+    if (const auto* name = value->GetColumnName(); name && (!value->GetSourceName() || value->GetSourceName()->empty())) {
+        value = BuildLiteralRawString(value->GetPos(), *name);
+    }
+
+    feature = new TCallNodeImpl(value->GetPos(), "EvaluateExpr", {value});
+    return true;
+}
+
+bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
+    // streaming_query_setting: an_id_or_type = expr
+
+    YQL_ENSURE(settings.Features);
+
+    const auto& name = Id(node.GetRule_an_id_or_type1(), *this);
+    const auto pos = Ctx_.Pos();
+
+    TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral);
+    const auto value = Unwrap(TSqlExpression(*this).Build(node.GetRule_expr3()));
+
+    return BuildStreamingQuerySettingValue(name, value, pos, *settings.Features);
 }
 
 bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings) {
@@ -6269,6 +6318,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
+    auto sqlHints = Ctx_.GetSqlHints();
     TNodeResult result = std::unexpected(ESQLError::Basic);
     {
         Ctx_.SetYqlSelectMode(mode);
@@ -6287,7 +6337,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         }
 
         if (!isAnyIncompatiblePragma) {
-            result = yqlSelect();
+            result = TryYqlSelect(Ctx_, mode, yqlSelect);
         } else {
             result = std::unexpected(ESQLError::UnsupportedYqlSelect);
         }
@@ -6317,6 +6367,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             }
 
             YQL_ENSURE(mode == EYqlSelect::Auto);
+            Ctx_.SetSqlHints(std::move(sqlHints));
             return legacy();
         }
     }

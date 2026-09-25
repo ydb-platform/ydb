@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_util.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
@@ -289,6 +290,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
 
     TMonPageData data{
         .Page = page,
+        .SelectedDDiskBalanceStrategy =
+            ParseDDiskBalanceStrategy(cgi.Get("strategy")),
         .TabletInfo = MakeMonTabletInfo(),
         .SelectedDbg = ParseSelectedDbg(cgi),
         .SelectedVChunk = ParseSelectedVChunk(cgi),
@@ -304,6 +307,51 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             ev->Sender,
             new NMon::TEvRemoteHttpInfoRes(
                 RenderMonPage(data, VChunkConfigs, TouchedVChunks)));
+        return true;
+    }
+
+    const bool isBalancePage =
+        page == EMonPage::Overview ||
+        (page == EMonPage::Dbg && data.SelectedDbg.has_value());
+    if (isBalancePage && cgi.Get("action") == "balance" &&
+        ev->Get()->GetMethod() == HTTP_METHOD_POST)
+    {
+        ui32 from = 0;
+        ui32 to = 0;
+        bool requested = false;
+        const bool hasValidRange =
+            cgi.Has("from") && cgi.Has("to") &&
+            TryFromString(cgi.Get("from"), from) &&
+            TryFromString(cgi.Get("to"), to) && from < to &&
+            to <= data.TabletInfo.VolumeDirectBlockGroupCount;
+        const bool isSelectedDbgRange =
+            page != EMonPage::Dbg ||
+            (from == *data.SelectedDbg && to == from + 1);
+        if (hasValidRange && isSelectedDbgRange) {
+            for (ui32 i = from; i < to; ++i) {
+                if (auto dbg = FastPathService->GetDirectBlockGroup(i)) {
+                    dbg->BalanceDDisks(data.SelectedDDiskBalanceStrategy);
+                    requested = true;
+                }
+            }
+        }
+
+        TStringBuilder querySuffix;
+        if (page == EMonPage::Dbg) {
+            querySuffix << "&dbg=" << *data.SelectedDbg;
+        }
+        querySuffix << "&strategy="
+                    << DDiskBalanceStrategyParam(
+                           data.SelectedDDiskBalanceStrategy);
+
+        ctx.Send(
+            ev->Sender,
+            new NMon::TEvRemoteHttpInfoRes(MakeRedirectResponse(
+                TabletID(),
+                PageParam(page),
+                requested ? "DDisk balancing requested."
+                          : "Invalid DDisk balancing request.",
+                querySuffix)));
         return true;
     }
 
@@ -469,9 +517,7 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     }
 
     if (page == EMonPage::Latency || page == EMonPage::Memory) {
-        if (page == EMonPage::Memory) {
-            data.FastPathServiceInfo = FastPathService->GetMonInfo();
-        }
+        data.FastPathServiceInfo = FastPathService->GetMonInfo();
         FastPathService->GatherMonSnapshots(std::nullopt)
             .Subscribe(
                 [data = std::move(data),

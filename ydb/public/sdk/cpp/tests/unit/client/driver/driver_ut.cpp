@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
@@ -65,6 +66,11 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         {
             BuildInfo = ReadBuildInfo(context);
 
+            const auto& metadata = context->client_metadata();
+            if (const auto it = metadata.find(YDB_AUTH_TICKET_HEADER); it != metadata.end()) {
+                AuthTicket.assign(it->second.data(), it->second.length());
+            }
+
             std::cerr << "ListEndpoints: " << request->ShortDebugString() << std::endl;
 
             const auto* result = MapFindPtr(MockResults, request->database());
@@ -80,6 +86,7 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         // From database name to result
         std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
         std::string BuildInfo;
+        std::string AuthTicket;
     };
 
     class TMockTableService : public Ydb::Table::V1::TableService::Service {
@@ -381,6 +388,25 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
 }
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(OidcTokenIsSentAsBearerTicket) {
+        TPortManager pm;
+        TMockDiscoveryService discoveryService;
+        discoveryService.MockResults["/Root/My/DB"] = {};
+        const auto address = TStringBuilder() << "127.0.0.1:" << pm.GetPort();
+        auto server = StartGrpcServer(address, discoveryService);
+
+        NOidc::TOidcConfig oidc;
+        oidc.Issuer = "https://issuer.example";
+        oidc.FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-access"};
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(address)
+            .SetDatabase("/Root/My/DB")
+            .SetDiscoveryMode(EDiscoveryMode::Sync)
+            .SetCredentialsProviderFactory(NOidc::CreateOidcProviderFactory(oidc)));
+
+        UNIT_ASSERT_VALUES_EQUAL(discoveryService.AuthTicket, "Bearer oidc-access");
+    }
+
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
         std::atomic_int providerCount = 0;
         auto driver = TDriver(

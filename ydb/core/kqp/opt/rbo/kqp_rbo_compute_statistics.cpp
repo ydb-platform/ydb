@@ -163,7 +163,7 @@ void TOpEmptySource::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = TRBOMetadata();
-    Props.Metadata->LogicalCard = ELogicalCardinality::One;
+    Props.Metadata->LogicalCard = Input ? ELogicalCardinality::ZeroOrMore : ELogicalCardinality::One;
 }
 
 /***
@@ -504,11 +504,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->ColumnsCount = outputIUs.size();
 
-    Props.Metadata->ShuffledByColumns = {};
-    if (CanEliminateAggregateShuffle(*this, ctx)) {
-        // Aggregation by a superset of existing shuffle keys keeps every group colocated by those shuffle keys.
-        Props.Metadata->ShuffledByColumns = inputMetadata.ShuffledByColumns;
-    }
+    Props.Metadata->ShuffledByColumns = GetAggregatePreservedShuffling(*this, ctx);
 
     // Aggregate acts like a source in terms of lineage.
     // FIXME: We currently delete all lineage of columns before Aggregate,

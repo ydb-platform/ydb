@@ -1,6 +1,7 @@
 #include "sql_ut.h"
 
 #include <yql/essentials/sql/v1/translation/sql.h>
+#include <yql/essentials/sql/v1/translation/sql_translation.h>
 
 using namespace NSQLTranslationV1;
 
@@ -43,6 +44,72 @@ Y_UNIT_TEST(AutoSubquery) {
         WHERE a IN (SELECT a FROM my_table VIEW my_view);
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(NestedArgumentErrorDoesNotRequestFallback) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Abs(Abs(1 AS named, 2));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unnamed arguments can not follow after named one");
+    UNIT_ASSERT_VALUES_EQUAL(res.Issues.Size(), 1);
+}
+
+Y_UNIT_TEST(SQLStatusOperatorOrPrioritizesBasicRegardlessOfErrorOrder) {
+    const TSQLStatus basic = std::unexpected(ESQLError::Basic);
+    const TSQLStatus unsupported = std::unexpected(ESQLError::UnsupportedYqlSelect);
+
+    const auto basicThenUnsupported = basic | unsupported;
+    const auto unsupportedThenBasic = unsupported | basic;
+
+    UNIT_ASSERT(!basicThenUnsupported);
+    UNIT_ASSERT(basicThenUnsupported.error() == ESQLError::Basic);
+    UNIT_ASSERT(!unsupportedThenBasic);
+    UNIT_ASSERT(unsupportedThenBasic.error() == ESQLError::Basic);
+}
+
+Y_UNIT_TEST(AutoFallbackPreservesMode) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT EnsureType(Percentile(CAST(key AS Interval64), 0.5), Interval64?)
+        FROM (SELECT Interval64('P1D') AS key);
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {{TString("YqlSelect"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(AutoFallbackPreservesHints) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        FROM (
+            SELECT k, Avg(v) AS v
+            FROM plato.x
+            GROUP /*+ COMPACT() */ BY k
+        )
+        SELECT * WITHOUT v;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Aggregate", "compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
 }
 
 Y_UNIT_TEST(Minimal) {
@@ -202,6 +269,161 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
     UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"Input" '()))");
+}
+
+Y_UNIT_TEST(FromTableViewWithoutClusterIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        SELECT * FROM Input VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "No cluster name given and no default cluster is selected");
+}
+
+Y_UNIT_TEST(FromPrimaryTableView) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE ydb;
+        SELECT Input.x FROM Input VIEW PRIMARY KEY;
+    )sql", settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    TWordCountHive counts = {"YqlSelect", "Read!"};
+    TString program = VerifyProgram(result, counts);
+    UNIT_ASSERT_VALUES_EQUAL(counts["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(counts["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"Input")) '('primary_view)))");
+}
+
+Y_UNIT_TEST(PrimaryTableViewRejectedForYt) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT x FROM plato.Input VIEW PRIMARY KEY;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "primary view is not supported for yt tables");
+}
+
+Y_UNIT_TEST(NamedTableViewOnPathBindUsesReferencePosition) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(USE plato;
+$table = "Input";
+SELECT * FROM $table VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    const NYql::TAstNode* read = FindNodeByChildAtomContent(result.Root, 0, "Read!");
+    UNIT_ASSERT(read);
+    UNIT_ASSERT_VALUES_EQUAL(read->GetPosition().Row, 3);
+    UNIT_ASSERT_VALUES_EQUAL(read->GetPosition().Column, 15);
+}
+
+Y_UNIT_TEST(FromPathBindViewWithoutClusterIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        $table = "Input";
+        SELECT * FROM $table VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "No cluster name given and no default cluster is selected");
+}
+
+Y_UNIT_TEST(AnonymousPathBindWithViewIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $table = "Input";
+        SELECT * FROM @$table VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "View is not supported for anonymous tables");
+}
+
+Y_UNIT_TEST(ViewOverNamedSourceIsUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        $x = SELECT 1 AS a;
+        SELECT a FROM $x VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "YqlSelect unsupported: VIEW for bind_parameter");
+}
+
+Y_UNIT_TEST(UnknownClusterOverNamedSourceIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        $x = SELECT 1 AS a;
+        SELECT a FROM bogus_cluster.$x;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Unknown cluster: bogus_cluster");
+}
+
+Y_UNIT_TEST(CallOverNamedSourceIsUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        $x = SELECT 1 AS a;
+        SELECT a FROM $x();
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "YqlSelect unsupported: bind_parameter call");
+}
+
+Y_UNIT_TEST(ViewOnPathBindCallIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $table = "Input";
+        SELECT * FROM $table() VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "View is not supported for subqueries");
+}
+
+Y_UNIT_TEST(ViewOnNamedSourceCallIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        $x = SELECT 1;
+        SELECT * FROM $x() VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "View is not supported for subqueries");
 }
 
 Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
@@ -794,11 +1016,61 @@ Y_UNIT_TEST(AutoGroupByCompactHint) {
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive stat = {"YqlSelect", "Aggregate", "compact"};
+    TWordCountHive stat = {"YqlSelect", "Aggregate", "group_by_compact"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
-    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
-    UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByCompact) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT k, Avg(v) FROM plato.x GROUP COMPACT BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "group_by_compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByCompactPragma) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA CompactGroupBy;
+        SELECT k, Avg(v) FROM plato.x GROUP BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "group_by_compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByDisableCompactPragma) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA DisableCompactGroupBy;
+        SELECT k, Avg(v) FROM plato.x GROUP COMPACT BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "group_by_compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 0);
 }
 
 Y_UNIT_TEST(GroupByExprAliasUnsupported) {
@@ -1211,6 +1483,21 @@ Y_UNIT_TEST(NamedNodeSubquerySource) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
+}
+
+Y_UNIT_TEST(NamedNodeTableWithoutCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $table = "Input";
+        SELECT * FROM $table;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:3:23: Error: No cluster name given and no default cluster is selected\n");
 }
 
 Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {

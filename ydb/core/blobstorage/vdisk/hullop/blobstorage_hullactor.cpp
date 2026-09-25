@@ -135,6 +135,9 @@ namespace NKikimr {
             hullCtx, rtCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, freshSegment, freshSegmentSnap,
             std::move(barriersSnap), std::move(levelSnap), it, firstLsn, lastLsn, TDuration::Max(), {},
             allowGarbageCollection, false));
+        // It writes into the chunks reserved for this segment before its records were admitted. A retry after an
+        // abort finds none left, since the aborted attempt forgot them, and reserves for itself.
+        compaction->AddPreReservedChunks(freshSegment->TakeReservedChunks());
 
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(hullCtx->VCtx->VDiskLogPrefix, "%s: fresh scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
 
@@ -267,6 +270,15 @@ namespace NKikimr {
             const double rateThreshold = Config->HullCompLevelRateThreshold;
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
+            params.AppendBlockSize = RTCtx->PDiskCtx->Dsk->AppendBlockSize;
+            // Same placement as THullCompaction::UseStripeSst: Blocks and Barriers go into
+            // the stripe heap, LogoBlobs stay in exclusive chunks.
+            if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
+                if (Config->HeapAllocatorMaxSstInBytes > 0 &&
+                        AppData()->FeatureFlags.GetEnableVDiskHeapAllocator()) {
+                    params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
+                }
+            }
             {
                 const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
                 const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);

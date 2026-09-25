@@ -47,6 +47,7 @@ namespace NKikimr {
 
             bool LockChunk(ui32 chunkId);
             THeapStat GetStat() const;
+            TStripeHeapSpaceStat GetSpaceStat() const;
             void ShredNotify(const std::vector<ui32>& chunksToShred);
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) const;
             THashSet<TChunkIdx> GetForbiddenChunks() const;

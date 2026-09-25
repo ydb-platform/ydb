@@ -115,7 +115,8 @@ private:
 public:
     static constexpr char ActorName[] = "SQL_QUERY";
 
-    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false, bool isStreamingMode = false);
+    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false,
+        bool isStreamingMode = false, TMaybe<TString> userToken = Nothing());
 
     void Bootstrap();
 
@@ -210,6 +211,7 @@ protected:
     TMaybe<TString> RequestType;
     bool IsSystemUser = false;
     bool IsStreamingMode = false;
+    const TMaybe<TString> UserToken;
     TString TxId;
     bool DeleteSession = false;
     bool RunningQuery = false;

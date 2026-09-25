@@ -96,7 +96,7 @@ message TActorSystemConfig {
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
         optional uint32 HarmonizerNeedyCpuWindowSeconds = 26 [default = 1]; // Supported for BASIC executors, range is [1, 32]
-        optional bool EnableWaker = 27 [default = false]; // Experimental, non-shared BASIC executors only
+        optional bool EnableWaker = 27 [default = false]; // Experimental, BASIC executors only
 
         optional bool HasSharedThread = 18;
         optional bool AllThreadsAreShared = 24;
@@ -145,6 +145,7 @@ message TActorSystemConfig {
     optional bool UseSharedThreads = 18 [default = true];
     optional bool UseUnitedPool = 22;
     optional bool UseRingQueue = 19 [default = true];
+    optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -2047,6 +2048,13 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -2568,6 +2576,15 @@ message TImmediateControlsConfig {
             DefaultValue: 10 }];
     }
     optional TRetroTracingControls RetroTracingControls = 23;
+
+    message TViewerControls {
+        optional uint64 LimitTraceVerbosity = 1 [(ControlOptions) = {
+            Description: "Limit viewer trace verbosity to dynamic nodes only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+    }
+    optional TViewerControls ViewerControls = 24;
 };
 
 message TMeteringConfig {
@@ -3562,6 +3579,21 @@ message TIamConfig {
     optional string ResourceManagerEndpoint = 7;
 }
 
+// Local path-prefix aliases. Rules are ordered and take effect on node restart.
+message TPathRewriteConfig {
+    message TRule {
+        // Nonempty absolute prefixes; trailing Src slashes are ignored.
+        // First path-component match wins. Rewritten paths collapse repeated '/'
+        // and drop trailing '/' except for the root path.
+        optional string Src = 1;
+        optional string Dst = 2;
+    }
+
+    // First matching prefix wins; results are not rematched.
+    // Relative and unmatched inputs remain unchanged.
+    repeated TRule Rules = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3685,9 +3717,10 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
+    optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
 
     // YDB's identity as a Yandex Cloud service and the IAM endpoints it calls as that service.
-    optional TIamConfig IamConfig = 124;
+    optional TIamConfig IamConfig = 125;
 }
 
 message TYdbVersion {

@@ -42,8 +42,8 @@ void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
 }
 
 TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-    const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-    const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
+    const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources,
+    const std::shared_ptr<TSpecialReadContext>& context, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
     : MergingContext(std::make_shared<TMergingContext>(start, finish, intervalIdx, includeFinish, includeStart, isExclusiveInterval))
     , Context(context)
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
@@ -62,11 +62,6 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
                 {"intervalIdx", IntervalIdx},
                 {"intervalId", GetIntervalId()});
         }
-        YDB_LOG_DEBUG("",
-            {"event", "register_source"},
-            {"intervalIdx", IntervalIdx},
-            {"intervalId", GetIntervalId()});
-        i->RegisterInterval(*this, i);
     }
     IntervalStateGuard.SetStatus(NColumnShard::TScanCounters::EIntervalStatus::WaitResources);
     ConstructResult();

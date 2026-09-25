@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-std::shared_ptr<NCommon::IDataSource> TOrderedResultWithLimitCollection::DoTryExtractNext() {
+std::unique_ptr<NCommon::TDataSourceLease> TOrderedResultWithLimitCollection::DoTryExtractNext() {
     if (!NextSource) {
         if (!SourcesConstructor->IsFinished()) {
             NextSource = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
@@ -16,7 +16,7 @@ std::shared_ptr<NCommon::IDataSource> TOrderedResultWithLimitCollection::DoTryEx
         }
     }
     {
-        std::shared_ptr<NCommon::IDataSource> localNext;
+        std::unique_ptr<NCommon::TDataSourceLease> localNext;
         if (!SourcesConstructor->IsFinished()) {
             localNext = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
             if (!localNext) {
@@ -29,30 +29,31 @@ std::shared_ptr<NCommon::IDataSource> TOrderedResultWithLimitCollection::DoTryEx
         }
         auto result = std::move(NextSource);
         NextSource = std::move(localNext);
+        const ui32 sourceIdx = result->GetSource().GetSourceIdx();
         AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() <= FetchingInFlightSources.size())("in_flight",
                                                                     GetSourcesInFlightCount())("fetching", FetchingInFlightSources.size());
-        AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceIdx()).second);
+        AFL_VERIFY(FetchingInFlightSources.emplace(sourceIdx).second);
         YDB_LOG_DEBUG("",
             {"event", "DoTryExtractNext"},
-            {"sourceIdx", result->GetSourceIdx()});
+            {"sourceIdx", sourceIdx});
         return result;
     }
 }
 
-void TOrderedResultWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
+void TOrderedResultWithLimitCollection::DoOnSourceFinished(const NCommon::IDataSource& source) {
     YDB_LOG_DEBUG("",
         {"event", "DoOnSourceFinished"},
-        {"sourceIdx", source->GetSourceIdx()},
+        {"sourceIdx", source.GetSourceIdx()},
         {"limit", Limit},
         {"max", GetMaxInFlight()},
         {"inFlightLimit", InFlightLimit},
         {"count", GetSourcesInFlightCount()});
-    if (source->GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
+    if (source.GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = Min(2 * InFlightLimit, GetMaxInFlight());
     }
     AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() <= FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())("fetching",
                                                                 FetchingInFlightSources.size());
-    AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceIdx()) || Cleared || Aborted)("source_idx", source->GetSourceIdx());
+    AFL_VERIFY(FetchingInFlightSources.erase(source.GetSourceIdx()) || Cleared || Aborted)("source_idx", source.GetSourceIdx());
 }
 
 TOrderedResultWithLimitCollection::TOrderedResultWithLimitCollection(

@@ -144,7 +144,7 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             const NDDisk::TDDiskConfig ddiskConfig =
                 MakeDDiskConfig(!TBase::Cfg.DisableDDiskChecksums,
-                    TBase::Cfg.ForcePDiskFallback);
+                    TBase::Cfg.ForcePDiskFallback, TBase::Cfg.DDiskChecksumsCacheBytes);
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(ServerNodeId, i + 1, DDiskSlotId);
@@ -161,7 +161,9 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                     "ddisk_pool");
                 NDDisk::TPersistentBufferFormat pbFormat{
                     TBase::Cfg.PersistentBufferChunks,
-                    TBase::Cfg.PersistentBufferChunks,
+                    // Allocate PB chunks on demand so initialization does not
+                    // compete with direct DDisk client workloads.
+                    0,
                     128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
                 TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
                     NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),

@@ -186,8 +186,8 @@ private:
                         .PDiskId = pdiskId,
                         .Location = location,
                         .Usable = usable,
-                        .NumSlots = pdisk.GetNumActiveSlots(),
-                        .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
+                        .NumActiveSlots = pdisk.GetNumActiveSlots(),
+                        .ExpectedSlotCount = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
                         .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
                         .SlotSizeInBytes = pdisk.GetExpectedSlotSize(), // either inferred or user-defined, 0 if not set
                         .Groups = {},

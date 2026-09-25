@@ -694,7 +694,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
 
 private:
-    EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithoutCommonTypeFixup;
+    EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithCommonTypeFixup;
 };
 
 template <>

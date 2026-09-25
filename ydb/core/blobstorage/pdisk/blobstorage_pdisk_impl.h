@@ -397,9 +397,11 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reservation
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
-            bool forHousekeeping = false);
+            bool forHousekeeping = false,
+            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+            NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor = nullptr);
     void ChunkReserve(TChunkReserve &evChunkReserve);
-    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
+    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation
@@ -424,6 +426,7 @@ public:
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
+    ui32 ReleaseUncommittedChunks(TOwner owner);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
     void EnsureSharedUringRouter(ui32 idleSpinUs);

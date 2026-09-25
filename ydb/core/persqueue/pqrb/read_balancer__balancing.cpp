@@ -311,9 +311,19 @@ void TPartitionFamily::Destroy(const TActorContext&) {
         Session->Families.erase(Id);
     }
 
-    for (auto partitionId : Partitions) {
-        Consumer.PartitionMapping.erase(partitionId);
+    // Partitions is not the full set of ids that point here. A releasing family
+    // can UpdatePartitionMapping for partitions that live only in RootPartitions
+    // or WantedPartitions, then Reset(Destroy) skips AfterRelease. Erasing just
+    // Partitions leaves FindFamily pointing at this object after it is freed
+    // (HasSpecialSession in ProccessReadingFinished).
+    for (auto it = Consumer.PartitionMapping.begin(); it != Consumer.PartitionMapping.end(); ) {
+        if (it->second == this) {
+            Consumer.PartitionMapping.erase(it++);
+        } else {
+            ++it;
+        }
     }
+
     Consumer.UnreadableFamilies.erase(Id);
     Consumer.FamiliesRequireBalancing.erase(Id);
     Consumer.Families.erase(Id);
@@ -2169,6 +2179,38 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     auto* consumer = it->second.get();
     consumer->RegisterReadingSession(session, ctx);
     consumer->ScheduleBalance(ctx);
+}
+
+void TBalancer::StopReadingSession(const TString& consumer, const TString& sessionName, const TActorContext& ctx) {
+    if (consumer.empty() || sessionName.empty()) {
+        LOG_N("Ignored kill request with empty consumer or session name",
+            {"consumer", consumer},
+            {"session", sessionName});
+        return;
+    }
+
+    size_t stopped = 0;
+    for (auto& [pipe, session] : Sessions) {
+        if (session->ClientId != consumer || session->SessionName != sessionName || !session->Sender) {
+            continue;
+        }
+
+        LOG_N("Stopping reading session from tablet monitoring",
+            {"consumer", consumer},
+            {"session", sessionName},
+            {"pipe", pipe},
+            {"sender", session->Sender});
+
+        auto response = std::make_unique<TEvPersQueue::TEvError>();
+        response->Record.SetCode(NPersQueue::NErrorCode::ERROR);
+        response->Record.SetDescription("Reading session stopped from tablet monitoring");
+        ctx.Send(session->Sender, std::move(response));
+        ++stopped;
+    }
+
+    if (!stopped) {
+        LOG_N("Reading session not found for kill request", {"consumer", consumer}, {"session", sessionName});
+    }
 }
 
 void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {

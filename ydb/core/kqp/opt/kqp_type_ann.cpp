@@ -1,5 +1,6 @@
 #include "kqp_opt.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -1224,7 +1225,7 @@ TStatus AnnotateOlapBinaryLogicOperator(const TExprNode::TPtr& node, TExprContex
 }
 
 bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* itemType, TExprContext& ctx) {
-    if (TKqpOlapApply::Match(node)) {
+    if (TKqpOlapApply::Match(node) || TKqpOlapUdf::Match(node)) {
         return true;
     } else if (TKqpOlapAnd::Match(node) || TKqpOlapOr::Match(node) || TKqpOlapXor::Match(node) || TKqpOlapNot::Match(node)) {
         bool res = true;
@@ -1493,6 +1494,24 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapUdf(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpOlapUdf::idx_KernelName), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* outputType = node->Child(TKqpOlapUdf::idx_OutputType);
+    if (!EnsureType(*outputType, ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(outputType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+    return TStatus::Ok;
+}
+
 bool ValidateOlapJsonOperation(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto column = node->Child(TKqpOlapJsonOperationBase::idx_Column);
     if (!EnsureAtom(*column, ctx)) {
@@ -1712,9 +1731,19 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
             }
         }
         if (!keyItemType) {
-            const auto jsonVals = FindNodes(inputPtr, [&](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-            if (jsonVals.size() == 1) {
-                if (const auto* ta = jsonVals.front()->GetTypeAnn().Get()) {
+            // Fallback when the DISTINCT key is a SELECT alias, but the pushed JSON_VALUE projection is still named
+            // after the source JSON column (the alias-projection rewrite did not run). Use that projection's type
+            // only when exactly one JSON_VALUE lives under KqpOlapProjection; JSON_VALUE inside a pushed filter
+            // (KqpOlapFilter) must not make the key ambiguous.
+            TExprNode::TListType projectionJsonVals;
+            for (const auto& projNode : FindNodes(inputPtr, [](const TExprNode::TPtr& n) { return TKqpOlapProjection::Match(n.Get()); })) {
+                const auto& op = projNode->ChildRef(TKqpOlapProjection::idx_OlapOperation);
+                if (TKqpOlapJsonValue::Match(op.Get())) {
+                    projectionJsonVals.push_back(op);
+                }
+            }
+            if (projectionJsonVals.size() == 1) {
+                if (const auto* ta = projectionJsonVals.front()->GetTypeAnn().Get()) {
                     keyItemType = ta;
                 }
             }
@@ -1724,7 +1753,9 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
         ctx.AddError(TIssue(
             ctx.GetPosition(key->Pos()),
             TStringBuilder() << "OLAP DISTINCT key '" << keyName
-                << "' is not present in the input row type and no matching OLAP projection or JSON_VALUE was found"
+                << "' is neither a stored column nor a pushed OLAP projection output. "
+                << "Alias the DISTINCT expression `AS " << keyName << "`, enable "
+                << "PRAGMA kikimr.OptEnableOlapPushdownProjections and make sure OptForceOlapPushdownDistinct names that alias."
         ));
         return TStatus::Error;
     }
@@ -1825,13 +1856,29 @@ TStatus AnnotateKqpPhysicalTx(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx, bool enableRBO) {
+TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx, const TKikimrConfiguration& config) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
+    if (config.EnableStreamingAggregation.Get().GetOrElse(false)
+        && !config.StreamingAggregationStateTablePath.Get().GetOrElse("").empty()) {
+        ui32 stateTableAggregations = 0;
+        if (const auto extraAggregation = FindNode(node, [&](const TExprNode::TPtr& expr) {
+            if (const auto aggregation = TMaybeNode<TKqpStreamingAggregation>(expr)) {
+                const auto stateTablePath = GetSetting(aggregation.Cast().Settings().Ref(), "state_table_path");
+                return stateTablePath && !stateTablePath->Tail().Content().empty() && ++stateTableAggregations > 1;
+            }
+            return false;
+        })) {
+            ctx.AddError(TIssue(ctx.GetPosition(extraAggregation->Pos()),
+                "At most one streaming aggregation with a state table is allowed per query"));
+            return TStatus::Error;
+        }
+    }
+
     // We need to infer the type of physical query for RBO at this time
-    if (enableRBO) {
+    if (config.GetEnableNewRBO()) {
         TKqpPhysicalQuery query(node);
 
         // Check the transactions, if any of them has effects, return the list of effects type
@@ -2876,12 +2923,17 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
 }
 
 TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize()) {
+        const auto sourceType = input->ChildPtr(0)->GetTypeAnn();
+        Y_ENSURE(sourceType && sourceType->GetKind() == ETypeAnnotationKind::List, "Invalid type for EmptySource input, expected List");
+        Y_ENSURE(sourceType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct, "Invalid type Empty source input, expected Struct");
+        input->SetTypeAnn(sourceType);
+        return TStatus::Ok;
+    }
 
     TVector<const TItemExprType*> resultItems;
     auto resultType = ctx.MakeType<TStructExprType>(resultItems);
-
     input->SetTypeAnn(ctx.MakeType<TListExprType>(resultType));
-
     return TStatus::Ok;
 }
 
@@ -3659,6 +3711,12 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureAtom(setting->Tail(), ctx)) {
                 return TStatus::Error;
             }
+            const TString tablePath(setting->Tail().Content());
+            if (NKikimr::PathPartBrokenAt(tablePath, "/") != tablePath.end()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()),
+                    "Invalid streaming aggregation state table path: only ASCII letters, digits, '/', '-', '_', and '.' are allowed"));
+                return TStatus::Error;
+            }
         } else if (name == "output_columns") {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return TStatus::Error;
@@ -3781,6 +3839,7 @@ public:
         AddHandler({TKqpOlapFilter::CallableName()}, Hndl(&AnnotateOlapFilter));
         AddHandler({TKqpOlapApplyColumnArg::CallableName()}, Hndl(&AnnotateOlapApplyColumnArg));
         AddHandler({TKqpOlapApply::CallableName()}, Hndl(&AnnotateOlapApply));
+        AddHandler({TKqpOlapUdf::CallableName()}, Hndl(&AnnotateOlapUdf));
         AddHandler({TKqpOlapAgg::CallableName()}, Hndl(&AnnotateOlapAgg));
         AddHandler({TKqpOlapDistinct::CallableName()}, Hndl(&AnnotateOlapDistinct));
         AddHandler({TKqpOlapExtractMembers::CallableName()}, Hndl(&AnnotateOlapExtractMembers));
@@ -3857,9 +3916,9 @@ private:
         };
     }
 
-    THandler HndlInt(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&, bool enableRBO)) {
-        return [handler, enableRBO = Config->GetEnableNewRBO()](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
-            return handler(input, ctx, enableRBO);
+    THandler HndlInt(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&, const TKikimrConfiguration&)) {
+        return [handler, this](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+            return handler(input, ctx, *Config);
         };
     }
 

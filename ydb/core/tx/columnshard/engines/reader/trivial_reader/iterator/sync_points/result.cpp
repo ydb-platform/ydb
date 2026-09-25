@@ -9,65 +9,61 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
-bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const {
+bool TSyncPointResult::IsSourcePrepared(const NCommon::IDataSource& source) const {
     if (!Next) {
-        return source->IsSyncSection() && source->HasStageResult() &&
-               (source->GetStageResult().HasResultChunk() || source->GetStageResult().IsEmpty());
-    } else if (source->IsSyncSection()) {
-        AFL_VERIFY(source->HasStageData() || (source->HasStageResult() && source->GetStageResult().IsEmpty()));
+        return source.IsSyncSection() && source.HasStageResult() &&
+               (source.GetStageResult().HasResultChunk() || source.GetStageResult().IsEmpty());
+    } else if (source.IsSyncSection()) {
+        AFL_VERIFY(source.HasStageData() || (source.HasStageResult() && source.GetStageResult().IsEmpty()));
         return true;
     } else {
         return false;
     }
 }
 
-ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
+ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& reader) {
+    auto& source = lease.GetSource();
     const ui32 resultChunkRowsCount =
-        (source->HasStageResult() && !source->GetStageResult().IsEmpty()) ? source->GetStageResult().GetResultChunkRowsCount() : 0;
-    LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-        source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), resultChunkRowsCount, source->GetReservedMemory(),
-        source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
+        (source.HasStageResult() && !source.GetStageResult().IsEmpty()) ? source.GetStageResult().GetResultChunkRowsCount() : 0;
+    LWTRACK(ResultSyncPoint, source.GetDataSourceOrbit(), source.GetRawPathId(), source.GetTabletId(), source.GetTxId(), source.GetSourceId(),
+        GetPointName(), source.GetFilteredRowsCount(), resultChunkRowsCount, source.GetReservedMemory(),
+        source.GetSourcesAheadQueueWaitDuration(), source.GetSourcesAhead(), DebugString());
     if (Next) {
-        if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
+        if (source.HasStageResult() && source.GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;
         }
-        if (source->HasStageData() && !source->GetStageData().GetTable().HasSomeUsefulInfo()) {
+        if (source.HasStageData() && !source.GetStageData().GetTable().HasSomeUsefulInfo()) {
             return ESourceAction::Finish;
         }
         return ESourceAction::ProvideNext;
     } else {
-        if (source->GetStageResult().IsEmpty()) {
+        if (source.GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;
         }
-        auto resultChunk = source->MutableStageResult().ExtractResultChunk();
-        const bool isFinished = source->GetStageResult().IsFinished();
-        if (resultChunk && resultChunk->HasData()) {
+        auto resultChunk = source.MutableStageResult().ExtractResultChunk();
+        const bool isFinished = source.GetStageResult().IsFinished();
+        const bool hasData = resultChunk && resultChunk->HasData();
+        if (hasData) {
             std::optional<TPartialSourceAddress> partialSourceAddress;
             if (!isFinished) {
-                partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex());
+                partialSourceAddress = TPartialSourceAddress(source.GetSourceIdx(), GetPointIndex());
             }
             YDB_LOG_DEBUG("",
                 {"event", "has_result"},
-                {"sourceIdx", source->GetSourceIdx()},
-                {"#_dup_source_idx", source->GetSourceIdx()},
+                {"sourceIdx", source.GetSourceIdx()},
+                {"#_dup_source_idx", source.GetSourceIdx()},
                 {"table", resultChunk->GetTable()->num_rows()},
                 {"isFinished", isFinished});
             auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
-                std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
-                    resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetSourceId()));
-        } else if (!isFinished) {
-            YDB_LOG_DEBUG("",
-                {"event", "continue_source"},
-                {"sourceIdx", source->GetSourceIdx()},
-                {"#_dup_source_idx", source->GetSourceIdx()});
-            source->MutableAs<IDataSource>()->ContinueCursor(source);
+                std::make_unique<TPartialReadResult>(source.GetResourceGuards(), source.MutableAs<IDataSource>()->GetGroupGuard(),
+                    resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source.GetSourceId()));
         }
         if (!isFinished) {
-            return ESourceAction::Wait;
+            return hasData ? ESourceAction::Wait : ESourceAction::Continue;
         }
-        source->MutableAs<IDataSource>()->ClearResult();
+        source.MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::ProvideNext;
     }
 }

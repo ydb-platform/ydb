@@ -444,6 +444,9 @@
     "name": "yt.PartitionByConstantKeysViaMap"
   },
   {
+    "name": "yt.PassOptLLVMToDqCodecs"
+  },
+  {
     "name": "yt.Pool"
   },
   {

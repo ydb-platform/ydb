@@ -3,6 +3,7 @@
 #include "antlr_token.h"
 #include "select_yql.h"
 #include "sql_expression.h"
+#include "sql_group_by.h"
 #include "sql_select_window.h"
 #include "sql_select.h"
 
@@ -1099,27 +1100,26 @@ private:
             return std::move(*maybe);
         }
 
-        const bool isClusterExplicit = rule.HasBlock1();
-
         TString service = Ctx_.Scoped->CurrService;
         TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
-
-        if (isClusterExplicit) {
-            const auto& expr = rule.GetBlock1().GetRule_cluster_expr1();
-            if (!ClusterExpr(expr, /* allowWildcard = */ false, service, cluster)) {
-                return std::unexpected(ESQLError::Basic);
-            }
+        if (rule.HasBlock1() && !ClusterExpr(rule.GetBlock1().GetRule_cluster_expr1(), /* allowWildcard = */ false, service, cluster)) {
+            return std::unexpected(ESQLError::Basic);
         }
 
-        const bool isAnonymous = rule.HasBlock2();
-
-        return Build(
-            rule,
-            rule.GetBlock3(),
-            std::move(service),
-            std::move(cluster),
-            isAnonymous,
-            isClusterExplicit);
+        switch (rule.GetBlock3().GetAltCase()) {
+            case TRule_table_ref_TBlock3::kAlt1:
+                return Build(rule.GetBlock3().GetAlt1().GetRule_table_key1(), std::move(service), std::move(cluster), rule.HasBlock2());
+            case TRule_table_ref_TBlock3::kAlt2:
+                return Build(rule, rule.GetBlock3().GetAlt2()).transform([](auto node) {
+                    return TYqlSource{.Node = std::move(node)};
+                });
+            case TRule_table_ref_TBlock3::kAlt3:
+                return Build(rule, rule.GetBlock3().GetAlt3(), std::move(service), std::move(cluster)).transform([](auto node) {
+                    return TYqlSource{.Node = std::move(node)};
+                });
+            case TRule_table_ref_TBlock3::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TMaybe<TSQLResult<TYqlSource>> TryBuildCTE(const TRule_table_ref& rule) {
@@ -1165,37 +1165,6 @@ private:
 
     TSQLResult<TYqlSource>
     Build(
-        const TRule_table_ref& rule,
-        const TRule_table_ref::TBlock3& block,
-        TString service,
-        TDeferredAtom cluster,
-        bool isAnonymous,
-        bool isClusterExplicit)
-    {
-        switch (block.GetAltCase()) {
-            case TRule_table_ref_TBlock3::kAlt1:
-                return Build(
-                    block.GetAlt1().GetRule_table_key1(),
-                    std::move(service),
-                    std::move(cluster),
-                    isAnonymous);
-            case TRule_table_ref_TBlock3::kAlt2:
-                return Build(rule, block.GetAlt2())
-                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
-            case TRule_table_ref_TBlock3::kAlt3:
-                return Build(
-                           block.GetAlt3(),
-                           std::move(service),
-                           std::move(cluster),
-                           isAnonymous,
-                           isClusterExplicit)
-                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
-            case TRule_table_ref_TBlock3::ALT_NOT_SET:
-                YQL_ENSURE(false, "Unreachable");
-        }
-    }
-
-    TSQLResult<TYqlSource> Build(
         const TRule_table_key& rule,
         TString service,
         TDeferredAtom cluster,
@@ -1209,11 +1178,7 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        if (rule.HasBlock2()) {
-            return Unsupported("(VIEW view_name)");
-        }
-
-        TString key = Id(rule.GetRule_id_table_or_type1(), *this);
+        auto [key, view] = TableKeyImpl(rule, *this, isAnonymous);
         if (key.empty()) {
             return std::unexpected(ESQLError::Basic);
         }
@@ -1222,6 +1187,7 @@ private:
             .Service = std::move(service),
             .Cluster = std::move(cluster),
             .Key = TDeferredAtom(Ctx_.Pos(), key),
+            .View = std::move(view),
             .IsAnonymous = isAnonymous,
         };
 
@@ -1268,14 +1234,14 @@ private:
     }
 
     TNodeResult Build(
+        const TRule_table_ref& rule,
         const TRule_table_ref::TBlock3::TAlt3& alt,
         TString service,
-        TDeferredAtom cluster,
-        bool isAnonymous,
-        bool isClusterExplicit)
+        TDeferredAtom cluster)
     {
         const auto& bindParameter = alt.GetRule_bind_parameter1();
         Token(bindParameter.GetToken1());
+        const TPosition position = Ctx_.Pos();
 
         TString name;
         if (!NamedNodeImpl(bindParameter, name, *this)) {
@@ -1287,33 +1253,85 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        if (auto source = GetYqlSource(node)) {
-            if (isAnonymous) {
-                return Unsupported("COMMAT bind_parameter");
-            }
-
-            if (isClusterExplicit && !Ctx_.Warning(Ctx_.Pos(), TIssuesIds::WARNING, [](auto& out) {
-                    out << "Explicit cluster is ignored";
-                }))
-            {
-                return std::unexpected(ESQLError::Basic);
-            }
-
-            return TNonNull(node);
+        if (GetYqlSource(node)) {
+            return BuildNamedYqlSource(rule, alt, std::move(node));
         }
-
         if (node->GetSource()) {
             return Unsupported("bind parameter referencing a legacy source");
+        }
+        if (alt.HasBlock2() && alt.HasBlock3()) {
+            Ctx_.Error() << "View is not supported for subqueries";
+            return std::unexpected(ESQLError::Basic);
+        }
+        return BuildNamedTablePath(
+            rule,
+            alt,
+            position,
+            std::move(node),
+            std::move(service),
+            std::move(cluster));
+    }
+
+    TNodeResult BuildNamedYqlSource(const TRule_table_ref& rule, const TRule_table_ref::TBlock3::TAlt3& alt, TNodePtr node)
+    {
+        if (rule.HasBlock2()) {
+            return Unsupported("COMMAT bind_parameter");
+        }
+        if (alt.HasBlock2()) {
+            if (alt.HasBlock3()) {
+                Ctx_.Error() << "View is not supported for subqueries";
+                return std::unexpected(ESQLError::Basic);
+            }
+            return Unsupported("bind_parameter call");
+        }
+        if (alt.HasBlock3()) {
+            return Unsupported("VIEW for bind_parameter");
+        }
+        if (rule.HasBlock1() && !Ctx_.Warning(Ctx_.Pos(), TIssuesIds::WARNING, [](auto& out) {
+                out << "Explicit cluster is ignored";
+            }))
+        {
+            return std::unexpected(ESQLError::Basic);
+        }
+        return TNonNull(std::move(node));
+    }
+
+    TNodeResult BuildNamedTablePath(
+        const TRule_table_ref& rule,
+        const TRule_table_ref::TBlock3::TAlt3& alt,
+        TPosition position,
+        TNodePtr node,
+        TString service,
+        TDeferredAtom cluster)
+    {
+        if (rule.HasBlock2() && alt.HasBlock3()) {
+            Ctx_.Error(position) << "View is not supported for anonymous tables";
+            return std::unexpected(ESQLError::Basic);
+        }
+        if (cluster.Empty()) {
+            Ctx_.Error(position) << "No cluster name given and no default cluster is selected";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        TViewDescription view;
+        if (alt.HasBlock3()) {
+            view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
+        }
+
+        if (cluster.Empty()) {
+            Ctx_.Error() << "No cluster name given and no default cluster is selected";
+            return std::unexpected(ESQLError::Basic);
         }
 
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = std::move(cluster),
             .Key = TDeferredAtom(node, Ctx_),
-            .IsAnonymous = isAnonymous,
+            .View = std::move(view),
+            .IsAnonymous = rule.HasBlock2(),
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+        return TNonNull(BuildYqlTableRef(position, std::move(args)));
     }
 
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
@@ -1328,16 +1346,8 @@ private:
     }
 
     TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
-        TPosition position = Ctx_.TokenPosition(rule.GetToken1());
         Token(rule.GetToken1());
-
-        if (rule.HasBlock2()) {
-            return Unsupported("GROUP COMPACT BY");
-        }
-
-        if (Ctx_.IsAnyUnusedHintForToken(position, [](const auto& hint) { return to_lower(hint.Name) == "compact"; })) {
-            return Unsupported("GROUP /*+ compact */ BY");
-        }
+        const bool isCompact = NSQLTranslationV1::IsCompactGroupBy(Ctx_, rule);
 
         if (TPosition position; IsDistinctOptSet(rule.GetRule_opt_set_quantifier4(), position)) {
             Ctx_.Error(position) << "DISTINCT is not supported in GROUP BY clause yet!";
@@ -1348,7 +1358,11 @@ private:
             return Unsupported("GROUP BY ... WITH an_id");
         }
 
-        return Build(rule.GetRule_grouping_element_list5());
+        auto groupBy = Build(rule.GetRule_grouping_element_list5());
+        if (groupBy) {
+            groupBy->IsCompact = isCompact;
+        }
+        return groupBy;
     }
 
     TSQLResult<TGroupBy> Build(const TRule_grouping_element_list& rule) {

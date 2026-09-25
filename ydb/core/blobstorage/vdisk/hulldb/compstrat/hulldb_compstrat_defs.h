@@ -321,12 +321,57 @@ namespace NKikimr {
 
             ////////////////////////////////////////////////////////////////////////
 
+            // What this job is expected to cost and to give back. The compaction broker
+            // needs a number to hand out before the job starts: exclusive chunks are what
+            // several VDisks on one PDisk are competing for, and the chunks a job releases
+            // are what makes it worth admitting at all.
+            //
+            // An SST in the stripe heap does not own its chunk. It occupies an extent of
+            // append blocks inside a chunk shared with other extents, and a new Blocks or
+            // Barriers SST is written the same way when the heap allocator is on. Those
+            // extents are StripeBlocksAllocated / StripeBlocksReleased. They are not
+            // chunks: NetChunks() stays the exclusive-chunk balance, and a stripe chunk
+            // returns to PDisk only once the heap finds it empty, which this forecast
+            // does not try to predict.
+            struct TSpaceForecast {
+                bool Valid = false;
+                ui32 OutputChunks = 0;             // exclusive chunks this job will allocate
+                ui32 InputChunks = 0;              // exclusive index chunks it releases once it commits
+                ui32 StripeBlocksAllocated = 0;    // append blocks new stripe SSTs will occupy
+                ui32 StripeBlocksReleased = 0;     // append blocks freed with deleted stripe SSTs
+                ui64 HugeGarbageBytes = 0;         // huge-blob garbage it makes collectable
+
+                void Clear() {
+                    *this = {};
+                }
+
+                // Worth running even though it costs space, as opposed to merely tidy.
+                // Stripe blocks are a different pool and are not part of this balance.
+                i64 NetChunks() const {
+                    return i64(InputChunks) - i64(OutputChunks);
+                }
+
+                TString ToString() const {
+                    if (!Valid) {
+                        return "{unknown}";
+                    }
+                    TStringStream str;
+                    str << "{OutputChunks# " << OutputChunks
+                        << " InputChunks# " << InputChunks
+                        << " StripeBlocksAllocated# " << StripeBlocksAllocated
+                        << " StripeBlocksReleased# " << StripeBlocksReleased
+                        << " HugeGarbageBytes# " << HugeGarbageBytes << "}";
+                    return str.Str();
+                }
+            };
+
             EAction Action;
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
             bool IsFullCompaction = false;
             ESelectStrategy SelectStrategy = ESelectStrategy::None;
+            TSpaceForecast Forecast;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
@@ -344,6 +389,7 @@ namespace NKikimr {
                 CompactSsts.Clear();
                 IsFullCompaction = false;
                 SelectStrategy = ESelectStrategy::None;
+                Forecast.Clear();
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }
@@ -387,6 +433,9 @@ namespace NKikimr {
                 str << "{" << ActionToStr(Action);
                 if (auto *ptr = GetPtr()) {
                     ptr->Output(str);
+                }
+                if (Forecast.Valid) {
+                    str << " Forecast# " << Forecast.ToString();
                 }
                 str << "}";
                 return str.Str();
@@ -447,6 +496,12 @@ namespace NKikimr {
             ui32 FreeChunksBudget = Max<ui32>();
             // When true, skip unconstrained Balance and prefer Emergency packing/merges.
             bool EmergencyMode = false;
+            // PDisk append block. Stripe extents are multiples of this; 0 if unknown.
+            ui32 AppendBlockSize = 0;
+            // Blocks/Barriers SSTs are written into the stripe heap, in extents of at most
+            // this many bytes, when the heap allocator is on. 0 means output SSTs take
+            // exclusive chunks (LogoBlobs, or the allocator is off).
+            ui32 StripeSstBytes = 0;
         };
 
     } // NHullComp

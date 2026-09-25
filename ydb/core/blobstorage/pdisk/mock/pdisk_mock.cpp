@@ -777,7 +777,17 @@ public:
                 {"msg", msg->ToString()},
                 {"VDiskId", owner.VDiskId});
             for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
-                Impl.DeleteChunk(owner, chunkIdx);
+                if (msg->IsDDisk && !owner.ReservedChunks.contains(chunkIdx)) {
+                    status = NKikimrProto::ERROR;
+                    errorReason = TStringBuilder() << "Can't forget chunkIdx# " << chunkIdx
+                        << ": chunk is not reserved or decommitted by this owner";
+                    break;
+                }
+            }
+            if (status == NKikimrProto::OK) {
+                for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
+                    Impl.DeleteChunk(owner, chunkIdx);
+                }
             }
         }
         Send(ev->Sender, new NPDisk::TEvChunkForgetResult(status, {}, errorReason), 0, ev->Cookie);
@@ -816,14 +826,18 @@ public:
         Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg));
         auto res = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, GetStatusFlags());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
-            if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
+            const auto estimatedColor = EstimateAllocationColor(msg->SizeChunks);
+            res->EstimatedColor = estimatedColor;
+            const bool refusedByColor = estimatedColor >= msg->RefuseAtColor;
+            if (Impl.GetNumFreeChunks() < msg->SizeChunks || refusedByColor) {
+                const char *error = refusedByColor ? "color bound exceeded" : "no free chunks";
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "Received TEvChunkReserve",
                     {"marker", "PDM09"},
                     {"msg", msg->ToString()},
-                    {"error", "no free chunks"});
+                    {"error", error});
                 res->Status = NKikimrProto::OUT_OF_SPACE;
                 res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
-                res->ErrorReason = "no free chunks";
+                res->ErrorReason = error;
             } else {
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Received TEvChunkReserve",
                     {"marker", "PDM07"},
@@ -1248,6 +1262,18 @@ public:
             : Impl.Occupancy;
     }
 
+    // Colour the owner would be in once this many chunks are taken, mirroring
+    // TPDisk::AllocateChunkForOwner. Without a quota model there are no colour
+    // boundaries to run into, so nothing is ever refused on colour.
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateAllocationColor(ui32 count) {
+        if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+            return NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+        }
+        GetStatusFlags(); // resyncs the shared quota with the free chunk count
+        double occupancy;
+        return Impl.ChunkSharedQuota->EstimateSpaceColor(count, &occupancy);
+    }
+
     TSpaceHeadroom GetSpaceHeadroom() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
@@ -1340,7 +1366,8 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()),
+            0, ev->Get()->IsDDisk ? ev->Cookie : 0);
     }
 
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {

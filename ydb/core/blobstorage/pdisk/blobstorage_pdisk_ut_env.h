@@ -192,8 +192,8 @@ public:
         }
     }
 
-    void Send(IEventBase* ev) {
-        auto evh = new IEventHandle(*PDiskActor, Sender, ev);
+    void Send(IEventBase* ev, ui64 cookie = 0) {
+        auto evh = new IEventHandle(*PDiskActor, Sender, ev, 0, cookie);
         // trace all events to check there is no VERIFY could happen
         evh->TraceId = NWilson::TTraceId::NewTraceId(NWilson::TTraceId::MAX_VERBOSITY, 4095);
         Runtime->Send(evh);
@@ -378,6 +378,19 @@ struct TVDiskMock {
         auto& commited = Chunks[EChunkState::COMMITTED];
         NPDisk::TCommitRecord rec;
         rec.DeleteChunks = TVector<TChunkIdx>(commited.begin(), commited.end());
+        SendEvLogImpl(1, rec);
+        Chunks[EChunkState::DELETED].insert(commited.begin(), commited.end());
+        commited.clear();
+    }
+
+    // Like DeleteCommitedChunks(), but with DeleteToDecommitted: PDisk keeps the chunks
+    // owned until they are explicitly forgotten. The state change itself completes in
+    // OnLogCommitDone(), which may still be pending when this returns.
+    void DecommitCommitedChunks() {
+        auto& commited = Chunks[EChunkState::COMMITTED];
+        NPDisk::TCommitRecord rec;
+        rec.DeleteChunks = TVector<TChunkIdx>(commited.begin(), commited.end());
+        rec.DeleteToDecommitted = true;
         SendEvLogImpl(1, rec);
         Chunks[EChunkState::DELETED].insert(commited.begin(), commited.end());
         commited.clear();

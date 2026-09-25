@@ -13,9 +13,8 @@ SRCS(
     part_persist_host_health.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
-    part_updatedirtymapstate.cpp
     part_setvchunktouched.cpp
-    part_updatevchunkconfig.cpp
+    part_updatevchunkstate.cpp
     partition_cleanup_actor.cpp
     partition_direct.cpp
     partition_direct_actor.cpp
@@ -28,6 +27,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos

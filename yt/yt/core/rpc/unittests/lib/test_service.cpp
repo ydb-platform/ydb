@@ -124,15 +124,18 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SomeCall)
     {
-        context->SetRequestInfo();
         int a = request->a();
+        context->AnnotateRequest()
+            .With("A", a);
         response->set_b(a + 100);
+        context->AnnotateResponse()
+            .With("B", response->b());
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, PassCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         WriteAuthenticationIdentityToProto(response, context->GetAuthenticationIdentity());
         ToProto(response->mutable_mutation_id(), context->GetMutationId());
         response->set_retry(context->IsRetry());
@@ -144,7 +147,9 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, AllocationCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest()
+            .With("Size", request->size())
+            .WithIf(request->wait_on_latch(), "WaitOnLatch", true);
         if (request->wait_on_latch()) {
             Latch()->Wait();
         }
@@ -212,26 +217,27 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, DoNothing)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, CustomMessageError)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->Reply(TError(NYT::EErrorCode(42), "Some Error"));
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, LatchedCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest()
+            .WithFormat("WaitOnLatch", "%v", request->wait_on_latch());
         if (request->wait_on_latch()) {
             Latch()->Wait();
         }
@@ -241,7 +247,7 @@ public:
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCanceledCall)
     {
         try {
-            context->SetRequestInfo();
+            context->AnnotateRequest();
             TDelayedExecutor::WaitForDuration(TDuration::Max());
             context->Reply();
         } catch (const TFiberCanceledException&) {
@@ -269,7 +275,8 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, StreamingEcho)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest()
+            .With("Delayed", request->delayed());
 
         bool delayed = request->delayed();
         std::vector<TSharedRef> receivedData;
@@ -307,7 +314,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerStreamsAborted)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto promise = NewPromise<void>();
         context->SubscribeCanceled(BIND([=] (const TError&) mutable {
@@ -336,7 +343,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerNotReading)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         WaitFor(context->GetRequestAttachmentsStream()->Read())
             .ThrowOnError();
@@ -358,7 +365,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerNotWriting)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto data = TSharedRef::FromString(std::string("abacaba"));
         WaitFor(context->GetResponseAttachmentsStream()->Write(data))
@@ -383,7 +390,7 @@ public:
     {
         static std::atomic<int> callCount;
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         if (callCount.fetch_add(1) % 2) {
             context->Reply();
@@ -394,20 +401,20 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, DelayedCall)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequireCoolFeature)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->ValidateClientFeature(ETestFeature::Cool);
         context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, GetTraceBaggage)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto* traceContext = NTracing::TryGetCurrentTraceContext();
         response->set_baggage(ToProto(NYson::ConvertToYsonString(traceContext->UnpackBaggage())));
         context->Reply();
@@ -424,7 +431,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, GetChannelFailureError)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         if (request->has_redirection_address()) {
             YT_VERIFY(CreateChannel_);
@@ -440,7 +447,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, ManuallyCanceledByServer)
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         context->Cancel();
     }
 

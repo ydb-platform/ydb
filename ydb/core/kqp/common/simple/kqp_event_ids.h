@@ -73,7 +73,7 @@ struct TKqpExecuterEvents {
         EvShardsResolveStatus,
         EvDelayedExecution,
         EvPqTopicResolveStatus,
-        EvCurrentExecutionStats
+        EvCurrentExecutionStats,
     };
 };
 

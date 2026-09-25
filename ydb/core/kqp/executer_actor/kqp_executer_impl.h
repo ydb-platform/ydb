@@ -957,7 +957,7 @@ protected:
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
             if (StatsReportingSettings.CollectCurrentQueryStats) {
-                const auto now = TInstant::Now();
+                const auto now = TMonotonic::Now();
                 if (LastCurrentQueryStatsReport + GetUserRequestContext()->CurrentQueryStatsInterval <= now) {
                     LastCurrentQueryStatsReport = now;
                     this->Send(Target, new TEvKqpExecuter::TEvCurrentExecutionStats(Stats->TakeCurrentStats()));
@@ -2211,7 +2211,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
-    TInstant LastCurrentQueryStatsReport;
+    TMonotonic LastCurrentQueryStatsReport;
     TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;

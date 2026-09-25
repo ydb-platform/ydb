@@ -20,11 +20,6 @@ struct TCurrentQueryResources {
     ui64 ObservedPeakComputeMemoryBytes = 0;
 };
 
-struct TCurrentExecStats : TCurrentQueryResources {
-    ui64 DurationUs = 0;
-    ui64 TableReadBytes = 0;
-};
-
 struct TCurrentExecStatsReport {
     TCurrentQueryResources Stats;
     ui64 SequenceNo = 0;

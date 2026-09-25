@@ -19,14 +19,14 @@ namespace NKikimr::NGRpcService {
 
         std::unique_ptr<TEvRequestAuthAndCheck> MakeRequest() {
             return std::make_unique<TEvRequestAuthAndCheck>(
-                "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id");
+                "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer");
         }
 
         class TNamedRequest final : public TEvRequestAuthAndCheck {
         public:
             explicit TNamedRequest(TString method)
                 : TEvRequestAuthAndCheck(
-                    "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
+                    "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer")
                 , Method_(std::move(method))
             {}
 

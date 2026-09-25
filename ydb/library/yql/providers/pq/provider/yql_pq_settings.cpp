@@ -1,10 +1,14 @@
 #include "yql_pq_settings.h"
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 namespace NYql {
 
 using namespace NCommon;
 
-TPqConfiguration::TPqConfiguration() {
+TPqConfiguration::TPqConfiguration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(PqProviderName, TQContext(), strictConfigValidation)
+{
     REGISTER_SETTING(*this, Auth)
         .ValueSetter([this](const TString&, const TString& value) {
             Auth = value;

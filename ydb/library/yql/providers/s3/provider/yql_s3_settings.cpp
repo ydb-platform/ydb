@@ -1,6 +1,7 @@
 #include "yql_s3_settings.h"
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 #include <util/generic/size_literals.h>
@@ -9,7 +10,9 @@ namespace NYql {
 
 using namespace NCommon;
 
-TS3Configuration::TS3Configuration() {
+TS3Configuration::TS3Configuration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(S3ProviderName, TQContext(), strictConfigValidation)
+{
     REGISTER_SETTING(*this, SourceCoroActor);
     REGISTER_SETTING(*this, MaxOutputObjectSize);
     REGISTER_SETTING(*this, UniqueKeysCountLimit);

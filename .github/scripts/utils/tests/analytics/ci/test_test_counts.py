@@ -8,10 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from _paths import ANALYTICS, add_product_paths
-
-add_product_paths(ANALYTICS)
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 
 from github_actions.ci_metrics import main
 from github_actions.test_counts import count_report_tests

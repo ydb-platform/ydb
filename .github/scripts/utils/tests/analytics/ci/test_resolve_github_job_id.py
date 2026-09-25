@@ -5,10 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from _paths import add_product_paths
-
-add_product_paths(Path(__file__).resolve().parents[4] / "analytics")
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "analytics"))
 
 import unittest
 

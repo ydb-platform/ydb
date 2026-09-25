@@ -314,6 +314,10 @@ private:
         TProducer* Producer;
 
         std::unordered_set<std::uint32_t> ReadyFutures;
+        // Partitions with an armed WaitEvent callback. Both this set and ReadyFutures
+        // are mutated only under Lock. UnsubscribeFromPartition drops the partition
+        // from here so an in-flight callback cannot insert into ReadyFutures afterwards.
+        std::unordered_set<std::uint32_t> SubscribedPartitions;
         std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
 

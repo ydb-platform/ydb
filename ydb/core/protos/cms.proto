@@ -759,6 +759,7 @@ enum EDDiskTabletSortBy {
     DDISK_TABLET_SORT_BY_TABLET_ID = 0;
     DDISK_TABLET_SORT_BY_LAST_CHANGED_AT = 1;
     DDISK_TABLET_SORT_BY_GROUPS_COUNT = 2;
+    DDISK_TABLET_SORT_BY_DEGRADE = 3;
 }
 
 message TDDiskTabletListRequest {
@@ -774,6 +775,8 @@ message TDDiskTabletListRequest {
     // Persistent Buffer are returned (evaluated on the CMS side using the
     // latest known PDisk availability, before paging).
     optional bool OnlyProblems = 6 [default = false];
+    // Group by worst DBG first, independently of the secondary sort direction.
+    optional bool GroupByDegrade = 7 [default = false];
 }
 
 message TDDiskTabletListResponse {
@@ -784,6 +787,8 @@ message TDDiskTabletListResponse {
         optional uint64 LastChangedAt = 4;
         optional uint32 UnavailableDDiskCount = 5;
         optional uint32 UnavailablePersistentBufferCount = 6;
+        // Maximum of unavailable DDisk and Persistent Buffer counts across all DBGs.
+        optional uint32 Degrade = 7;
     }
 
     reserved 2;

@@ -300,6 +300,129 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 0);
     }
 
+    Y_UNIT_TEST(DDiskTabletListDegrade)
+    {
+        for (bool swapRoles : {false, true}) {
+            TCmsTestEnv env(8);
+            env.ConfigureDDiskPool(3);
+            // ConfigureDDiskPool creates PDisk 1000 on each node. Match fake
+            // Whiteboard to this configuration before reporting disk failures.
+            constexpr ui32 pdiskId = 1000;
+            {
+                TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                for (ui32 i = 0; i < env.GetNodeCount(); ++i) {
+                    auto& disks = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)].PDiskStateInfo;
+                    disks.clear();
+                    auto& disk = disks[pdiskId];
+                    disk.SetPDiskId(pdiskId);
+                    disk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                }
+            }
+            // Supply controlled layouts using these same PDisks.
+            env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
+                    auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
+                    const ui64 tabletId = record.GetTabletId();
+                    if (tabletId >= 2001 && tabletId <= 2003) {
+                        record.ClearGroups();
+                        auto addDisk = [&](auto* id, ui32 nodeIndex) {
+                            id->SetNodeId(env.GetNodeId(nodeIndex));
+                            id->SetPDiskId(pdiskId);
+                            id->SetDDiskSlotId(1);
+                        };
+                        for (ui32 i = 0; i < 3; ++i) {
+                            auto* group = record.AddGroups();
+                            group->SetDirectBlockGroupId(i + 1);
+                            // 2001: three DBGs with one failed disk in EACH role,
+                            // degrade 1. 2002: two failures in one role and one in
+                            // the other, degrade 2. 2003: healthy. Test both roles.
+                            const bool failed = tabletId == 2001 || (tabletId == 2002 && i == 0);
+                            auto addPrimary = [&] {
+                                return swapRoles ? group->AddPersistentBufferDDiskId() : group->AddDDiskId();
+                            };
+                            auto addSecondary = [&] {
+                                return swapRoles ? group->AddDDiskId() : group->AddPersistentBufferDDiskId();
+                            };
+                            addDisk(addPrimary(), failed ? 0 : 2);
+                            addDisk(addSecondary(), failed ? 0 : 3);
+                            if (tabletId == 2002 && i == 0) {
+                                addDisk(addPrimary(), 1);
+                            }
+                            group->AddDDiskId(); // Unallocated slots do not fail.
+                        }
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            for (ui64 tabletId = 2001; tabletId <= 2003; ++tabletId) {
+                const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+                UNIT_ASSERT_VALUES_EQUAL(allocation.GetStatus(), NKikimrProto::OK);
+                env.WaitForDDiskInfo(tabletId, 1);
+            }
+            {
+                TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                for (ui32 i = 0; i < 2; ++i) {
+                    TFakeNodeWhiteboardService::Info[env.GetNodeId(i)]
+                        .PDiskStateInfo[pdiskId].SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
+                }
+            }
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetGroupByDegrade(true);
+            request.SetLimit(0);
+            for (bool descending : {false, true}) {
+                request.SetSortDescending(descending);
+                const auto response = env.RequestDDiskTabletList(request);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetTabletId(), 2002);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetDegrade(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetTabletId(), 2001);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetDegrade(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetUnavailableDDiskCount(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(2).GetTabletId(), 2003);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(2).GetDegrade(), 0);
+            }
+            request.SetLimit(1);
+            request.SetOffset(1);
+            request.SetOnlyProblems(true);
+            const auto page = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTotalCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(page.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTablets(0).GetTabletId(), 2001);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTablets(0).GetDegrade(), 1);
+
+            // Explicit degrade sort also works without grouping, in both directions.
+            request.SetGroupByDegrade(false);
+            request.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE);
+            request.SetOnlyProblems(false);
+            request.SetOffset(0);
+            request.SetLimit(0);
+            for (bool descending : {false, true}) {
+                request.SetSortDescending(descending);
+                const auto sorted = env.RequestDDiskTabletList(request);
+                UNIT_ASSERT_VALUES_EQUAL(sorted.TabletsSize(), 3);
+                for (ui32 i = 0; i < 3; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(sorted.GetTablets(i).GetDegrade(), descending ? 2 - i : i);
+                }
+            }
+            request.SetOnlyProblems(true);
+
+            // Recover node 0: only the second disk in the primary role stays down.
+            {
+                TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                TFakeNodeWhiteboardService::Info[env.GetNodeId(0)]
+                    .PDiskStateInfo[pdiskId].SetState(NKikimrBlobStorage::TPDiskState::Normal);
+            }
+            request.SetOffset(0);
+            const auto recovered = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTotalCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetTabletId(), 2002);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetDegrade(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetUnavailableDDiskCount(), swapRoles ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetUnavailablePersistentBufferCount(), swapRoles ? 1 : 0);
+        }
+    }
+
     Y_UNIT_TEST(DDiskTabletListFilterSortAndPage)
     {
         TCmsTestEnv env(8);

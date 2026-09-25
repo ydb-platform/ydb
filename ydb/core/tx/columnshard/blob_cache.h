@@ -38,13 +38,16 @@ struct TReadBlobRangeOptions {
 };
 
 struct TBlobCacheSettings {
-    std::optional<ui64> MaxCacheDataSize;
-    std::optional<ui64> MaxInFlightBytes;
-    std::optional<ui64> MaxRequestBytes;
-    std::optional<ui64> ReadDeadlineMs;
-    std::optional<ui64> WriteProtectDurationMs;
+    ui64 MaxCacheDataSize = 0;
+    ui64 MaxInFlightBytes = 0;
+    ui64 MaxRequestBytes = 0;
+    ui64 ReadDeadlineMs = 0;
+    ui64 WriteProtectDurationMs = 0;
+    // Set only when the proto field itself is present. An absent field still gets the proto default,
+    // but the memory controller may still resize the cache.
+    bool MaxCacheDataSizeFromConfig = false;
 
-    // Only fields explicitly present in the proto are set; everything else stays at the actor's built-in default.
+    // Copies every knob with Get(), so an unset field still receives its proto default.
     static TBlobCacheSettings FromProto(const NKikimrConfig::TBlobCacheConfig& cfg);
 };
 

@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/columnshard.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/printf.h>
 
 namespace NKikimr::NKqp {
 
@@ -44,9 +45,9 @@ NYdb::TStatus ExecScheme(TTestHelper& testHelper, const TString& query) {
 }
 
 void AlterCacheBlobsAfterWrite(TTestHelper& testHelper, const TString& objectName, const bool enabled, const TString& objectType = "TABLE") {
-    const auto query = TStringBuilder() << "ALTER OBJECT `" << objectName << "` (TYPE " << objectType
-                                        << ") SET (ACTION=UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE`=`" << (enabled ? "true" : "false")
-                                        << "`)";
+    const auto query = Sprintf(
+        "ALTER OBJECT `%s` (TYPE %s) SET (ACTION=UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE`=`%s`)",
+        objectName.c_str(), objectType.c_str(), enabled ? "true" : "false");
     auto result = ExecScheme(testHelper, query);
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -60,7 +61,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCacheBlobsAfterWrite) {
         testHelper.CreateTable(table);
 
         const auto options = DescribeOptions(testHelper.GetKikimr(), table.GetName());
-        UNIT_ASSERT(!options.HasCacheBlobsAfterWrite() || !options.GetCacheBlobsAfterWrite());
+        UNIT_ASSERT(!options.HasCacheBlobsAfterWrite());
     }
 
     Y_UNIT_TEST(AlterEnablesAndDisablesOption) {
@@ -88,8 +89,9 @@ Y_UNIT_TEST_SUITE(KqpOlapCacheBlobsAfterWrite) {
         auto table = MakeTable();
         testHelper.CreateTable(table);
 
-        const auto query = TStringBuilder() << "ALTER OBJECT `" << table.GetName()
-                                            << "` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE`=`notabool`)";
+        const auto query = Sprintf(
+            "ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE`=`notabool`)",
+            table.GetName().c_str());
         auto result = ExecScheme(testHelper, query);
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_C(result.GetIssues().ToString().contains("CACHE_BLOBS_AFTER_WRITE"), result.GetIssues().ToString());
@@ -110,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCacheBlobsAfterWrite) {
 
         {
             const auto options = DescribeStorePresetOptions(testHelper.GetKikimr(), store.GetName());
-            UNIT_ASSERT(!options.HasCacheBlobsAfterWrite() || !options.GetCacheBlobsAfterWrite());
+            UNIT_ASSERT(!options.HasCacheBlobsAfterWrite());
         }
 
         // The option lives in the store's schema preset, so tables in the store inherit it.

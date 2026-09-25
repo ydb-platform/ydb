@@ -1,3 +1,4 @@
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
@@ -31,7 +32,7 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
 
-        TBlobCacheSettings settings;
+        TBlobCacheSettings settings = TBlobCacheSettings::FromProto(NKikimrConfig::TBlobCacheConfig());
         settings.MaxCacheDataSize = maxBytes;
         settings.WriteProtectDurationMs = writeProtectDurationMs;
         Counters = new ::NMonitoring::TDynamicCounters();

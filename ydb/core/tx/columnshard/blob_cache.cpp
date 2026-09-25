@@ -93,12 +93,6 @@ private:
         }
     };
 
-    static constexpr i64 DEFAULT_MAX_IN_FLIGHT_BYTES = 250ll << 20;
-    static constexpr i64 DEFAULT_MAX_REQUEST_BYTES = 8ll << 20;
-    static constexpr ui64 DEFAULT_READ_DEADLINE_MS = 30000;
-    static constexpr ui64 DEFAULT_WRITE_PROTECT_DURATION_MS = 3600000;
-    static constexpr ui64 DEFAULT_MAX_CACHE_DATA_SIZE = 1000ull << 20;
-
     struct TCacheEntry {
         TString Data;
         TInstant StickyUntil;
@@ -171,12 +165,12 @@ public:
         : TActorBootstrapped<TBlobCache>()
         , Cache(SIZE_MAX)
         , Evictable(SIZE_MAX)
-        , MaxCacheDataSize(settings.MaxCacheDataSize.value_or(DEFAULT_MAX_CACHE_DATA_SIZE), 0, 1ull << 40)
-        , UseMaxCacheDataSizeFromConfig(settings.MaxCacheDataSize.has_value())
-        , MaxInFlightDataSize(settings.MaxInFlightBytes.value_or(Min<ui64>((ui64)MaxCacheDataSize, DEFAULT_MAX_IN_FLIGHT_BYTES)), 0, 10ull << 30)
-        , WriteProtectDurationMs(settings.WriteProtectDurationMs.value_or(DEFAULT_WRITE_PROTECT_DURATION_MS))
-        , MaxRequestBytes(settings.MaxRequestBytes.value_or(DEFAULT_MAX_REQUEST_BYTES))
-        , ReadDeadlineDuration(TDuration::MilliSeconds(settings.ReadDeadlineMs.value_or(DEFAULT_READ_DEADLINE_MS)))
+        , MaxCacheDataSize(settings.MaxCacheDataSize, 0, 1ull << 40)
+        , UseMaxCacheDataSizeFromConfig(settings.MaxCacheDataSizeFromConfig)
+        , MaxInFlightDataSize(settings.MaxInFlightBytes, 0, 10ull << 30)
+        , WriteProtectDurationMs(settings.WriteProtectDurationMs)
+        , MaxRequestBytes(settings.MaxRequestBytes)
+        , ReadDeadlineDuration(TDuration::MilliSeconds(settings.ReadDeadlineMs))
         , CacheDataSize(0)
         , StickyDataSize(0)
         , ReadCookie(1)
@@ -328,8 +322,6 @@ private:
     void SendCachedHit(const TActorId& sender, const TBlobRange& requested, const TCacheEntry& entry, const TBlobRange& covering,
         const bool promote, const TActorContext& ctx) {
         Y_ABORT_UNLESS(entry.Data.size() == covering.Size, "Cached %s, size %" PRISZT, covering.ToString().c_str(), entry.Data.size());
-        Y_ABORT_UNLESS(covering.Offset <= requested.Offset);
-        Y_ABORT_UNLESS(static_cast<ui64>(covering.Offset) + covering.Size >= static_cast<ui64>(requested.Offset) + requested.Size);
         const TString data = entry.Data.substr(requested.Offset - covering.Offset, requested.Size);
         Hits->Inc();
         HitsBytes->Add(requested.Size);
@@ -591,8 +583,16 @@ private:
         SizeBlobsInFlight->Dec();
         InFlightDataSize -= blobRange.Size;
 
-        Y_ABORT_UNLESS(
-            Cache.FindWithoutPromote(blobRange) == Cache.End(), "Range %s must not be already in cache", blobRange.ToString().c_str());
+        // The same range can already be in the cache when the DS reply arrives. Serve those bytes
+        // and do not insert the DS payload over the existing entry.
+        auto cached = Cache.FindWithoutPromote(blobRange);
+        if (cached != Cache.End()) {
+            for (const auto& to : readIt->second.Waiting) {
+                SendCachedHit(to, blobRange, cached.Value(), blobRange, false, ctx);
+            }
+            OutstandingReads.erase(readIt);
+            return;
+        }
 
         if (status == NKikimrProto::EReplyStatus::OK) {
             Y_ABORT_UNLESS(blobRange.Size == data.size(), "Read %s, size %" PRISZT, blobRange.ToString().c_str(), data.size());
@@ -815,21 +815,12 @@ private:
 
 TBlobCacheSettings TBlobCacheSettings::FromProto(const NKikimrConfig::TBlobCacheConfig& cfg) {
     TBlobCacheSettings settings;
-    if (cfg.HasMaxSizeBytes()) {
-        settings.MaxCacheDataSize = cfg.GetMaxSizeBytes();
-    }
-    if (cfg.HasMaxInFlightBytes()) {
-        settings.MaxInFlightBytes = cfg.GetMaxInFlightBytes();
-    }
-    if (cfg.HasMaxRequestBytes()) {
-        settings.MaxRequestBytes = cfg.GetMaxRequestBytes();
-    }
-    if (cfg.HasReadDeadlineMs()) {
-        settings.ReadDeadlineMs = cfg.GetReadDeadlineMs();
-    }
-    if (cfg.HasWriteProtectDurationMs()) {
-        settings.WriteProtectDurationMs = cfg.GetWriteProtectDurationMs();
-    }
+    settings.MaxCacheDataSize = cfg.GetMaxSizeBytes();
+    settings.MaxInFlightBytes = cfg.GetMaxInFlightBytes();
+    settings.MaxRequestBytes = cfg.GetMaxRequestBytes();
+    settings.ReadDeadlineMs = cfg.GetReadDeadlineMs();
+    settings.WriteProtectDurationMs = cfg.GetWriteProtectDurationMs();
+    settings.MaxCacheDataSizeFromConfig = cfg.HasMaxSizeBytes();
     return settings;
 }
 

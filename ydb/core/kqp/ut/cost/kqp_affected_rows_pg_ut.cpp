@@ -809,6 +809,78 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         UNIT_ASSERT_VALUES_EQUAL_C(leftover.GetStatus(), EStatus::SUCCESS, leftover.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(leftover.GetResultSet(0).RowsCount(), 0u);
     }
+
+    Y_UNIT_TEST(CollectAffectedRows_NonMatchingDelete_PresentWithZero) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                VALUES (1u, "Anna", 3500u, "None");
+            )"), BeginReadCommittedRW(), GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                DELETE FROM `/Root/TestTable` WHERE Group = 999u;
+            )"), BeginReadCommittedRW(), GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, 0u);
+            UNIT_ASSERT_C(HasAnyAffectedRowsField(result),
+                "affected_rows field should be present (with 0) for non-matching DML when collect_affected_rows is enabled");
+        }
+    }
+
+    Y_UNIT_TEST(CollectAffectedRows_BatchUpdate) {
+        NKikimrConfig::TAppConfig app = GetAppConfig();
+        app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(10000);
+        app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(10);
+        TKikimrRunner kikimr(app);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                VALUES (1u, "a", 0u, ""), (2u, "b", 0u, ""), (3u, "c", 0u, "");
+            )"), BeginReadCommittedRW(), GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            // Regression: TKqpPartitionedExecuter::FillRequestFrom must propagate CollectAffectedRows
+            auto result = session.ExecuteQuery(Q_(R"(
+                BATCH UPDATE `/Root/TestTable`
+                    SET Amount = 100u
+                    WHERE Group < 3u;
+            )"), NYdb::NQuery::TTxControl::NoTx(), GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, 2u);
+        }
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                BATCH UPDATE `/Root/TestTable`
+                    SET Amount = 200u
+                    WHERE Group < 3u;
+            )"), NYdb::NQuery::TTxControl::NoTx(), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!HasAnyAffectedRowsField(result),
+                "affected_rows field must be absent when collect_affected_rows is disabled");
+        }
+    }
 }
 
 } // namespace NKqp

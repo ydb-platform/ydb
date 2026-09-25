@@ -368,7 +368,7 @@ struct TKqpTableWriterStatistics {
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
-    void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
+    void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath, bool collectAffectedRows) {
         AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds,
                      DeferredBreakerQuerySpanIds, DeferredBreakerNodeIds);
         LocksBrokenAsBreaker = 0;
@@ -399,7 +399,9 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        if (collectAffectedRows) {
+            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        }
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -1814,7 +1816,7 @@ public:
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) {
-        Stats.FillStats(stats, TablePath);
+        Stats.FillStats(stats, TablePath, CollectAffectedRows);
     }
 
     bool FlushBeforeCommit() const {

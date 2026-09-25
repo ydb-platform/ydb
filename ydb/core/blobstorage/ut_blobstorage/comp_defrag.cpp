@@ -1361,7 +1361,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                     auto* msg = ev->Get<TEvCompactionTokenRequest>();
                     compactionsRequested++;
                     ui32 groupIdx = env.GetGroupIdxByGroupId(msg->GroupId);
-                    msg->Ratio = groupRatio[groupIdx];
+                    msg->Priority = {groupRatio[groupIdx], false};
                     break;
                 }
                 case TEvBlobStorage::EvCompactionTokenResult: {
@@ -1430,6 +1430,52 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             expectedGroupIdxOrder[i] = expectedGroupIdxOrderPerNode;
         }
         UNIT_ASSERT(compactionGroupIdxOrderPerNode == expectedGroupIdxOrder);
+    }
+
+    Y_UNIT_TEST(CompBrokerEmergencyPriorityAndPendingUpdate) {
+        TTestEnvCompBroker env(1, 8, 1);
+        constexpr ui32 pdiskId = Max<ui32>() - 1;
+        const TGroupId groupId = env.GroupInfos[0]->GroupID;
+        const TVDiskIdShort vdiskId(env.GroupInfos[0]->GetVDiskId(0));
+        const TActorId brokerId = MakeBlobStorageCompBrokerID();
+
+        auto request = [&](const TActorId& owner, TCompactionPriority priority) {
+            env.Env.Runtime->Send(new IEventHandle(brokerId, owner,
+                new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, priority)), owner.NodeId());
+        };
+        auto receive = [&](const TActorId& owner) {
+            auto result = env.Env.WaitForEdgeActorEvent<TEvCompactionTokenResult>(
+                owner, false, env.Env.Now() + TDuration::Seconds(30));
+            UNIT_ASSERT_C(result, "expected a token for " << owner);
+            return result->Get()->Token;
+        };
+        auto release = [&](const TActorId& owner, TCompactionTokenId token) {
+            env.Env.Runtime->Send(new IEventHandle(brokerId, owner,
+                new TEvReleaseCompactionToken(pdiskId, groupId, vdiskId, token)), owner.NodeId());
+        };
+
+        // Occupy the only token while all competing requests enter the queue.
+        const auto holder = env.Env.Runtime->AllocateEdgeActor(1);
+        request(holder, {0.0, false});
+        const auto heldToken = receive(holder);
+        const auto normal = env.Env.Runtime->AllocateEdgeActor(1);
+        const auto emergencyLow = env.Env.Runtime->AllocateEdgeActor(1);
+        const auto emergencyHigh = env.Env.Runtime->AllocateEdgeActor(1);
+        const auto updated = env.Env.Runtime->AllocateEdgeActor(1);
+        request(normal, {1000000.0, false});
+        request(emergencyLow, {0.1, true});
+        request(emergencyHigh, {0.2, true});
+        request(updated, {0.0, false});
+        env.Env.Sim(TDuration::Seconds(1));
+
+        // A waiting VDisk enters emergency mode and overtakes both emergency requests.
+        request(updated, {0.3, true});
+        env.Env.Sim(TDuration::Seconds(1));
+        release(holder, heldToken);
+        for (const auto& owner : {updated, emergencyHigh, emergencyLow, normal}) {
+            release(owner, receive(owner));
+        }
+        env.Env.Sim(TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST(CompBrokerSecondRequestCancelsFirst) {
@@ -1607,13 +1653,13 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
         const TActorId deadOwner = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         env.Env.Runtime->Send(new IEventHandle(brokerId, deadOwner,
-            new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, 1.0)), deadOwner.NodeId());
+            new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, TCompactionPriority{1.0, false})), deadOwner.NodeId());
         env.Env.Runtime->DestroyActor(deadOwner);
         env.Env.Sim(TDuration::Seconds(1));
 
         const TActorId nextOwner = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         env.Env.Runtime->Send(new IEventHandle(brokerId, nextOwner,
-            new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, 1.0)), nextOwner.NodeId());
+            new TEvCompactionTokenRequest(pdiskId, groupId, vdiskId, TCompactionPriority{1.0, false})), nextOwner.NodeId());
 
         auto result = env.Env.WaitForEdgeActorEvent<TEvCompactionTokenResult>(
             nextOwner, false, env.Env.Now() + TDuration::Seconds(30));

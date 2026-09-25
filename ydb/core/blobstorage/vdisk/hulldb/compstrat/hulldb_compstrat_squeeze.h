@@ -40,6 +40,7 @@ namespace NKikimr {
                 EAction action = SelectQuantum();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::Squeeze;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());

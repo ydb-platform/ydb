@@ -1232,7 +1232,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
         *ev->Record.MutableWatermark() = item->Data.Watermark.GetRef();
     }
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    ui32 flags = NActors::IEventHandle::MakeFlags(DqIcChannelData, NActors::IEventHandle::FlagTrackDelivery);
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
@@ -1327,7 +1327,7 @@ void TNodeState::FailOutputs(const TString& reason) {
 }
 
 void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    ui32 flags = NActors::IEventHandle::MakeFlags(DqIcChannelAck, NActors::IEventHandle::FlagTrackDelivery);
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
@@ -1551,7 +1551,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
     evAck->Record.SetStatus(record.GetSeqNo() <= ConfirmedSeqNo ? NYql::NDqProto::TEvChannelAckV2::OK : NYql::NDqProto::TEvChannelAckV2::RESEND);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    ui32 flags = NActors::IEventHandle::MakeFlags(DqIcChannelAck, NActors::IEventHandle::FlagTrackDelivery);
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
@@ -1604,7 +1604,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::RESEND);
             evAck->Record.SetSeqNo(ConfirmedSeqNo + 1);
 
-            ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+            ui32 flags = NActors::IEventHandle::MakeFlags(DqIcChannelAck, NActors::IEventHandle::FlagTrackDelivery);
             if (!Subscribed.exchange(true)) {
                 flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
             }
@@ -1986,7 +1986,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    ui32 flags = NActors::IEventHandle::MakeFlags(DqIcChannelAck, NActors::IEventHandle::FlagTrackDelivery);
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
@@ -2315,7 +2315,7 @@ void TNodeState::SendDiscovery() {
     evDiscovery->Record.SetGenMinor(GenMinor);
     evDiscovery->Record.SetSeqNo(SeqNo);
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    ui32 flags = NActors::IEventHandle::MakeFlags(DqIcChannelData, NActors::IEventHandle::FlagTrackDelivery);
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }

@@ -14,6 +14,8 @@ struct TInterconnectChannels {
         IC_TABLETS_SMALL,   // < 1 KB
         IC_TABLETS_MEDIUM,  // < 1 MB
         IC_TABLETS_LARGE,   // > 1 MB
+        IC_DQ_DATA,         // TEvChannelDataV2, TEvChannelDiscoveryV2
+        IC_DQ_ACK,          // TEvChannelAckV2, TEvChannelUpdateV2
     };
 
     enum ETabletBorders : ui64 {

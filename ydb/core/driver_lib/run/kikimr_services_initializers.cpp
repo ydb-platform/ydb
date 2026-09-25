@@ -816,6 +816,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 CHANNEL(IC_TABLETS_SMALL),
                 CHANNEL(IC_TABLETS_MEDIUM),
                 CHANNEL(IC_TABLETS_LARGE),
+                CHANNEL(IC_DQ_DATA),
+                CHANNEL(IC_DQ_ACK),
             };
 
             if (icConfig.GetEnforceScopeValidation()) {

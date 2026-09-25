@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -353,6 +354,9 @@ public:
         //         channelPoolId = it->second;
         //     }
         // }
+
+        static_assert(NYql::NDq::DqIcChannelData == TInterconnectChannels::IC_DQ_DATA);
+        static_assert(NYql::NDq::DqIcChannelAck == TInterconnectChannels::IC_DQ_ACK);
 
         auto channelServiceActorId = TActivationContext::Register(
             NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(),

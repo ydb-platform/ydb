@@ -132,6 +132,11 @@ inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
+// Interconnect channels of the remote messages, one per direction, to keep the order within each of them.
+// Registered by name as NKikimr::TInterconnectChannels::IC_DQ_DATA and IC_DQ_ACK
+constexpr ui32 DqIcChannelData = 9;     // TEvChannelDataV2, TEvChannelDiscoveryV2
+constexpr ui32 DqIcChannelAck = 10;     // TEvChannelAckV2, TEvChannelUpdateV2
+
 struct TDqChannelLimits {
     // Node level memory back pressure: report a negative IMemoryQuotaManager::GetMemoryAvailability of the
     // receiver side to the sender and keep the channel at the cold inflight window while it is set.

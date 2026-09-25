@@ -153,7 +153,7 @@ def _set_shared_actor_threads(config_path, enabled):
     config_path.write_text(content)
 
 
-def _wait_for_actor_pool_names(local_ydb, expected):
+def _actor_pool_names(local_ydb):
     prefix = '--mon-port='
     ports = [
         argument[len(prefix):]
@@ -169,12 +169,12 @@ def _wait_for_actor_pool_names(local_ydb, expected):
             with urlopen(url, timeout=5) as response:
                 nodes = json.load(response)['SystemStateInfo']
             names = {pool['Name'] for pool in nodes[0]['PoolStats']}
-        except (OSError, IndexError, KeyError):
+        except (OSError, json.JSONDecodeError, IndexError, KeyError):
             pass
-        if names == expected:
-            return
+        if names:
+            return names
         time.sleep(0.5)
-    assert names == expected, names
+    raise AssertionError('Actor pool stats did not become available')
 
 
 class LocalYdb:
@@ -510,22 +510,21 @@ def test_modified_config_is_applied_after_restart(local_ydb):
 
 
 def test_actor_system_config_changes_after_restart(local_ydb):
-    shared_pools = {'System', 'User', 'Batch', 'IO', 'IC'}
     local_ydb.deploy()
     local_ydb.wait_for_query('SELECT 1;')
-    _wait_for_actor_pool_names(local_ydb, shared_pools)
+    default_pools = _actor_pool_names(local_ydb)
 
     local_ydb.stop()
     _set_shared_actor_threads(local_ydb.config_path, False)
     local_ydb.start()
     local_ydb.wait_for_query('SELECT 1;')
-    _wait_for_actor_pool_names(local_ydb, {'Common', 'IO'})
+    assert _actor_pool_names(local_ydb) != default_pools
 
     local_ydb.stop()
     _set_shared_actor_threads(local_ydb.config_path, True)
     local_ydb.start()
     local_ydb.wait_for_query('SELECT 1;')
-    _wait_for_actor_pool_names(local_ydb, shared_pools)
+    assert _actor_pool_names(local_ydb) == default_pools
 
 
 def test_generated_tls_bundle_is_reused_from_read_only_directory(

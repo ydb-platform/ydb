@@ -2499,6 +2499,7 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
             code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraIsUnknown ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
             code == NChaosClient::EErrorCode::ShortcutRevoked ||

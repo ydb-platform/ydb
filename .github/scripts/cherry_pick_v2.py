@@ -2,7 +2,8 @@
 """
 Cherry-pick v2 Script - Automated Backport Tool
 
-Maintains order of input sources and creates PRs with proper metadata.
+Applies merged sources in merge-time order, unmerged ones after them in input
+order, and creates PRs with proper metadata.
 """
 
 import os
@@ -34,6 +35,8 @@ class Source:
     body_item: str
     author: Optional[str]
     pull_requests: List[Any]
+    is_merged: bool = True
+    merged_at: Optional[datetime.datetime] = None
 
 
 @dataclass
@@ -94,14 +97,24 @@ def create_commit_source(commit, repo, logger) -> Source:
     
     # Get commit message title (first line)
     commit_title = commit.commit.message.split('\n')[0].strip() if commit.commit.message else f"commit {commit.sha[:7]}"
-    
+
+    is_merged = linked_pr.merged if linked_pr else True
+    if is_merged:
+        merged_at = linked_pr.merged_at if linked_pr and linked_pr.merged_at else None
+        if merged_at is None:
+            merged_at = commit.commit.committer.date if commit.commit.committer else None
+    else:
+        merged_at = None
+
     return Source(
         type='commit',
         commit_shas=[commit.sha],
         title=f'commit {commit.sha[:7]}: {commit_title}',
         body_item=body_item,
         author=author,
-        pull_requests=[linked_pr] if linked_pr else []
+        pull_requests=[linked_pr] if linked_pr else [],
+        is_merged=is_merged,
+        merged_at=merged_at
     )
 
 
@@ -124,8 +137,53 @@ def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
         title=f'PR #{pull.number}: {pull.title}',
         body_item=f"* PR {pull.html_url}",
         author=pull.user.login,
-        pull_requests=[pull]
+        pull_requests=[pull],
+        is_merged=bool(pull.merged),
+        merged_at=pull.merged_at if pull.merged else None
     )
+
+
+def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+    """Normalizes a datetime to aware UTC so that values are comparable"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
+
+
+def sort_sources(sources: List[Source], logger) -> List[Source]:
+    """Orders sources the way they must be applied.
+
+    Commits are cherry-picked sequentially, so the order defines the resulting
+    history: merged sources go first in merge-time order (the order they were
+    applied to the original branch), unmerged ones go after them in input order.
+    The sort is stable, so sources with equal or unknown merge time keep their
+    relative input order.
+    """
+    merged = [s for s in sources if s.is_merged]
+    unmerged = [s for s in sources if not s.is_merged]
+
+    unknown_time = [s for s in merged if s.merged_at is None]
+    if unknown_time:
+        logger.warning(
+            "No merge time for %s, keeping them in input order before the rest",
+            ', '.join(s.title for s in unknown_time)
+        )
+
+    # Sources without a known merge time sort first, keeping their input order
+    epoch = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+    merged.sort(key=lambda s: to_utc(s.merged_at) or epoch)
+
+    ordered = merged + unmerged
+    logger.info(
+        "Cherry-pick order:\n%s",
+        '\n'.join(
+            f"  {i}. {s.title} ({'merged at ' + s.merged_at.isoformat() if s.merged_at else 'unmerged' if not s.is_merged else 'merge time unknown'})"
+            for i, s in enumerate(ordered, 1)
+        )
+    )
+    return ordered
 
 
 def is_empty_cherry_pick(output: str) -> bool:
@@ -666,7 +724,9 @@ def main():
             
             source = create_commit_source(commit, repo, logger)
             sources.append(source)
-    
+
+    sources = sort_sources(sources, logger)
+
     # Validate
     all_commit_shas = []
     all_pull_requests = []

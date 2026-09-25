@@ -143,16 +143,26 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return true;
     }
 
-    void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
-        MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
-        for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
-            if (!Used_[i]) {
-                consume(TSingleTuple{
-                    Table_.PackedRow(i),
-                    BuildData_.Overflow.data()
-                });
+    // Scans tuples whose used flag equals `used`, starting at `resumeIndex`. Returns false when the
+    // output fills up, leaving the cursor positioned at the next tuple for the following call.
+    bool ForEachWhereUsed(bool used, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                          std::predicate auto isFull) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachWhereUsed called but not tracking used tuples");
+        const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);
+        for (; resumeIndex < nTuples; ++resumeIndex) {
+            if (bool(Used_[resumeIndex]) != used) {
+                continue;
+            }
+            consume(TSingleTuple{
+                Table_.PackedRow(resumeIndex),
+                BuildData_.Overflow.data()
+            });
+            if (isFull()) {
+                ++resumeIndex;
+                return false;
             }
         }
+        return true;
     }
 
   private:

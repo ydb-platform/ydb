@@ -22,24 +22,28 @@ UPSERT INTO documents (id, payload) VALUES
     (1, JsonDocument(@@{
         "owner_id": 100,
         "tag": "active",
+        "tags": ["red", "large"],
         "archived": false,
         "content": {"x": 1, "y": 1}
     }@@)),
     (2, JsonDocument(@@{
         "owner_id": 100,
         "tag": "draft",
+        "tags": ["blue"],
         "archived": false,
         "content": {"x": 1, "y": 2}
     }@@)),
     (3, JsonDocument(@@{
         "owner_id": 101,
         "tag": "active",
+        "tags": ["green", "large"],
         "archived": true,
         "content": {"x": 2, "y": 1}
     }@@)),
     (4, JsonDocument(@@{
         "owner_id": 102,
         "tag": "pending",
+        "tags": [],
         "archived": false,
         "content": {"x": 2, "y": 2}
     }@@));
@@ -83,6 +87,25 @@ WHERE JSON_VALUE(payload, '$.tag' RETURNING Utf8) IN $tags;
 
 Запуск с `$tags = ["active"u, "pending"u]` вернёт строки `1`, `3` и `4`.
 
+## Пересечение JSON-массивов
+
+Для документов `1: ["red", "large"]`, `2: ["blue"]` и `3: ["green", "large"]` один статический запрос принимает массив любой длины:
+
+```yql
+DECLARE $values AS Json;
+
+SELECT id
+FROM documents VIEW json_idx
+WHERE JSON_EXISTS(
+    payload,
+    '$.tags[*] ? (@ == $values)'
+    PASSING $values AS values
+)
+ORDER BY id;
+```
+
+При `$values = ["red", "large"]` запрос возвращает `1, 3`: достаточно одного общего элемента. При `$values = []` запрос возвращает пустой результат.
+
 ## Параметры внутри JsonPath (PASSING)
 
 Если параметр должен использоваться внутри фильтра JsonPath (`? (...)`), его передают в секции `PASSING`:
@@ -118,7 +141,7 @@ WHERE JSON_VALUE(
 
 ## Поддерживаемые типы параметров
 
-Для всех трёх способов поддерживаются параметры со следующими типами: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`. Опциональные типы (`Optional<T>`) в параметрах не поддерживаются.
+Скалярные параметры поддерживают `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `String`, `Utf8` и `Bool`. Дополнительно параметр типа `Json` можно использовать в `PASSING` в условии равенства как динамический набор OR-значений. Опциональные типы (`Optional<T>`) в параметрах не поддерживаются.
 
 Подробнее о типах см. в [{#T}](../../dev/json-indexes.md#json-value).
 

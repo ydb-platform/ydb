@@ -105,6 +105,22 @@ Three ways to pass query parameters are supported:
    WHERE JSON_EXISTS(payload, '$.k ? (@ == $v)' PASSING $v AS v);
    ```
 
+   To search for an intersection with a JSON array of arbitrary length, pass a parameter of the `Json` type:
+
+   ```yql
+   DECLARE $values AS Json;
+
+   SELECT id
+   FROM documents VIEW json_idx
+   WHERE JSON_EXISTS(
+       payload,
+       '$.tags[*] ? (@ == $values)'
+       PASSING $values AS values
+   );
+   ```
+
+   When a `PASSING` parameter has the `Json` type, its indexable values are expanded at runtime into an OR set of tokens. Duplicate values do not duplicate result rows, and an empty array returns an empty result. The original JsonPath expression is still evaluated as a post-filter for exact semantics.
+
 ## AND and OR combinations
 
 `JSON_EXISTS` and `JSON_VALUE` on the same JSON column can be combined in a single `WHERE` using the `AND` and `OR` operators:

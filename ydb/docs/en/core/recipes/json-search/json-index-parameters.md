@@ -23,24 +23,28 @@ UPSERT INTO documents (id, payload) VALUES
     (1, JsonDocument(@@{
         "owner_id": 100,
         "tag": "active",
+        "tags": ["red", "large"],
         "archived": false,
         "content": {"x": 1, "y": 1}
     }@@)),
     (2, JsonDocument(@@{
         "owner_id": 100,
         "tag": "draft",
+        "tags": ["blue"],
         "archived": false,
         "content": {"x": 1, "y": 2}
     }@@)),
     (3, JsonDocument(@@{
         "owner_id": 101,
         "tag": "active",
+        "tags": ["green", "large"],
         "archived": true,
         "content": {"x": 2, "y": 1}
     }@@)),
     (4, JsonDocument(@@{
         "owner_id": 102,
         "tag": "pending",
+        "tags": [],
         "archived": false,
         "content": {"x": 2, "y": 2}
     }@@));
@@ -89,6 +93,25 @@ Any collection of scalar values can serve as a parameter for `IN`: `List<T>`, `T
 
 Running with `$tags = ["active"u, "pending"u]` returns rows `1`, `3`, and `4`.
 
+## JSON array intersection
+
+For documents `1: ["red", "large"]`, `2: ["blue"]`, and `3: ["green", "large"]`, one static query accepts an array of any length:
+
+```yql
+DECLARE $values AS Json;
+
+SELECT id
+FROM documents VIEW json_idx
+WHERE JSON_EXISTS(
+    payload,
+    '$.tags[*] ? (@ == $values)'
+    PASSING $values AS values
+)
+ORDER BY id;
+```
+
+With `$values = ["red", "large"]`, the query returns `1, 3`: one common element is sufficient. With `$values = []`, the query returns no rows.
+
 ## Parameters inside JsonPath (PASSING)
 
 If a parameter must be used inside a JsonPath filter (`? (...)`), it is passed in the `PASSING` clause:
@@ -128,7 +151,7 @@ WHERE JSON_VALUE(
 
 ## Supported parameter types
 
-For all three methods, parameters with the following types are supported: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`. Optional types (`Optional<T>`) are not supported in parameters.
+Scalar parameters support `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `String`, `Utf8`, and `Bool`. In addition, a `Json` parameter can be used in an equality condition inside `PASSING` as a dynamic set of OR values. Optional types (`Optional<T>`) are not supported in parameters.
 
 For more details about types, see [{#T}](../../dev/json-indexes.md#json-value).
 

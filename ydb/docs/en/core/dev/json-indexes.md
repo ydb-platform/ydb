@@ -123,6 +123,22 @@ The `JSON_EXISTS` function returns `true` for any non-empty JsonPath result. The
 
 {% endnote %}
 
+A parameter of the `Json` type can be passed to an equality condition inside `PASSING`:
+
+```yql
+DECLARE $values AS Json;
+
+SELECT id
+FROM documents VIEW json_idx
+WHERE JSON_EXISTS(
+    payload,
+    '$.tags[*] ? (@ == $values)'
+    PASSING $values AS values
+);
+```
+
+When a `PASSING` parameter has the `Json` type, its indexable values are expanded at runtime into an OR set of tokens. This lets one static query search for an intersection with a JSON array of arbitrary length. Duplicate values do not duplicate result rows, and an empty array returns an empty result. The original JsonPath expression is still evaluated as a post-filter for exact semantics.
+
 ### JSON_VALUE {#json-value}
 
 Extracting a scalar value with a required `RETURNING <type>`.

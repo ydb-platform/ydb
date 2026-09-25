@@ -45,6 +45,8 @@ ALTER TABLE `<table_name>`
 
 ### Параметры локального min_max-индекса {#local-min-max}
 
+{% include [min_max_index_unavailable_26_2.md](../_includes/min_max_index_unavailable_26_2.md) %}
+
 {% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
 
 ### Ограничения

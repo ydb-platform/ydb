@@ -6,6 +6,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#include <cmath>
+
 namespace NKikimr::NConveyorComposite::NConfig {
 
 TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
@@ -116,6 +118,135 @@ TConfig TConfig::BuildDefault() {
     return BuildFromProto(BuildDefaultProto()).DetachResult();
 }
 
+TConclusionStatus THeavyLimit::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::THeavyLimit& proto) {
+    if (!proto.HasCpuLimitUs() || !proto.GetCpuLimitUs()) {
+        return TConclusionStatus::Fail("heavy_limits cpu_limit_us must be greater than 0");
+    }
+    if (!proto.HasThreadLimit() || !proto.GetThreadLimit()) {
+        return TConclusionStatus::Fail("heavy_limits thread_limit must be greater than 0");
+    }
+    CpuLimit = TDuration::MicroSeconds(proto.GetCpuLimitUs());
+    ThreadLimit = proto.GetThreadLimit();
+    return TConclusionStatus::Success();
+}
+
+TString THeavyLimit::DebugString() const {
+    TStringBuilder sb;
+    sb << "{cpu_us=" << CpuLimit.MicroSeconds() << ";threads=" << ThreadLimit << "}";
+    return sb;
+}
+
+namespace {
+// WorkersCount and DefaultFractionOfThreadsCount are any_of. DeserializeFromProto keeps
+// WorkersCount when both are set, so a yaml value must drop the other field inherited from defaults.
+void ApplyPoolSizeAnyOf(NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& target,
+    const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& yamlPool) {
+    if (yamlPool.HasWorkersCount()) {
+        target.SetWorkersCount(yamlPool.GetWorkersCount());
+        target.ClearDefaultFractionOfThreadsCount();
+    } else if (yamlPool.HasDefaultFractionOfThreadsCount()) {
+        target.ClearWorkersCount();
+        target.SetDefaultFractionOfThreadsCount(yamlPool.GetDefaultFractionOfThreadsCount());
+    }
+}
+}
+
+TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefaults(
+    const NKikimrConfig::TCompositeConveyorConfig& defaults, const NKikimrConfig::TCompositeConveyorConfig& yaml) {
+    bool allHaveLinks = yaml.GetWorkerPools().size() > 0;
+    for (const auto& pool : yaml.GetWorkerPools()) {
+        if (!pool.GetLinks().size()) {
+            allHaveLinks = false;
+            break;
+        }
+    }
+    if (allHaveLinks) {
+        return yaml;
+    }
+
+    NKikimrConfig::TCompositeConveyorConfig result = defaults;
+    if (yaml.HasEnabled()) {
+        result.SetEnabled(yaml.GetEnabled());
+    }
+    if (yaml.GetCategories().size()) {
+        const ui32 allCategoryCount = GetEnumAllValues<ESpecialTaskCategory>().size();
+        if ((ui32)yaml.GetCategories().size() >= allCategoryCount) {
+            result.ClearCategories();
+            result.MutableCategories()->CopyFrom(yaml.GetCategories());
+        } else {
+            for (const auto& yamlCat : yaml.GetCategories()) {
+                NKikimrConfig::TCompositeConveyorConfig::TCategory* existing = nullptr;
+                for (auto& cat : *result.MutableCategories()) {
+                    if (cat.GetName() == yamlCat.GetName()) {
+                        existing = &cat;
+                        break;
+                    }
+                }
+                if (existing) {
+                    *existing = yamlCat;
+                } else {
+                    *result.AddCategories() = yamlCat;
+                }
+            }
+        }
+    }
+
+    for (const auto& yamlPool : yaml.GetWorkerPools()) {
+        if (!yamlPool.HasName() || yamlPool.GetName().empty()) {
+            return TConclusionStatus::Fail("worker pool overlay requires a name");
+        }
+        NKikimrConfig::TCompositeConveyorConfig::TWorkersPool* existing = nullptr;
+        for (auto& pool : *result.MutableWorkerPools()) {
+            if (pool.GetName() == yamlPool.GetName()) {
+                existing = &pool;
+                break;
+            }
+        }
+        if (yamlPool.GetLinks().size()) {
+            if (existing) {
+                auto merged = yamlPool;
+                ApplyPoolSizeAnyOf(merged, yamlPool);
+                if (!yamlPool.HasWorkersCount() && !yamlPool.HasDefaultFractionOfThreadsCount()) {
+                    if (existing->HasWorkersCount()) {
+                        merged.SetWorkersCount(existing->GetWorkersCount());
+                    } else if (existing->HasDefaultFractionOfThreadsCount()) {
+                        merged.SetDefaultFractionOfThreadsCount(existing->GetDefaultFractionOfThreadsCount());
+                    }
+                }
+                if (!merged.HasMaxBatchSize() && existing->HasMaxBatchSize()) {
+                    merged.SetMaxBatchSize(existing->GetMaxBatchSize());
+                }
+                if (!merged.GetHeavyLimits().size() && existing->GetHeavyLimits().size()) {
+                    merged.MutableHeavyLimits()->CopyFrom(existing->GetHeavyLimits());
+                }
+                *existing = merged;
+            } else {
+                *result.AddWorkerPools() = yamlPool;
+            }
+            continue;
+        }
+        if (!existing) {
+            TStringBuilder expected;
+            for (const auto& pool : result.GetWorkerPools()) {
+                if (expected) {
+                    expected << ", ";
+                }
+                expected << "'" << pool.GetName() << "'";
+            }
+            return TConclusionStatus::Fail(
+                "unknown worker pool name for overlay: '" + yamlPool.GetName() + "', expected one of: " + expected);
+        }
+        if (yamlPool.GetHeavyLimits().size()) {
+            existing->MutableHeavyLimits()->CopyFrom(yamlPool.GetHeavyLimits());
+        }
+        ApplyPoolSizeAnyOf(*existing, yamlPool);
+        if (yamlPool.HasMaxBatchSize()) {
+            existing->SetMaxBatchSize(yamlPool.GetMaxBatchSize());
+        }
+    }
+    return result;
+}
+
 TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
     : WorkersPoolId(wpId)
     , WorkersCountInfo(workersCountDouble, workersFraction) {
@@ -154,6 +285,29 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
     if (proto.HasMaxBatchSize()) {
         MaxBatchSize = proto.GetMaxBatchSize();
     }
+    for (const auto& protoLimit : proto.GetHeavyLimits()) {
+        THeavyLimit limit;
+        auto conclusion = limit.DeserializeFromProto(protoLimit);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        if (!HeavyLimits.empty()) {
+            if (limit.GetCpuLimit() <= HeavyLimits.back().GetCpuLimit()) {
+                return TConclusionStatus::Fail("heavy_limits cpu_limit_us must be strictly increasing");
+            }
+            if (limit.GetThreadLimit() >= HeavyLimits.back().GetThreadLimit()) {
+                return TConclusionStatus::Fail("heavy_limits thread_limit must be strictly decreasing");
+            }
+        }
+        // Absolute workers_count is rejected here when thread_limit does not fit.
+        // A pool sized only by default_fraction_of_threads_count is not checked:
+        // the worker count is fraction * GetPossibleMaxLimitThreads() and is unknown at parse time.
+        // An oversized thread_limit on such a pool is a silent no-op and stays the operator's responsibility.
+        if (proto.HasWorkersCount() && limit.GetThreadLimit() >= static_cast<ui32>(std::ceil(proto.GetWorkersCount()))) {
+            return TConclusionStatus::Fail("heavy_limits thread_limit must be less than workers_count");
+        }
+        HeavyLimits.emplace_back(std::move(limit));
+    }
 
     return TConclusionStatus::Success();
 }
@@ -170,6 +324,15 @@ TString TWorkersPool::DebugString() const {
     }
     sbLinks << "]";
     sb << "links=" << sbLinks << ";";
+    if (HeavyLimits.size()) {
+        TStringBuilder sbLimits;
+        sbLimits << "[";
+        for (auto&& l : HeavyLimits) {
+            sbLimits << l.DebugString() << ";";
+        }
+        sbLimits << "]";
+        sb << "heavy_limits=" << sbLimits << ";";
+    }
     sb << "}";
     return sb;
 }

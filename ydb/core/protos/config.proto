@@ -819,12 +819,18 @@ message TCompositeConveyorConfig {
         optional double Weight = 2;
     }
 
+    message THeavyLimit {
+        optional uint64 CpuLimitUs = 1;
+        optional uint32 ThreadLimit = 2;
+    }
+
     message TWorkersPool {
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
+        repeated THeavyLimit HeavyLimits = 6;
     }
 
     optional bool Enabled = 1 [default = true];

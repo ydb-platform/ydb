@@ -851,8 +851,9 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
         using TTestLogSinkCall = std::optional<TLogMessage>; // empty if flush called
         std::vector<TTestLogSinkCall> Calls;
 
-        void Write(const TLogMessage& message) override {
+        bool Write(const TLogMessage& message) override {
             Calls.push_back(message);
+            return true;
         }
 
         void Flush() override {

@@ -23,12 +23,15 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
-void TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    TBaseSchematizedLogWriter::Write(message);
+bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+    if (!TBaseSchematizedLogWriter::Write(message)) {
+        return false;
+    }
     CurrentBatchSize++;
     if (Settings.MaxBatchSize.has_value() && CurrentBatchSize == Settings.MaxBatchSize.value() ) {
         Flush();
     }
+    return true;
 }
 
 void TColumnShardLogWriter::Flush() {
@@ -41,13 +44,15 @@ TString TColumnShardLogWriter::GetStoreDescription() {
     TStringBuilder sb;
     for (const auto& column : Columns) {
         sb << "Columns{ Name: \"" << column->Name << "\" Type : \"" << column->Type << "\"";
+        if (column->Settings.IsDictionary) {
+            sb << " DataAccessorConstructor{ ClassName: \"DICTIONARY\" } ";
+        }
         if (column->Settings.IsNotNull) {
             sb << " NotNull : true";
         }
         if (!column->Settings.Extra.empty()) {
             sb << " " << column->Settings.Extra;
         }
-        // Columns{ Name: "message" Type : "Utf8" DataAccessorConstructor{ ClassName: "DICTIONARY" } }
         sb << " }";
     }
 
@@ -132,7 +137,21 @@ void TColumnShardLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& 
     WaitForSchemeOperation(sender, txId);
 }
 
-void TColumnShardLogWriter::CreateOrUpdateStorage() {
+bool TColumnShardLogWriter::CheckStorageExists() const {
+    auto schemeClient = GetRunner().GetSchemeClient();
+
+    const TString storePath = "/Root/" + Settings.StoreName;
+    const auto store = schemeClient.DescribePath(storePath).GetValueSync();
+    if (!store.IsSuccess() || store.GetEntry().Type != NYdb::NScheme::ESchemeEntryType::ColumnStore) {
+        return false;
+    }
+
+    const TString tablePath = storePath + "/" + Settings.TableName;
+    const auto table = schemeClient.DescribePath(tablePath).GetValueSync();
+    return table.IsSuccess() && table.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::ColumnTable;
+}
+
+void TColumnShardLogWriter::CreateStorage() {
     // Create column store
     TString storeScheme = GetStoreDescription();
     NKikimrSchemeOp::TColumnStoreDescription store;
@@ -157,8 +176,13 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
     op.SetWorkingDir(workingDir);
     op.MutableCreateColumnTable()->CopyFrom(table);
     ExecuteModifyScheme(op);
+}
 
-    TableExists = true;
+void TColumnShardLogWriter::CreateOrUpdateStorage() {
+    if (!CheckStorageExists()) {
+        CreateStorage();
+    }
+    StorageExists = true;
 }
 
 void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {

@@ -6,15 +6,18 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
+#include <functional>
 #include <memory>
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
 class TBaseSchematizedLogWriter : public NActors::NStructuredLog::ILogSink {
 public:
-    TBaseSchematizedLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
+    using TLogMessageFilter = std::function<bool(NActors::NStructuredLog::TLogMessage)>;
+
+    TBaseSchematizedLogWriter(TKikimrRunner& runner, TLogMessageFilter filter, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
         : Runner(runner)
-        , Component(component)
+        , Filter(std::move(filter))
         , Columns(std::move(columns)) {
 
         for(std::size_t i = 0;i < Columns.size();i++) {
@@ -30,37 +33,27 @@ public:
         return Runner;
     }
 
-    NLog::EComponent GetComponent() const {
-        return Component;
-    }
-
     const TVector<std::shared_ptr<TSchematizedLogColumn>>& GetColumns() const {
         return Columns;
     }
 
-    bool IsTableExists() const {
-        return TableExists;
-    }
-
-    void Write(const NActors::NStructuredLog::TLogMessage&) override;
+    bool Write(const NActors::NStructuredLog::TLogMessage&) override;
     void Flush() override;
 
-    virtual void CreateOrUpdateStorage() = 0;
-    virtual void DeleteStorageIfExists() = 0;
-    virtual void CleanupStorageIfExists(TInstant before) = 0;
 protected:
+    virtual void CreateOrUpdateStorage() = 0;
     virtual void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) = 0;
 
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     std::shared_ptr<arrow::RecordBatch> CreateCurrentBatch();
 
     TKikimrRunner& Runner;
-    const NLog::EComponent Component;
+    const TLogMessageFilter Filter;
     const TVector<std::shared_ptr<TSchematizedLogColumn>> Columns;
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
 
-    bool TableExists {false};
+    bool StorageExists {false};
     unsigned WrittenRecordCount{0};
 };
 

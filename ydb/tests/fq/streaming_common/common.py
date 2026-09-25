@@ -48,6 +48,7 @@ def set_test_env(request):
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
+    os.environ["YDB_TEST_PQ_READ_ACTOR_RETRY_POLICY_MAX_TIME_MS"] = "5000"
 
 
 def get_ydb_config(request, enable_fq_connector=None):
@@ -686,6 +687,20 @@ class StreamingTestBase(TestYdsBase):
 
     def get_ydb_client(self, kikimr: Kikimr, local_topics: bool) -> YdbClient:
         return kikimr.ydb_client if local_topics else kikimr.external_ydb_client
+
+    def get_query_state(self, kikimr: Kikimr, query_name: str):
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        result_sets = kikimr.ydb_client.query(
+            f"""
+            SELECT Status, RetryCount, Issues
+            FROM `.sys/streaming_queries`
+            WHERE Path = "{path}";
+        """,
+            timeout=10,
+        )
+        assert len(result_sets) == 1, result_sets
+        assert len(result_sets[0].rows) == 1, result_sets[0].rows
+        return result_sets[0].rows[0]
 
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None) -> None:
         if endpoint is None:

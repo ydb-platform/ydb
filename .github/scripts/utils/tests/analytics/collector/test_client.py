@@ -11,24 +11,27 @@ from _paths import ANALYTICS, add_product_paths
 
 add_product_paths(ANALYTICS)
 
+import io
 import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
+from pathlib import Path
 
 from collector import (
-    attach_context,
     end,
     enrich,
     flush_file,
     main,
     normalize_metric,
-    read_pending_spans,
+    send,
     start,
-    timed,
     track,
-    write_send_offset,
 )
+from collector.buffer import append_record, read_pending_spans, write_send_offset
+from collector.spans import attach_context
+from collector.values import build_track_record, parse_datetime, parse_labels
 
 
 class CollectorNormalizeTest(unittest.TestCase):
@@ -219,17 +222,25 @@ class CollectorLifecycleTest(unittest.TestCase):
             self.assertEqual(by_name["ya_make_try_1"]["labels"]["report_url"], "try1")
             self.assertNotIn("report_url", by_name["ya_make_try_2"]["labels"])
 
-    def test_timed_records_failure(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "analytics.jsonl")
-            with self.assertRaises(RuntimeError):
-                with timed("boom", file=path, source="my_job"):
-                    raise RuntimeError("nope")
-            with open(path, encoding="utf-8") as handle:
-                record = json.loads(handle.readline())
-            self.assertEqual(record["name"], "boom")
-            self.assertEqual(record["conclusion"], "failure")
-            self.assertGreaterEqual(record["value"], 0)
+    def test_send_without_open_span_does_not_invent_track(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None, **kwargs):
+            sends.append(path)
+            return 0
+
+        import collector.client as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "analytics.jsonl")
+                self.assertEqual(send("ghost", file=path, conclusion="cancelled"), 0)
+                self.assertFalse(os.path.exists(path))
+                self.assertEqual(sends, [path])
+        finally:
+            client.flush_file = original
 
     def test_start_without_name_returns_error(self):
         self.assertEqual(main(["start"]), 1)
@@ -305,6 +316,134 @@ class CollectorLifecycleTest(unittest.TestCase):
                 os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
             else:
                 os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved_cred
+
+    def test_flush_error_uses_sys_stderr(self):
+        import collector.client as client
+
+        original = client.upsert_metrics
+        saved = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
+        os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("ydb down")
+
+        class Wrapper:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def check_credentials(self):
+                return True
+
+            def get_table_path(self, key):
+                raise KeyError(key)
+
+        client.upsert_metrics = boom
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "analytics.jsonl")
+                track("my_step", {"value": 1, "kind": "count"}, file=path, source="arcadia")
+                buf = io.StringIO()
+                err = sys.stderr
+                sys.stderr = buf
+                try:
+                    uploaded = flush_file(path, ydb_wrapper_factory=lambda: Wrapper)
+                finally:
+                    sys.stderr = err
+            self.assertEqual(uploaded, 0)
+            self.assertIn("ydb down", buf.getvalue())
+            self.assertNotIn("NameError", buf.getvalue())
+        finally:
+            client.upsert_metrics = original
+            if saved is None:
+                os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
+            else:
+                os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved
+
+    def test_mixed_batch_writes_skipped_file(self):
+        import collector.client as client
+
+        original = client.upsert_metrics
+        saved = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
+        os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
+        client.upsert_metrics = lambda wrapper, rows, **kwargs: len(rows)
+
+        class Wrapper:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def check_credentials(self):
+                return True
+
+            def get_table_path(self, key):
+                raise KeyError(key)
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "analytics.jsonl")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("not-json\n")
+                    handle.write(
+                        json.dumps(
+                            {
+                                "name": "ok",
+                                "source": "arcadia",
+                                "run_id": 1,
+                                "span_id": "span-ok",
+                                "event_ts": "2026-09-21T10:00:00Z",
+                                "value": 1,
+                            }
+                        )
+                        + "\n"
+                    )
+                uploaded = flush_file(path, ydb_wrapper_factory=lambda: Wrapper)
+                self.assertEqual(uploaded, 1)
+                skipped = Path(path + ".skipped").read_text(encoding="utf-8")
+                self.assertIn("invalid json", skipped)
+        finally:
+            client.upsert_metrics = original
+            if saved is None:
+                os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
+            else:
+                os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved
+
+
+class CollectorValuesTest(unittest.TestCase):
+    def test_epoch_strings_and_iso(self):
+        self.assertEqual(parse_datetime("1000"), datetime.fromtimestamp(1000, tz=timezone.utc))
+        self.assertEqual(
+            parse_datetime("2026-09-21T10:00:00Z"),
+            datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc),
+        )
+
+    def test_parse_labels(self):
+        self.assertEqual(parse_labels(["cache_mode=none", "ya_attempt=2"])["cache_mode"], "none")
+        self.assertEqual(parse_labels(["bad"]), {})
+
+    def test_build_record_duration_from_epochs(self):
+        record = build_track_record(
+            "ya_make_try_1",
+            {
+                "source": "ya_phase",
+                "started_epoch": "1000",
+                "finished_epoch": "1010.5",
+                "conclusion": "success",
+                "ya_attempt": 1,
+            },
+        )
+        self.assertEqual(record["value"], 10500.0)
+        self.assertEqual(record["labels"]["ya_attempt"], 1)
+
+    def test_append_record_creates_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "nested", "out.jsonl")
+            append_record(path, {"name": "x"})
+            self.assertTrue(os.path.exists(path))
 
 
 if __name__ == "__main__":

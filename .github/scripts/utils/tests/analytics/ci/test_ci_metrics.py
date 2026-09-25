@@ -18,15 +18,8 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
-from collector import (
-    append_record,
-    build_track_record,
-    load_unsent_lines,
-    parse_datetime,
-    parse_labels,
-    read_pending_spans,
-    write_send_offset,
-)
+from collector.buffer import load_unsent_lines, write_send_offset
+from collector.spans import read_pending_spans
 from github_actions import runner_info
 from github_actions.ci_metrics import (
     DEFAULT_TABLE_PATH,
@@ -34,9 +27,7 @@ from github_actions.ci_metrics import (
     attach_context,
     build_create_table_sql,
     github_env_defaults,
-    guess_build_preset,
     main,
-    metrics_from_workflow_run,
     normalize_metric,
     rows_from_jsonl,
     start,
@@ -44,6 +35,7 @@ from github_actions.ci_metrics import (
     enrich,
     track,
 )
+from github_actions.export_github_job_metrics import guess_build_preset, metrics_from_workflow_run
 from github_actions.runner_info import INVENTORY_LABEL, USAGE_LABEL
 
 
@@ -70,6 +62,20 @@ class NormalizeMetricTest(unittest.TestCase):
             normalize_metric(
                 {
                     "name": "job",
+                    "event_ts": "2026-09-21T10:00:00Z",
+                }
+            )
+        )
+
+    def test_requires_github_job_id(self):
+        self.assertIsNone(
+            normalize_metric(
+                {
+                    "name": "job",
+                    "source": "ya_phase",
+                    "run_id": 1,
+                    "run_attempt": 1,
+                    "span_id": "span-1",
                     "event_ts": "2026-09-21T10:00:00Z",
                 }
             )
@@ -115,6 +121,7 @@ class NormalizeMetricTest(unittest.TestCase):
         labels = json.loads(row["labels"])
         self.assertEqual(labels["cache_mode"], "dist_cache")
         self.assertEqual(labels["ya_attempt"], 1)
+        self.assertEqual(labels["parent_span_id"], "job-555")
         self.assertEqual(row["source"], "ya_phase")
 
     def test_finished_epoch_needs_source_and_job_id(self):
@@ -255,6 +262,7 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertEqual(job_row["kind"], "duration")
         self.assertEqual(job_row["value"], 60 * 60 * 1000)
         self.assertEqual(json.loads(job_row["labels"])["queued_ms"], 60 * 1000)
+        self.assertEqual(json.loads(job_row["labels"])["parent_span_id"], "job-777")
 
         queue_row = next(row for row in rows if row["name"] == "queue")
         self.assertEqual(queue_row["value"], 60 * 1000)
@@ -408,6 +416,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                     )
                 os.environ["GITHUB_EVENT_PATH"] = path
                 os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+                os.environ["BUILD_PRESET"] = "relwithdebinfo"
                 defaults = github_env_defaults()
             self.assertEqual(defaults["pr_number"], 53660)
             self.assertEqual(defaults["commit"], "abc123def")
@@ -482,63 +491,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 os.environ["GITHUB_NUMERIC_JOB_ID"] = old
 
 
-class ParseDatetimeTest(unittest.TestCase):
-    def test_epoch_strings_and_iso(self):
-        self.assertEqual(
-            parse_datetime("1000"),
-            datetime.fromtimestamp(1000, tz=timezone.utc),
-        )
-        self.assertEqual(
-            parse_datetime("1010.5"),
-            datetime.fromtimestamp(1010.5, tz=timezone.utc),
-        )
-        self.assertEqual(
-            parse_datetime("1726900000000"),
-            datetime.fromtimestamp(1726900000, tz=timezone.utc),
-        )
-        self.assertEqual(
-            parse_datetime("2026-09-21T10:00:00Z"),
-            datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc),
-        )
-
-
 class RecordApiTest(unittest.TestCase):
-    def test_build_record_duration_from_epochs(self):
-        record = build_track_record(
-            "ya_make_try_1",
-            {
-                "source": "ya_phase",
-                "started_epoch": "1000",
-                "finished_epoch": "1010.5",
-                "conclusion": "success",
-                "ya_attempt": 1,
-            },
-        )
-        self.assertEqual(record["name"], "ya_make_try_1")
-        self.assertEqual(record["value"], 10500.0)
-        self.assertEqual(record["unit"], "ms")
-        self.assertEqual(record["labels"]["ya_attempt"], 1)
-        self.assertNotIn("duration_ms", record["labels"])
-
-    def test_duration_ms_not_copied_into_labels(self):
-        record = build_track_record(
-            "ya_make_try_1",
-            {"source": "ya_phase", "duration_ms": 1500, "cache_mode": "none"},
-        )
-        self.assertEqual(record["value"], 1500.0)
-        self.assertEqual(record["labels"], {"cache_mode": "none"})
-
-    def test_finished_at_maps_to_duration(self):
-        record = build_track_record(
-            "ya_make_try_1",
-            {
-                "source": "ya_phase",
-                "started_epoch": "1000",
-                "finished_at": "1970-01-01T00:16:42Z",
-            },
-        )
-        self.assertEqual(record["value"], 2000.0)
-
     def test_track_and_cli_append_jsonl(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
@@ -581,34 +534,8 @@ class RecordApiTest(unittest.TestCase):
             self.assertEqual(second["kind"], "gauge")
             self.assertEqual(second["value"], 42.0)
 
-    def test_append_record_creates_parent(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "nested", "out.jsonl")
-            append_record(path, {"name": "x"})
-            self.assertTrue(os.path.exists(path))
-
 
 class TrackApiTest(unittest.TestCase):
-    def test_name_and_properties_json(self):
-        record = build_track_record(
-            "ya_make_try_1",
-            {
-                "kind": "duration",
-                "source": "ya_phase",
-                "started_epoch": "1000",
-                "finished_epoch": "1010",
-                "conclusion": "success",
-                "cache_mode": "dist_cache",
-                "ya_attempt": 1,
-            },
-        )
-        self.assertEqual(record["name"], "ya_make_try_1")
-        self.assertEqual(record["kind"], "duration")
-        self.assertEqual(record["source"], "ya_phase")
-        self.assertEqual(record["value"], 10000.0)
-        self.assertEqual(record["labels"]["cache_mode"], "dist_cache")
-        self.assertEqual(record["labels"]["ya_attempt"], 1)
-
     def test_cli_oneliner_positional_and_duration_sec(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
@@ -656,7 +583,7 @@ class TrackApiTest(unittest.TestCase):
             self.assertEqual(second["name"], "graph_compare")
             self.assertEqual(second["value"], 2000.0)
 
-    def test_cli_track_json(self):
+    def test_cli_track_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             self.assertEqual(
@@ -667,8 +594,16 @@ class TrackApiTest(unittest.TestCase):
                         path,
                         "--name",
                         "ydbd_size",
-                        "--json",
-                        json.dumps({"kind": "gauge", "value": 42, "unit": "bytes", "source": "clean_build", "cache_mode": "none"}),
+                        "--kind",
+                        "gauge",
+                        "--value",
+                        "42",
+                        "--unit",
+                        "bytes",
+                        "--source",
+                        "clean_build",
+                        "--label",
+                        "cache_mode=none",
                     ]
                 ),
                 0,
@@ -806,18 +741,6 @@ class TrackApiTest(unittest.TestCase):
             with open(path, encoding="utf-8") as handle:
                 rows = [json.loads(line) for line in handle if line.strip()]
             self.assertEqual([row["name"] for row in rows], ["ydbd_size"])
-
-
-class ParseLabelsTest(unittest.TestCase):
-    def test_key_values_and_extra_json(self):
-        labels = parse_labels(["cache_mode=none", "ya_attempt=2"], '{"nproc": 8}')
-        self.assertEqual(labels["cache_mode"], "none")
-        self.assertEqual(labels["ya_attempt"], "2")
-        self.assertEqual(labels["nproc"], 8)
-
-    def test_invalid_extra_ignored(self):
-        labels = parse_labels([], "not-json")
-        self.assertNotIn("extra", labels)
 
 
 class RunnerFlagsTest(unittest.TestCase):
@@ -972,6 +895,75 @@ class RunnerFlagsTest(unittest.TestCase):
         self.assertEqual(row["conclusion"], "success")
         self.assertEqual(row["labels"]["report_url"], "https://s3.example/dashboard.html")
         self.assertEqual(row["labels"]["error"], "should-not-change-conclusion")
+
+
+class FlushBehaviorTest(unittest.TestCase):
+    def test_mixed_batch_writes_skipped_and_uploads_valid(self):
+        created = []
+
+        class Wrapper:
+            def __init__(self):
+                created.append(self)
+                self.created_tables = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def check_credentials(self):
+                return True
+
+            def get_table_path(self, key):
+                raise KeyError(key)
+
+            def create_table(self, path, sql):
+                self.created_tables.append(path)
+
+        import github_actions.ci_metrics as client
+
+        original = client.collector_upsert_metrics
+        saved = os.environ.get("ANALYTICS_YDB_CREDENTIALS")
+        os.environ["ANALYTICS_YDB_CREDENTIALS"] = "1"
+        uploaded = []
+
+        def fake_upsert(wrapper, rows, **kwargs):
+            uploaded.append((rows, kwargs.get("ensure_table")))
+            return len(rows)
+
+        client.collector_upsert_metrics = fake_upsert
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "ci_metrics.jsonl")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps({"name": "bad"}) + "\n")
+                    handle.write(
+                        json.dumps(
+                            {
+                                "name": "ok",
+                                "source": "ya_phase",
+                                "run_id": 1,
+                                "github_job_id": 2,
+                                "run_attempt": 1,
+                                "span_id": "span-ok",
+                                "event_ts": "2026-09-21T10:00:00Z",
+                                "value": 1,
+                            }
+                        )
+                        + "\n"
+                    )
+                count = client.flush_file(path, ydb_wrapper_factory=lambda: Wrapper)
+                self.assertEqual(count, 1)
+                self.assertEqual(uploaded[0][1], False)
+                skipped = Path(path + ".skipped").read_text(encoding="utf-8")
+                self.assertIn("no event_ts", skipped)
+        finally:
+            client.collector_upsert_metrics = original
+            if saved is None:
+                os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
+            else:
+                os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved
 
 
 if __name__ == "__main__":

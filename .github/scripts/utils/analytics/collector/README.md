@@ -41,7 +41,9 @@ flush_file()
 
 PK: `(event_ts, date, run_id, source, name, kind, span_id)`. `span_id` обязателен; collector сам генерирует его при `start`/`track`. TTL — 1 год на `event_ts` (колонка TTL должна быть первой в PK).
 
-Для `flush` / `send` нужны SDK `ydb` и `ydb_wrapper` плюс один из:
+Невалидные строки после успешного upsert пишутся в `$CI_METRICS_FILE.skipped` (`reason` + исходная запись), offset всё равно двигается. Если валидных нет — offset не трогаем.
+
+Для `flush` / `send` нужны SDK `ydb` и `ydb_wrapper` (в этом репозитории — `.github/scripts/analytics/ydb_wrapper.py`, в `PYTHONPATH` или рядом) плюс один из:
 
 - `ANALYTICS_YDB_CREDENTIALS`
 - `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`

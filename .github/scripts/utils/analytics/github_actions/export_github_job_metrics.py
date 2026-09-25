@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -22,7 +23,197 @@ _ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
 if str(_ANALYTICS_ROOT) not in sys.path:
     sys.path.insert(0, str(_ANALYTICS_ROOT))
 
-from github_actions.ci_metrics import metrics_from_workflow_run, upload_rows
+from collector.flush import has_send_credentials
+from collector.schema import _open_ydb_wrapper
+from collector.values import _as_uint, duration_ms_between, parse_datetime
+from github_actions.ci_metrics import normalize_metric, resolve_table_path, upsert_metrics
+
+BUILD_PRESET_RE = re.compile(
+    r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
+)
+
+
+def guess_build_preset(job_name: Optional[str]) -> Optional[str]:
+    if not job_name:
+        return None
+    match = BUILD_PRESET_RE.search(job_name)
+    return match.group(1) if match else None
+
+
+def _first_pr_number(run: Dict[str, Any]) -> Optional[int]:
+    pulls = run.get("pull_requests") or []
+    if not pulls:
+        return None
+    return _as_uint(pulls[0].get("number"))
+
+
+def _first_pr_base(run: Dict[str, Any]) -> Optional[str]:
+    pulls = run.get("pull_requests") or []
+    if not pulls:
+        return None
+    base = pulls[0].get("base") or {}
+    return base.get("ref")
+
+
+def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    now = datetime.now(timezone.utc)
+    run_id = _as_uint(run.get("id"))
+    if run_id is None:
+        return []
+    run_created = parse_datetime(run.get("created_at") or run.get("run_started_at"))
+    event_name = run.get("event")
+    workflow = run.get("name")
+    commit = run.get("head_sha")
+    run_attempt = _as_uint(run.get("run_attempt"))
+    if run_attempt is None:
+        return []
+    html_url = run.get("html_url")
+    branch = run.get("head_branch")
+    pr_number = None
+    if event_name in ("pull_request", "pull_request_target"):
+        branch = run.get("base_branch") or _first_pr_base(run) or branch
+        pr_number = _first_pr_number(run)
+
+    rows: List[Dict[str, Any]] = []
+    for job in jobs:
+        job_id = _as_uint(job.get("id"))
+        if job_id is None:
+            continue
+        job_name = job.get("name") or ""
+        job_started = parse_datetime(job.get("started_at"))
+        job_completed = parse_datetime(job.get("completed_at"))
+        conclusion = job.get("conclusion") or job.get("status")
+        preset = guess_build_preset(job_name)
+        job_created = parse_datetime(job.get("created_at")) or run_created
+        queued_ms = duration_ms_between(job_created, job_started)
+        parent = f"job-{job_id}"
+        common = {
+            "run_id": run_id,
+            "github_job_id": job_id,
+            "kind": "duration",
+            "workflow": workflow,
+            "job_name": job_name,
+            "event_name": event_name,
+            "branch": branch,
+            "build_preset": preset,
+            "pr_number": pr_number,
+            "commit": commit,
+            "run_attempt": run_attempt,
+            "run_url": html_url,
+            "exported_at": now,
+        }
+        if job_started is not None:
+            job_labels: Dict[str, Any] = {}
+            if queued_ms is not None:
+                job_labels["queued_ms"] = queued_ms
+            job_labels["parent_span_id"] = parent
+            rows.append(
+                normalize_metric(
+                    {
+                        **common,
+                        "span_id": parent,
+                        "name": "job",
+                        "source": "github_job",
+                        "started_at": job_started,
+                        "finished_at": job_completed,
+                        "value": duration_ms_between(job_started, job_completed),
+                        "conclusion": conclusion,
+                        "labels": job_labels or None,
+                    },
+                    now=now,
+                )
+            )
+            if queued_ms is not None and job_created is not None:
+                rows.append(
+                    normalize_metric(
+                        {
+                            **common,
+                            "span_id": f"queue-{job_id}",
+                            "name": "queue",
+                            "source": "github_job",
+                            "started_at": job_created,
+                            "value": queued_ms,
+                            "conclusion": conclusion,
+                            "labels": {"queued_ms": queued_ms, "parent_span_id": parent},
+                        },
+                        now=now,
+                    )
+                )
+        for step_index, step in enumerate(job.get("steps") or [], start=1):
+            step_name = (step.get("name") or "").strip()
+            step_started = parse_datetime(step.get("started_at"))
+            if not step_name or step_started is None:
+                continue
+            step_completed = parse_datetime(step.get("completed_at"))
+            rows.append(
+                normalize_metric(
+                    {
+                        **common,
+                        "span_id": f"step-{job_id}-{step_index}",
+                        "name": step_name,
+                        "source": "github_step",
+                        "started_at": step_started,
+                        "finished_at": step_completed,
+                        "value": duration_ms_between(step_started, step_completed),
+                        "conclusion": step.get("conclusion") or step.get("status"),
+                        "labels": {"parent_span_id": parent},
+                    },
+                    now=now,
+                )
+            )
+    return [row for row in rows if row is not None]
+
+
+def last_export_at(table_path: Optional[str] = None) -> Optional[datetime]:
+    if not has_send_credentials():
+        return None
+    try:
+        with _open_ydb_wrapper() as wrapper:
+            if not wrapper.check_credentials():
+                return None
+            path = table_path or resolve_table_path(wrapper)
+            rows = wrapper.execute_scan_query(
+                f"""
+                SELECT MAX(exported_at) AS last_export
+                FROM `{path}`
+                WHERE source IN ("github_job", "github_step")
+                """
+            )
+    except Exception as exc:  # noqa: BLE001 — fall back to --hours
+        print(f"Warning: export watermark query failed: {exc}")
+        return None
+    if not rows:
+        return None
+    value = rows[0].get("last_export") if isinstance(rows[0], dict) else None
+    return parse_datetime(value)
+
+
+def resolve_created_since(hours: int, table_path: Optional[str] = None) -> datetime:
+    floor = datetime.now(timezone.utc) - timedelta(hours=hours)
+    last = last_export_at(table_path)
+    if last is None:
+        return floor
+    return max(last - timedelta(minutes=15), floor)
+
+
+def upload_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) -> int:
+    if not rows:
+        return 0
+    if not has_send_credentials():
+        print("Analytics YDB credentials are missing, skipping")
+        return 0
+    try:
+        with _open_ydb_wrapper() as wrapper:
+            if not wrapper.check_credentials():
+                print("Analytics YDB credentials are missing, skipping")
+                return 0
+            path = table_path or resolve_table_path(wrapper)
+            uploaded = upsert_metrics(wrapper, rows, table_path=path)
+        print(f"Uploaded {uploaded} metric rows to {path}")
+        return uploaded
+    except Exception as exc:  # noqa: BLE001 — telemetry must not fail the caller
+        print(f"Warning: analytics upload failed: {exc}", file=sys.stderr)
+        return 0
 
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
@@ -299,7 +490,7 @@ def main(argv=None) -> int:
     try:
         args = parse_args(argv)
         workflows = expand_workflows(args.org, args.repo, args.workflow)
-        created_since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
+        created_since = resolve_created_since(args.hours, table_path=args.table_path)
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
             f"since {created_since.isoformat()}"

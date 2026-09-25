@@ -4,7 +4,9 @@
 
 Таблица: `analytics/ci_metrics`. Профили компиляции сюда не кладём.
 
-PK: `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`. Без `github_job_id` / `run_attempt` / `span_id` строка в YDB не уходит. TTL — 1 год.
+PK: `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`. Без `github_job_id` / `run_attempt` / `span_id` строка в YDB не уходит. TTL — 1 год. `CREATE TABLE` на flush не вызывается (`ensure_table=False`).
+
+Связка с GitHub job: в labels пишется `parent_span_id=job-{github_job_id}` (то же у export `queue`/`step`). Job id резолвится скриптом `.github/scripts/analytics/resolve_github_job_id.py` с пагинацией jobs API.
 
 ## CLI в job
 
@@ -40,7 +42,7 @@ python3 "$CI_METRICS_PY" track-tests --report "$CURRENT_REPORT"   # pass/fail/sk
 | `branch` | `BRANCH_NAME` / `GITHUB_BASE_REF` / event / `GITHUB_REF_NAME` |
 | `commit` | `ORIGINAL_HEAD` / event / `GITHUB_SHA` |
 | `pr_number` | `PR_NUMBER` или event |
-| `build_preset` | `BUILD_PRESET` или из `job_name` |
+| `build_preset` | `BUILD_PRESET` (в job; в export — regex по имени job) |
 | `run_attempt` | `GITHUB_RUN_ATTEMPT` |
 
 Файл буфера: `CI_METRICS_FILE`. Креды склада — как у collector.
@@ -55,7 +57,7 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
   --hours 2
 ```
 
-`--workflow pr_check.yml` (можно несколько) или все active workflows. `--org` / `--repo` / `--table-path` по желанию.
+Окно: `MAX(exported_at)` по `github_job`/`github_step` минус 15 минут, но не старше `--hours` (fallback 2ч, если watermark нет). `--workflow pr_check.yml` (можно несколько) или все active workflows. `--org` / `--repo` / `--table-path` по желанию.
 
 ```bash
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py'

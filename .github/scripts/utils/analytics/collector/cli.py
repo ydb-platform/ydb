@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from typing import Any, Callable, Dict, Optional
 
@@ -13,19 +12,8 @@ from .values import parse_labels
 
 def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     properties: Dict[str, Any] = {}
-    raw_json = getattr(args, "json", None)
-    if raw_json:
-        try:
-            parsed = json.loads(raw_json)
-        except json.JSONDecodeError:
-            print("Warning: --json is not valid JSON", file=sys.stderr)
-        else:
-            if isinstance(parsed, dict):
-                properties.update(parsed)
-            else:
-                print("Warning: --json must be a JSON object", file=sys.stderr)
     label_items = list(getattr(args, "label", None) or [])
-    properties.update(parse_labels(label_items, getattr(args, "extra", None)))
+    properties.update(parse_labels(label_items))
     run_id = getattr(args, "run_id", None)
     if run_id not in (None, ""):
         properties["run_id"] = run_id
@@ -166,7 +154,6 @@ def run_cli(
 def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optional[str] = None) -> None:
     parser.add_argument("positional_name", nargs="?", default=None, help="Event/metric name")
     parser.add_argument("--name", default=None, help="Event/metric name")
-    parser.add_argument("--json", default=None, help="Optional measurement JSON (merged with flags)")
     parser.add_argument("--kind", default=kind_default, choices=sorted(KIND_UNITS))
     parser.add_argument("--source", default=None, help="Producer id, e.g. nightly_build")
     parser.add_argument("--value", type=float, default=None)
@@ -178,7 +165,6 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("--conclusion", default=None)
     parser.add_argument("--error", default=None, help="Short error/status reason (labels.error)")
     parser.add_argument("--label", action="append", default=[], help="key=value")
-    parser.add_argument("--extra", default=None, help="JSON object merged into labels")
     parser.add_argument("--file", default=None, help="JSONL path")
     parser.add_argument("--run-id", default=None, help="Run id (or $ANALYTICS_RUN_ID)")
 

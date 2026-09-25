@@ -6,7 +6,6 @@ import json
 import os
 import re
 import secrets
-import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
@@ -86,7 +85,7 @@ def _as_json(value: Any) -> Optional[str]:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def parse_labels(items: Optional[Iterable[str]], extra: Optional[str] = None) -> Dict[str, Any]:
+def parse_labels(items: Optional[Iterable[str]]) -> Dict[str, Any]:
     labels: Dict[str, Any] = {}
     for item in items or []:
         if not item or "=" not in item:
@@ -95,17 +94,22 @@ def parse_labels(items: Optional[Iterable[str]], extra: Optional[str] = None) ->
         key = key.strip()
         if key:
             labels[key] = value
-    if extra:
-        try:
-            parsed = json.loads(extra)
-        except json.JSONDecodeError:
-            print("Warning: --extra is not valid JSON", file=sys.stderr)
-        else:
-            if isinstance(parsed, dict):
-                labels.update(parsed)
-            else:
-                print("Warning: --extra must be a JSON object", file=sys.stderr)
     return labels
+
+
+def normalize_skip_reason(raw: Dict[str, Any]) -> Optional[str]:
+    if not str(raw.get("name") or "").strip():
+        return "no name"
+    if parse_datetime(raw.get("event_ts") or raw.get("started_at")) is None:
+        return "no event_ts"
+    if _as_uint(raw.get("run_id")) is None:
+        return "no run_id"
+    labels = _coerce_labels(raw)
+    if not str(raw.get("source") or labels.get("source") or "").strip():
+        return "no source"
+    if not str(raw.get("span_id") or labels.get("span_id") or "").strip():
+        return "no span_id"
+    return None
 
 
 def merge_defaults(raw: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:

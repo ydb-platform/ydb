@@ -6,9 +6,8 @@ import json
 import os
 import secrets
 import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .buffer import append_record, read_pending_spans, read_send_offset, write_pending_spans
 from .schema import AttachFn, EnrichFn, INTERNAL_FIELD_KEYS, default_metrics_file
@@ -284,7 +283,7 @@ def track(
     merged = _record_kwargs(properties, labels)
     resolved_kind = kind
     if resolved_kind is None and value is None and finished_epoch is None and merged.get("value") is None:
-        resolved_kind = "info" if "payload" in merged else "event"
+        resolved_kind = "event"
     record = build_track_record(
         name,
         merged,
@@ -314,19 +313,15 @@ def send(
     table_path: Optional[str] = None,
     **fields: Any,
 ) -> int:
-    """End leftover spans (or record a named instant event) and export the batch."""
+    """End leftover spans and export the batch. Does not invent a new event."""
     path = file or default_metrics_file()
     extras = _record_kwargs(properties, None)
     extras.update({key: value for key, value in fields.items() if value is not None})
     for key in INTERNAL_FIELD_KEYS:
         extras.pop(key, None)
     extras.pop("payload", None)
-    pending = read_pending_spans(path)
-    hook = {"attach": attach, "enrich": enrich}
-    if name and not any(span.get("name") == name for span in pending):
-        track(name, extras, file=path, **hook)
-    else:
-        end(name, extras, file=path, enrich=enrich)
+    extras.pop("attach", None)
+    end(name, extras, file=path, enrich=enrich)
     if flush is None:
         from .flush import flush_file as default_flush
 
@@ -334,16 +329,3 @@ def send(
     if table_path:
         return flush(path, table_path=table_path)
     return flush(path)
-
-
-@contextmanager
-def timed(name: str, **kwargs: Any) -> Iterator[None]:
-    file = kwargs.pop("file", None)
-    start(name, file=file, **kwargs)
-    try:
-        yield
-    except Exception:
-        end(name, file=file, conclusion="failure")
-        raise
-    else:
-        end(name, file=file, conclusion="success")

@@ -6,13 +6,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
 INVENTORY_LABEL = "runner.inventory"
 USAGE_LABEL = "runner.usage"
 CACHE_ENV = "CI_RUNNER_INFO_FILE"
-USAGE_CPU_SAMPLE_SEC = 0.05
 TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
@@ -73,9 +71,9 @@ def collect_inventory() -> Dict[str, Any]:
         return {}
 
 
-def collect_usage(*, sample_sec: float = USAGE_CPU_SAMPLE_SEC) -> Dict[str, Any]:
+def collect_usage(*, sample_sec: float = 0) -> Dict[str, Any]:
     try:
-        return _collect_usage(sample_sec=sample_sec)
+        return _collect_usage()
     except Exception:  # noqa: BLE001 — telemetry must not fail CI
         return {}
 
@@ -130,9 +128,9 @@ def _collect_inventory() -> Dict[str, Any]:
     return out
 
 
-def _collect_usage(*, sample_sec: float) -> Dict[str, Any]:
+def _collect_usage() -> Dict[str, Any]:
     out: Dict[str, Any] = {}
-    cpu_pct = _cpu_pct(sample_sec)
+    cpu_pct = _cpu_load_pct()
     if cpu_pct is not None:
         out["cpu_pct"] = cpu_pct
     mem = _meminfo()
@@ -188,30 +186,16 @@ def _disk_usage(path: str) -> Optional[Dict[str, int]]:
     }
 
 
-def _read_proc_stat() -> Optional[Tuple[float, float]]:
+def _cpu_load_pct() -> Optional[float]:
     try:
-        with open("/proc/stat", encoding="utf-8") as handle:
-            parts = handle.readline().split()
-        total = sum(int(item) for item in parts[1:])
-        idle = int(parts[4]) if len(parts) > 4 else 0
-        if len(parts) > 5:
-            idle += int(parts[5])
-        return float(total), float(idle)
+        with open("/proc/loadavg", encoding="utf-8") as handle:
+            load1 = float(handle.read().split()[0])
+        cpus = os.cpu_count() or 1
+        return round(100.0 * load1 / cpus, 2)
     except (OSError, ValueError, IndexError):
-        return None
-
-
-def _cpu_pct(sample_sec: float) -> Optional[float]:
-    first = _read_proc_stat()
-    if first is None:
-        return None
-    if sample_sec > 0:
-        time.sleep(sample_sec)
-    second = _read_proc_stat()
-    if second is None:
-        return None
-    total_delta = second[0] - first[0]
-    idle_delta = second[1] - first[1]
-    if total_delta <= 0:
-        return 0.0
-    return round(100.0 * (1.0 - idle_delta / total_delta), 2)
+        try:
+            load1 = os.getloadavg()[0]
+        except OSError:
+            return None
+        cpus = os.cpu_count() or 1
+        return round(100.0 * load1 / cpus, 2)

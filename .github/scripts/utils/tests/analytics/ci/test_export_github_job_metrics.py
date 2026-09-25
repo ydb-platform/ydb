@@ -14,13 +14,17 @@ add_product_paths(ANALYTICS)
 import os
 import unittest
 
+from datetime import datetime, timedelta, timezone
+
 from github_actions.export_github_job_metrics import (
     ALL_WORKFLOWS,
     DEFAULT_WORKFLOWS,
     attach_pull_requests,
     is_all_workflows,
+    last_export_at,
     pull_refs_from_commit_pulls,
     pull_requests_have_target,
+    resolve_created_since,
     resolve_workflows,
     split_workflows,
     workflow_file_name,
@@ -124,6 +128,34 @@ class ListWorkflowsTest(unittest.TestCase):
             ),
             ["pr_check.yml", "run_tests.yml"],
         )
+
+
+class WatermarkTest(unittest.TestCase):
+    def test_falls_back_to_hours_when_no_last_export(self):
+        original = last_export_at
+        import github_actions.export_github_job_metrics as exp
+
+        exp.last_export_at = lambda table_path=None: None
+        try:
+            since = resolve_created_since(2)
+            delta = datetime.now(timezone.utc) - since
+            self.assertGreater(delta.total_seconds(), 2 * 3600 - 5)
+            self.assertLess(delta.total_seconds(), 2 * 3600 + 5)
+        finally:
+            exp.last_export_at = original
+
+    def test_uses_last_export_minus_15m_when_recent(self):
+        import github_actions.export_github_job_metrics as exp
+
+        last = datetime.now(timezone.utc) - timedelta(minutes=10)
+        original = exp.last_export_at
+        exp.last_export_at = lambda table_path=None: last
+        try:
+            since = resolve_created_since(2)
+            expected = last - timedelta(minutes=15)
+            self.assertLess(abs((since - expected).total_seconds()), 2)
+        finally:
+            exp.last_export_at = original
 
 
 if __name__ == "__main__":

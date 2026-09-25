@@ -158,15 +158,10 @@ runs:
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
-        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-        job_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
-          -H "Authorization: Bearer ${{ github.token }}" \
-          -H "Accept: application/vnd.github+json" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "$jobs_url" || true)
-        job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .id' | head -1 || true)
-        job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .name' | head -1 || true)
-        if [ -z "$job_id" ]; then
+        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py "$BUILD_PRESET" || true)
+        job_id="${resolved%%$'\t'*}"
+        job_title="${resolved#*$'\t'}"
+        if [ -z "$job_id" ] || [ "$job_id" = "$resolved" ]; then
           echo "failed to resolve GITHUB_NUMERIC_JOB_ID for preset ${BUILD_PRESET}; metrics will be dropped" >&2
         else
           echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"

@@ -784,9 +784,10 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    // FlagTrackDelivery, plus FlagSubscribeOnSession for the 1st event since the session was (re)connected
-    ui32 SendFlags() {
-        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    // FlagTrackDelivery on the interconnect channel given (DqIcChannelData or DqIcChannelControl), plus
+    // FlagSubscribeOnSession for the 1st event since the session was (re)connected
+    ui32 SendFlags(ui32 icChannel) {
+        ui32 flags = NActors::IEventHandle::MakeFlags(icChannel, NActors::IEventHandle::FlagTrackDelivery);
         // a load first: a locked exchange on every event would bounce the line between the sending threads
         if (!Subscribed.load() && !Subscribed.exchange(true)) {
             flags |= NActors::IEventHandle::FlagSubscribeOnSession;

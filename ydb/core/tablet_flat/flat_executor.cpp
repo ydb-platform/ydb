@@ -2951,7 +2951,7 @@ void TExecutor::MakeLogSnapshot() {
         version->SetHead(ui32(NTable::ECompatibility::Edge));
     }
 
-    LogicAlter->SnapToLog(snap);
+    LogicAlter->SnapToLog(snap, *commit);
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;

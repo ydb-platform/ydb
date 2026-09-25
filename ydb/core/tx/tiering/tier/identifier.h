@@ -41,6 +41,11 @@ public:
     TString ToString() const {
         return ObjectKeyPrefix ? "s3:" + ::ToString(ConfigPath.size()) + ":" + ConfigPath + *ObjectKeyPrefix : ConfigPath;
     }
+
+    static TString GetDisplayName(const TString& storageId) {
+        return storageId.StartsWith("s3:") ? FromString(storageId).GetConfigPath() : storageId;
+    }
+
     friend IOutputStream& operator<<(IOutputStream& out, const TExternalStorageId& storageId) {
         return out << storageId.ToString();
     }

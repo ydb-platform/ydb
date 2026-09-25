@@ -1,9 +1,31 @@
 #include "object_key.h"
 
-#include <util/digest/multi.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
+
+namespace {
+
+ui64 MixObjectKeyHash(ui64 value) {
+    value += ~(value << 32);
+    value ^= value >> 22;
+    value += ~(value << 13);
+    value ^= value >> 8;
+    value += value << 3;
+    value ^= value >> 15;
+    value += ~(value << 27);
+    value ^= value >> 31;
+    return value;
+}
+
+ui64 GetObjectKeyHash(const TLogoBlobID& blobId) {
+    ui64 hash = blobId.Cookie();
+    hash = MixObjectKeyHash(hash) ^ blobId.Step();
+    hash = MixObjectKeyHash(hash) ^ blobId.Generation();
+    return MixObjectKeyHash(hash) ^ blobId.TabletID();
+}
+
+}   // namespace
 
 ui32 TObjectKey::GetChannelForWriting() const {
     return StorageId.GetObjectKeyPrefix() ? TreeLayoutChannel : FlatLayoutChannel;
@@ -14,7 +36,7 @@ TString TObjectKey::Make(const TLogoBlobID& blobId) const {
         return blobId.ToString();
     }
 
-    const size_t hash = MultiHash(blobId.TabletID(), blobId.Generation(), blobId.Step(), blobId.Cookie());
+    const ui64 hash = GetObjectKeyHash(blobId);
     static constexpr char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
     TStringBuilder key;
     if (StorageId.GetObjectKeyPrefix() && !StorageId.GetObjectKeyPrefix()->empty()) {

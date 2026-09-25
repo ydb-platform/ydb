@@ -114,7 +114,10 @@ class TestTieringRestart(RestartToAnotherVersionFixture):
         assert result[0].rows[0].checksum == count * (count - 1) // 2
         result = self.query("SELECT SUM(LENGTH(payload)) AS bytes FROM tiered;")
         assert result[0].rows[0].bytes == sum(len(row["payload"]) for row in rows)
-        self.query("ALTER TABLE tiered SET TTL Interval(\"PT0S\") DELETE ON ts;")
+        self.query(f"""
+            ALTER TABLE tiered SET TTL
+                Interval("PT1S") TO EXTERNAL DATA SOURCE {target}, Interval("PT2S") DELETE ON ts;
+        """)
         self.wait_for(lambda: self.query("SELECT COUNT(*) AS count FROM tiered;")[0].rows[0].count == 0,
                       "Expired rows were not deleted after changing version")
         self.wait_for(lambda: not list(bucket.objects.all()), "Tier objects were not collected after changing version")

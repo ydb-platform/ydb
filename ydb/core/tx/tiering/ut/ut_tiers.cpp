@@ -79,7 +79,7 @@ public:
 
     void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
-        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
+        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64", const TString& ttlSettings = {}) {
         CreateTestOlapStore(Sprintf(R"(
              Name: "%s"
              ColumnShardCount: %d
@@ -99,13 +99,14 @@ public:
         TBase::CreateTestOlapTable(storeName, Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
+            %s
             Sharding {
                 HashSharding {
                     Function: %s
                     Columns: %s
                 }
             }
-        )", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
+        )", tableName.c_str(), tableShardsCount, ttlSettings.c_str(), shardingFunction.c_str(), shardingColumns.c_str()));
     }
 
     void CreateTestOlapTableWithTTL(TString tableName = "olapTable", ui32 tableShardsCount = 3,
@@ -557,12 +558,29 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT_VALUES_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetConfigVerified().GetProtoConfig().GetEndpoint(), TierEndpoint);
         }
 
-        lHelper.CreateTestOlapTable("olapTable", 2);
+        lHelper.CreateTestOlapTable("olapTable", 2, "olapStore", 4, "HASH_FUNCTION_CONSISTENCY_64", Tree ? R"(
+            TtlSettings {
+                Enabled {
+                    ColumnName: "timestamp"
+                    Tiers {
+                        ApplyAfterSeconds: 864000
+                        EvictToExternalStorage { Storage: "/Root/tier1" ObjectKeyPrefix: "archive/data" }
+                    }
+                    Tiers {
+                        ApplyAfterSeconds: 1728000
+                        EvictToExternalStorage { Storage: "/Root/tier2" ObjectKeyPrefix: "cold" }
+                    }
+                }
+            }
+        )" : "");
         lHelper.StartSchemaRequest(
             R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`))"
         );
-        lHelper.StartSchemaRequest(
-            R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
+        if (!Tree) {
+            lHelper.StartSchemaRequest(
+                R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
+        }
+
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
@@ -603,52 +621,37 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT(check);
         }
         Cerr << "storage initialized..." << Endl;
+        const TString oldRowsQuery = TStringBuilder()
+            << "SELECT COUNT(*) AS count, SUM(LENGTH(message)) AS bytes FROM `/Root/olapStore/olapTable` WHERE timestamp < CAST("
+            << now.GetValue() << "ul AS Timestamp)";
+        const TString expectedRows = lHelper.ReadScanResult(oldRowsQuery);
+        UNIT_ASSERT(expectedRows);
 #ifndef S3_TEST_USAGE
         if (Tree) {
             using TObjectKey = NOlap::NBlobOperations::NTier::TObjectKey;
-            const auto* storage = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>();
-            const TString oldRowsQuery = TStringBuilder() << "SELECT COUNT(*) AS count, SUM(LENGTH(message)) AS bytes FROM `/Root/olapStore/olapTable` WHERE timestamp < CAST("
-                << now.GetValue() << "ul AS Timestamp)";
-            const TString expectedRows = lHelper.ReadScanResult(oldRowsQuery);
-            UNIT_ASSERT(expectedRows);
-            for (const TString prefix : {"archive/data", "another//path"}) {
-                lHelper.StartSchemaRequest(TStringBuilder()
-                    << "ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`"
-                    << prefix << "`, Interval(\"P10000D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`cold` ON timestamp");
-                const TObjectKey keys(NTiers::TExternalStorageId("/Root/tier1", prefix).ToString());
-                bool migrated = false;
-                const auto deadline = Now() + TDuration::Seconds(120);
-                while (Now() < deadline) {
-                    runtime.AdvanceCurrentTime(TDuration::Minutes(6));
-                    lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall);
-                    const auto& bucket = storage->GetBucket("fake");
-                    migrated = bucket.GetSize() != 0;
-                    for (auto it = bucket.begin(); it != bucket.end(); ++it) {
-                        TLogoBlobID blob;
-                        TString error;
-                        if (!keys.Parse(it->first, blob, error) || blob.Channel() != TObjectKey::TreeLayoutChannel) {
-                            migrated = false;
-                            break;
-                        }
-                    }
+            const TObjectKey keys(NTiers::TExternalStorageId("/Root/tier1", TString("archive/data")).ToString());
+            const auto& bucket = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("fake");
+            UNIT_ASSERT(bucket.GetSize());
+            for (auto it = bucket.begin(); it != bucket.end(); ++it) {
+                TLogoBlobID blob;
+                TString error;
+                UNIT_ASSERT_C(keys.Parse(it->first, blob, error), error);
+                UNIT_ASSERT_VALUES_EQUAL(blob.Channel(), TObjectKey::TreeLayoutChannel);
+            }
 
-                    if (migrated) {
-                        break;
-                    }
-                }
-
-                UNIT_ASSERT_C(migrated, "Legacy objects were not migrated and collected for prefix " + prefix);
-                UNIT_ASSERT_VALUES_EQUAL(lHelper.ReadScanResult(oldRowsQuery), expectedRows);
+            for (auto&& view : {"primary_index_portion_stats", "primary_index_stats"}) {
+                const TString query = TStringBuilder()
+                    << "SELECT DISTINCT COALESCE(TierName, Utf8(\"\")) AS TierName FROM `/Root/olapStore/olapTable/.sys/"
+                    << view << "` WHERE Activity = 1 AND TierName != \"__DEFAULT\" ORDER BY TierName";
+                UNIT_ASSERT_VALUES_EQUAL_C(lHelper.ReadScanResult(query), R"([["/Root/tier1"]])", query);
             }
         }
 #endif
 
-/*
-        lHelper.DropTable("/Root/olapStore/olapTable");
-        lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");
-*/
-        lHelper.StartSchemaRequest(
-            R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10000D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20000D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
+        lHelper.StartSchemaRequest(TStringBuilder()
+            << "ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval(\"P10000D\") TO EXTERNAL DATA SOURCE `/Root/tier1`"
+            << (Tree ? ".`archive/data`" : "") << ", Interval(\"P20000D\") TO EXTERNAL DATA SOURCE `/Root/tier2`"
+            << (Tree ? ".`cold`" : "") << " ON timestamp");
         {
             const TInstant start = Now();
             bool check = false;
@@ -668,6 +671,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             UNIT_ASSERT(check);
         }
+        UNIT_ASSERT_VALUES_EQUAL(lHelper.ReadScanResult(oldRowsQuery), expectedRows);
 #ifndef S3_TEST_USAGE
         UNIT_ASSERT_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1);
 #endif

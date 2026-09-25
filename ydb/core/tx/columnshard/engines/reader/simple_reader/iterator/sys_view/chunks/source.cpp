@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 
 #include <library/cpp/json/writer/json.h>
 
@@ -228,11 +229,13 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         ForEachChunkInPKOrder(
             [&](const TColumnRecord& record) {
-                const TString tierName = Portion->GetEntityStorageId(record.GetEntityId(), PortionSchema->GetIndexInfo());
+                const TString tierName = NColumnShard::NTiers::TExternalStorageId::GetDisplayName(
+                    Portion->GetEntityStorageId(record.GetEntityId(), PortionSchema->GetIndexInfo()));
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
             },
             [&](const TIndexChunk& index) {
-                const TString tierName = Portion->GetEntityStorageId(index.GetEntityId(), PortionSchema->GetIndexInfo());
+                const TString tierName = NColumnShard::NTiers::TExternalStorageId::GetDisplayName(
+                    Portion->GetEntityStorageId(index.GetEntityId(), PortionSchema->GetIndexInfo()));
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
             });
         return NArrow::FinishBuilder(std::move(builder));

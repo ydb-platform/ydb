@@ -7,4 +7,9 @@ enum class ETieringObjectKeyTree {
     Enabled,
 };
 
+enum class ETieringTableLocation {
+    Standalone,
+    InStore,
+};
+
 }

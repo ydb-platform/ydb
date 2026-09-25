@@ -4478,7 +4478,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryReadFromDisabled, TStreamingWithSchemaSecretsTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryReadFrom(false);
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryDisposition(true);
+        featureFlags->SetEnableStreamingQueryReadFrom(false);
         CreateTopic("readFromDisabledInput");
         CreateTopic("readFromDisabledOutput");
         CreatePqSource("sourceName");

@@ -817,6 +817,56 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
     return IGraphTransformer::TStatus::Repeat;
 }
 
+IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TContext& ctx)
+{
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureComputable(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(input->Tail(), ctx.Expr, isUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Keep the resolved column (or its deferred error) until the parent
+    // has had a chance to interpret the original identifier as a type.
+    input->SetTypeAnn(isUniversal ? ctx.Expr.MakeType<TUniversalExprType>() : input->Head().GetTypeAnn());
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus FinalizeYqlColumnRefs(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx)
+{
+    YQL_ENSURE(input->IsCallable("YqlSelect"));
+
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
+    settings.VisitChecker = [&](const TExprNode& node) {
+        // Nested SELECTs finalize their own column references.
+        return &node == input.Get() || !node.IsCallable({"YqlSelect", "PgSelect"});
+    };
+
+    return OptimizeExpr(
+        input,
+        output,
+        [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+            // Type arguments have already been consumed by EnsureTypeRewrite.
+            return node->IsCallable("YqlColumnOrType") ? node->HeadPtr() : node;
+        },
+        ctx.Expr,
+        settings);
+}
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
 {

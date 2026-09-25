@@ -16923,6 +16923,8 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["YqlResultItem"] = &SqlResultItemWrapper;
     ExtFunctions["YqlValuesList"] = &SqlValuesListWrapper;
     Functions["YqlColumnRef"] = &SqlColumnRefWrapper;
+    Functions["YqlColumnRefOrType"] = &SqlColumnRefWrapper;
+    Functions["YqlColumnOrType"] = &YqlColumnOrTypeWrapper;
     Functions["YqlSubLink"] = &SqlSubLinkWrapper;
     Functions["YqlSelf"] = &SqlSelfWrapper;
     Functions["YqlStar"] = &SqlStarWrapper;

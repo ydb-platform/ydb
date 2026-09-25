@@ -1520,6 +1520,60 @@ Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
 }
 
+TString VerifyYqlColumnRefs(
+    const TString& query,
+    ui32 expectedColumnRefs,
+    ui32 expectedColumnRefOrTypeRefs)
+{
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef ", "YqlColumnRefOrType"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_GT_C(stat["YqlSelect"], 0, program);
+    UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlColumnRef "], expectedColumnRefs, program);
+    UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlColumnRefOrType"], expectedColumnRefOrTypeRefs, program);
+    return program;
+}
+
+Y_UNIT_TEST(ColumnRefOrTypeInAutoMode) {
+    VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT EvaluateExpr(FormatType(TypeOf(AsErased(Int64))));
+    )sql", 0, 1);
+}
+
+Y_UNIT_TEST(ColumnRefOrTypePeekErasedTypeArgument) {
+    VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT PeekErased(AsErased(42), Int64)
+        FROM (VALUES (1)) AS lhs (Int64)
+        CROSS JOIN (VALUES (2)) AS rhs (Int64);
+    )sql", 0, 1);
+}
+
+Y_UNIT_TEST(ColumnRefOrTypePeekErasedWithColumn) {
+    const auto program = VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT PeekErased(AsErased(1), Int64) AS value
+        FROM (VALUES (CAST(42 AS Int64))) AS src (Int64);
+    )sql", 0, 1);
+    UNIT_ASSERT_STRING_CONTAINS(
+        program,
+        R"yql((PeekErased (AsErased (Int32 '"1")) (YqlColumnRefOrType '"Int64")))yql");
+}
+
+Y_UNIT_TEST(ColumnRefOrTypePeekErasedInSubquery) {
+    VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT PeekErased(AsErased(1), Int64)) AS value
+        FROM (VALUES (CAST(42 AS Int64))) AS src (Int64);
+    )sql", 0, 1);
+}
+
 Y_UNIT_TEST(NamedNodeSubqueryReuse) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

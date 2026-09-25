@@ -24,6 +24,58 @@ namespace {
 
 void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks, bool& isUniversal);
 
+enum class ESqlColumnRefStatus {
+    Found,
+    Row,
+    NoFrom,
+    UnknownAlias,
+    Ambiguous,
+    AmbiguousTable,
+    Missing,
+};
+
+struct TSqlColumnRefCandidate {
+    const TInput* Input = nullptr;
+    ui32 Position = 0;
+    bool IsVirtual = false;
+};
+
+struct TSqlColumnRefMatch {
+    ESqlColumnRefStatus Status = ESqlColumnRefStatus::Missing;
+    const TInput* Input = nullptr;
+    const TInput* RowInput = nullptr;
+    TMaybe<ui32> Position;
+    bool IsVirtual = false;
+    TVector<TSqlColumnRefCandidate> Candidates;
+};
+
+TString ColumnRefErrorMessage(const TExprNode& node, ESqlColumnRefStatus status) {
+    switch (status) {
+        case ESqlColumnRefStatus::NoFrom:
+            return "Column reference can't be used without FROM";
+        case ESqlColumnRefStatus::UnknownAlias:
+            return TStringBuilder() << "Unknown alias: " << node.Head().Content();
+        case ESqlColumnRefStatus::Ambiguous:
+            return TStringBuilder() << "Column reference is ambiguous: " << node.Tail().Content();
+        case ESqlColumnRefStatus::AmbiguousTable:
+            return TStringBuilder() << "Table reference is ambiguous: " << node.Tail().Content();
+        case ESqlColumnRefStatus::Missing:
+            return TStringBuilder() << "No such column: " << node.Tail().Content();
+        case ESqlColumnRefStatus::Found:
+        case ESqlColumnRefStatus::Row:
+            break;
+    }
+
+    YQL_ENSURE(false, "Unexpected successful column reference status");
+    return {};
+}
+
+TSqlColumnRefMatch ResolveSqlColumnRef(
+    const TExprNode& node,
+    const TInputs& inputs,
+    const THashSet<TString>& possibleAliases,
+    bool scanColumnsOnly);
+
 bool ScanColumns(
     TExprNode::TPtr root,
     TInputs& inputs,
@@ -201,6 +253,105 @@ void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks, bool& isUniversal) {
     });
 }
 
+TSqlColumnRefMatch ResolveSqlColumnRef(
+    const TExprNode& node,
+    const TInputs& inputs,
+    const THashSet<TString>& possibleAliases,
+    bool scanColumnsOnly)
+{
+    YQL_ENSURE(node.IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"}));
+
+    if (inputs.empty()) {
+        return {.Status = ESqlColumnRefStatus::NoFrom};
+    }
+
+    const bool qualified = node.ChildrenSize() == 2;
+    if (qualified && !possibleAliases.contains(TString(node.Head().Content()))) {
+        return {.Status = ESqlColumnRefStatus::UnknownAlias};
+    }
+
+    const TString columnName(node.Tail().Content());
+    const TInput* matchedAliasInput = nullptr;
+    const TInput* matchedAliasInputI = nullptr;
+    ui32 matchedAliasICount = 0;
+
+    for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
+        ui32 matches = 0;
+        const TInput* matchedInput = nullptr;
+        TMaybe<ui32> matchedPosition;
+        bool matchedIsVirtual = false;
+        TVector<TSqlColumnRefCandidate> candidates;
+
+        for (const auto& input : inputs) {
+            if (priority != input.Priority) {
+                continue;
+            }
+            if (qualified && (input.Alias.empty() || node.Head().Content() != input.Alias)) {
+                continue;
+            }
+
+            if (!input.Alias.empty()) {
+                if (columnName == input.Alias) {
+                    matchedAliasInput = &input;
+                } else if (AsciiEqualsIgnoreCase(columnName, input.Alias)) {
+                    ++matchedAliasICount;
+                    matchedAliasInputI = &input;
+                }
+            }
+
+            if (input.Order && input.Order->IsDuplicatedIgnoreCase(columnName)) {
+                return {.Status = ESqlColumnRefStatus::Ambiguous};
+            }
+
+            bool isVirtual;
+            if (const auto position = input.Type->FindItemI(columnName, &isVirtual)) {
+                ++matches;
+                matchedInput = &input;
+                matchedPosition = position;
+                matchedIsVirtual = isVirtual;
+                if (scanColumnsOnly) {
+                    candidates.push_back({.Input = &input, .Position = *position, .IsVirtual = isVirtual});
+                }
+                if (!scanColumnsOnly && matches > 1) {
+                    return {.Status = ESqlColumnRefStatus::Ambiguous};
+                }
+            }
+        }
+
+        if (matches) {
+            return {
+                .Status = ESqlColumnRefStatus::Found,
+                .Input = matchedInput,
+                .Position = matchedPosition,
+                .IsVirtual = matchedIsVirtual,
+                .Candidates = std::move(candidates),
+            };
+        }
+
+        if (priority == TInput::External) {
+            if (scanColumnsOnly) {
+                return {.Status = ESqlColumnRefStatus::Missing};
+            }
+
+            const TInput* rowInput = nullptr;
+            if (matchedAliasInput) {
+                rowInput = matchedAliasInput;
+            } else if (matchedAliasInputI) {
+                rowInput = matchedAliasInputI;
+            }
+
+            if (!matchedAliasInput && matchedAliasICount > 1) {
+                return {.Status = ESqlColumnRefStatus::AmbiguousTable};
+            }
+            if (rowInput) {
+                return {.Status = ESqlColumnRefStatus::Row, .RowInput = rowInput};
+            }
+        }
+    }
+
+    return {.Status = ESqlColumnRefStatus::Missing};
+}
+
 bool ScanColumns(
     TExprNode::TPtr root,
     TInputs& inputs,
@@ -292,7 +443,8 @@ bool ScanColumns(
                     break;
                 }
             }
-        } else if (node->IsCallable({"YqlColumnRef", "PgColumnRef"})) {
+        } else if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"})) {
+            const bool columnOrType = node->IsCallable("YqlColumnRefOrType");
             if (hasStar && *hasStar && !hasEmitPgStar) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Star is incompatible to column reference"));
                 isError = true;
@@ -300,128 +452,79 @@ bool ScanColumns(
             }
 
             hasColumnRef = true;
-            if (inputs.empty()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Column reference can't be used without FROM"));
-                isError = true;
-                return false;
-            }
-
-            if (node->ChildrenSize() == 2 && possibleAliases.find(node->Head().Content()) == possibleAliases.end()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), TStringBuilder() << "Unknown alias: " << node->Head().Content()));
-                isError = true;
-                return false;
-            }
+            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, scanColumnsOnly);
+            const auto deferred = columnOrType && match.Status != ESqlColumnRefStatus::AmbiguousTable;
             auto lcase = to_lower(TString(node->Tail().Content()));
-            if (auto it = usedInUsing.find(lcase); node->ChildrenSize() == 1 && it != usedInUsing.end()) {
+            if (const auto it = usedInUsing.find(lcase);
+                node->ChildrenSize() == 1 && it != usedInUsing.end() &&
+                match.Status != ESqlColumnRefStatus::NoFrom)
+            {
                 refs.insert(it->second);
-            } else {
-                TString foundAlias;
-                bool matchedAlias = false;
-                ui32 matchedAliasI = 0;
-                TMaybe<ui32> matchedAliasIndex;
-                TMaybe<ui32> matchedAliasIndexI;
-                for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {
-                    ui32 matches = 0;
-                    for (ui32 inputIndex = 0; inputIndex < inputs.size(); ++inputIndex) {
-                        auto& x = inputs[inputIndex];
-                        if (priority != x.Priority) {
-                            continue;
+                return true;
+            }
+
+            switch (match.Status) {
+                case ESqlColumnRefStatus::Found: {
+                    const auto& input = *match.Input;
+                    if (qualifiedRefs && !input.Alias.empty()) {
+                        (*qualifiedRefs)[input.Alias].insert(TString(node->Tail().Content()));
+                    } else {
+                        refs.insert(TString(node->Tail().Content()));
+                    }
+                    const auto recordExternalColumn = [&](const TInput* candidateInput, ui32 position, bool isVirtual) {
+                        if (candidateInput->Priority == TInput::External) {
+                            const auto& candidateItem = candidateInput->Type->GetItems()[position];
+                            inputs[candidateInput - inputs.data()].UsedExternalColumns.insert(TString(candidateItem->GetCleanName(isVirtual)));
                         }
-
-                        if (node->ChildrenSize() == 2) {
-                            if (x.Alias.empty() || node->Head().Content() != x.Alias) {
-                                continue;
-                            }
-                        }
-
-                        if (!x.Alias.empty()) {
-                            if (node->Tail().Content() == x.Alias) {
-                                matchedAlias = true;
-                                matchedAliasIndex = inputIndex;
-                            } else if (AsciiEqualsIgnoreCase(node->Tail().Content(), x.Alias)) {
-                                ++matchedAliasI;
-                                matchedAliasIndexI = inputIndex;
-                            }
-                        }
-
-                        if (x.Order && x.Order->IsDuplicatedIgnoreCase(TString(node->Tail().Content()))) {
-                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                    TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
-                                isError = true;
-                                return false;
-                        }
-
-                        bool isVirtual;
-                        auto pos = x.Type->FindItemI(node->Tail().Content(), &isVirtual);
-                        if (pos) {
-                            foundAlias = x.Alias;
-                            ++matches;
-                            if (!scanColumnsOnly && matches > 1) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                    TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
-                                isError = true;
-                                return false;
-                            }
-
-                            if (x.Priority == TInput::External) {
-                                auto name = TString(x.Type->GetItems()[*pos]->GetCleanName(isVirtual));
-                                x.UsedExternalColumns.insert(name);
+                    };
+                    if (match.Candidates.empty()) {
+                        recordExternalColumn(match.Input, *match.Position, match.IsVirtual);
+                    }
+                    for (const auto& candidate : match.Candidates) {
+                        recordExternalColumn(candidate.Input, candidate.Position, candidate.IsVirtual);
+                    }
+                    return true;
+                }
+                case ESqlColumnRefStatus::Row:
+                    for (const auto& item : match.RowInput->Type->GetItems()) {
+                        if (!item->GetName().StartsWith("_yql_")) {
+                            refs.insert(TString(item->GetName()));
+                            if (match.RowInput->Priority == TInput::External) {
+                                inputs[match.RowInput - inputs.data()].UsedExternalColumns.insert(TString(item->GetName()));
                             }
                         }
                     }
-
-                    if (matches) {
-                        break;
-                    }
-
-                    if (!matches && priority == TInput::External) {
-                        if (scanColumnsOnly) {
-                            // projection columns aren't available yet
-                            return true;
-                        }
-
-                        TInput* tableRefInput = nullptr;
-                        if (matchedAlias) {
-                            tableRefInput = &inputs[*matchedAliasIndex];
-                        } else {
-                            if (matchedAliasI > 1) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                        TStringBuilder() << "Table reference is ambiguous: " << node->Tail().Content()));
-                                isError = true;
-                                return false;
-                            }
-
-                            if (matchedAliasI == 1) {
-                                tableRefInput = &inputs[*matchedAliasIndexI];
-                            }
-                        }
-
-                        if (!tableRefInput) {
-                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
-                                TStringBuilder() << "No such column: " << node->Tail().Content()));
-                            isError = true;
-                            return false;
-                        }
-
-                        for (const auto& item : tableRefInput->Type->GetItems()) {
-                            if (!item->GetName().StartsWith("_yql_")) {
-                                refs.insert(TString(item->GetName()));
-                                if (tableRefInput->Priority == TInput::External) {
-                                    tableRefInput->UsedExternalColumns.insert(TString(item->GetName()));
-                                }
-                            }
-                        }
-
+                    return true;
+                case ESqlColumnRefStatus::NoFrom:
+                    if (deferred) {
                         return true;
                     }
-                }
-
-                if (foundAlias && qualifiedRefs) {
-                    (*qualifiedRefs)[foundAlias].insert(TString(node->Tail().Content()));
-                } else {
-                    refs.insert(TString(node->Tail().Content()));
-                }
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    break;
+                case ESqlColumnRefStatus::UnknownAlias:
+                    if (deferred) {
+                        return true;
+                    }
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    break;
+                case ESqlColumnRefStatus::Ambiguous:
+                    if (deferred) {
+                        return true;
+                    }
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    break;
+                case ESqlColumnRefStatus::AmbiguousTable:
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    break;
+                case ESqlColumnRefStatus::Missing:
+                    if (scanColumnsOnly || deferred) {
+                        return true;
+                    }
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), ColumnRefErrorMessage(*node, match.Status)));
+                    break;
             }
+            isError = true;
+            return false;
         }
         return true;
     });
@@ -893,6 +996,13 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
         }
     }
 
+    THashSet<TString> possibleAliases;
+    for (const auto& input : inputs) {
+        if (!input.Alias.empty()) {
+            possibleAliases.insert(input.Alias);
+        }
+    }
+
     TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChanges = true;
     optSettings.VisitChecker = [](const TExprNode& node) {
@@ -994,91 +1104,77 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             return argNode;
         }
 
-        if (node->IsCallable({"YqlColumnRef", "PgColumnRef"})) {
-            const TInput* matchedAliasInput = nullptr;
-            const TInput* matchedAliasInputI = nullptr;
+        if (node->IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"})) {
+            const bool columnOrType = node->IsCallable("YqlColumnRefOrType");
+            const auto wrapColumn = [&](TExprNode::TPtr column) {
+                return columnOrType
+                    ? ctx.Expr.NewCallable(node->Pos(), "YqlColumnOrType", {std::move(column), node->TailPtr()})
+                    : column;
+            };
+            const auto columnError = [&](const TString& message) {
+                const auto* type = ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(node->Pos()), message));
+                return wrapColumn(ctx.Expr.NewCallable(node->Pos(), "Error", {ExpandType(node->Pos(), *type, ctx.Expr)}));
+            };
             if (node->ChildrenSize() == 1 && usedInUsing.contains(node->Tail().Content())) {
                 // clang-format off
-                return ctx.Expr.Builder(node->Pos())
+                return wrapColumn(ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
                                 .Add(0, argNode)
                                 .Atom(1, node->Tail().Content())
                             .Seal()
-                            .Build();
+                            .Build());
                 // clang-format on
             }
-            for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
-                for (const auto& x : inputs) {
-                    if (priority != x.Priority) {
-                        continue;
-                    }
-                    if (node->ChildrenSize() == 2) {
-                        if (x.Alias.empty() || node->Head().Content() != x.Alias) {
-                            continue;
-                        }
-                    }
-
-                    if (!x.Alias.empty()) {
-                        if (node->Tail().Content() == x.Alias) {
-                            matchedAliasInput = &x;
-                        } else if (AsciiEqualsIgnoreCase(node->Tail().Content(), x.Alias)) {
-                            matchedAliasInputI = &x;
-                        }
-                    }
-
-                    auto pos = x.Type->FindItemI(node->Tail().Content(), /*isVirtual=*/nullptr);
-                    if (pos) {
-                        // clang-format off
-                        return ctx.Expr.Builder(node->Pos())
-                            .Callable("Member")
-                                .Add(0, argNode)
-                                .Atom(1, MakeAliasedColumn(x.Alias, x.Type->GetItems()[*pos]->GetName()))
-                            .Seal()
-                            .Build();
-                        // clang-format on
-                    }
-                }
-            }
-
-            if (!matchedAliasInput && matchedAliasInputI) {
-                matchedAliasInput = matchedAliasInputI;
-            }
-
-            if (matchedAliasInput) {
+            const auto match = ResolveSqlColumnRef(*node, inputs, possibleAliases, /*scanColumnsOnly=*/false);
+            if (match.Status == ESqlColumnRefStatus::Found) {
+                const auto& input = *match.Input;
+                const auto& item = input.Type->GetItems()[*match.Position];
                 // clang-format off
-                return ctx.Expr.Builder(node->Pos())
+                auto column = ctx.Expr.Builder(node->Pos())
+                    .Callable("Member")
+                        .Add(0, argNode)
+                        .Atom(1, MakeAliasedColumn(input.Alias, item->GetName()))
+                    .Seal()
+                    .Build();
+                // clang-format on
+                return wrapColumn(std::move(column));
+            }
+
+            if (match.Status == ESqlColumnRefStatus::Row) {
+                const auto& rowInput = *match.RowInput;
+                // clang-format off
+                return wrapColumn(ctx.Expr.Builder(node->Pos())
                     .Callable("PgToRecord")
                         .Callable(0, "DivePrefixMembers")
                             .Add(0, argNode)
                             .List(1)
-                                .Atom(0, MakeAliasedColumn(matchedAliasInput->Alias, ""))
+                                .Atom(0, MakeAliasedColumn(rowInput.Alias, ""))
                             .Seal()
                         .Seal()
                         .List(1)
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
-                                // clang-format on
                                 ui32 pos = 0;
-                                for (ui32 i = 0; i < matchedAliasInput->Type->GetSize(); ++i) {
-                                    auto columnName = matchedAliasInput->Order ?
-                                        matchedAliasInput->Order.GetRef()[i].PhysicalName :
-                                        matchedAliasInput->Type->GetItems()[i]->GetName();
+                                for (ui32 i = 0; i < rowInput.Type->GetSize(); ++i) {
+                                    auto columnName = rowInput.Order ?
+                                        rowInput.Order.GetRef()[i].PhysicalName :
+                                        rowInput.Type->GetItems()[i]->GetName();
                                     if (!columnName.StartsWith("_yql_")) {
-                                        // clang-format off
                                         parent.List(pos++)
                                             .Atom(0, columnName)
                                             .Atom(1, columnName)
                                         .Seal();
-                                        // clang-format on
                                     }
                                 }
-
                                 return parent;
-                            // clang-format off
                             })
                         .Seal()
                     .Seal()
-                    .Build();
+                    .Build());
                 // clang-format on
+            }
+
+            if (columnOrType) {
+                return columnError(ColumnRefErrorMessage(*node, match.Status));
             }
 
             YQL_ENSURE(false, "Missing input");
@@ -4909,6 +5005,13 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
             auto newSettings = ReplaceSetting(options, {}, "sort", newSortTuple, ctx.Expr);
             output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
             return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+
+    if (isYql) {
+        const auto status = FinalizeYqlColumnRefs(input, output, ctx);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
     }
 

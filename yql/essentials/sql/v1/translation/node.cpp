@@ -1660,11 +1660,12 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
                            : BuildQuotedAtom(Pos_, *GetColumnName());
 
         if (IsYqlRef_) {
+            callable = MaybeType_ ? "YqlColumnRefOrType" : "YqlColumnRef";
             if (!Source_.empty()) {
                 TNodePtr source = BuildQuotedAtom(Pos_, Source_);
-                Node_ = Y("YqlColumnRef", std::move(source), ref);
+                Node_ = Y(callable, std::move(source), ref);
             } else {
-                Node_ = Y("YqlColumnRef", ref);
+                Node_ = Y(callable, ref);
             }
         } else {
             Node_ = Y(callable, "row", ref);
@@ -1780,9 +1781,8 @@ TNodePtr BuildColumnOrType(TPosition pos, const TString& column) {
     return new TColumnNode(pos, column, source, maybeType);
 }
 
-TNodePtr BuildYqlColumnRef(TPosition pos) {
+TNodePtr BuildYqlColumnRef(TPosition pos, bool maybeType) {
     TString source = "";
-    bool maybeType = true;
     auto* node = new TColumnNode(pos, /* column = */ "", source, maybeType);
     node->SetAsYqlRef();
     return node;

@@ -72,6 +72,11 @@ TExprNode::TPtr RebuildLambdaYqlWin(
     const TExprNode::TPtr& row,
     const TExprNode* windows,
     TExprContext& ctx);
+IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
+IGraphTransformer::TStatus FinalizeYqlColumnRefs(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

@@ -133,13 +133,13 @@
             {"eventType", ev->Type},                                                        \
             {"sender", ev->Sender.ToString()},                                              \
             {"recipient", SelfId().ToString()},                                             \
-            {"event", ev->ToString().substr(0, 1000)})                                      \
+            {"event", ev->ToString().substr(0, 1000)});                                     \
     } else {                                                                                \
         YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
             {"function", __FUNCTION__},                                                     \
             {"eventType", ev->Type},                                                        \
             {"sender", ev->Sender.ToString()},                                              \
-            {"recipient", ev->Recipient.ToString()})                                        \
+            {"recipient", ev->Recipient.ToString()});                                       \
     }
 
 #define TRACE_EVENT_TYPE(eventType)                                                         \

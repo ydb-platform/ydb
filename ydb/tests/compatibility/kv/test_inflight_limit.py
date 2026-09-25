@@ -74,17 +74,16 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         with urlopen(Request(url, data=data, method="POST"), timeout=120) as response:
             assert response.status == 200
 
-    def test_old_proxy_handles_limit_response_from_current_tablet(self):
+    def _run_concurrent_writes(self, proxy_node):
         current_node = self._nodes_by_binary(current_binary_path)[0]
-        old_node = self._nodes_by_binary(inter_stable_binary_path)[0]
-        old_client = keyvalue_client_factory(
-            old_node.host,
-            old_node.port,
+        client = keyvalue_client_factory(
+            proxy_node.host,
+            proxy_node.port,
             cluster=self.cluster,
             retry_count=1,
         )
 
-        response = old_client.create_tablets(1, self.volume_path)
+        response = client.create_tablets(1, self.volume_path)
         assert response.operation.status == StatusIds.SUCCESS, response
 
         swagger = SwaggerClient(current_node.host, current_node.mon_port)
@@ -108,7 +107,7 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
 
         def write(index):
             barrier.wait()
-            return old_client.kv_write(
+            return client.kv_write(
                 self.volume_path,
                 0,
                 "key_{}".format(index),
@@ -119,7 +118,12 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         with ThreadPoolExecutor(max_workers=CONCURRENT_WRITES) as executor:
             responses = list(executor.map(write, range(CONCURRENT_WRITES)))
 
-        statuses = [item.operation.status for item in responses]
+        return client, [item.operation.status for item in responses]
+
+    def test_old_proxy_handles_limit_response_from_current_tablet(self):
+        old_node = self._nodes_by_binary(inter_stable_binary_path)[0]
+        old_client, statuses = self._run_concurrent_writes(old_node)
+
         assert StatusIds.SUCCESS in statuses, statuses
         assert StatusIds.UNAVAILABLE in statuses, statuses
         assert all(
@@ -128,4 +132,23 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         ), statuses
 
         response = old_client.kv_write(self.volume_path, 0, "after_burst", b"ok")
+        assert response.operation.status == StatusIds.SUCCESS, response
+
+    def test_current_proxy_returns_overloaded(self):
+        current_node = self._nodes_by_binary(current_binary_path)[0]
+        current_client, statuses = self._run_concurrent_writes(current_node)
+
+        assert StatusIds.SUCCESS in statuses, statuses
+        assert StatusIds.OVERLOADED in statuses, statuses
+        assert all(
+            status in (StatusIds.SUCCESS, StatusIds.OVERLOADED)
+            for status in statuses
+        ), statuses
+
+        response = current_client.kv_write(
+            self.volume_path,
+            0,
+            "after_burst",
+            b"ok",
+        )
         assert response.operation.status == StatusIds.SUCCESS, response

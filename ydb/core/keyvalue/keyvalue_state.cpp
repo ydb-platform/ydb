@@ -100,8 +100,7 @@ TKeyValueState::TKeyValueState()
     , RejectNonExistentStorageChannel(RejectNonExistentStorageChannel_Base)
     , UsePerChannelReadQueues_Base(0, 0, 1)
     , UsePerChannelReadQueues(UsePerChannelReadQueues_Base)
-    , RequestsInFlightLimit_Base(10'000, 1, 1'000'000)
-    , RequestsInFlightLimit(RequestsInFlightLimit_Base)
+    , RequestsInFlightLimit(TControlWrapper(10'000, 1, 1'000'000))
 {
     TabletCounters = nullptr;
     Clear();
@@ -647,8 +646,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         RejectNonExistentStorageChannel.ResetControl(RejectNonExistentStorageChannel_Base);
         TControlBoard::RegisterSharedControl(UsePerChannelReadQueues_Base, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
         UsePerChannelReadQueues.ResetControl(UsePerChannelReadQueues_Base);
-        TControlBoard::RegisterSharedControl(RequestsInFlightLimit_Base, icb->KeyValueVolumeControls.RequestsInFlightLimit);
-        RequestsInFlightLimit.ResetControl(RequestsInFlightLimit_Base);
+        RequestsInFlightLimit.ResetControl(TControlWrapper(
+            icb->KeyValueVolumeControls.RequestsInFlightLimit.AtomicLoad()));
 
         YDB_LOG_DEBUG("Init KeyValue with ICB",
             {"keyValue", TabletId},

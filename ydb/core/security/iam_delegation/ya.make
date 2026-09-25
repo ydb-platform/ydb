@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     events.h
-    iam_actor_base.h
+    iam_actor_base.cpp
     iam_delegation_service.cpp
     services.h
     settings.cpp

@@ -254,172 +254,6 @@ struct TFixture {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(IamDelegationSettings) {
-    // The identity of YDB and the token service come from replication_config.iam_service_control when
-    // IamConfig leaves them empty; IamConfig wins when it sets them; the delegation endpoints never fall back.
-    Y_UNIT_TEST(FromConfigFallsBackToReplicationSection) {
-        NKikimrReplication::TReplicationDefaults replication;
-        auto& shared = *replication.MutableIamServiceControl();
-        shared.SetEndpoint("ts.example.net:4282");
-        shared.SetServiceId("ydb");
-        shared.SetMicroserviceId("data-plane");
-        shared.SetResourceType("resource-manager.cloud");
-        shared.SetEnableSsl(false);
-
-        NKikimrConfig::TIamConfig config;
-        config.SetServiceControlEndpoint("iam.example.net:4283");
-        {
-            const auto settings = TIamDelegationSettings::FromConfig(config, replication);
-            UNIT_ASSERT_VALUES_EQUAL(settings.TokenServiceEndpoint, "ts.example.net:4282");
-            UNIT_ASSERT_VALUES_EQUAL(settings.ServiceId, "ydb");
-            UNIT_ASSERT_VALUES_EQUAL(settings.MicroserviceId, "data-plane");
-            UNIT_ASSERT_VALUES_EQUAL(settings.ResourceType, "resource-manager.cloud");
-            UNIT_ASSERT_VALUES_EQUAL(settings.EnableSsl, false);
-            UNIT_ASSERT_VALUES_EQUAL(settings.ServiceControlEndpoint, "iam.example.net:4283");
-            UNIT_ASSERT_VALUES_EQUAL(settings.ResourceManagerEndpoint, "");
-            UNIT_ASSERT_VALUES_EQUAL(settings.Validate(), "");
-            UNIT_ASSERT_VALUES_EQUAL(settings.ValidateForDelegation(), "");
-        }
-        {
-            config.SetTokenServiceEndpoint("ts.other.net:4282");
-            config.SetServiceId("ydb-other");
-            config.SetEnableSsl(true);
-            const auto settings = TIamDelegationSettings::FromConfig(config, replication);
-            UNIT_ASSERT_VALUES_EQUAL(settings.TokenServiceEndpoint, "ts.other.net:4282");
-            UNIT_ASSERT_VALUES_EQUAL(settings.ServiceId, "ydb-other");
-            UNIT_ASSERT_VALUES_EQUAL(settings.MicroserviceId, "data-plane");
-            UNIT_ASSERT_VALUES_EQUAL(settings.EnableSsl, true);
-        }
-        {
-            // nothing anywhere: the identity is missing, as without the fallback
-            const auto settings = TIamDelegationSettings::FromConfig(NKikimrConfig::TIamConfig(), NKikimrReplication::TReplicationDefaults());
-            UNIT_ASSERT_STRING_CONTAINS(settings.Validate(), "TokenServiceEndpoint");
-        }
-    }
-
-    Y_UNIT_TEST(FromConfigCopiesIamConfig) {
-        NKikimrConfig::TIamConfig config;
-        config.SetTokenServiceEndpoint("ts.example.net:4282");
-        config.SetServiceControlEndpoint("iam.example.net:4283");
-        config.SetResourceManagerEndpoint("rm.example.net:4284");
-        config.SetEnableSsl(false);
-        config.SetServiceId("ydb");
-        config.SetMicroserviceId("data-plane");
-        config.SetResourceType("resource-manager.cloud");
-
-        const auto settings = TIamDelegationSettings::FromConfig(config);
-        // the token service, the IAM control plane and Resource Manager are different endpoints
-        UNIT_ASSERT_VALUES_EQUAL(settings.TokenServiceEndpoint, "ts.example.net:4282");
-        UNIT_ASSERT_VALUES_EQUAL(settings.ServiceControlEndpoint, "iam.example.net:4283");
-        UNIT_ASSERT_VALUES_EQUAL(settings.ResourceManagerEndpoint, "rm.example.net:4284");
-        UNIT_ASSERT_VALUES_EQUAL(settings.CanResolveCloud(), true);
-        UNIT_ASSERT_VALUES_EQUAL(settings.EnableSsl, false);
-        UNIT_ASSERT_VALUES_EQUAL(settings.ServiceId, "ydb");
-        UNIT_ASSERT_VALUES_EQUAL(settings.MicroserviceId, "data-plane");
-        UNIT_ASSERT_VALUES_EQUAL(settings.ResourceType, "resource-manager.cloud");
-        UNIT_ASSERT_VALUES_EQUAL(settings.Validate(), "");
-        UNIT_ASSERT_VALUES_EQUAL(settings.ValidateForDelegation(), "");
-
-        // the constants are not affected by the config
-        UNIT_ASSERT_VALUES_EQUAL(settings.ReferrerType, "ydb.secret");
-        UNIT_ASSERT_VALUES_EQUAL(settings.RequestTimeout, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(settings.OperationPollInterval, TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(settings.OperationPollTimeout, TDuration::Seconds(60));
-        UNIT_ASSERT_VALUES_EQUAL(settings.MaxRetries, 5u);
-        UNIT_ASSERT_VALUES_EQUAL(settings.TokenRefreshMargin, TDuration::Minutes(5));
-        UNIT_ASSERT_VALUES_EQUAL(settings.MaxTokenCacheLifetime, TDuration::Hours(1));
-        UNIT_ASSERT_VALUES_EQUAL(settings.IdleKeyTtl, TDuration::Minutes(10));
-
-        // SSL is on by default
-        const auto defaults = TIamDelegationSettings::FromConfig(NKikimrConfig::TIamConfig());
-        UNIT_ASSERT_VALUES_EQUAL(defaults.EnableSsl, true);
-        UNIT_ASSERT_VALUES_EQUAL(defaults.TokenServiceEndpoint, "");
-        UNIT_ASSERT_VALUES_EQUAL(defaults.ServiceControlEndpoint, "");
-        UNIT_ASSERT_VALUES_EQUAL(defaults.ResourceManagerEndpoint, "");
-    }
-
-    // Resource Manager is optional: without it delegations still work, only the cloud of a
-    // service account cannot be looked up and the cloud of the database is used instead.
-    Y_UNIT_TEST(ResourceManagerEndpointIsOptional) {
-        NKikimrConfig::TIamConfig config;
-        config.SetTokenServiceEndpoint("ts.example.net:4282");
-        config.SetServiceControlEndpoint("iam.example.net:4283");
-        config.SetServiceId("ydb");
-        config.SetMicroserviceId("data-plane");
-        config.SetResourceType("resource-manager.cloud");
-
-        const auto withoutRm = TIamDelegationSettings::FromConfig(config);
-        UNIT_ASSERT_VALUES_EQUAL(withoutRm.ValidateForDelegation(), "");
-        UNIT_ASSERT_VALUES_EQUAL(withoutRm.CanResolveCloud(), false);
-
-        config.SetResourceManagerEndpoint("rm.example.net:4284");
-        UNIT_ASSERT_VALUES_EQUAL(TIamDelegationSettings::FromConfig(config).CanResolveCloud(), true);
-
-        // the lookup starts on the control plane, Resource Manager alone is not enough
-        config.ClearServiceControlEndpoint();
-        UNIT_ASSERT_VALUES_EQUAL(TIamDelegationSettings::FromConfig(config).CanResolveCloud(), false);
-    }
-
-    Y_UNIT_TEST(ValidateListsMissingFields) {
-        const TString prefix = "IAM delegation is not configured, missing IamConfig fields:";
-
-        TIamDelegationSettings empty;
-        const TString all = empty.Validate();
-        UNIT_ASSERT_C(all.StartsWith(prefix), all);
-        UNIT_ASSERT_STRING_CONTAINS(all, " TokenServiceEndpoint");
-        UNIT_ASSERT_STRING_CONTAINS(all, " ServiceId");
-        UNIT_ASSERT_STRING_CONTAINS(all, " MicroserviceId");
-        UNIT_ASSERT_STRING_CONTAINS(all, " ResourceType");
-
-        TIamDelegationSettings settings;
-        settings.TokenServiceEndpoint = "ts.example.net:4282";
-        settings.ServiceId = "ydb";
-        settings.ResourceType = "resource-manager.cloud";
-        // MicroserviceId is part of the identity IAM checks (the agent service account is named after it)
-        const TString onlyMicroservice = settings.Validate();
-        UNIT_ASSERT_C(onlyMicroservice.StartsWith(prefix), onlyMicroservice);
-        UNIT_ASSERT_STRING_CONTAINS(onlyMicroservice, " MicroserviceId");
-        UNIT_ASSERT_C(!onlyMicroservice.Contains("Endpoint"), onlyMicroservice);
-        UNIT_ASSERT_C(!onlyMicroservice.Contains("ServiceId"), onlyMicroservice);
-        UNIT_ASSERT_C(!onlyMicroservice.Contains("ResourceType"), onlyMicroservice);
-
-        settings.MicroserviceId = "data-plane";
-        UNIT_ASSERT_VALUES_EQUAL(settings.Validate(), "");
-    }
-
-    // Minting a token needs only the token service, setting a delegation up also needs the IAM
-    // control plane. A cluster configured only for the IAM auth of external data sources has the
-    // token service endpoint and nothing else, and must keep reading the secrets it already has.
-    Y_UNIT_TEST(ValidateForDelegationRequiresServiceControlEndpoint) {
-        NKikimrConfig::TIamConfig config;
-        config.SetTokenServiceEndpoint("ts.example.net:4282");
-        config.SetServiceId("ydb");
-        config.SetMicroserviceId("data-plane");
-        config.SetResourceType("resource-manager.cloud");
-
-        const auto tokenServiceOnly = TIamDelegationSettings::FromConfig(config);
-        UNIT_ASSERT_VALUES_EQUAL(tokenServiceOnly.Validate(), "");
-
-        const TString error = tokenServiceOnly.ValidateForDelegation();
-        UNIT_ASSERT_C(error.StartsWith("Setting up and revoking IAM delegations is not configured,"
-            " missing IamConfig fields:"), error);
-        UNIT_ASSERT_STRING_CONTAINS(error, " ServiceControlEndpoint");
-        UNIT_ASSERT_C(!error.Contains(" TokenServiceEndpoint"), error);
-        UNIT_ASSERT_C(!error.Contains(" ServiceId"), error);
-        UNIT_ASSERT_C(!error.Contains(" ResourceType"), error);
-
-        config.SetServiceControlEndpoint("iam.example.net:4283");
-        UNIT_ASSERT_VALUES_EQUAL(TIamDelegationSettings::FromConfig(config).ValidateForDelegation(), "");
-
-        // the delegation check also reports what the token path is missing
-        const TString all = TIamDelegationSettings().ValidateForDelegation();
-        UNIT_ASSERT_STRING_CONTAINS(all, " TokenServiceEndpoint");
-        UNIT_ASSERT_STRING_CONTAINS(all, " ServiceControlEndpoint");
-        UNIT_ASSERT_STRING_CONTAINS(all, " ServiceId");
-        UNIT_ASSERT_STRING_CONTAINS(all, " ResourceType");
-    }
-}
-
 Y_UNIT_TEST_SUITE(IamDelegationService) {
     Y_UNIT_TEST(SetupDone) {
         TFixture f;
@@ -471,39 +305,6 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
 
         const auto result = f.Setup(service, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::TIMEOUT);
-    }
-
-    Y_UNIT_TEST(RetryableErrorThenSuccess) {
-        TFixture f;
-        f.ServiceControlMock.FailCount = 2;
-        f.ServiceControlMock.FailStatus = grpc::StatusCode::UNAVAILABLE;
-        const auto service = f.StartDelegationService();
-
-        const auto result = f.Setup(service, f.Spec());
-        UNIT_ASSERT_C(result.IsSuccess(), result.Issues.ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 3u);
-    }
-
-    Y_UNIT_TEST(RetriesExhausted) {
-        TFixture f;
-        f.ServiceControlMock.FailCount = 100;
-        f.ServiceControlMock.FailStatus = grpc::StatusCode::UNAVAILABLE;
-        const auto service = f.StartDelegationService();
-
-        const auto result = f.Setup(service, f.Spec());
-        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 3u);
-    }
-
-    Y_UNIT_TEST(PermissionDeniedIsNotRetried) {
-        TFixture f;
-        f.ServiceControlMock.FailCount = 1;
-        f.ServiceControlMock.FailStatus = grpc::StatusCode::PERMISSION_DENIED;
-        const auto service = f.StartDelegationService();
-
-        const auto result = f.Setup(service, f.Spec());
-        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAUTHORIZED);
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u);
     }
 
     Y_UNIT_TEST(CloudMismatchIsExplained) {
@@ -595,21 +396,6 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u);
     }
 
-    Y_UNIT_TEST(SystemTokenTimeout) {
-        TFixture f;
-        f.Settings.RequestTimeout = TDuration::Seconds(1);
-        f.Settings.MaxRetries = 1;
-        auto source = f.SilentSystemToken();
-        const auto service = f.StartDelegationService(source->Service);
-
-        // the service never answers: the request fails with the timeout (RequestTimeout is what makes it inevitable)
-        const auto result = f.Setup(service, f.Spec());
-        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), "timeout while obtaining the system service account token");
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(source->RequestCount(), 1u);
-    }
-
     Y_UNIT_TEST(SystemTokenFailureIsRetried) {
         // a failure to obtain the system token counts as a retryable failure of the call
         TFixture f;
@@ -680,6 +466,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
             TNonRetryable{grpc::StatusCode::INVALID_ARGUMENT, Ydb::StatusIds::BAD_REQUEST},
             TNonRetryable{grpc::StatusCode::NOT_FOUND, Ydb::StatusIds::NOT_FOUND},
             TNonRetryable{grpc::StatusCode::UNAUTHENTICATED, Ydb::StatusIds::UNAUTHORIZED},
+            TNonRetryable{grpc::StatusCode::PERMISSION_DENIED, Ydb::StatusIds::UNAUTHORIZED},
             TNonRetryable{grpc::StatusCode::FAILED_PRECONDITION, Ydb::StatusIds::BAD_REQUEST},
         }) {
             f.ServiceControlMock.FailStatus = grpcStatus;

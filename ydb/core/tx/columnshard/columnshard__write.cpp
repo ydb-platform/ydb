@@ -195,7 +195,8 @@ public:
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
         TxId = evWrite.Record.GetTxId();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tx_id", TxId);
+        YDB_LOG_CREATE_CONTEXT(
+            {"txId", TxId});
         const auto& locks = evWrite.Record.GetLocks();
         AFL_VERIFY(!locks.GetLocks().empty());
         auto& lock = locks.GetLocks()[0];

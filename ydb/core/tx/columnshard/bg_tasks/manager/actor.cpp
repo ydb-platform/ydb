@@ -33,8 +33,11 @@ void TSessionActor::SaveSessionProgress() {
 
 void TSessionActor::SaveSessionState() {
     if (SaveSessionStateTx) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "save_session_state_skipped")("self_id", SelfId())("tablet_id", TabletId)(
-            "in_flight_tx", *SaveSessionStateTx);
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "save_session_state_skipped"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"inFlightTx", *SaveSessionStateTx});
         return;
     }
     const ui64 txId = GetNextTxId();
@@ -47,9 +50,13 @@ void TSessionActor::SaveSessionState() {
 }
 
 void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_local_tx_completed")("self_id", SelfId())("tablet_id", TabletId)(
-        "internal_tx_id", ev->Get()->GetInternalTxId())("save_progress_tx", SaveSessionProgressTx ? *SaveSessionProgressTx : 0)(
-        "save_state_tx", SaveSessionStateTx ? *SaveSessionStateTx : 0);
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        {"event", "session_actor_local_tx_completed"},
+        {"selfId", SelfId()},
+        {"tabletId", TabletId},
+        {"internalTxId", ev->Get()->GetInternalTxId()},
+        {"saveProgressTx", SaveSessionProgressTx ? *SaveSessionProgressTx : 0},
+        {"saveStateTx", SaveSessionStateTx ? *SaveSessionStateTx : 0});
     if (SaveSessionProgressTx && *SaveSessionProgressTx == ev->Get()->GetInternalTxId()) {
         SaveSessionProgressTx.reset();
         OnSessionProgressSaved();
@@ -57,15 +64,22 @@ void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
         SaveSessionStateTx.reset();
         OnSessionStateSaved();
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_on_tx_completed")("self_id", SelfId())("tablet_id", TabletId)(
-            "internal_tx_id", ev->Get()->GetInternalTxId());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "session_actor_on_tx_completed"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"internalTxId", ev->Get()->GetInternalTxId()});
         OnTxCompleted(ev->Get()->GetInternalTxId());
     }
 }
 
 void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_handle_control")("self_id", SelfId())("tablet_id", TabletId)(
-        "save_state_tx", SaveSessionStateTx ? *SaveSessionStateTx : 0)("save_progress_tx", SaveSessionProgressTx ? *SaveSessionProgressTx : 0);
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        {"event", "session_actor_handle_control"},
+        {"selfId", SelfId()},
+        {"tabletId", TabletId},
+        {"saveStateTx", SaveSessionStateTx ? *SaveSessionStateTx : 0},
+        {"saveProgressTx", SaveSessionProgressTx ? *SaveSessionProgressTx : 0});
     TSessionControlContainer control;
     {
         auto conclusion = control.DeserializeFromProto(ev->Get()->Record);
@@ -81,7 +95,10 @@ void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
             return;
         }
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "session_actor_control_saving_state")("self_id", SelfId())("tablet_id", TabletId);
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+        {"event", "session_actor_control_saving_state"},
+        {"selfId", SelfId()},
+        {"tabletId", TabletId});
     SaveSessionState();
 }
 

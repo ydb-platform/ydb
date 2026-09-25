@@ -76,7 +76,8 @@ private:
         bool foundResult = false;
         if (!SortHeap.Current().IsDeleted()) {
             foundResult = true;
-            //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_add", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+            //        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            //              {"keyAdd", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             if (builder) {
                 builder->AddRecord(SortHeap.Current());
             }
@@ -85,7 +86,8 @@ private:
                 *resultPosition = SortHeap.Current().GetKeyColumns().GetPosition();
             }
         } else {
-            //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+            //        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            //              {"keySkip", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             if (builder) {
                 builder->SkipRecord(SortHeap.Current());
             }
@@ -97,7 +99,8 @@ private:
             if (builder) {
                 builder->SkipRecord(SortHeap.Current());
             }
-            //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+            //            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            //                {"keySkip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             auto& anotherIterator = SortHeap.Current();
             if (PossibleSameVersionFlag) {
                 AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)

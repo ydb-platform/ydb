@@ -13,6 +13,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 
 #include <library/cpp/lwtrace/all.h>
@@ -52,8 +53,13 @@ public:
 private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
-            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"scanId", ScanId},
+            {"txId", TxId},
+            {"scanGen", ScanGen},
+            {"taskIdentifier", ReadMetadataRange->GetScanIdentifier()});
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);

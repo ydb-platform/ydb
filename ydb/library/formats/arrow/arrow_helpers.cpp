@@ -25,6 +25,8 @@
 
 #include <memory>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
@@ -518,7 +520,9 @@ bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
     }
 
     if (!result.ok()) {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "ReserveData")("error", result.ToString());
+        YDB_LOG_ERROR("",
+            {"event", "ReserveData"},
+            {"error", result});
     }
     return result.ok();
 }
@@ -541,14 +545,18 @@ bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, s
         Y_ABORT_UNLESS(i);
         for (auto&& f : i->schema()->fields()) {
             if (!fieldNames.emplace(f->name(), fields.size()).second) {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "duplicated column")("name", f->name());
+                YDB_LOG_ERROR("",
+                    {"event", "duplicated column"},
+                    {"name", f->name()});
                 return false;
             }
             fields.emplace_back(f);
         }
         if (i->num_rows() != batches.front()->num_rows()) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "inconsistency record sizes")("i", i->num_rows())(
-                "front", batches.front()->num_rows());
+            YDB_LOG_ERROR("",
+                {"event", "inconsistency record sizes"},
+                {"i", i->num_rows()},
+                {"front", batches.front()->num_rows()});
             return false;
         }
         for (auto&& c : i->columns()) {

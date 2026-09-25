@@ -7,6 +7,8 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NArrow::NMerger {
 
 void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const  {
@@ -22,7 +24,9 @@ void TRecordBatchBuilder::SkipRecord(const TBatchIterator& /*cursor*/) {
 
 void TRecordBatchBuilder::AddRecord(const TCursor& position) {
     //    AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
-    //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    //    YDB_LOG_TRACE("",
+    //          {"event", "record_add_on_read"},
+    //          {"record", position.DebugJson()});
     position.AppendPositionTo(Builders, MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }
@@ -30,7 +34,9 @@ void TRecordBatchBuilder::AddRecord(const TCursor& position) {
 void TRecordBatchBuilder::AddRecord(const TRWSortableBatchPosition& position) {
     AFL_VERIFY_DEBUG(position.GetData().GetColumns().size() == Builders.size());
     AFL_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
-    //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    //    YDB_LOG_TRACE("",
+    //          {"event", "record_add_on_read"},
+    //          {"record", position.DebugJson()});
     position.GetData().AppendPositionTo(Builders, position.GetPosition(), MemoryBufferLimit ? &CurrentBytesUsed : nullptr);
     ++RecordsCount;
 }

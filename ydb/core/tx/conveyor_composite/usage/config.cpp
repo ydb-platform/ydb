@@ -6,6 +6,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
 namespace NKikimr::NConveyorComposite::NConfig {
 
 TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
@@ -23,8 +25,10 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     std::set<ESpecialTaskCategory> usedCategories;
     for (auto&& i : config.GetCategories()) {
         if (i.HasQueueSizeLimit()) {
-            AFL_WARN(NKikimrServices::TX_CONVEYOR)("event", "unused_composite_conveyor_queue_size_limit")(
-                "category", i.GetName())("queue_size_limit", i.GetQueueSizeLimit());
+            YDB_LOG_WARN("",
+                {"event", "unused_composite_conveyor_queue_size_limit"},
+                {"category", i.GetName()},
+                {"queueSizeLimit", i.GetQueueSizeLimit()});
         }
         TCategory cat(ESpecialTaskCategory::Insert);
         auto conclusion = cat.DeserializeFromProto(i);

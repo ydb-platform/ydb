@@ -3,6 +3,8 @@
 #include <ydb/library/formats/arrow/permutations.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow::NMerger {
 
 void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy) {
@@ -103,9 +105,13 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         SortHeap.UpdateTop();
     }
     if (SortHeap.Empty()) {
-        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", readTo.DebugJson().GetStringRobust())("heap", "EMPTY");
+        YDB_LOG_DEBUG("",
+            {"pos", readTo.DebugJson().GetStringRobust()},
+            {"heap", "EMPTY"});
     } else {
-        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", readTo.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        YDB_LOG_DEBUG("",
+            {"pos", readTo.DebugJson().GetStringRobust()},
+            {"heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
     }
     return result;
 }
@@ -138,7 +144,9 @@ ui64 TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const b
     if (SortHeap.Empty()) {
         return 0;
     }
-    AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+    YDB_LOG_DEBUG("",
+        {"pos", pos.DebugJson().GetStringRobust()},
+        {"heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
     ui64 recordsSkipped = 0;
     while (!SortHeap.Empty()) {
         const auto cmpResult = SortHeap.Current().GetKeyColumns().Compare(pos);
@@ -154,7 +162,9 @@ ui64 TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const b
         const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
         AFL_VERIFY(SortHeap.Current().GetSourceId() == sourceId);
         recordsSkipped += SortHeap.Current().GetPositionIndex() - currentPosIndex;
-        AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        YDB_LOG_DEBUG("",
+            {"pos", pos.DebugJson().GetStringRobust()},
+            {"heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
 
         if (skipPos.IsEqual()) {
             if (!lower) {

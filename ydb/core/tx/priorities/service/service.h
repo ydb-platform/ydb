@@ -7,6 +7,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NPrioritiesQueue {
 
@@ -39,7 +40,9 @@ private:
 
 public:
     STATEFN(StateMain) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("name", QueueName)("actor_id", SelfId());
+        YDB_LOG_CREATE_CONTEXT(
+            {"name", QueueName},
+            {"actorId", SelfId()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvRegisterClient, Handle);
             hFunc(TEvExecution::TEvUnregisterClient, Handle);
@@ -47,7 +50,9 @@ public:
             hFunc(TEvExecution::TEvAskMax, Handle);
             hFunc(TEvExecution::TEvFree, Handle);
             default:
-                AFL_ERROR(NKikimrServices::TX_PRIORITIES_QUEUE)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_PRIORITIES_QUEUE, "",
+                    {"problem", "unexpected event for task executor"},
+                    {"evType", ev->GetTypeName()});
                 break;
         }
     }

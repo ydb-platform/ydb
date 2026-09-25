@@ -1,6 +1,7 @@
 #include <ydb/apps/ydb/experimental/ydb/commands/udf_package.h>
 
 #include <library/cpp/digest/old_crc/crc.h>
+#include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/vector.h>
@@ -15,6 +16,7 @@ namespace {
 struct TEntry {
     TString Name;
     TString Data;
+    char Type = '0';
 };
 
 void WriteOctal(TString& header, size_t offset, size_t length, ui64 value) {
@@ -38,7 +40,7 @@ TString MakeTar(const TVector<TEntry>& entries) {
         WriteOctal(header, 124, 12, entry.Data.size());
         WriteOctal(header, 136, 12, 0);
         std::memset(header.Detach() + 148, ' ', 8);
-        header[156] = '0';
+        header[156] = entry.Type;
         std::memcpy(header.Detach() + 257, "ustar", 5);
         ui64 checksum = 0;
         for (char value : header) {
@@ -159,6 +161,28 @@ Y_UNIT_TEST_SUITE(TUdfPackageTest) {
         const auto package = ParseUdfPackage(Compress(MakeTar(ValidEntries), ZLib::GZip));
         UNIT_ASSERT_VALUES_EQUAL(package.Manifest, ValidEntries[0].Data);
         UNIT_ASSERT_VALUES_EQUAL(package.Body, ValidEntries[1].Data);
+    }
+
+    Y_UNIT_TEST(ParsePythonPaxGzipTar) {
+        // Python tarfile emits PAX extended headers for fractional mtimes.
+        const TString path = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "data/python_pax_package.tar.gz");
+        const auto package = ReadUdfPackage(path);
+        UNIT_ASSERT_VALUES_EQUAL(package.Manifest, ValidEntries[0].Data);
+        UNIT_ASSERT_VALUES_EQUAL(package.Body, ValidEntries[1].Data);
+    }
+
+    Y_UNIT_TEST(ValidateEffectivePaxPath) {
+        const auto valid = ParseUdfPackage(MakeTar({
+            {"PaxHeader", "20 path=module.wasm\n", 'x'},
+            {"placeholder", ValidEntries[1].Data},
+            ValidEntries[0],
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(valid.Body, ValidEntries[1].Data);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ParseUdfPackage(MakeTar({
+            ValidEntries[0],
+            {"PaxHeader", "24 path=dir/module.wasm\n", 'x'},
+            ValidEntries[1],
+        })), yexception, "archive root");
     }
 
     Y_UNIT_TEST(ParseStoredZip) {

@@ -10,6 +10,7 @@
 
 #include <array>
 #include <limits>
+#include <map>
 
 namespace NYdb::NConsoleClient {
 namespace {
@@ -52,7 +53,7 @@ TString ReadLimited(IInputStream& input, size_t limit, TStringBuf description) {
 }
 
 void ValidateEntryName(TStringBuf name) {
-    if (name.empty() || name == "." || name == ".." || name.Contains('/') || name.Contains('\\')) {
+    if (name.empty() || name == "." || name == ".." || name.Contains('/') || name.Contains('\\') || name.Contains('\0')) {
         ythrow yexception() << "Package entries must be regular files in the archive root: '" << name << "'";
     }
 }
@@ -131,6 +132,57 @@ ui64 ParseTarOctal(TStringBuf field, TStringBuf fieldName) {
     return result;
 }
 
+ui64 ParseTarDecimal(TStringBuf field, TStringBuf fieldName) {
+    if (field.empty()) {
+        ythrow yexception() << "Missing TAR " << fieldName;
+    }
+    ui64 result = 0;
+    for (const char digit : field) {
+        if (digit < '0' || digit > '9' ||
+            result > (std::numeric_limits<ui64>::max() - (digit - '0')) / 10)
+        {
+            ythrow yexception() << "Invalid TAR " << fieldName;
+        }
+        result = result * 10 + (digit - '0');
+    }
+    return result;
+}
+
+using TPaxFields = std::map<TString, TString>;
+
+void ParsePaxRecords(TStringBuf data, TPaxFields& fields) {
+    size_t offset = 0;
+    while (offset < data.size()) {
+        const size_t space = data.find(' ', offset);
+        if (space == TStringBuf::npos) {
+            ythrow yexception() << "Invalid PAX record length";
+        }
+        const ui64 length = ParseTarDecimal(data.SubStr(offset, space - offset), "PAX record length");
+        if (length <= space - offset + 2 || length > data.size() - offset) {
+            ythrow yexception() << "Invalid PAX record length";
+        }
+        const TStringBuf record = data.SubStr(space + 1, length - (space - offset) - 1);
+        const size_t equals = record.find('=');
+        if (equals == TStringBuf::npos || equals == 0 || record.back() != '\n' ||
+            record.Contains('\0'))
+        {
+            ythrow yexception() << "Invalid PAX record";
+        }
+        fields[TString(record.Head(equals))] = TString(record.SubStr(equals + 1, record.size() - equals - 2));
+        offset += length;
+    }
+}
+
+TStringBuf PaxValue(const TPaxFields& global, const TPaxFields& local, const TString& key) {
+    if (auto it = local.find(key); it != local.end()) {
+        return it->second;
+    }
+    if (auto it = global.find(key); it != global.end()) {
+        return it->second;
+    }
+    return {};
+}
+
 TStringBuf TarStringField(TStringBuf header, size_t offset, size_t length) {
     TStringBuf field = header.SubStr(offset, length);
     const size_t end = field.find('\0');
@@ -150,6 +202,8 @@ void ValidateTarChecksum(TStringBuf header) {
 
 TUdfPackage ParseTar(TStringBuf data) {
     TPackageBuilder builder;
+    TPaxFields globalPax;
+    TPaxFields localPax;
     size_t offset = 0;
     bool endSeen = false;
     while (offset < data.size()) {
@@ -163,36 +217,49 @@ TUdfPackage ParseTar(TStringBuf data) {
             break;
         }
         ValidateTarChecksum(header);
-        const TStringBuf name = TarStringField(header, 0, 100);
-        const TStringBuf prefix = TarStringField(header, 345, 155);
-        if (!prefix.empty()) {
-            ythrow yexception() << "Package entries must be in the archive root";
-        }
+        const TStringBuf headerName = TarStringField(header, 0, 100);
         const char type = header[156];
-        if (type != '\0' && type != '0') {
-            ythrow yexception() << "Package contains a non-regular TAR entry '" << name << "'";
+        if (type != '\0' && type != '0' && type != 'x' && type != 'g') {
+            ythrow yexception() << "Package contains a non-regular TAR entry '" << headerName << "'";
         }
-        ValidateEntryName(name);
-        const ui64 size64 = ParseTarOctal(header.SubStr(124, 12), "file size");
+        const bool isPax = type == 'x' || type == 'g';
+        const TStringBuf paxSize = isPax ? TStringBuf{} : PaxValue(globalPax, localPax, "size");
+        const ui64 size64 = paxSize.empty()
+            ? ParseTarOctal(header.SubStr(124, 12), "file size")
+            : ParseTarDecimal(paxSize, "PAX file size");
         if (size64 > data.size() - offset) {
-            ythrow yexception() << "Truncated TAR entry '" << name << "'";
-        }
-        if (size64 > MaxBodySize && name != "manifest.json") {
-            ythrow yexception() << "Package binary exceeds " << MaxBodySize << " bytes";
-        }
-        if (size64 > MaxManifestSize && name == "manifest.json") {
-            ythrow yexception() << "Package manifest.json exceeds " << MaxManifestSize << " bytes";
+            ythrow yexception() << "Truncated TAR entry '" << headerName << "'";
         }
         const size_t size = static_cast<size_t>(size64);
-        builder.Add(name, std::string(data.data() + offset, size));
+        if (isPax) {
+            if (size > MaxManifestSize) {
+                ythrow yexception() << "PAX metadata exceeds " << MaxManifestSize << " bytes";
+            }
+            ParsePaxRecords(data.SubStr(offset, size), type == 'g' ? globalPax : localPax);
+        } else {
+            const TStringBuf prefix = TarStringField(header, 345, 155);
+            const TStringBuf paxPath = PaxValue(globalPax, localPax, "path");
+            const TString name = !paxPath.empty() ? TString(paxPath)
+                : prefix.empty() ? TString(headerName) : TString(prefix) + "/" + TString(headerName);
+            ValidateEntryName(name);
+            const size_t limit = name == "manifest.json" ? MaxManifestSize : MaxBodySize;
+            if (size > limit) {
+                ythrow yexception() << "Package entry '" << name << "' exceeds " << limit << " bytes";
+            }
+            builder.Add(name, std::string(data.data() + offset, size));
+            localPax.clear();
+        }
         const size_t paddedSize = (size + TarBlockSize - 1) / TarBlockSize * TarBlockSize;
         if (paddedSize > data.size() - offset) {
-            ythrow yexception() << "Truncated TAR padding after '" << name << "'";
+            ythrow yexception() << "Truncated TAR padding after '" << headerName << "'";
         }
         offset += paddedSize;
     }
     if (!endSeen) {
         ythrow yexception() << "TAR package has no end marker";
+    }
+    if (!localPax.empty()) {
+        ythrow yexception() << "TAR package ends with unused PAX metadata";
     }
     while (offset < data.size()) {
         if (data[offset++] != '\0') {

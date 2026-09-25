@@ -177,7 +177,6 @@ private:
 
 public:
     virtual NColumnShard::TInternalPathId GetPathId() const override {
-        AFL_VERIFY(false);
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 

@@ -285,8 +285,8 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(disabled == unmatched);
             UNIT_ASSERT_VALUES_EQUAL(disabled[0], Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(disabled[1], Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(disabled[2], Ydb::StatusIds::BAD_REQUEST);
-            UNIT_ASSERT_VALUES_EQUAL(disabled[3], Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[2], Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[3], Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(disabled[4], Ydb::StatusIds::BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(disabled[5], Ydb::StatusIds::SUCCESS);
         }

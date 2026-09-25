@@ -59,7 +59,7 @@ void TMemoryTokenCacher::Write(const NYdb::NOidc::TTokenCache& tokens) {
 
 int main(int argc, char** argv) {
     if (argc != 5) {
-        std::cerr << "Usage: oidc <grpcs://endpoint:port> <database> <issuer> <client-id>" << std::endl;
+        std::cerr << "Usage: oidc <grpc[s]://endpoint:port> <database> <issuer> <client-id>" << std::endl;
         return 1;
     }
     try {
@@ -74,8 +74,7 @@ int main(int argc, char** argv) {
             .Cacher(std::make_shared<TMemoryTokenCacher>())
             .Acceptor(std::make_shared<TConsoleAcceptor>());
 
-        auto config = NYdb::TDriverConfig()
-            .SetEndpoint(argv[1])
+        auto config = NYdb::TDriverConfig(argv[1])
             .SetDatabase(argv[2])
             .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
             .SetCredentialsProviderFactory(NYdb::NOidc::CreateOidcProviderFactory(oidcConfig));

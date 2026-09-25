@@ -26,7 +26,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage/base
-    ydb/core/blobstorage/pdisk/subsystem
+    ydb/core/blobstorage/pdisk/common
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/lwtrace_probes
@@ -40,8 +40,6 @@ PEERDIR(
     ydb/library/schlab/schine
 )
 
-GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_state.h)
-GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_defs.h)
 
 
 SRCS(
@@ -51,7 +49,6 @@ SRCS(
     blobstorage_pdisk_completion_impl.cpp
     blobstorage_pdisk_delayed_cost_loop.cpp
     blobstorage_pdisk_driveestimator.cpp
-    blobstorage_pdisk_drivemodel_db.cpp
     blobstorage_pdisk_impl.cpp
     blobstorage_pdisk_impl_http.cpp
     blobstorage_pdisk_impl_log.cpp
@@ -60,7 +57,6 @@ SRCS(
     blobstorage_pdisk_log_cache.cpp
     blobstorage_pdisk_logreader.cpp
     blobstorage_pdisk_mon.cpp
-    blobstorage_pdisk_params.cpp
     blobstorage_pdisk_requestimpl.cpp
     blobstorage_pdisk_syslogreader.cpp
     blobstorage_pdisk_sectorrestorator.cpp
@@ -69,12 +65,12 @@ SRCS(
     blobstorage_pdisk_util_flightcontrol.cpp
     blobstorage_pdisk_util_signal_event.cpp
     blobstorage_pdisk_writer.cpp
-    drivedata_serializer.cpp
 )
 
 END()
 
 RECURSE(
+    common
     metadata
     mock
 )

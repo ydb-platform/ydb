@@ -167,14 +167,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
 
     TString database = requestedDatabase;
     TString path = requestedPath;
-    if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE && requestedDatabase == "/Root") {
-        // RTMR compatibility
-        // It uses cluster specified in gateways.conf with ClusterType unset (CT_PERS_QUEUE by default) and default Database and its own read/write code
-        auto pos = requestedPath.find('/');
-        Y_ENSURE(pos != TString::npos, "topic name is expected in format <account>/<path>");
-        database = "/logbroker-federation/" + requestedPath.substr(0, pos);
-        path = requestedPath.substr(pos + 1);
-    }
 
     YQL_ENSURE(CredentialsFactory, "CredentialsFactory is not set for `" << cluster << "`.`" << path << "`");
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());

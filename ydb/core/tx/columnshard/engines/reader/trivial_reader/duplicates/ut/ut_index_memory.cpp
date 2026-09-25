@@ -27,6 +27,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -167,6 +168,13 @@ Y_UNIT_TEST_SUITE(TIndexReadMemoryTracking) {
 
         NActors::TTestActorRuntimeBase runtime(1, false);
         runtime.Initialize();
+        // relwithdebinfo aborts on a log component outside the registered mask.
+        runtime.GetLogSettings(0)->Append(
+            NKikimrServices::TX_COLUMNSHARD_SCAN, NKikimrServices::TX_COLUMNSHARD_SCAN + 1, [](NActors::NLog::EComponent) -> const TString& {
+                static TString name = "TX_COLUMNSHARD_SCAN";
+                return name;
+            });
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_ERROR);
         const auto edge = runtime.AllocateEdgeActor();
         auto readContext = std::make_shared<TReadContext>(TTestStoragesManager::GetInstance(), std::make_shared<TMockDataAccessorsManager>(edge),
             std::make_shared<NColumnFetching::TColumnDataManager>(edge),

@@ -523,7 +523,9 @@ TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartReserveMemory(
 
     auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
 
-    // Index payload is not scaled by LIMIT: skip-index chunks are read in full, so reserve their stored size.
+    // Upper bound, not the category slice a header may name: the fetcher can still read the rest of the chunk.
+    // Not scaled by LIMIT. indexes is empty unless the scan graph was built with EnableCsIndexReadMemoryTracking,
+    // which is what attaches an index reserve node.
     const ui64 sizeToReserve = policy->GetReserveMemorySize(result.GetBlobsSize(), result.GetRawSize(),
                                    GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount()) +
                                GetIndexesDataSizeForFetch(indexes);

@@ -374,6 +374,52 @@ std::shared_ptr<NExecution::TCompiledGraph> BuildMergeFilterSimpleGraph(const bo
     return builder.Finish().DetachResult();
 }
 
+std::shared_ptr<NExecution::TCompiledGraph> BuildSingleIndexFilterGraph(const bool reserveIndexMemory) {
+    auto schema = std::make_shared<arrow::Schema>(std::vector{ std::make_shared<arrow::Field>("int", arrow::int64()) });
+    TSchemaColumnResolver resolver(schema);
+    NOptimization::TGraph::TBuilder builder(resolver);
+    if (reserveIndexMemory) {
+        builder.EnableIndexMemoryReserve();
+    }
+    builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
+    builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(0), 4));
+    {
+        auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({ 1, 3 }), TColumnChainInfo(1003),
+            std::make_shared<TSimpleFunction>(EOperation::Equal),
+            std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Equals))
+                        .DetachResult();
+        builder.Add(proc);
+    }
+    {
+        auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({ 1003, 4 }), TColumnChainInfo(1103),
+            std::make_shared<TSimpleFunction>(EOperation::Add),
+            std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce))
+                        .DetachResult();
+        builder.Add(proc);
+    }
+    builder.Add(std::make_shared<TFilterProcessor>(1103));
+    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1 })));
+    return builder.Finish().DetachResult();
+}
+
+ui32 CountIndexReservesWiredToIndexFetch(const std::shared_ptr<NExecution::TCompiledGraph>& chain) {
+    ui32 indexReserves = 0;
+    for (const auto& [_, node] : chain->GetNodes()) {
+        if (node->GetProcessor()->GetProcessorType() != EProcessorType::ReserveMemory) {
+            continue;
+        }
+        if (!node->GetProcessor()->DebugJson()["extra_data"].Has("indexes")) {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(node->GetOutputEdges().size(), 1);
+        const auto* fetch = node->GetOutputEdges().front();
+        UNIT_ASSERT(fetch->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData);
+        UNIT_ASSERT(fetch->GetProcessor()->DebugJson()["extra_data"].Has("indexes"));
+        ++indexReserves;
+    }
+    return indexReserves;
+}
+
 Y_UNIT_TEST_SUITE(ProgramStep) {
     Y_UNIT_TEST(Round0) {
         for (auto eop : { EOperation::Round, EOperation::RoundBankers, EOperation::RoundToExp2 }) {
@@ -631,6 +677,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
     Y_UNIT_TEST(MergeFilterSimpleIndexMemory) {
         auto chain = BuildMergeFilterSimpleGraph(true);
         AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:2;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexReservesWiredToIndexFetch(chain), 1);
+    }
+
+    Y_UNIT_TEST(SingleIndexFetchMemory) {
+        auto withoutReserve = BuildSingleIndexFilterGraph(false);
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexReservesWiredToIndexFetch(withoutReserve), 0);
+        auto chain = BuildSingleIndexFilterGraph(true);
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexReservesWiredToIndexFetch(chain), 1);
     }
 
     Y_UNIT_TEST(Projection) {

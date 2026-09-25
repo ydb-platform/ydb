@@ -413,13 +413,11 @@ runs:
         fi
 
         if [ -z "${CI_CACHE_MODE:-}" ]; then
-          CI_CACHE_MODE=none
-          for _ya_flag in "${params[@]}"; do
-            if [ "$_ya_flag" = "--bazel-remote-store" ]; then
-              CI_CACHE_MODE=dist_cache
-              break
-            fi
-          done
+          if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+            CI_CACHE_MODE=dist_cache
+          else
+            CI_CACHE_MODE=none
+          fi
         fi
         echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         python3 "$CI_METRICS_PY" track runner_info --kind info --source ya_phase --runner \

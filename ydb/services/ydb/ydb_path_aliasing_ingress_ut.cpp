@@ -4,6 +4,7 @@
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
@@ -26,6 +27,7 @@ namespace NKikimr::NGRpcService {
 
         using TDiscovery = Ydb::Discovery::V1::DiscoveryService::Stub;
         using TKeyValue = Ydb::KeyValue::V1::KeyValueService::Stub;
+        using TScheme = Ydb::Scheme::V1::SchemeService::Stub;
         using TTable = Ydb::Table::V1::TableService::Stub;
         using TTopic = Ydb::Topic::V1::TopicService::Stub;
 
@@ -47,6 +49,7 @@ namespace NKikimr::NGRpcService {
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");
             AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
             AddRule(config, "/virtual/", "/Root");
+            AddRule(config, "/alternate-root", "/");
             AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
             AddRule(config, "/Root/kfront", "/Root/missing");
             return config;
@@ -136,6 +139,53 @@ namespace NKikimr::NGRpcService {
     } // namespace
 
     Y_UNIT_TEST_SUITE(YdbPathAliasingIngress) {
+        Y_UNIT_TEST(SchemeResponsesUseRequestedNames) {
+            TFixture fixture;
+            auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+
+            Ydb::Scheme::DescribePathRequest describe;
+            describe.set_path("/alias");
+            const auto described = Result<Ydb::Scheme::DescribePathResult>(
+                Call(*stub, &TScheme::DescribePath, describe, "/alias"));
+            UNIT_ASSERT_VALUES_EQUAL(described.self().name(), "alias");
+
+            Ydb::Scheme::ListDirectoryRequest list;
+            list.set_path("/alias");
+            const auto listed = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/alias"));
+            UNIT_ASSERT_VALUES_EQUAL(listed.self().name(), "alias");
+
+            list.set_path("/");
+            const auto virtualRoot = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/virtual"));
+            std::set<std::string> virtualChildren;
+            for (const auto& child : virtualRoot.children()) {
+                virtualChildren.insert(child.name());
+            }
+            UNIT_ASSERT(virtualChildren.contains("virtual"));
+            UNIT_ASSERT(!virtualChildren.contains("Root"));
+
+            const auto physicalRoot = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/Root"));
+            std::set<std::string> physicalChildren;
+            for (const auto& child : physicalRoot.children()) {
+                physicalChildren.insert(child.name());
+            }
+            UNIT_ASSERT(physicalChildren.contains("Root"));
+            UNIT_ASSERT(!physicalChildren.contains("virtual"));
+
+            list.set_path("/alternate-root");
+            const auto alternateRoot = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/virtual"));
+            UNIT_ASSERT_VALUES_EQUAL(alternateRoot.self().name(), "alternate-root");
+            std::set<std::string> alternateChildren;
+            for (const auto& child : alternateRoot.children()) {
+                alternateChildren.insert(child.name());
+            }
+            UNIT_ASSERT(alternateChildren.contains("Root"));
+            UNIT_ASSERT(!alternateChildren.contains("virtual"));
+        }
+
         Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {
             TFixture fixture;
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);

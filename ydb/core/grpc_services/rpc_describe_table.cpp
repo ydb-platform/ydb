@@ -144,6 +144,10 @@ private:
                 if (OverrideName) {
                     selfEntry->set_name(OverrideName);
                 }
+                if (TablePath != GetProtoRequest()->path()) {
+                    const auto parts = NKikimr::SplitPath(TString{GetProtoRequest()->path()});
+                    selfEntry->set_name(parts.empty() ? TString("/") : parts.back());
+                }
 
                 if (pathDescription.HasColumnTableDescription()) {
                     const auto& tableDescription = pathDescription.GetColumnTableDescription();

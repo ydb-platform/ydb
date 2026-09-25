@@ -1618,6 +1618,7 @@ FROM `{table_name}`"""
     @link_test_case("#46136")
     @link_test_case("#46137")
     @link_test_case("#48466")
+    @pytest.mark.parametrize("kikimr", [{"enable_htap_tx": True}], indirect=["kikimr"])
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("additional_operator", ["hop", "mr", "join"])
     def test_precompute_and_other_ops(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, additional_operator: str) -> None:
@@ -2106,6 +2107,7 @@ FROM `{table_name}`"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
     @link_test_case("#47255")
+    @pytest.mark.parametrize("kikimr", [{"enable_htap_tx": True}], indirect=["kikimr"])
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("additional_operator", ["hop", "mr", "multi_output"])
     def test_join_and_other_ops(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, additional_operator: str) -> None:

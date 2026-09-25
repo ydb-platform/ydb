@@ -707,7 +707,10 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
     TStringStream logStream;
     {
-        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        auto settings = MakeStreamSettings(logStream);
+        // The raw query helper does not acknowledge streamed results required by channel v1.
+        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(2);
+        TKikimrRunner kikimr(settings);
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

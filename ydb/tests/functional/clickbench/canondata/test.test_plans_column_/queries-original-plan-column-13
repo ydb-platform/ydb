@@ -60,8 +60,7 @@
                                                 "PlanNodeId": 5,
                                                 "Plans": [
                                                     {
-                                                        "Blocks": "True",
-                                                        "HashFunc": "HashV2",
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "SearchPhrase"
                                                         ],
@@ -96,8 +95,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
-                                                                        "Blocks": "True",
-                                                                        "HashFunc": "HashV2",
+                                                                        "HashFunc": "HashV1",
                                                                         "KeyColumns": [
                                                                             "SearchPhrase",
                                                                             "UserID"

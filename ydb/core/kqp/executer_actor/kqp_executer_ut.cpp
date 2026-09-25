@@ -378,25 +378,22 @@ void Init(TQueryExecutionStats& stats) {
             stats.UpdateTaskStats(2, 2, second, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
             stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
             stats.StorageCpuTimeUs = 50;
-            auto snapshot = stats.GetCurrentExecStats(TInstant::Seconds(12));
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.DurationUs, 2000000);
+            auto snapshot = stats.GetCurrentQueryResources();
             UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 350);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 12288);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.TableReadBytes, 3000);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2100);
             UNIT_ASSERT(stats.StageStats.empty());
 
             first.SetMemoryUsage(0);
             first.MutableTasks(0)->SetCpuTimeUs(150);
             stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
-            snapshot = stats.GetCurrentExecStats(TInstant::Seconds(13));
+            snapshot = stats.GetCurrentQueryResources();
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 8192);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 400);
 
             stats.UpdateTaskStats(2, 2, second, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
-            snapshot = stats.GetCurrentExecStats(TInstant::Seconds(14));
+            snapshot = stats.GetCurrentQueryResources();
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.TableReadBytes, 3000);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2100);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 400);
         }
@@ -419,8 +416,7 @@ void Init(TQueryExecutionStats& stats) {
         first.SetMemoryUsage(2048);
         stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
-        auto snapshot = stats.GetCurrentExecStats(TInstant::Seconds(12));
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.TableReadBytes, 4000);
+        auto snapshot = stats.GetCurrentQueryResources();
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 10240);
 
@@ -428,8 +424,7 @@ void Init(TQueryExecutionStats& stats) {
         first.MutableTasks(0)->SetIngressBytes(0);
         first.SetMemoryUsage(0);
         stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
-        snapshot = stats.GetCurrentExecStats(TInstant::Seconds(13));
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.TableReadBytes, 4000);
+        snapshot = stats.GetCurrentQueryResources();
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 8192);
 
@@ -437,8 +432,7 @@ void Init(TQueryExecutionStats& stats) {
         stats.UpdateTaskStats(1, 0, storage, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
         stats.UpdateTaskStats(1, 0, storage, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
         stats.UpdateTaskStats(2, 2, TDqComputeActorStats{}, nullptr, COMPUTE_STATE_FAILURE, TDuration::Max());
-        snapshot = stats.GetCurrentExecStats(TInstant::Seconds(14));
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.TableReadBytes, 4600);
+        snapshot = stats.GetCurrentQueryResources();
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
     }
@@ -520,10 +514,9 @@ void Init(TQueryExecutionStats& stats) {
         auto report = MakeReport(1, 100, 4096, 1000, 700);
         stats.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         stats.UpdateTaskStats(1, 1, TDqComputeActorStats{}, nullptr, COMPUTE_STATE_FAILURE, TDuration::Max());
-        const auto snapshot = stats.GetCurrentExecStats(TInstant::Seconds(12));
+        const auto snapshot = stats.GetCurrentQueryResources();
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 100);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.TableReadBytes, 1000);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 700);
     }
 }

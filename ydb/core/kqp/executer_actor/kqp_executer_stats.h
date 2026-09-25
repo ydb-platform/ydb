@@ -525,7 +525,7 @@ public:
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
     void ExportAggExecStats(TAggExecStat* metrics);
-    TCurrentExecStats GetCurrentExecStats(TInstant now) const;
+    TCurrentQueryResources GetCurrentQueryResources() const;
     TCurrentExecStatsReport TakeCurrentStats(bool finished = false);
 };
 

@@ -1565,30 +1565,21 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
 }
 
-TCurrentExecStats TQueryExecutionStats::GetCurrentExecStats(TInstant now) const {
-    TCurrentExecStats result;
-    if (StartTs && now >= StartTs) {
-        result.DurationUs = (now - StartTs).MicroSeconds();
-    }
+TCurrentQueryResources TQueryExecutionStats::GetCurrentQueryResources() const {
+    TCurrentQueryResources result;
     result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
     result.ComputeMemoryBytes = CurrentMemoryBytes;
     result.ReadIngressBytes = CurrentReadIngressBytes;
-    result.TableReadBytes = CurrentTableReadBytes;
     result.ObservedPeakComputeMemoryBytes = ObservedPeakComputeMemoryBytes;
     return result;
 }
 
 TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
-    auto current = GetCurrentExecStats(TInstant::Now());
+    auto current = GetCurrentQueryResources();
     if (finished) {
         current.ComputeMemoryBytes = 0;
     }
-    return {{
-        .CpuTimeUs = current.CpuTimeUs,
-        .ComputeMemoryBytes = current.ComputeMemoryBytes,
-        .ReadIngressBytes = current.ReadIngressBytes,
-        .ObservedPeakComputeMemoryBytes = current.ObservedPeakComputeMemoryBytes,
-    }, ++CurrentStatsSequenceNo};
+    return {current, ++CurrentStatsSequenceNo};
 }
 
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {

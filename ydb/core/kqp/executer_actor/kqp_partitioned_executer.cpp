@@ -233,7 +233,7 @@ public:
     }
 
     void PublishCurrentStats() {
-        const auto now = TInstant::Now();
+        const auto now = TMonotonic::Now();
         if (LastCurrentStatsPublish + UserRequestContext->CurrentQueryStatsInterval > now) {
             return;
         }
@@ -1052,7 +1052,7 @@ private:
     TCurrentQueryStats CurrentQueryStats;
     THashMap<TActorId, TCurrentQueryStats::TSourceState> ChildCurrentStats;
     ui64 CurrentStatsSequenceNo = 0;
-    TInstant LastCurrentStatsPublish;
+    TMonotonic LastCurrentStatsPublish;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 

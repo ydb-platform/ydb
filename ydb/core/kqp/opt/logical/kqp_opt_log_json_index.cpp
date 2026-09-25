@@ -37,6 +37,7 @@ struct TJsonNodeParams {
     std::optional<EDataSlot> ReturningType;
     std::unordered_map<TString, TString> Variables;
     std::unordered_map<TString, TString> ParamVariables;
+    THashSet<TString> JsonCollectionParams;
 };
 
 TPredicateCollectResult MakeCollectError(TExprContext& ctx, TPositionHandle pos, TStringBuf message) {
@@ -312,10 +313,15 @@ bool IsSupportedJsonParamType(const TTypeAnnotationNode* type) {
         case EDataSlot::Uint64:
         case EDataSlot::Float:
         case EDataSlot::Double:
+        case EDataSlot::Json:
             return true;
         default:
             return false;
     }
+}
+
+bool IsJsonCollectionParamType(const TTypeAnnotationNode* type) {
+    return type && type->GetKind() == ETypeAnnotationKind::Data && type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Json;
 }
 
 std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode, const THashSet<TString>& indexedColumns) {
@@ -335,6 +341,7 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
     const auto& nodeVariables = jsonNode.Variables().Ref();
     std::unordered_map<TString, TString> variables;
     std::unordered_map<TString, TString> paramVariables;
+    THashSet<TString> jsonCollectionParams;
 
     if (nodeVariables.IsCallable("AsDict")) {
         for (ui32 i = 0; i < nodeVariables.ChildrenSize(); ++i) {
@@ -364,9 +371,15 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
             if (innerValue.Maybe<TCoParameter>()) {
                 const auto paramName = TString(innerValue.Cast<TCoParameter>().Name().Value());
                 const auto paramType = innerValue.Cast<TCoParameter>().Ref().GetTypeAnn();
+
                 if (!IsSupportedJsonParamType(paramType)) {
                     return std::unexpected(TStringBuilder() << "Variable '" << varName << "' is bound to a parameter with unsupported type");
                 }
+
+                if (IsJsonCollectionParamType(paramType)) {
+                    jsonCollectionParams.emplace(paramName);
+                }
+
                 paramVariables.emplace(varName, paramName);
                 continue;
             }
@@ -424,7 +437,8 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         .JsonPath = jsonNode.JsonPath().Cast<TCoUtf8>().Literal().StringValue(),
         .ReturningType = returningType,
         .Variables = std::move(variables),
-        .ParamVariables = std::move(paramVariables) };
+        .ParamVariables = std::move(paramVariables),
+        .JsonCollectionParams = std::move(jsonCollectionParams) };
 }
 
 std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPredicateCollectResult> left,
@@ -515,7 +529,15 @@ TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params, ECall
         return MakeCollectError(ctx, pos, collectResult.GetError().GetMessage());
     }
 
-    return AppendComparisonValue(params.ColumnName, std::move(collectResult), std::move(comparisonValue));
+    auto result = AppendComparisonValue(params.ColumnName, std::move(collectResult), std::move(comparisonValue));
+    for (const auto& token : result.Collect.GetTokens()) {
+        if (params.JsonCollectionParams.contains(token.ParamName)) {
+            result.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
+            break;
+        }
+    }
+
+    return result;
 }
 
 std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const TExprBase& value) {

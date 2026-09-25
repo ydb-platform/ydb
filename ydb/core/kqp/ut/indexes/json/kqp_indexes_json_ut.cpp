@@ -2044,6 +2044,125 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    Y_UNIT_TEST_TWIN(JsonPassingArrayParameterOverlap, Compact) {
+        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"(
+            CREATE TABLE `/Root/rent_rule` (
+                rule_id Uint64,
+                daily_schedules Json,
+                PRIMARY KEY (rule_id)
+            );
+        )");
+        ExecuteJsonStatement(db, R"(
+            UPSERT INTO `/Root/rent_rule` (rule_id, daily_schedules) VALUES
+                (1u, Json('["7/0", "6/1"]')),
+                (2u, Json('["7/0"]')),
+                (3u, Json('["5/2"]')),
+                (4u, Json('[]')),
+                (5u, Json('[1, true, "shared"]')),
+                (6u, Json('[2, false]'));
+        )");
+        ExecuteJsonStatement(db, R"(
+            ALTER TABLE `/Root/rent_rule`
+                ADD INDEX schedules_json GLOBAL USING json ON (daily_schedules);
+        )");
+
+        const TString indexQuery = R"(
+            DECLARE $schedules AS Json;
+            SELECT r.rule_id
+            FROM `/Root/rent_rule` VIEW schedules_json AS r
+            WHERE JSON_EXISTS(
+                r.daily_schedules,
+                '$[*] ? (@ == $schedules)'
+                PASSING $schedules AS schedules
+            )
+            ORDER BY rule_id;
+        )";
+        const TString primaryQuery = R"(
+            DECLARE $schedules AS Json;
+            SELECT r.rule_id
+            FROM `/Root/rent_rule` VIEW PRIMARY KEY AS r
+            WHERE JSON_EXISTS(
+                r.daily_schedules,
+                '$[*] ? (@ == $schedules)'
+                PASSING $schedules AS schedules
+            )
+            ORDER BY rule_id;
+        )";
+
+        const auto execute = [&](const TString& query, TStringBuf schedules, EStatsMode statsMode = EStatsMode::None) {
+            auto params = TParamsBuilder()
+                .AddParam("$schedules").Json(TString(schedules)).Build()
+                .Build();
+            auto settings = TExecuteQuerySettings().StatsMode(statsMode);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        const auto validate = [&](TStringBuf schedules, TStringBuf expected) {
+            auto primary = execute(primaryQuery, schedules);
+            auto indexed = execute(indexQuery, schedules);
+            CompareYson(TString(expected), FormatResultSetYson(primary.GetResultSet(0)));
+            CompareYson(TString(expected), FormatResultSetYson(indexed.GetResultSet(0)));
+        };
+
+        validate(R"(["7/0", "6/1", "7/0"])", "[[[1u]];[[2u]]]");
+        validate(R"(["missing"])", "[]");
+        validate(R"([1, true])", "[[[5u]]]");
+
+        for (TStringBuf schedules : {TStringBuf("[]"), TStringBuf("[[], {}]")}) {
+            auto primary = execute(primaryQuery, schedules);
+            auto indexed = execute(indexQuery, schedules, EStatsMode::Basic);
+
+            CompareYson("[]", FormatResultSetYson(primary.GetResultSet(0)));
+            CompareYson("[]", FormatResultSetYson(indexed.GetResultSet(0)));
+            AssertTableStats(indexed, "/Root/rent_rule", {
+                .ExpectedReads = 0,
+            });
+            AssertTableStats(indexed, "/Root/rent_rule/schedules_json/indexImplTable", {
+                .ExpectedReads = 0,
+            });
+        }
+
+        TStringBuilder manyValues;
+        manyValues << '[';
+        for (ui32 i = 0; i < 256; ++i) {
+            if (i) {
+                manyValues << ',';
+            }
+            manyValues << '"' << "missing-" << i << '"';
+        }
+        manyValues << ",\"7/0\"]";
+        const TString manyValuesJson = manyValues;
+        validate(manyValuesJson, "[[[1u]];[[2u]]]");
+
+        auto indexed = execute(indexQuery, R"(["7/0", "6/1", "7/0"])", EStatsMode::Basic);
+        CompareYson("[[[1u]];[[2u]]]", FormatResultSetYson(indexed.GetResultSet(0)));
+        AssertTableStats(indexed, "/Root/rent_rule", {
+            .ExpectedReads = 2,
+        });
+        AssertTableStats(indexed, "/Root/rent_rule/schedules_json/indexImplTable", {
+            .ExpectedReads = Compact ? 2u : 3u,
+        });
+
+        auto explainParams = TParamsBuilder()
+            .AddParam("$schedules").Json(R"(["7/0", "6/1"])").Build()
+            .Build();
+        auto explain = db.ExecuteQuery(indexQuery, TTxControl::NoTx(), explainParams,
+            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(), "Explain plan is missing");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true), "Failed to parse explain plan");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "schedules_json"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Name", "TableFullScan"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Node Type", "TableFullScan"), 0);
+    }
+
     Y_UNIT_TEST(SelectJsonIndex_Top) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             static constexpr const char* where = R"(JSON_EXISTS(Text, '$.k1'))";

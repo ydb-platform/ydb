@@ -562,15 +562,34 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
-        YDB_LOG_WARN("Failed to get parameter value for full-text query token",
-            {"paramName", token.GetParamName()});
+        YDB_LOG_WARN("Failed to get parameter value for full-text query token", {"paramName", token.GetParamName()});
         return { baseToken };
     }
 
-    auto [type, value] = *paramPtr;
     TVector<TString> result;
 
-    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
+    auto [type, value] = *paramPtr;
+    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data) {
+        auto* dataType = static_cast<NKikimr::NMiniKQL::TDataType*>(type);
+        const auto dataSlot = dataType->GetDataSlot();
+
+        if (dataSlot && *dataSlot == NUdf::EDataSlot::Json) {
+            TString error;
+            const auto jsonTokens = NJsonIndex::TokenizeJson(value.AsStringRef(), error);
+            YQL_ENSURE(error.empty(), "Failed to tokenize Json query parameter '" << token.GetParamName() << "': " << error);
+
+            result.reserve(jsonTokens.size());
+            for (const auto& jsonToken : jsonTokens) {
+                result.emplace_back(baseToken + jsonToken);
+            }
+
+            std::sort(result.begin(), result.end());
+            result.erase(std::unique(result.begin(), result.end()), result.end());
+            return result;
+        }
+
+        return { ResolveFullTextQueryToken(token, stageInfo) };
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
         NUdf::TUnboxedValue item;
         auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
         auto iter = value.GetListIterator();
@@ -3079,7 +3098,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
 
     auto columns = BuildKqpColumns(source, tableInfo);
     const auto& snapshot = GetMeta().Snapshot;
-    
+
     if (stageInfo.Meta.PrunedPartitions.empty()) {
         return Nothing();
     }

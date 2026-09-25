@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
 
             // Negation
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Utf8) IS NULL)");
-            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Utf8) IS NOT NULL)"); 
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Utf8) IS NOT NULL)");
 
             // JV(...) == true is equivalent to standalone JV(...) - collects trueSuffix token
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\3k1" + trueSuffix});
@@ -944,7 +944,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                    AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0))",
                 {"\2a", "\2b" + numSuffix(0)});
 
-            // Same forms alone 
+            // Same forms alone
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10)");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)");
@@ -2610,6 +2610,26 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING Date('2026-01-01') AS v))");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING DateTime('2026-01-01T00:00:00Z') AS v))");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v)' PASSING Timestamp('2026-01-01T00:00:00Z') AS v))");
+        });
+    }
+
+    Y_UNIT_TEST(JsonPassingArrayParameterTokens) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            const auto params = TParamsBuilder()
+                .AddParam("$p").Json(R"(["v", "1"])").Build()
+                .Build();
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$[*] ? (@ == $values)' PASSING $p AS values))",
+                {NJsonIndex::TToken{"", "$p"}}, params, "or");
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == $values && @.k2 == 1)' PASSING $p AS values))",
+                {NJsonIndex::TToken{"\3k1", "$p"}, NJsonIndex::TToken{"\3k2" + numSuffix(1), ""}},
+                params, "or");
+
+            ValidateError(db, R"(JSON_EXISTS(Text, '$[*] ? (@ == $values)' PASSING $p AS values))",
+                TParamsBuilder()
+                    .AddParam("$p").OptionalJson(R"(["v"])").Build()
+                    .Build());
         });
     }
 

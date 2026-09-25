@@ -1,7 +1,4 @@
-"""Product import paths for utils unit tests.
-
-Keep tests out of analytics/dashboard/metrics packages.
-"""
+"""Product import paths for utils unit tests."""
 
 from __future__ import annotations
 

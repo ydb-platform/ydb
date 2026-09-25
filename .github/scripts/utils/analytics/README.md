@@ -12,8 +12,6 @@
 
 `YDBWrapper` по-прежнему из `.github/scripts/analytics/ydb_wrapper.py`.
 
-Unit-тесты лежат отдельно в `tests/analytics/` (не рядом с клиентом):
-
 ```bash
 python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
 ```
@@ -60,7 +58,7 @@ python3 .github/scripts/utils/analytics/ci_metrics.py send
 
 Что пишется из GitHub Actions:
 
-- `export_github_job_metrics.py`: queue / job / GHA-step по **всем активным** workflow (PR-check, Run-tests, nightly, …). Один файл: `--workflow pr_check.yml` или `CI_METRICS_WORKFLOW=pr_check.yml`. В `collect_analytics_fast.yml` это отдельный job `GitHub job metrics` — параллельно с остальным сбором, чтобы scrape GitHub не держал витрины.
+- `export_github_job_metrics.py`: queue / job / GHA-step по **всем активным** workflow (PR-check, Run-tests, nightly, …). Один файл: `--workflow pr_check.yml` или `CI_METRICS_WORKFLOW=pr_check.yml`. Job в `collect_analytics_fast.yml`: `GitHub job metrics`.
 - PR-check in-job: ya phases с раннера
 - Nightly-Build: `ydbd_cached_build`, `ydbd_size`, evlog + `build_info`
 - Build-analytics-run: clang time-trace + evlog

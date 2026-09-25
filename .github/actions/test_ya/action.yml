@@ -231,7 +231,6 @@ runs:
           python3 "$CI_METRICS_PY" enrich --name "$name" "$@" || true
         }
         record_ci_flush() {
-          # Completed rows only. Does not close open spans (ya_make still running).
           python3 "$CI_METRICS_PY" flush || true
         }
         record_ci_send_cancelled() {

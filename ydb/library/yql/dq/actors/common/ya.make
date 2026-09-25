@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/dq/actors/protos
+    ydb/library/yverify_stream
     yql/essentials/public/issue
 )
 

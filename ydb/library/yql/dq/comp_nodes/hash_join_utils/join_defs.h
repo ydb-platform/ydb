@@ -16,6 +16,10 @@ enum class ESide { Probe, Build };
 
 const char* AsString(ESide side);
 
+constexpr ESide OtherSide(ESide side) {
+    return side == ESide::Build ? ESide::Probe : ESide::Build;
+}
+
 template <typename T> struct TSides {
     T Build;
     T Probe;

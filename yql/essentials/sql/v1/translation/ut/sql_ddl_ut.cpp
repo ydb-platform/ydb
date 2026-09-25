@@ -215,7 +215,10 @@ namespace {
 
 NSQLTranslation::TTranslationSettings PathAliasSettings() {
     NSQLTranslation::TTranslationSettings settings;
-    settings.NormalizePath = [](TStringBuf path) {
+    settings.NormalizePath = [](TStringBuf service, TStringBuf cluster, TStringBuf path) {
+        if (service != "kikimr" || cluster != "plato") {
+            return TString(path);
+        }
         if (path == "/alias" || path.StartsWith("/alias/")) {
             return TString("/canonical") + path.SubStr(6);
         }
@@ -228,11 +231,11 @@ NSQLTranslation::TTranslationSettings PathAliasSettings() {
 }
 
 NYql::TAstParseResult TranslatePathAliases(const TString& sql,
-    NSQLTranslation::TTranslationSettings settings = PathAliasSettings())
-{
+                                           NSQLTranslation::TTranslationSettings settings = PathAliasSettings()) {
     auto result = SqlToYqlWithMode("USE plato; " + sql, NSQLTranslation::ESqlMode::QUERY,
-        10, "kikimr", EDebugOutput::None, false, std::move(settings));
-    UNIT_ASSERT_C(result.IsOk(), sql << "\n" << Err2Str(result));
+                                   10, "kikimr", EDebugOutput::None, false, std::move(settings));
+    UNIT_ASSERT_C(result.IsOk(), sql << "\n"
+                                     << Err2Str(result));
     return result;
 }
 
@@ -274,18 +277,24 @@ Y_UNIT_TEST(PrefixesAndSingleRewrite) {
     auto settings = PathAliasSettings();
     settings.PathPrefix = "/canonical"; // The request database was normalized at ingress.
     for (const TString sql : {
-        "SELECT * FROM path;",
-        "SELECT * FROM `/alias/path`;",
-        "PRAGMA TablePathPrefix = '/alias'; SELECT * FROM path;",
-        "PRAGMA TablePathPrefix = ('kikimr', '/alias'); SELECT * FROM path;",
-        "PRAGMA TablePathPrefix = ('plato', '/alias'); SELECT * FROM path;",
-    }) {
+             "SELECT * FROM path;",
+             "SELECT * FROM `/alias/path`;",
+             "PRAGMA TablePathPrefix = '/alias'; SELECT * FROM path;",
+             "PRAGMA TablePathPrefix('kikimr', '/alias'); SELECT * FROM path;",
+             "PRAGMA TablePathPrefix('plato', '/alias'); SELECT * FROM path;",
+         }) {
         const auto result = TranslatePathAliases(sql, settings);
         UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/canonical/path"), 1, sql);
         UNIT_ASSERT_VALUES_EQUAL_C(CountPathAtoms(*result.Root, "/second/path"), 0, sql);
     }
     const auto explicitCanonical = TranslatePathAliases("SELECT * FROM `/canonical/path`;", settings);
     UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*explicitCanonical.Root, "/second/path"), 1);
+    const auto cleared = TranslatePathAliases("PRAGMA TablePathPrefix = ''; SELECT * FROM path;", settings);
+    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*cleared.Root, "path"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*cleared.Root, "/canonical/path"), 0);
+    const auto sharedPrefix = TranslatePathAliases("PRAGMA TablePathPrefix = '/alias'; SELECT * FROM path; SELECT * FROM hahn.path;", settings);
+    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*sharedPrefix.Root, "/canonical/path"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*sharedPrefix.Root, "/alias/path"), 1);
 }
 
 Y_UNIT_TEST(ExternalResourcesAndData) {
@@ -311,7 +320,7 @@ Y_UNIT_TEST(ExternalResourcesAndData) {
     UNIT_ASSERT_VALUES_EQUAL(CountPathAtoms(*disabled.Root, "/alias/path"), 1);
 }
 
-}
+} // Y_UNIT_TEST_SUITE(LiteralPathAliases)
 
 Y_UNIT_TEST_SUITE(ExternalDataSource) {
 Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {

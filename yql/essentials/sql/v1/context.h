@@ -180,7 +180,7 @@ public:
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
-    TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
+    TString GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
     TString BuildTablePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const;
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
@@ -291,8 +291,7 @@ public:
     bool EnsureAvailable(TPosition position, const NYql::TFeature& feature);
 
 private:
-    bool IsLocalCluster(const TString& service, const TDeferredAtom& cluster) const;
-    TString NormalizePath(TStringBuf path) const;
+    TString NormalizePath(const TString& service, const TDeferredAtom& cluster, TStringBuf path) const;
 
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
@@ -309,8 +308,8 @@ private:
     NYql::TPosition Position_;
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
-    TString PathPrefix_;
-    TString LocalPathPrefix_;
+    // An unset SQL override inherits the canonical request database prefix.
+    TMaybe<TString> PathPrefix_;
     THashMap<TString, TString> ProviderPathPrefixes_;
     THashMap<TString, TString> ClusterPathPrefixes_;
     bool IntoHeading_ = true;

@@ -23,10 +23,12 @@ PER_PAGE = 100
 def pick_job(jobs: List[Dict[str, Any]], runner_name: str) -> Optional[Dict[str, Any]]:
     if not runner_name:
         return None
-    for job in jobs:
-        if str(job.get("runner_name") or "") == runner_name:
-            return job
-    return None
+    matches = [job for job in jobs if str(job.get("runner_name") or "") == runner_name]
+    if not matches:
+        return None
+    running = [job for job in matches if job.get("status") == "in_progress"]
+    pool = running or matches
+    return max(pool, key=lambda job: str(job.get("started_at") or ""))
 
 
 def list_run_jobs(

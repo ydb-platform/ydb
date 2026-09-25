@@ -25,6 +25,23 @@ class PickJobTest(unittest.TestCase):
         self.assertIsNone(pick_job(jobs, "runner-missing"))
         self.assertIsNone(pick_job(jobs, ""))
 
+    def test_prefers_in_progress_over_earlier_job_on_same_runner(self):
+        jobs = [
+            {
+                "id": 1,
+                "runner_name": "same",
+                "status": "completed",
+                "started_at": "2026-09-25T10:00:00Z",
+            },
+            {
+                "id": 2,
+                "runner_name": "same",
+                "status": "in_progress",
+                "started_at": "2026-09-25T12:00:00Z",
+            },
+        ]
+        self.assertEqual(pick_job(jobs, "same")["id"], 2)
+
 
 class PaginationTest(unittest.TestCase):
     def test_lists_two_pages_and_picks_runner(self):

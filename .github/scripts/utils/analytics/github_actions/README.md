@@ -57,7 +57,7 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
   --hours 2
 ```
 
-Окно GitHub `created` всегда `--hours` (в cron — 36), его watermark не сужает. Уже записанные `github_job` с `event_ts` в этом окне пропускаются. Ошибка запроса — выгружаем окно целиком, upsert идемпотентный. По умолчанию все active workflows. `--workflow pr_check.yml` ограничивает список. `--org` / `--repo` / `--table-path` по желанию.
+Окно GitHub `created` всегда `--hours` (в cron — 36), его watermark не сужает. Пропускается пара `(run_id, run_attempt)`, у которой уже есть `github_job` в этом окне. Ошибка запроса — выгружаем окно целиком, upsert идемпотентный. По умолчанию все active workflows. `--workflow pr_check.yml` ограничивает список. `--org` / `--repo` / `--table-path` по желанию.
 
 ```bash
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py'

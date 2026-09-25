@@ -169,8 +169,8 @@ def _meminfo() -> Dict[str, int]:
             continue
         out[key] = kib * 1024
     if "MemAvailable" not in out and "MemTotal" in out:
-        used_free = out.get("MemFree", 0) + out.get("Buffers", 0) + out.get("Cached", 0)
-        out["MemAvailable"] = max(out["MemTotal"] - used_free, 0)
+        free = out.get("MemFree", 0) + out.get("Buffers", 0) + out.get("Cached", 0)
+        out["MemAvailable"] = min(free, out["MemTotal"])
     return out
 
 

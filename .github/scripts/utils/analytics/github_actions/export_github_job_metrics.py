@@ -166,15 +166,15 @@ def created_since(hours: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(hours=hours)
 
 
-def already_exported(run_id: Any, exported: set) -> bool:
+def already_exported(run_id: Any, run_attempt: Any, exported: set) -> bool:
     try:
-        return int(run_id) in exported
+        return (int(run_id), int(run_attempt)) in exported
     except (TypeError, ValueError):
         return False
 
 
 def exported_run_ids(since: datetime, table_path: Optional[str] = None) -> set:
-    """Run ids that already have a github_job row in this window.
+    """(run_id, run_attempt) pairs that already have a github_job row in this window.
 
     The GitHub `created` filter stays at `since`. A failed query exports the
     whole window again; upsert is idempotent.
@@ -189,7 +189,7 @@ def exported_run_ids(since: datetime, table_path: Optional[str] = None) -> set:
             path = table_path or resolve_table_path(wrapper)
             rows = wrapper.execute_scan_query(
                 f"""
-                SELECT run_id
+                SELECT run_id, run_attempt
                 FROM `{path}`
                 WHERE event_ts >= Timestamp("{ts}")
                   AND source = "github_job"
@@ -201,11 +201,12 @@ def exported_run_ids(since: datetime, table_path: Optional[str] = None) -> set:
         return set()
     ids = set()
     for row in rows or []:
-        if isinstance(row, dict):
-            try:
-                ids.add(int(row["run_id"]))
-            except (KeyError, TypeError, ValueError):
-                continue
+        if not isinstance(row, dict):
+            continue
+        try:
+            ids.add((int(row["run_id"]), int(row["run_attempt"])))
+        except (KeyError, TypeError, ValueError):
+            continue
     return ids
 
 
@@ -288,12 +289,11 @@ def iter_workflow_runs(
     workflow: str,
     created_since: datetime,
     per_page: int = 50,
-    max_pages: int = 20,
 ) -> Iterable[Dict[str, Any]]:
     created = f">={created_since.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     url = f"https://api.github.com/repos/{org}/{repo}/actions/workflows/{quote(workflow)}/runs"
     page = 1
-    while page <= max_pages:
+    while True:
         payload = github_get(
             url,
             params={
@@ -388,7 +388,7 @@ def collect_rows(
     exported = exported or set()
     for run in iter_workflow_runs(org, repo, workflow, created_since):
         run_id = run.get("id")
-        if run_id is None or already_exported(run_id, exported):
+        if run_id is None or already_exported(run_id, run.get("run_attempt"), exported):
             continue
         try:
             jobs = list_run_jobs(org, repo, int(run_id))

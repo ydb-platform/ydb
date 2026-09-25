@@ -86,12 +86,13 @@ class CreatedSinceTest(unittest.TestCase):
 
 
 class AlreadyExportedTest(unittest.TestCase):
-    def test_skips_known_run_and_keeps_new(self):
-        exported = {10, 11}
-        self.assertTrue(already_exported(10, exported))
-        self.assertTrue(already_exported("11", exported))
-        self.assertFalse(already_exported(12, exported))
-        self.assertFalse(already_exported(None, exported))
+    def test_skips_known_attempt_and_keeps_a_new_one(self):
+        exported = {(10, 1)}
+        self.assertTrue(already_exported(10, 1, exported))
+        self.assertTrue(already_exported("10", "1", exported))
+        self.assertFalse(already_exported(10, 2, exported))
+        self.assertFalse(already_exported(12, 1, exported))
+        self.assertFalse(already_exported(None, 1, exported))
 
 
 if __name__ == "__main__":

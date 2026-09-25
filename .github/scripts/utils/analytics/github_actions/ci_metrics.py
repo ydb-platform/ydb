@@ -232,6 +232,8 @@ def enrich(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Opti
         ya_attempt = extra_labels.get("ya_attempt")
     if ya_attempt in (None, "") and isinstance(props.get("labels"), dict):
         ya_attempt = props["labels"].get("ya_attempt")
+    if ya_attempt in (None, ""):
+        ya_attempt = props.get("ya_attempt")
     if ya_attempt not in (None, ""):
         extras["match_labels"] = {"ya_attempt": ya_attempt}
     return collector_enrich(name, props, **extras)

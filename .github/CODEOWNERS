@@ -109,6 +109,7 @@
 /ydb/core/kqp/proxy_service/kqp_script_executions.cpp @ydb-platform/fq
 /ydb/core/kqp/proxy_service/kqp_script_executions.h @ydb-platform/fq
 /ydb/core/kqp/run_script_actor/ @ydb-platform/fq
+/ydb/core/kqp/runtime/streaming/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/service/kqp_qs_scripts_ut.cpp @ydb-platform/fq
 /ydb/core/local_proxy/ @ydb-platform/fq
@@ -139,6 +140,10 @@
 /ydb/library/yql/dq/actors/compute/dq_checkpoints* @ydb-platform/fq
 /ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.* @ydb-platform/fq
 /ydb/library/yql/dq/actors/compute/input_transforms/ @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/dq_async_compute_actor_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/dq_compute_actor_checkpoints_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/dq_sync_compute_actor_ut.cpp @ydb-platform/fq
+/ydb/library/yql/dq/actors/compute/ut/mock_lookup_factory.* @ydb-platform/fq
 /ydb/library/yql/dq/comp_nodes/dq_watermark_generator.* @ydb-platform/fq
 /ydb/library/yql/dq/opt/dq_opt_hopping.* @ydb-platform/fq
 /ydb/library/yql/dq/proto/dq_state_load_plan.proto @ydb-platform/fq

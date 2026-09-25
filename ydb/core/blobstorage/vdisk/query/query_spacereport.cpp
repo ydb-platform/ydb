@@ -35,6 +35,23 @@ namespace {
 
     using namespace NVDiskSpaceReport;
 
+#define VDISK_SPACE_REPORT_BREAKDOWN_FIELDS(XX) \
+    XX(UsefulBlobDataBytes)                      \
+    XX(LiveMetadataBytes)                        \
+    XX(LiveAuxiliaryDataBytes)                   \
+    XX(GcDeadBlobDataBytes)                      \
+    XX(GcDeadMetadataBytes)                      \
+    XX(MergeRedundantBlobDataBytes)              \
+    XX(MergeRedundantMetadataBytes)              \
+    XX(WritePaddingBytes)                        \
+    XX(SlotInternalFragmentationBytes)           \
+    XX(FreeSlotBytes)                            \
+    XX(ChunkTailBytes)                           \
+    XX(FreeChunkReserveBytes)                    \
+    XX(LockedOrQuarantinedBytes)                 \
+    XX(UnclassifiedBytes)                        \
+    XX(FreeStripeBytes)
+
     enum EEv {
         EvSourceTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvScanComplete,
@@ -47,30 +64,26 @@ namespace {
 
     struct TEvSourceTimeout : TEventLocal<TEvSourceTimeout, EvSourceTimeout> {};
 
+    struct TScanMetrics {
+        TDuration Duration;
+        ui64 CpuTimeUs = 0;
+        ui64 Quanta = 0;
+        ui64 VisitedKeys = 0;
+        ui64 PhysicalRecords = 0;
+    };
+
     struct TEvScanComplete : TEventLocal<TEvScanComplete, EvScanComplete> {
         const ui64 AttemptId;
         std::unique_ptr<TEvGetVDiskSpaceReportResponse> Response;
-        const TDuration Duration;
-        const ui64 CpuTimeUs;
-        const ui64 Quanta;
-        const ui64 VisitedKeys;
-        const ui64 PhysicalRecords;
+        const TScanMetrics Metrics;
 
         TEvScanComplete(
                 ui64 attemptId,
                 std::unique_ptr<TEvGetVDiskSpaceReportResponse> response,
-                TDuration duration,
-                ui64 cpuTimeUs,
-                ui64 quanta,
-                ui64 visitedKeys,
-                ui64 physicalRecords)
+                TScanMetrics metrics)
             : AttemptId(attemptId)
             , Response(std::move(response))
-            , Duration(duration)
-            , CpuTimeUs(cpuTimeUs)
-            , Quanta(quanta)
-            , VisitedKeys(visitedKeys)
-            , PhysicalRecords(physicalRecords)
+            , Metrics(metrics)
         {}
     };
 
@@ -166,21 +179,17 @@ namespace {
     };
 
     void FillBreakdown(const TSpaceBreakdown& source, NKikimrVDisk::TVDiskSpaceBreakdown* target) {
-        target->SetUsefulBlobDataBytes(source.UsefulBlobDataBytes);
-        target->SetLiveMetadataBytes(source.LiveMetadataBytes);
-        target->SetLiveAuxiliaryDataBytes(source.LiveAuxiliaryDataBytes);
-        target->SetGcDeadBlobDataBytes(source.GcDeadBlobDataBytes);
-        target->SetGcDeadMetadataBytes(source.GcDeadMetadataBytes);
-        target->SetMergeRedundantBlobDataBytes(source.MergeRedundantBlobDataBytes);
-        target->SetMergeRedundantMetadataBytes(source.MergeRedundantMetadataBytes);
-        target->SetWritePaddingBytes(source.WritePaddingBytes);
-        target->SetSlotInternalFragmentationBytes(source.SlotInternalFragmentationBytes);
-        target->SetFreeSlotBytes(source.FreeSlotBytes);
-        target->SetChunkTailBytes(source.ChunkTailBytes);
-        target->SetFreeChunkReserveBytes(source.FreeChunkReserveBytes);
-        target->SetLockedOrQuarantinedBytes(source.LockedOrQuarantinedBytes);
-        target->SetUnclassifiedBytes(source.UnclassifiedBytes);
-        target->SetFreeStripeBytes(source.FreeStripeBytes);
+#define SET_FIELD(name) target->Set##name(source.name);
+        VDISK_SPACE_REPORT_BREAKDOWN_FIELDS(SET_FIELD)
+#undef SET_FIELD
+    }
+
+    ui64 CalculateAccountedBytes(const NKikimrVDisk::TVDiskSpaceBreakdown& value) {
+        ui64 result = 0;
+#define ADD_FIELD(name) result += value.Get##name();
+        VDISK_SPACE_REPORT_BREAKDOWN_FIELDS(ADD_FIELD)
+#undef ADD_FIELD
+        return result;
     }
 
     void FillComponent(const TComponentState& source, NKikimrVDisk::TVDiskSpaceComponent* target) {
@@ -386,6 +395,27 @@ namespace {
             return !BlobYieldedState;
         }
 
+        template <class TMerger, class TSnapshot, class TYieldedState>
+        bool ScanMetadata(
+                TMerger& merger,
+                TComponentState& component,
+                const TSnapshot& snapshot,
+                std::optional<TYieldedState>& yieldedState) {
+            auto aggregator = TPerKeySpaceAggregator(&merger,
+                [&component](const auto&, const TMerger& keyMerger) {
+                    const auto& estimate = keyMerger.GetConclusion();
+                    component.Breakdown += estimate.Breakdown;
+                    AddPhysicalSsts(component, estimate.PhysicalSsts);
+                }, &VisitedKeys, &PhysicalRecords);
+            yieldedState = TraverseDbWithoutMerge(
+                HullCtx,
+                &aggregator,
+                snapshot,
+                std::move(yieldedState),
+                YieldPolicy);
+            return !yieldedState;
+        }
+
         bool ScanBlocks(THullDsSnap& snapshot) {
             TBlocksSpaceMerger merger(
                 HullCtx->VCtx->Top->GType,
@@ -393,19 +423,7 @@ namespace {
                 HullCtx->AllowKeepFlags,
                 true,
                 PDiskCtx->Dsk->AppendBlockSize);
-            auto aggregator = TPerKeySpaceAggregator(&merger,
-                [this](const TKeyBlock&, const TBlocksSpaceMerger& keyMerger) {
-                    const auto& estimate = keyMerger.GetConclusion();
-                    Blocks.Breakdown += estimate.Breakdown;
-                    AddPhysicalSsts(Blocks, estimate.PhysicalSsts);
-                }, &VisitedKeys, &PhysicalRecords);
-            BlocksYieldedState = TraverseDbWithoutMerge(
-                HullCtx,
-                &aggregator,
-                snapshot.BlocksSnap,
-                std::move(BlocksYieldedState),
-                YieldPolicy);
-            return !BlocksYieldedState;
+            return ScanMetadata(merger, Blocks, snapshot.BlocksSnap, BlocksYieldedState);
         }
 
         bool ScanBarriers(THullDsSnap& snapshot) {
@@ -416,19 +434,7 @@ namespace {
                 HullCtx->AllowKeepFlags,
                 true,
                 PDiskCtx->Dsk->AppendBlockSize);
-            auto aggregator = TPerKeySpaceAggregator(&merger,
-                [this](const TKeyBarrier&, const TBarriersSpaceMerger& keyMerger) {
-                    const auto& estimate = keyMerger.GetConclusion();
-                    Barriers.Breakdown += estimate.Breakdown;
-                    AddPhysicalSsts(Barriers, estimate.PhysicalSsts);
-                }, &VisitedKeys, &PhysicalRecords);
-            BarriersYieldedState = TraverseDbWithoutMerge(
-                HullCtx,
-                &aggregator,
-                snapshot.BarriersSnap,
-                std::move(BarriersYieldedState),
-                YieldPolicy);
-            return !BarriersYieldedState;
+            return ScanMetadata(merger, Barriers, snapshot.BarriersSnap, BarriersYieldedState);
         }
 
         void FinishHuge(TComponentState& huge, ui64 stripeChunkCount) {
@@ -641,11 +647,13 @@ namespace {
             TThis::Send(OwnerId, new TEvScanComplete(
                 AttemptId,
                 std::move(response),
-                completed - CollectionStartedMonotonic,
-                ScanCpuTimeUs,
-                ScanQuanta,
-                VisitedKeys,
-                PhysicalRecords));
+                {
+                    .Duration = completed - CollectionStartedMonotonic,
+                    .CpuTimeUs = ScanCpuTimeUs,
+                    .Quanta = ScanQuanta,
+                    .VisitedKeys = VisitedKeys,
+                    .PhysicalRecords = PhysicalRecords,
+                }));
             PassAway();
         }
 
@@ -887,75 +895,23 @@ namespace {
 
         friend class TActorBootstrapped<TThis>;
 
-        static ui64 AccountedBytes(const NKikimrVDisk::TVDiskSpaceBreakdown& value) {
-            return value.GetUsefulBlobDataBytes()
-                + value.GetLiveMetadataBytes()
-                + value.GetLiveAuxiliaryDataBytes()
-                + value.GetGcDeadBlobDataBytes()
-                + value.GetGcDeadMetadataBytes()
-                + value.GetMergeRedundantBlobDataBytes()
-                + value.GetMergeRedundantMetadataBytes()
-                + value.GetWritePaddingBytes()
-                + value.GetSlotInternalFragmentationBytes()
-                + value.GetFreeSlotBytes()
-                + value.GetChunkTailBytes()
-                + value.GetFreeChunkReserveBytes()
-                + value.GetLockedOrQuarantinedBytes()
-                + value.GetUnclassifiedBytes()
-                + value.GetFreeStripeBytes();
-        }
-
         struct TBreakdownCounters {
-            const TCounterPtr UsefulBlobDataBytes;
-            const TCounterPtr LiveMetadataBytes;
-            const TCounterPtr LiveAuxiliaryDataBytes;
-            const TCounterPtr GcDeadBlobDataBytes;
-            const TCounterPtr GcDeadMetadataBytes;
-            const TCounterPtr MergeRedundantBlobDataBytes;
-            const TCounterPtr MergeRedundantMetadataBytes;
-            const TCounterPtr WritePaddingBytes;
-            const TCounterPtr SlotInternalFragmentationBytes;
-            const TCounterPtr FreeSlotBytes;
-            const TCounterPtr ChunkTailBytes;
-            const TCounterPtr FreeChunkReserveBytes;
-            const TCounterPtr LockedOrQuarantinedBytes;
-            const TCounterPtr UnclassifiedBytes;
-            const TCounterPtr FreeStripeBytes;
+            const TCounterGroup Group;
+#define DECLARE_COUNTER(name) const TCounterPtr name;
+            VDISK_SPACE_REPORT_BREAKDOWN_FIELDS(DECLARE_COUNTER)
+#undef DECLARE_COUNTER
 
             explicit TBreakdownCounters(const TCounterGroup& group)
-                : UsefulBlobDataBytes(group->GetCounter("UsefulBlobDataBytes"))
-                , LiveMetadataBytes(group->GetCounter("LiveMetadataBytes"))
-                , LiveAuxiliaryDataBytes(group->GetCounter("LiveAuxiliaryDataBytes"))
-                , GcDeadBlobDataBytes(group->GetCounter("GcDeadBlobDataBytes"))
-                , GcDeadMetadataBytes(group->GetCounter("GcDeadMetadataBytes"))
-                , MergeRedundantBlobDataBytes(group->GetCounter("MergeRedundantBlobDataBytes"))
-                , MergeRedundantMetadataBytes(group->GetCounter("MergeRedundantMetadataBytes"))
-                , WritePaddingBytes(group->GetCounter("WritePaddingBytes"))
-                , SlotInternalFragmentationBytes(group->GetCounter("SlotInternalFragmentationBytes"))
-                , FreeSlotBytes(group->GetCounter("FreeSlotBytes"))
-                , ChunkTailBytes(group->GetCounter("ChunkTailBytes"))
-                , FreeChunkReserveBytes(group->GetCounter("FreeChunkReserveBytes"))
-                , LockedOrQuarantinedBytes(group->GetCounter("LockedOrQuarantinedBytes"))
-                , UnclassifiedBytes(group->GetCounter("UnclassifiedBytes"))
-                , FreeStripeBytes(group->GetCounter("FreeStripeBytes"))
+                : Group(group)
+#define INITIALIZE_COUNTER(name) , name(Group->GetCounter(#name))
+                VDISK_SPACE_REPORT_BREAKDOWN_FIELDS(INITIALIZE_COUNTER)
+#undef INITIALIZE_COUNTER
             {}
 
             void Set(const NKikimrVDisk::TVDiskSpaceBreakdown& value) const {
-                UsefulBlobDataBytes->Set(value.GetUsefulBlobDataBytes());
-                LiveMetadataBytes->Set(value.GetLiveMetadataBytes());
-                LiveAuxiliaryDataBytes->Set(value.GetLiveAuxiliaryDataBytes());
-                GcDeadBlobDataBytes->Set(value.GetGcDeadBlobDataBytes());
-                GcDeadMetadataBytes->Set(value.GetGcDeadMetadataBytes());
-                MergeRedundantBlobDataBytes->Set(value.GetMergeRedundantBlobDataBytes());
-                MergeRedundantMetadataBytes->Set(value.GetMergeRedundantMetadataBytes());
-                WritePaddingBytes->Set(value.GetWritePaddingBytes());
-                SlotInternalFragmentationBytes->Set(value.GetSlotInternalFragmentationBytes());
-                FreeSlotBytes->Set(value.GetFreeSlotBytes());
-                ChunkTailBytes->Set(value.GetChunkTailBytes());
-                FreeChunkReserveBytes->Set(value.GetFreeChunkReserveBytes());
-                LockedOrQuarantinedBytes->Set(value.GetLockedOrQuarantinedBytes());
-                UnclassifiedBytes->Set(value.GetUnclassifiedBytes());
-                FreeStripeBytes->Set(value.GetFreeStripeBytes());
+#define SET_COUNTER(name) name->Set(value.Get##name());
+                VDISK_SPACE_REPORT_BREAKDOWN_FIELDS(SET_COUNTER)
+#undef SET_COUNTER
             }
         };
 
@@ -967,8 +923,8 @@ namespace {
             const TCounterPtr AccountedBytes;
             const TBreakdownCounters Breakdown;
 
-            TComponentCounters(const TCounterGroup& root, const TString& name)
-                : Group(root->GetSubgroup("component", name))
+            explicit TComponentCounters(TCounterGroup group)
+                : Group(std::move(group))
                 , ChunkCount(Group->GetCounter("ChunkCount"))
                 , AllocatedBytes(Group->GetCounter("AllocatedBytes"))
                 , StripedBytes(Group->GetCounter("StripedBytes"))
@@ -976,11 +932,15 @@ namespace {
                 , Breakdown(Group)
             {}
 
+            TComponentCounters(const TCounterGroup& root, const TString& name)
+                : TComponentCounters(root->GetSubgroup("component", name))
+            {}
+
             void Set(const NKikimrVDisk::TVDiskSpaceComponent& value) const {
                 ChunkCount->Set(value.GetChunkCount());
                 AllocatedBytes->Set(value.GetAllocatedBytes());
                 StripedBytes->Set(value.GetStripedBytes());
-                AccountedBytes->Set(TVDiskSpaceReportManager::AccountedBytes(value.GetBreakdown()));
+                AccountedBytes->Set(CalculateAccountedBytes(value.GetBreakdown()));
                 Breakdown.Set(value.GetBreakdown());
             }
         };
@@ -1017,28 +977,16 @@ namespace {
 
         struct TChunkKeeperSubsystemCounters {
             const TCounterPtr SubsystemId;
-            const TCounterPtr ChunkCount;
-            const TCounterPtr AllocatedBytes;
-            const TCounterPtr StripedBytes;
-            const TCounterPtr AccountedBytes;
-            const TBreakdownCounters Breakdown;
+            const TComponentCounters Total;
 
             explicit TChunkKeeperSubsystemCounters(const TCounterGroup& group)
                 : SubsystemId(group->GetCounter("SubsystemId"))
-                , ChunkCount(group->GetCounter("ChunkCount"))
-                , AllocatedBytes(group->GetCounter("AllocatedBytes"))
-                , StripedBytes(group->GetCounter("StripedBytes"))
-                , AccountedBytes(group->GetCounter("AccountedBytes"))
-                , Breakdown(group)
+                , Total(group)
             {}
 
             void Set(const NKikimrVDisk::TVDiskChunkKeeperSpace& value) const {
                 SubsystemId->Set(value.GetSubsystemId());
-                ChunkCount->Set(value.GetTotal().GetChunkCount());
-                AllocatedBytes->Set(value.GetTotal().GetAllocatedBytes());
-                StripedBytes->Set(value.GetTotal().GetStripedBytes());
-                AccountedBytes->Set(TVDiskSpaceReportManager::AccountedBytes(value.GetTotal().GetBreakdown()));
-                Breakdown.Set(value.GetTotal().GetBreakdown());
+                Total.Set(value.GetTotal());
             }
         };
 
@@ -1149,20 +1097,32 @@ namespace {
                 ev->Cookie, HullCtx->VCtx, {});
         }
 
-        template <typename TCounterMap>
-        void RemoveStaleSubgroups(
+        template <typename TValueRange, typename TCounterMap, typename TGetLabel>
+        void PublishLabeledCounters(
                 const char* labelName,
-                const THashSet<TString>& current,
-                TCounterMap& counterMap) {
-            std::vector<TString> staleLabels;
-            for (const auto& [label, _] : counterMap) {
-                if (current.find(label) == current.end()) {
-                    staleLabels.push_back(label);
+                const TValueRange& values,
+                TCounterMap& counterMap,
+                TGetLabel getLabel) {
+            using TCounters = typename TCounterMap::mapped_type::element_type;
+
+            THashSet<TString> currentLabels;
+            for (const auto& value : values) {
+                const TString label = ToString(getLabel(value));
+                currentLabels.insert(label);
+                auto& counters = counterMap[label];
+                if (!counters) {
+                    counters = std::make_unique<TCounters>(Counters->GetSubgroup(labelName, label));
                 }
+                counters->Set(value);
             }
-            for (const TString& label : staleLabels) {
-                Counters->RemoveSubgroup(labelName, label);
-                counterMap.erase(label);
+
+            for (auto it = counterMap.begin(); it != counterMap.end();) {
+                if (currentLabels.contains(it->first)) {
+                    ++it;
+                } else {
+                    Counters->RemoveSubgroup(labelName, it->first);
+                    it = counterMap.erase(it);
+                }
             }
         }
 
@@ -1190,60 +1150,31 @@ namespace {
             Unattributed.Set(report.GetUnattributed());
             StripeHeap.Set(report.GetStripeHeap());
 
-            THashSet<TString> currentHugeClasses;
-            for (const auto& value : report.GetHuge().GetSizeClasses()) {
-                const TString label = ToString(value.GetSlotSizeBytes());
-                currentHugeClasses.insert(label);
-                auto it = HugeClasses.find(label);
-                if (it == HugeClasses.end()) {
-                    it = HugeClasses.emplace(label, std::make_unique<THugeClassCounters>(
-                        Counters->GetSubgroup("slot_size_bytes", label))).first;
-                }
-                it->second->Set(value);
-            }
-            RemoveStaleSubgroups("slot_size_bytes", currentHugeClasses, HugeClasses);
-
-            THashSet<TString> currentChunkKeeperSubsystems;
-            for (const auto& value : report.GetChunkKeeper()) {
-                const TString label = ToString(value.GetSubsystemId());
-                currentChunkKeeperSubsystems.insert(label);
-                auto it = ChunkKeeperSubsystems.find(label);
-                if (it == ChunkKeeperSubsystems.end()) {
-                    it = ChunkKeeperSubsystems.emplace(
-                        label,
-                        std::make_unique<TChunkKeeperSubsystemCounters>(
-                            Counters->GetSubgroup("chunk_keeper_subsystem", label))).first;
-                }
-                it->second->Set(value);
-            }
-            RemoveStaleSubgroups(
-                "chunk_keeper_subsystem", currentChunkKeeperSubsystems, ChunkKeeperSubsystems);
+            PublishLabeledCounters(
+                "slot_size_bytes",
+                report.GetHuge().GetSizeClasses(),
+                HugeClasses,
+                [](const auto& value) { return value.GetSlotSizeBytes(); });
+            PublishLabeledCounters(
+                "chunk_keeper_subsystem",
+                report.GetChunkKeeper(),
+                ChunkKeeperSubsystems,
+                [](const auto& value) { return value.GetSubsystemId(); });
         }
 
-        void UpdateAttemptMetrics(
-                TDuration duration,
-                ui64 cpuTimeUs,
-                ui64 quanta,
-                ui64 visitedKeys,
-                ui64 physicalRecords) {
-            LastRefreshDurationMs->Set(duration.MilliSeconds());
-            LastRefreshCpuTimeUs->Set(cpuTimeUs);
-            LastRefreshQuanta->Set(quanta);
-            LastRefreshVisitedKeys->Set(visitedKeys);
-            LastRefreshPhysicalRecords->Set(physicalRecords);
+        void UpdateAttemptMetrics(const TScanMetrics& metrics) {
+            LastRefreshDurationMs->Set(metrics.Duration.MilliSeconds());
+            LastRefreshCpuTimeUs->Set(metrics.CpuTimeUs);
+            LastRefreshQuanta->Set(metrics.Quanta);
+            LastRefreshVisitedKeys->Set(metrics.VisitedKeys);
+            LastRefreshPhysicalRecords->Set(metrics.PhysicalRecords);
         }
 
-        void RecordFailure(
-                TString errorReason,
-                TDuration duration,
-                ui64 cpuTimeUs,
-                ui64 quanta,
-                ui64 visitedKeys,
-                ui64 physicalRecords) {
+        void RecordFailure(TString errorReason, const TScanMetrics& metrics) {
             LastAttemptError = std::move(errorReason);
             LastAttemptSuccessful->Set(0);
             RefreshFailures->Inc();
-            UpdateAttemptMetrics(duration, cpuTimeUs, quanta, visitedKeys, physicalRecords);
+            UpdateAttemptMetrics(metrics);
 
             const TMonotonic now = TActivationContext::Monotonic();
             if (LastFailureLog == TMonotonic::Zero() || now - LastFailureLog >= FailureLogPeriod) {
@@ -1301,22 +1232,13 @@ namespace {
                 LastAttemptError.clear();
                 LastAttemptSuccessful->Set(1);
                 RefreshSuccesses->Inc();
-                UpdateAttemptMetrics(
-                    result->Duration,
-                    result->CpuTimeUs,
-                    result->Quanta,
-                    result->VisitedKeys,
-                    result->PhysicalRecords);
+                UpdateAttemptMetrics(result->Metrics);
             } else {
                 RecordFailure(
                     record.GetErrorReason().empty()
                         ? TString("SpaceReport worker returned no report")
                         : TString(record.GetErrorReason()),
-                    result->Duration,
-                    result->CpuTimeUs,
-                    result->Quanta,
-                    result->VisitedKeys,
-                    result->PhysicalRecords);
+                    result->Metrics);
             }
             FinishAttempt();
         }
@@ -1329,11 +1251,7 @@ namespace {
             TThis::Send(ActiveWorkerId, new TEvents::TEvPoisonPill);
             RecordFailure(
                 "SpaceReport refresh exceeded the 30 minute watchdog",
-                TActivationContext::Monotonic() - AttemptStarted,
-                0,
-                0,
-                0,
-                0);
+                {.Duration = TActivationContext::Monotonic() - AttemptStarted});
             // Keep the worker as active until TEvGone arrives. Poison cannot
             // interrupt an activation, so clearing it here could let a second
             // scan overlap a worker that is still unwinding.
@@ -1355,11 +1273,7 @@ namespace {
 
             RecordFailure(
                 "SpaceReport worker terminated without a completion event",
-                TActivationContext::Monotonic() - AttemptStarted,
-                0,
-                0,
-                0,
-                0);
+                {.Duration = TActivationContext::Monotonic() - AttemptStarted});
             FinishAttempt();
         }
 
@@ -1505,6 +1419,8 @@ namespace {
         std::unordered_map<TString, std::unique_ptr<THugeClassCounters>> HugeClasses;
         std::unordered_map<TString, std::unique_ptr<TChunkKeeperSubsystemCounters>> ChunkKeeperSubsystems;
     };
+
+#undef VDISK_SPACE_REPORT_BREAKDOWN_FIELDS
 
 } // anonymous namespace
 

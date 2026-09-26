@@ -31,6 +31,8 @@ struct TTestEnv {
         Runtime.GetAppData().Icb->CreateConfigControls(true);
         TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BlobDepotControls.S3MaxWritesInFlight);
 
+        // Only locator allocation is under test. Park external S3 requests in an edge actor;
+        // no HTTP server, S3 credentials or successful object uploads are needed.
         Runtime.RegisterService(MakeBlobDepotS3RouterID(TabletId), Runtime.AllocateEdgeActor());
         Observer = Runtime.AddObserver([this](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -60,7 +62,8 @@ struct TTestEnv {
         s3->MutableSyncMode();
         s3->MutableSettings()->SetBucket("test-bucket");
         Runtime.SendToPipe(TabletId, edge, config.release(), 0, GetPipeConfigWithRetries());
-        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5)), "BlobDepot did not apply the test configuration");
+        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5)),
+            "BlobDepot did not apply the test configuration");
     }
 
     TAgent Connect(ui32 nodeIndex, ui64 instanceId = 1) {
@@ -70,11 +73,13 @@ struct TTestEnv {
         auto request = std::make_unique<TEvBlobDepot::TEvRegisterAgent>();
         request->Record.SetAgentInstanceId(instanceId);
         Send(agent, request.release());
-        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRegisterAgentResult>(edge, TDuration::Seconds(1)), "BlobDepot did not register the test agent");
+        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRegisterAgentResult>(edge, TDuration::Seconds(1)),
+            "BlobDepot did not register the test agent");
         return agent;
     }
 
     ui64 Send(const TAgent& agent, IEventBase* event) {
+        // BlobDepot requires consecutive request cookies starting at one on every pipe.
         const ui64 cookie = ++RequestIds[agent.Pipe];
         Runtime.SendToPipe(agent.Pipe, agent.Edge, event, agent.NodeIndex, cookie);
         return cookie;
@@ -142,15 +147,18 @@ void CheckReconnectReleasesWrites(ui64 newInstanceId) {
     const auto otherAgent = env.Connect(1);
     env.Prepare(oldAgent, 1);
     env.ExpectPrepared(oldAgent, 1);
+    // The old connection owns both an allocated locator and a queued request.
     env.Prepare(oldAgent, 2);
     env.Prepare(otherAgent, 3);
     env.ExpectPending(2);
     env.ExpectPending(3);
 
+    // Register the replacement before the old pipe reports disconnection.
     const auto replacement = env.Connect(0, newInstanceId);
     env.ExpectPrepared(otherAgent, 3);
     UNIT_ASSERT(!env.PrepareResults.contains(2));
 
+    // A late disconnect of the superseded pipe must not disconnect the replacement.
     env.Disconnect(oldAgent);
     env.Prepare(replacement, 4);
     env.ExpectPending(4);
@@ -224,6 +232,7 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         env.Block(blocker, tabletId);
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
+        // No IDs were allocated, so only BlockToDeliver can trigger the push on reconnect.
         const auto replacement = env.Connect(0);
         const auto push = env.Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvPushNotify>(
             replacement.Edge, TDuration::MilliSeconds(100));
@@ -246,9 +255,12 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         env.QueryBlocks(lessee, tabletId);
         env.Disconnect(lessee);
 
+        // The block finishes via storage while the disconnected agent's lease is still valid.
+        // Reissuing the same generation/issuer must not collide with a stale BlockToDeliver.
         env.Block(blocker, tabletId);
         env.ExpectBlocked(blocker);
         env.Block(blocker, tabletId);
+        // The mock storage reports that the first request already installed this block.
         env.ExpectBlocked(blocker, NKikimrProto::ALREADY);
     }
 }

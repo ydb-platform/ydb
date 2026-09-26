@@ -318,6 +318,7 @@ protected:
     ui64 PostponedIntermediatesCount = 0;
     ui64 IntermediatesInFlight;
     ui64 RoInlineIntermediatesInFlight;
+    THashSet<ui64> DataRequestsInFlight;
     ui64 DeletesPerRequestLimit;
 
     TTabletCountersBase *TabletCounters;
@@ -343,10 +344,13 @@ protected:
     TMemorizableControlWrapper RejectNonExistentStorageChannel;
     TControlWrapper UsePerChannelReadQueues_Base;
     TMemorizableControlWrapper UsePerChannelReadQueues;
+    TMemorizableControlWrapper RequestsInFlightLimit;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
     bool RejectNonExistentStorageChannelEnabled(const TActorContext& ctx);
+    bool TryAcquireRequestSlot(TIntermediate& intermediate, const TActorContext& ctx);
+    void ReleaseRequestSlot(TIntermediate& intermediate);
 
 public:
     TKeyValueState();
@@ -694,6 +698,7 @@ public:
                     ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat,
                     intermediate->AcquiredChannels);
         } else { //metrics change report in OnRequestComplete is not done
+            ReleaseRequestSlot(*intermediate);
             ResourceMetrics->TryUpdate(ctx);
             RequestInputTime.erase(intermediate->RequestUid);
         }

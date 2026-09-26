@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_inflight_limit.py
     test_s3_router_metrics.py
 )
 

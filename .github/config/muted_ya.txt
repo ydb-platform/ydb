@@ -26,6 +26,7 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServ
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/persqueue/ut TPQTest.TestWritePQ
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.LatestTopologySupersedesPrepare
 ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.CreateIndexedTableAndForceDropSimultaneously[PipeResets]

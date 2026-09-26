@@ -542,6 +542,30 @@ def parse_args(argv=None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def remember_ref(refs: List[tuple], ref: Optional[tuple]) -> None:
+    if ref and ref not in refs:
+        refs.append(ref)
+
+
+def open_runs_to_save(
+    listed: List[tuple],
+    held: List[tuple],
+    previous: List[tuple],
+    list_failed: bool,
+    exported: set,
+) -> List[tuple]:
+    pending: List[tuple] = []
+    for ref in list(listed) + list(held):
+        remember_ref(pending, ref)
+    if not list_failed:
+        return pending
+    for run_id, attempt in previous:
+        if already_exported(run_id, attempt, exported):
+            continue
+        remember_ref(pending, (run_id, attempt))
+    return pending
+
+
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
@@ -554,6 +578,8 @@ def main(argv=None) -> int:
         )
         rows: List[Dict[str, Any]] = []
         still_open: List[tuple] = []
+        held: List[tuple] = []
+        list_failed = False
         open_since = datetime.now(timezone.utc) - MAX_LOOKBACK
         for workflow in workflows:
             try:
@@ -563,34 +589,39 @@ def main(argv=None) -> int:
             for status in ("in_progress", "queued"):
                 try:
                     for run in iter_workflow_runs(args.org, args.repo, workflow, open_since, status=status):
-                        ref = run_ref(run)
-                        if ref and ref not in still_open:
-                            still_open.append(ref)
+                        remember_ref(still_open, run_ref(run))
                 except Exception as exc:  # noqa: BLE001
+                    list_failed = True
                     print(f"Warning: failed to list {status} runs for {workflow}: {exc}")
-        for run_id, attempt in load_open_runs(args.table_path):
-            if (run_id, attempt) in still_open or already_exported(run_id, attempt, exported):
+        previous = load_open_runs(args.table_path)
+        for run_id, attempt in previous:
+            ref = (run_id, attempt)
+            if ref in still_open or already_exported(run_id, attempt, exported):
                 continue
             try:
                 run = fetch_run(args.org, args.repo, run_id)
             except Exception as exc:  # noqa: BLE001
                 print(f"Warning: failed to refresh run {run_id}: {exc}")
+                remember_ref(held, ref)
                 continue
             if run.get("status") != "completed":
-                ref = run_ref(run)
-                if ref and ref not in still_open:
-                    still_open.append(ref)
+                remember_ref(still_open, run_ref(run) or ref)
                 continue
             try:
                 jobs = list_run_jobs(args.org, args.repo, run_id)
                 rows.extend(metrics_from_workflow_run(attach_pull_requests(args.org, args.repo, run), jobs))
             except Exception as exc:  # noqa: BLE001
                 print(f"Warning: failed to export finished run {run_id}: {exc}")
-        save_open_runs(still_open, args.table_path)
-        if not rows:
+                remember_ref(held, ref)
+        pending = open_runs_to_save(still_open, held, previous, list_failed, exported)
+        if rows:
+            uploaded = upload_rows(rows, table_path=args.table_path)
+            if uploaded <= 0:
+                print("Warning: metrics were not uploaded, keeping the previous open-run list")
+                return 0
+        else:
             print("No GitHub job metric rows to upload")
-            return 0
-        upload_rows(rows, table_path=args.table_path)
+        save_open_runs(pending, args.table_path)
         return 0
     except Exception as exc:  # noqa: BLE001 — collector must not fail the analytics job
         print(f"Warning: GitHub job metrics export failed: {exc}")

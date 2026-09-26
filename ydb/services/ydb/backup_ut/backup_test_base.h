@@ -196,7 +196,7 @@ private:
         const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
 
         auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
+            CREATE TABLE `RecursiveFolderProcessing/Table0` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)

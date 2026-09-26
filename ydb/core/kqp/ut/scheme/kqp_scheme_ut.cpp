@@ -2791,6 +2791,43 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithUniformPartitions(true);
     }
 
+    // KIKIMR-25849: partition_count must be filled without requesting
+    // table stats or shard boundaries
+    Y_UNIT_TEST(DescribeTablePartitionCount) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/DescribeTablePartitionCount";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                UNIFORM_PARTITIONS = 4
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // No extra options: partition_count must still be present
+        {
+            auto describeResult = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            const auto& proto = NYdb::TProtoAccessor::GetProto(describeResult.GetTableDescription());
+            UNIT_ASSERT_VALUES_EQUAL(proto.partition_count(), 4);
+        }
+
+        // With table statistics: the legacy TableStats.partitions must match
+        {
+            auto describeResult = session.DescribeTable(tableName,
+                NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
+        }
+    }
+
     void CreateTableWithPartitionAtKeysSimple(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

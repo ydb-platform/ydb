@@ -1157,6 +1157,14 @@ TCheckFunc PartitionCount(ui32 count) {
     };
 }
 
+TCheckFunc TablePartitionCount(ui64 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& table = record.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL_C(table.GetPartitionCount(), count,
+            "unexpected PartitionCount in table description");
+    };
+}
+
 TCheckFunc FollowerCount(ui32 count) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetFollowerCount(), count);

@@ -1383,6 +1383,10 @@ message DescribeTableResult {
     optional MetricsSettings metrics_settings = 19;
     // List of multi-column table statistics
     repeated TableMultiColumnStatisticsDescription statistics = 20;
+
+    // Actual number of table partitions (shards), always filled, so clients
+    // don't need to request shard_key_bounds or table_stats.
+    uint64 partition_count = 21;
 }
 
 message Query {

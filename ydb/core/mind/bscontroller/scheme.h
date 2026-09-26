@@ -134,6 +134,7 @@ struct Schema : NIceDb::Schema {
         struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
         struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct BlobCheckerPeriodicity : Column<30, NScheme::NTypeIds::Uint64> { using Type = TDuration; static constexpr Type Default = TDuration::Zero(); };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -141,7 +142,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, BlobCheckerPeriodicity>;
     };
 
     struct VSlot : Table<5> {
@@ -496,6 +497,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
     };
 
+    struct BlobCheckerGroupStatus : Table<135> {
+        struct GroupId : Column<1, Group::ID::ColumnType> {};
+        struct SerializedStatus : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, SerializedStatus>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -522,7 +531,8 @@ struct Schema : NIceDb::Schema {
         BlobDepotDeleteQueue,
         BridgeSyncState,
         DirectBlockGroupTabletState,
-        DirectBlockGroupClaims
+        DirectBlockGroupClaims,
+        BlobCheckerGroupStatus
     >;
 
     using TSettings = SchemaSettings<

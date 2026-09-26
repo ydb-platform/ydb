@@ -1,4 +1,4 @@
-# Adding, deleting, and renaming an index
+# Managing indexes
 
 ## Adding an index {#add-index}
 
@@ -238,6 +238,49 @@ ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
 );
 ```
 
+
+## Rebuilding a vector index {#rebuild-index}
+
+`REBUILD INDEX` builds a replacement for an existing [vector index](../../../../dev/vector-indexes.md) from the table data and atomically replaces the old index under the same name. Use it to recalculate clusters after the data distribution changes or to change clustering parameters.
+
+The operation supports only `vector_kmeans_tree` indexes, including filtered and covering indexes. The index must already exist and be in the `Ready` state, which means its previous build has completed. You can check that the index exists and verify its type with [scheme describe](../../../../reference/ydb-cli/commands/scheme-describe.md).
+
+To rebuild an index with its current settings:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_vector_index`;
+```
+
+To change clustering parameters during the rebuild, add `WITH`:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_vector_index`
+WITH (clusters = 128, levels = 2);
+```
+
+The `WITH` clause accepts the following parameters:
+
+| Parameter | Description |
+| --- | --- |
+| `clusters` | Number of clusters. An integer from `2` to `2048`. |
+| `levels` | Number of tree levels. An integer from `1` to `16`. |
+| `overlap_clusters` | Number of nearest leaf clusters to which each vector is added. |
+| `adaptive_clusters` | Whether to select the number of clusters automatically for each filtering-column value in a filtered index. Accepts `true` or `false`. |
+| `parallel` | Maximum number of partition handlers involved in rebuilding. Uses the same limits and default as [`ADD INDEX`](#add-index). |
+
+Clustering parameters omitted from `WITH` retain their existing values. In particular, omitting `clusters` and `levels` does not automatically select new values for the current table size. The [vector index parameter constraints](#add-index) also apply when rebuilding.
+
+The index keeps its indexed and covered columns. Its distance or similarity function, vector value type, and vector dimensionality are inherited from the existing index. Do not specify `distance`, `similarity`, `vector_type`, or `vector_dimension` in `WITH`: the statement rejects these parameters, even if their values match the existing settings. To change them, create a separate index.
+
+The existing index remains available for queries and continues to receive table updates while the replacement is built. After a successful build, {{ ydb-short-name }} atomically switches to the replacement. Queries continue to use the same index name. If rebuilding fails or is cancelled before replacement, the old index remains available. Rebuilding can resume after a restart of the schema management tablet.
+
+Replacing the index can invalidate cached query plans. Queries running around the switch may need to be retried; use the standard [SDK retry mechanism](../../../../recipes/ydb-sdk/retry.md).
+
+{% note warning %}
+
+The replacement is built from a snapshot and inherits the [consistency limitation of vector index builds](../../../../dev/vector-indexes.md#build-consistency). Concurrent table updates may not be reflected in the rebuilt index. If full consistency is required, pause writes for the duration of rebuilding.
+
+{% endnote %}
 
 ## Deleting an index {#drop-index}
 

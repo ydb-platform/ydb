@@ -201,6 +201,8 @@ ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRW
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
+ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeInsertsOneShard
+ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeUpsertsMultiShard
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CallDropViewOnTable
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CreateViewIfNotExists
@@ -306,6 +308,7 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterDlqMoveActionRequiresExisting
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServiceConsumerGuards
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterPreservesMeteringModeWhenUnspecified
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterRejectsNegativeSpeedsAndHugePartitions
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterRetentionStorageMb
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas

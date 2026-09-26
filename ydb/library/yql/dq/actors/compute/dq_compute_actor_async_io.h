@@ -43,7 +43,8 @@ struct IMemoryQuotaManager {
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
     virtual ~IMemoryQuotaManager() = default;
     // isOptional == true: the caller can continue without the memory (e.g. hash table growth that can be
-    // replaced by spilling), the manager MAY refuse in advance even if it has free quota.
+    // replaced by spilling), the manager MAY refuse in advance even if it has free quota. TGuaranteeQuotaManager
+    // passes the flag on to its parent, the KQP resource manager refuses it at the spilling threshold.
     // isOptional == false: the caller fails without the memory.
     virtual bool AllocateQuota(ui64 memorySize, bool isOptional) = 0;
     virtual void FreeQuota(ui64 memorySize) = 0;

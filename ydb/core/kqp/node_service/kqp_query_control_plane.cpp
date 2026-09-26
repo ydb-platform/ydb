@@ -37,16 +37,19 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         });
     }
 
-    bool AllocateExtraQuota(ui64 extraSize) override {
+    bool AllocateExtraQuota(ui64 extraSize, bool isOptional) override {
         auto result = ResourceManager->AllocateResources(*Tx, TaskId,
-            NRm::TKqpResourcesRequest{.Memory = extraSize});
+            NRm::TKqpResourcesRequest{.Memory = extraSize, .Optional = isOptional});
 
         if (!result) {
-            YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
-                {"problem", "cannot_allocate_memory"},
-                {"txId", Tx->TxId},
-                {"taskId", TaskId},
-                {"memory", extraSize});
+            // an optional refusal is the spilling signal, the caller logs it
+            if (!isOptional) {
+                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                    {"problem", "cannot_allocate_memory"},
+                    {"txId", Tx->TxId},
+                    {"taskId", TaskId},
+                    {"memory", extraSize});
+            }
 
             return false;
         }
@@ -108,23 +111,20 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
             memoryRequired += AllocationStep - 1;
             memoryRequired &= ~(AllocationStep - 1);
 
-            if (isOptional && Tx->GetMemoryAvailability() < static_cast<i64>(memoryRequired)) {
-                // refuse optional requests in advance, no resource manager round trip
-                AvailableQuota.fetch_add(memorySize);
-                return false;
-            }
-
-            auto result = ResourceManager->AllocateResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memoryRequired});
+            // the resource manager refuses an optional request at the spilling threshold
+            auto result = ResourceManager->AllocateResources(*Tx, 0,
+                NRm::TKqpResourcesRequest{.Memory = memoryRequired, .Optional = isOptional});
             if (result) {
                 AvailableQuota.fetch_add(memoryRequired);
                 Limit.fetch_add(memoryRequired);
             } else {
-                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
-                    {"problem", "cannot_allocate_memory"},
-                    {"txId", Tx->TxId},
-                    {"taskId", 0},
-                    {"memory", memoryRequired},
-                    {"optional", isOptional});
+                if (!isOptional) {
+                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                        {"problem", "cannot_allocate_memory"},
+                        {"txId", Tx->TxId},
+                        {"taskId", 0},
+                        {"memory", memoryRequired});
+                }
                 // a little over-quoting is tolerated for mandatory requests only: the caller of an optional
                 // request can do without the memory, it must not get what the resource manager refused
                 if (isOptional || memoryRequired >= AllocationStep * 10) {

@@ -1,0 +1,75 @@
+{
+  "skill_name": "ydb-release-publication",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Выпусти YDB Server 26.2.1.14. Release-notes PR #52531 содержит только changelog files, Docker cell is TBD, а build-docs ещё выполняется.",
+      "expected_output": "Останавливает публикацию до любых внешних mutations и перечисляет каждый конкретный blocker.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Не запускает docs release, не создаёт GitHub Release, default-branch PR или Atushka post",
+        "Требует оба changelog и оба downloads files в release-notes PR",
+        "Требует проверенный Docker artifact вместо TBD",
+        "Требует завершившийся success build-docs",
+        "Возвращает BLOCKED с конкретными условиями снятия блокировки"
+      ],
+      "covers": "Release does not start from an incomplete release-notes PR"
+    },
+    {
+      "id": 2,
+      "prompt": "Опубликуй YDB Server 26.2.1.14 по приложенному готовому состоянию.",
+      "expected_output": "Выполняет процесс строго после пройденного preflight, публикует stable docs before GitHub Release, готовит default branch PR и Club YDB draft.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Проверяет merged main release-notes PR, четыре файла, artifacts, CI и review before external publication",
+        "Создаёт focused stable release-notes backport only from the merged main PR",
+        "Ждёт success docs_release, HTTP 200 и changelog anchor before GitHub Release",
+        "Создаёт public GitHub Release for exact existing tag",
+        "Создаёт default-branch PR that changes only ydb/docs/default-branch.txt",
+        "Создаёт MODERATORS draft in Club YDB with the approved template image and binary plus release-notes links",
+        "Возвращает links to each PR, workflow, published page, GitHub Release and Atushka draft"
+      ],
+      "covers": "Complete release workflow follows verified dependency order"
+    },
+    {
+      "id": 3,
+      "prompt": "После успешной публикации stable docs создай GitHub Release для 26.2.1.14.",
+      "expected_output": "Создаёт non-draft non-prerelease GitHub Release with the established English release-notes body, then reads it back.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Проверяет существование exact tag before creating the release",
+        "Использует body Release notes: https://ydb.tech/docs/en/changelog-server?version=v26.2#26-2-1-14",
+        "Не использует bare URL or RU URL in GitHub Release body",
+        "Проверяет created release body, tag, public state and URL after mutation"
+      ],
+      "covers": "GitHub Release body and post-mutation verification"
+    },
+    {
+      "id": 4,
+      "prompt": "Обнови MODERATORS-черновик в Club YDB для OSS YDB Server 26.2.1.14. Старый шаблон утверждает, что релиз установлен на всех prod и preprod кластерах. В Tier A сейчас 25.4, кластеры Млечного Пути уже на 26.3 и не откатываются. Владелец согласовал формулировку: «Мы выпустили новую версию YDB Server 26.2.1.14 в OSS».",
+      "expected_output": "Убирает неверное утверждение об установке во внутренних кластерах, использует согласованную OSS-формулировку и всегда добавляет запрос версии базы данных.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Не утверждает, что версия установлена на всех prod, preprod или внутренних кластерах",
+        "Использует уже согласованную владельцем формулировку про OSS, не запрашивая её повторно",
+        "Если формулировка про внутреннее развёртывание не дана, запрашивает у владельца approved wording до создания или редактирования черновика",
+        "Всегда добавляет текст о проверке версии и SQL-запрос SELECT Version();",
+        "Сохраняет MODERATORS visibility, approved template image и проверяет черновик после изменения"
+      ],
+      "covers": "Club YDB announcement does not infer internal rollout status and always includes a version query"
+    },
+    {
+      "id": 5,
+      "prompt": "Подготовь MODERATORS-черновик в Club YDB для OSS YDB Server 26.2.1.14. В старом шаблоне сказано, что релиз установлен на всех prod и preprod кластерах. Другой информации о внутреннем развёртывании нет.",
+      "expected_output": "До создания или редактирования черновика запрашивает у владельца согласованную формулировку о внутренней доступности и не использует утверждение из старого шаблона.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Не создаёт и не редактирует черновик до получения approved wording",
+        "Не переносит утверждение о prod, preprod или всех внутренних кластерах из старого шаблона",
+        "Явно запрашивает у владельца формулировку о внутренней доступности или установке",
+        "После получения формулировки добавит обязательный текст и SQL-запрос SELECT Version();"
+      ],
+      "covers": "Club YDB announcement asks for missing internal-rollout wording before mutation"
+    }
+  ]
+}

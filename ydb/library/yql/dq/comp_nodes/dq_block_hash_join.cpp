@@ -77,7 +77,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         IBlockLayoutConverter::TPackResult result;
         const size_t cols = UserDataCols();
         if (cols == 0) {
-            MKQL_ENSURE(Meta_->Kind == EJoinKind::Cross, "empty payload side is only allowed for Cross join");
+            MKQL_ENSURE(Meta_->KeyColumns.Build.empty(), "empty payload side is only allowed for a keyless join");
             const auto* layout = ArrowBlockToInternalConverter_->GetTupleLayout();
             const ui64 n = GetBlockCount(Buff_[0]);
             result.PackedTuples.resize(layout->TotalRowSize * n, 0);
@@ -348,11 +348,12 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinKind = parsed.Kind;
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
+    const bool isGrid = meta.KeyColumns.Build.empty();
 
     MKQL_ENSURE(!joinComponents.empty(), "Expected at least block length column");
     MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least block length column");
     MKQL_ENSURE(!rightStreamComponents.empty(), "Expected at least block length column");
-    if (joinKind != EJoinKind::Cross) {
+    if (!isGrid) {
         MKQL_ENSURE(joinComponents.size() > 1, "Expected at least one data column");
         MKQL_ENSURE(leftStreamComponents.size() > 1, "Expected at least one data column");
         MKQL_ENSURE(rightStreamComponents.size() > 1, "Expected at least one data column");
@@ -413,8 +414,8 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
 
     return DispatchHashJoinByKind<TBlockHashJoinWrapper, IComputationNode>(
-        joinKind, preservedSide, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,
-        std::move(filters));
+        joinKind, preservedSide, isGrid, "unsupported join type in block hash join", ctx.Mutables,
+        std::move(meta), streams, std::move(filters));
 }
 
 } // namespace NKikimr::NMiniKQL

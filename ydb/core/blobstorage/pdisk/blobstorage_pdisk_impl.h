@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_chunk_tracker.h"
+#include "blobstorage_pdisk_compaction_arbiter.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
@@ -136,6 +137,7 @@ public:
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
+    TControlWrapper CompactionAdmissionColor;
     std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
         if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
             if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
@@ -435,6 +437,17 @@ public:
 #endif
     void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Planned level compaction (EnableVDiskPlannedCompaction); all of it runs under StateMutex
+    std::unique_ptr<TCompactionArbiter> CompactionArbiter; // set when the feature is enabled
+    struct TCompactionArbiterSpace;
+    ui32 CompactionArbiterFreeChunks = 0; // what the arbiter last saw, to tell it only about changes
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> CompactionArbiterForcedColor;
+    i64 CompactionAdmissionColorCached = 0;
+    void ProcessCompactionBidder(TCompactionBidder& req);
+    void UpdateCompactionArbiter(); // Called by the PDisk worker
+    void DropCompactionBidders(TOwner owner);
+    void SendCompactionArbiterOutbox(TCompactionArbiter::TOutbox& out);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
     void NormalizeExpectedSlotSettings();
     i64 GetExpectedOwnerSizeInChunks() const;

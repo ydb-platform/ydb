@@ -68,14 +68,14 @@ namespace NKikimr {
             }
 
             // try to find what to compact based on storage consumption
-            action = TStrategyFreeSpace(HullCtx, LevelSnap, Task).Select();
+            action = TStrategyFreeSpace(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
                 return action;
             }
 
             // try to squeeze if required
             if (Params.SqueezeBefore) {
-                action = TStrategySqueeze(HullCtx, LevelSnap, Task, Params.SqueezeBefore).Select();
+                action = TStrategySqueeze(HullCtx, Params, LevelSnap, Task, Params.SqueezeBefore).Select();
                 if (action != ActNothing) {
                     return action;
                 }

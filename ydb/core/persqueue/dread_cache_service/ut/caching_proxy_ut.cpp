@@ -1,5 +1,7 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
+#include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/public/lib/base/msgbus_status.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ {
@@ -28,6 +30,79 @@ struct TTestSetup {
         return resp;
     }
 };
+
+Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
+    // Offsets 13 and 14 are complete. Offset 15 is only the first part.
+    // DirectRead must not drop it; the missing part is requested by a follow-up.
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+    runtime->SetScheduledLimit(100000);
+
+    NKikimrClient::TPersQueueRequest request;
+    auto* read = request.MutablePartitionRequest()->MutableCmdRead();
+    read->SetClientId("user");
+    read->SetSessionId("session1");
+    read->SetOffset(13);
+    read->SetPartNo(0);
+    read->SetDirectReadId(1);
+    read->SetReadToBlobEnd(true);
+
+    const auto tablet = runtime->AllocateEdgeActor();
+    auto proxy = runtime->Register(CreateReadProxy(
+            setup.Context.Edge, 1, tablet, 1, TDirectReadKey{"session1", 1, 1}, request, TActorId{}));
+    {
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back(TEvents::TEvBootstrap::EventType, 1);
+        runtime->DispatchEvents(opts);
+    }
+
+    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    auto* result = response->Record.MutablePartitionResponse()->MutableCmdReadResult();
+    result->SetRealReadOffset(13);
+    result->SetLastOffset(15);
+    result->SetEndOffset(24);
+    auto add = [&](ui64 offset, ui32 partNo, ui32 totalParts) {
+        auto* row = result->AddResult();
+        row->SetOffset(offset);
+        row->SetData("x");
+        row->SetPartNo(partNo);
+        if (totalParts) {
+            row->SetTotalParts(totalParts);
+        }
+    };
+    add(13, 0, 1);
+    add(14, 0, 1);
+    add(15, 0, 2);
+
+    runtime->Send(new IEventHandle(proxy, setup.Context.Edge, response.Release()));
+    auto followup = runtime->GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(followup);
+    const auto& follow = followup->Record.GetPartitionRequest().GetCmdRead();
+    UNIT_ASSERT_VALUES_EQUAL(follow.GetOffset(), 15);
+    UNIT_ASSERT_VALUES_EQUAL(follow.GetPartNo(), 1);
+
+    read->ClearDirectReadId();
+    auto plain = runtime->Register(CreateReadProxy(
+            setup.Context.Edge, 1, tablet, 1, TDirectReadKey{}, request, TActorId{}));
+    {
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back(TEvents::TEvBootstrap::EventType, 1);
+        runtime->DispatchEvents(opts);
+    }
+    auto plainResponse = MakeHolder<TEvPersQueue::TEvResponse>();
+    plainResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    plainResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    plainResponse->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(*result);
+    runtime->Send(new IEventHandle(plain, setup.Context.Edge, plainResponse.Release()));
+    auto prepared = runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(prepared);
+    const auto& plainRows = prepared->Record.GetPartitionResponse().GetCmdReadResult();
+    UNIT_ASSERT_VALUES_EQUAL(plainRows.ResultSize(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(plainRows.GetResult(0).GetOffset(), 13);
+    UNIT_ASSERT_VALUES_EQUAL(plainRows.GetResult(1).GetOffset(), 14);
+}
 
 Y_UNIT_TEST(TestPublishAndForget) {
     TTestSetup setup;

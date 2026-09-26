@@ -177,12 +177,18 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
     KqpYqlSyntaxVersion = config.GetSqlVersion();
+    NormalizePath = config.NormalizePath;
     return *this;
 }
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = LangVer;
+    if (NormalizePath) {
+        settings.NormalizePath = [normalize = NormalizePath, localCluster = Cluster](TStringBuf cluster, TStringBuf path) {
+            return cluster == localCluster ? normalize(path) : TString(path);
+        };
+    }
     settings.BackportMode = BackportMode;
 
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {

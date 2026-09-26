@@ -13,6 +13,7 @@ WITH (option = value[, ...])
 * `secret_name` — имя изменяемого секрета.
 * `option` — опция команды:
   * `value` — строка со значением секрета.
+  * `SERVICE_ACCOUNT_ID`, `RESOURCE` — только для [секрета с делегированием IAM](../../../concepts/datamodel/iam-delegation-secrets.md): новый сервисный аккаунт и/или облако. Новое делегирование настраивается в IAM до отзыва старого, поэтому запросы, использующие секрет, переключаются на новый сервисный аккаунт без перезапуска. Источник секрета (`SOURCE`) изменить нельзя.
 
 ## Разрешения
 
@@ -32,7 +33,14 @@ ALTER SECRET secret_name WITH (value = "secret_value_new");
 ALTER SECRET IF EXISTS secret_name WITH (value = "secret_value_new");
 ```
 
+Сменить сервисный аккаунт [секрета с делегированием IAM](../../../concepts/datamodel/iam-delegation-secrets.md):
+
+```sql
+ALTER SECRET events_sa WITH (SERVICE_ACCOUNT_ID="aje6h0sbq9wl2xn5tdg7");
+```
+
 ## См. также
 
 * [CREATE SECRET](create-secret.md)
 * [DROP SECRET](drop-secret.md)
+* [{#T}](../../../concepts/datamodel/iam-delegation-secrets.md)

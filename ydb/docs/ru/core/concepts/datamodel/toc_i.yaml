@@ -6,6 +6,7 @@ items:
 - { name: Топики,                                 href: topic.md }
 - { name: Узлы координации,                       href: coordination-node.md }
 - { name: Секреты,                                href: secrets.md }
+- { name: Секреты с делегированием IAM,           href: iam-delegation-secrets.md }
 - { name: Внешние источники данных,               href: external_data_source.md }
 - { name: Внешние таблицы,                        href: external_table.md }
 - name: Служебные объекты

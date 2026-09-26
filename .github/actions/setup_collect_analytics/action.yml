@@ -1,0 +1,22 @@
+name: setup_collect_analytics
+description: YDB access and pip deps for collect-analytics jobs. Checkout the repo first.
+inputs:
+  extra_packages:
+    required: false
+    default: ""
+    description: Extra pip packages (space-separated), e.g. requests
+  ci_ydb_service_account_key_file_credentials:
+    required: true
+  ydb_qa_config:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ inputs.ci_ydb_service_account_key_file_credentials }}
+        ydb_qa_config: ${{ inputs.ydb_qa_config }}
+    - name: Install dependencies
+      shell: bash
+      run: python3 -m pip install ydb ydb[yc] codeowners pandas ${{ inputs.extra_packages }}

@@ -5,7 +5,7 @@ TEST_SRCS(
     test_init.py
 )
 
-REQUIREMENTS(ram:16 cpu:4)
+REQUIREMENTS(ram:16 cpu:2)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

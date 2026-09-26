@@ -38,12 +38,14 @@ namespace NKafka {
                 HFunc(TEvKafka::TEvUpdateCounter, Handle);
                 HFunc(TEvKafka::TEvUpdateHistCounter, Handle);
                 HFunc(TEvKafka::TEvGetCountersRequest, Handle);
+                HFunc(TEvKafka::TEvGetGroupMemberCounter, Handle);
             }
         }
 
         void Handle(TEvKafka::TEvUpdateCounter::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvKafka::TEvUpdateHistCounter::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvKafka::TEvGetCountersRequest::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvKafka::TEvGetGroupMemberCounter::TPtr& ev, const TActorContext& ctx);
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetGroupFromLabels(const TVector<std::pair<TString, TString>>& labels);
 
     private:
@@ -75,6 +77,17 @@ namespace NKafka {
                                                 NMonitoring::ExplicitHistogram({100, 200, 500, 1000, 2000, 5000, 10000, 30000}));
         counter->Collect(ev->Get()->Value, ev->Get()->Count);
     }
+
+    void TKafkaMetricsActor::Handle(TEvKafka::TEvGetGroupMemberCounter::TPtr& ev, const TActorContext&) {
+        auto& req = *ev->Get();
+        auto group = GetGroupFromLabels(req.Labels);
+        auto counter = group->GetExpiringNamedCounter(req.Labels.back().first, req.Labels.back().second, false);
+        if (req.MemberCount.has_value()) {
+            counter->Set(*req.MemberCount);
+        }
+        Send(req.ConnectionId, new TEvKafka::TEvSaveGroupMemberCounter(std::move(counter), req.GroupId));
+    }
+
 
     void TKafkaMetricsActor::Handle(TEvKafka::TEvGetCountersRequest::TPtr& ev, const TActorContext&) {
         Send(ev->Sender, new TEvKafka::TEvGetCountersResponse{Settings.Counters});

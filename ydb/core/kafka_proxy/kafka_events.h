@@ -11,6 +11,8 @@
 #include "actors/actors.h"
 #include <util/generic/hash.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 using namespace NActors;
 
 namespace NKafka {
@@ -49,6 +51,8 @@ struct TEvKafka {
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
         EvTokenRecheck,
+        EvGetGroupMemberCounter,
+        EvSaveGroupMemberCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -257,6 +261,7 @@ struct TEvKafka {
         {}
     };
 
+
     struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
         TEvReadSessionInfo(const TString& groupId)
         : GroupId(groupId)
@@ -294,6 +299,33 @@ struct PartitionConsumerOffset {
         , Metadata(metadata)
     {}
 };
+
+    struct TEvGetGroupMemberCounter : public TEventLocal<TEvGetGroupMemberCounter, EvGetGroupMemberCounter> {
+        TVector<std::pair<TString, TString>> Labels;
+        TActorId ConnectionId;
+        TString GroupId;
+        std::optional<i64> MemberCount;
+
+        TEvGetGroupMemberCounter(TVector<std::pair<TString, TString>> labels,
+                                 TActorId connectionId,
+                                 TString groupId,
+                                 std::optional<i64> memberCount = std::nullopt)
+            : Labels(std::move(labels))
+            , ConnectionId(connectionId)
+            , GroupId(std::move(groupId))
+            , MemberCount(memberCount)
+        {}
+    };
+
+    struct TEvSaveGroupMemberCounter : public TEventLocal<TEvSaveGroupMemberCounter, EvSaveGroupMemberCounter> {
+        NMonitoring::TDynamicCounters::TCounterPtr Counter;
+        TString GroupId;
+
+        TEvSaveGroupMemberCounter(NMonitoring::TDynamicCounters::TCounterPtr counter, TString groupId)
+            : Counter(std::move(counter))
+            , GroupId(std::move(groupId))
+        {}
+    };
 
 struct TPartitionOffsetsInfo {
     ui64 PartitionId = 0;

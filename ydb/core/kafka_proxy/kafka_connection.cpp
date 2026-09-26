@@ -7,6 +7,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include "actors/actors.h"
 #include "actors/kafka_api_versions_actor.h"
@@ -81,6 +82,8 @@ public:
     TEvPollerReady::TPtr PollerEventSaved = nullptr;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
+
+    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> GroupMemberCounters;
 
     std::shared_ptr<Msg> Request;
     Msg::TPtr PendingRequest;
@@ -622,6 +625,11 @@ protected:
             {LogPrefix()},
             {"groupId", r->GroupId});
         Context->GroupId = r->GroupId;
+    }
+
+
+    void Handle(TEvKafka::TEvSaveGroupMemberCounter::TPtr ev, const TActorContext& /*ctx*/) {
+        GroupMemberCounters[ev->Get()->GroupId] = std::move(ev->Get()->Counter);
     }
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
@@ -1253,6 +1261,7 @@ protected:
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
+            HFunc(TEvKafka::TEvSaveGroupMemberCounter, Handle);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:

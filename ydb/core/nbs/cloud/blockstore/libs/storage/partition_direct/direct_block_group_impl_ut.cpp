@@ -587,6 +587,30 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(2_MB, Service->LastCopyRangeBudgetByteCount);
     }
 
+    // A group blocked on connects must not keep the executor after it is
+    // dropped. use_count stays at 2: this local and the fixture vector.
+    Y_UNIT_TEST_F(ShouldReleaseExecutorWhenConnectsStayPending, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        for (const auto& ddiskId: transport->GetDDiskIds()) {
+            transport->SetPendingConnect(EConnectionType::DDisk, ddiskId);
+        }
+        for (const auto& pbufferId: transport->GetPBufferIds()) {
+            transport->SetPendingConnect(EConnectionType::PBuffer, pbufferId);
+        }
+
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        RunAndGetInitialReady(dbg);
+        DoAllExecutorAndRuntimeWork(executor);
+
+        dbg.reset();
+        transport.reset();
+        executor->Stop();
+
+        UNIT_ASSERT_VALUES_EQUAL(2L, executor.use_count());
+    }
+
     // The initial-ready signal fires exactly once, only after the locked
     // quorum (3 of 5 DDisk sessions and PBuffers) is reached.
     Y_UNIT_TEST_F(ShouldSignalInitialReadyOnceLockedQuorumReached, TDBGFixture)

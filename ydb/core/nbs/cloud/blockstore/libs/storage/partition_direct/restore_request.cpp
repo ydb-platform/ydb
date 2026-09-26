@@ -7,35 +7,32 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/services/services.pb.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TRestoreRequestExecutor::TRestoreRequestExecutor(
-    NActors::TActorSystem* actorSystem,
-    IDirectBlockGroupPtr directBlockGroup)
-    : ActorSystem(actorSystem)
-    , DirectBlockGroup(std::move(directBlockGroup))
+    std::weak_ptr<IDirectBlockGroup> directBlockGroup)
+    : DirectBlockGroup(std::move(directBlockGroup))
     , Response(std::make_unique<TAggregatedListPBufferResponse>())
 {}
 
 TRestoreRequestExecutor::~TRestoreRequestExecutor()
 {
     if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TRestoreRequestExecutor. Reply not sent");
-
-        Y_ABORT_UNLESS(false);
+        // The group (or the transport future that kept this request) is gone
+        // before every host replied. Complete the promise so waiters unblock.
+        Reply(MakeError(E_REJECTED, "TDirectBlockGroup destroyed"));
     }
 }
 
 void TRestoreRequestExecutor::Run()
 {
+    if (DirectBlockGroup.expired()) {
+        Reply(MakeError(E_REJECTED, "TDirectBlockGroup destroyed"));
+        return;
+    }
+
     for (THostIndex i = 0; i < DirectBlockGroupHostCount; ++i) {
         DoRun(i);
     }
@@ -43,7 +40,16 @@ void TRestoreRequestExecutor::Run()
 
 void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
 {
-    auto future = DirectBlockGroup->ListPBuffers(hostIndex);
+    auto directBlockGroup = DirectBlockGroup.lock();
+    if (!directBlockGroup) {
+        OnResponse(
+            hostIndex,
+            TListPBufferResponse{
+                .Error = MakeError(E_REJECTED, "TDirectBlockGroup destroyed")});
+        return;
+    }
+
+    auto future = directBlockGroup->ListPBuffers(hostIndex);
     future.Subscribe(
         [self = shared_from_this(), hostIndex]   //
         (const NThreading::TFuture<TListPBufferResponse>& f)
@@ -76,6 +82,10 @@ void TRestoreRequestExecutor::OnResponse(
 
 void TRestoreRequestExecutor::Reply(NProto::TError error)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     Response->Error = std::move(error);
     Promise.TrySetValue(std::move(*Response));
 }

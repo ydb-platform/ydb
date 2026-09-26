@@ -1,9 +1,20 @@
 #include "run.h"
 #include "config_helpers.h"
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/util/affinity.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/scope.h>
+#include <util/system/event.h>
+
+#include <array>
+#include <atomic>
+#include <functional>
 
 Y_UNIT_TEST_SUITE(XdsBootstrapConfigInitializer) {
 
@@ -143,6 +154,103 @@ const NActors::TBasicExecutorPoolConfig* FindBasicPool(
         }
     }
     return nullptr;
+}
+
+Y_UNIT_TEST(ExecutorPriorityConfiguration) {
+    class TCallbackActor : public NActors::TActorBootstrapped<TCallbackActor> {
+    public:
+        explicit TCallbackActor(std::function<void()> callback)
+            : Callback(std::move(callback))
+        {}
+
+        void Bootstrap() {
+            Callback();
+            PassAway();
+        }
+
+    private:
+        std::function<void()> Callback;
+    };
+
+    // Exercise omitted, false and true per-pool settings in the same system.
+    // Priority selection must not depend on the Batch role or the pool name.
+    for (const int batchSetting : {-1, 0, 1, 2}) {
+        for (const bool waker : {false, true}) {
+            NKikimrConfig::TActorSystemConfig config;
+            if (batchSetting >= 0) {
+                config.SetBatchExecutor(batchSetting);
+            }
+            for (ui32 poolId = 0; poolId < 3; ++poolId) {
+                auto* pool = config.AddExecutor();
+                pool->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+                pool->SetName(poolId == 2 ? "Background" : "Batch");
+                pool->SetThreads(1);
+                pool->SetMinThreads(1);
+                pool->SetMaxThreads(1);
+                pool->SetSpinThreshold(0);
+                pool->SetEnableWaker(waker);
+                if (poolId != 0) {
+                    pool->SetUsePriority(poolId == 2);
+                }
+            }
+
+            struct TObservation {
+                TManualEvent Started, Release;
+                std::array<TManualEvent, 3> Done;
+                std::array<ui32, 3> Order{Max<ui32>(), Max<ui32>(), Max<ui32>()};
+                std::atomic<ui32> Next{0};
+            };
+            // Observations outlive shutdown, including assertion failures.
+            std::array<TObservation, 3> observations;
+            auto setup = MakeHolder<NActors::TActorSystemSetup>();
+            setup->NodeId = 1;
+            setup->CpuManager.Shared.United = config.GetUseUnitedPool();
+            NActorSystemConfigHelpers::AddExecutorPools(setup->CpuManager, config, nullptr);
+            setup->Scheduler.Reset(NActors::CreateSchedulerThread(
+                NActorSystemConfigHelpers::CreateSchedulerConfig(config.GetScheduler())));
+            NActors::TActorSystem actorSystem(setup);
+            actorSystem.Start();
+            Y_DEFER {
+                for (auto& obs : observations) {
+                    obs.Release.Signal();
+                }
+                actorSystem.Stop();
+            };
+            const auto pools = actorSystem.GetBasicExecutorPools();
+            UNIT_ASSERT_VALUES_EQUAL(pools.size(), observations.size());
+            for (auto* pool : pools) {
+                const bool priority = pool->PoolId == 2;
+                NActors::TExecutorPoolStats poolStats;
+                TVector<NActors::TExecutorThreadStats> threadStats;
+                pool->GetCurrentStats(poolStats, threadStats);
+                UNIT_ASSERT_VALUES_EQUAL(poolStats.HasPriorityActivationQueues, priority);
+
+                auto& [started, release, done, order, next] = observations[pool->PoolId];
+                actorSystem.Register(new TCallbackActor([&started, &release] {
+                    started.Signal();
+                    release.Wait();
+                }), NActors::TMailboxType::HTSwap, pool->PoolId);
+                UNIT_ASSERT_C(started.WaitT(TDuration::Seconds(5)), "configured worker did not start");
+                for (ui32 i = 0; i < 3; ++i) {
+                    THolder<NActors::IActor> actor(new TCallbackActor([&next, &order, &done, i] {
+                        order[i] = next.fetch_add(1);
+                        done[i].Signal();
+                    }));
+                    if (i == 2) {
+                        actor->SetMailboxPriority(NActors::EMailboxPriority::High);
+                    }
+                    actorSystem.Register(actor.Release(), NActors::TMailboxType::HTSwap, pool->PoolId);
+                }
+                release.Signal();
+                for (auto& event : done) {
+                    UNIT_ASSERT_C(event.WaitT(TDuration::Seconds(5)), "configured pool did not drain");
+                }
+                UNIT_ASSERT_VALUES_EQUAL(order[2], priority ? 0 : 2);
+                UNIT_ASSERT_VALUES_EQUAL(order[0], priority ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(order[1], priority ? 2 : 1);
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST(HarmonizerNeedyCpuWindow) {

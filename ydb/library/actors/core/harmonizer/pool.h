@@ -10,7 +10,7 @@
 namespace NActors {
 
 class ISharedPool;
-class TBasicExecutorPool;
+class TBasicExecutorPoolBase;
 class IExecutorPool;
 template <typename T>
 struct TWaitingStats;
@@ -27,7 +27,7 @@ struct TPoolInfo {
     std::vector<TThreadInfo> SharedInfo;
     ISharedPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
-    TBasicExecutorPool* BasicPool = nullptr;
+    TBasicExecutorPoolBase* BasicPool = nullptr;
     bool IsSharedOnly = false;
 
     i16 DefaultFullThreadCount = 0;

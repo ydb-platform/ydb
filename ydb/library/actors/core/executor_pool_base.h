@@ -7,6 +7,7 @@
 #include <ydb/library/actors/queues/activation_queue.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/threadparkpad.h>
+#include <memory>
 
 //#define RING_ACTIVATION_QUEUE
 
@@ -32,6 +33,8 @@ namespace NActors {
 #endif
         TAtomic RegisterRevolvingCounter = 0;
         ui64 AllocateID();
+        class TPriorityState;
+        std::unique_ptr<TPriorityState> PriorityState;
     public:
         explicit TExecutorPoolBaseMailboxed(ui32 poolId);
         ~TExecutorPoolBaseMailboxed();

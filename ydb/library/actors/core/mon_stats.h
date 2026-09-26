@@ -86,6 +86,11 @@ namespace NActors {
         bool HasFullOwnSharedThread = false;
         bool HasHalfOfOwnSharedThread = false;
         bool HasHalfOfOtherSharedThread = false;
+        bool HasPriorityActivationQueues = false;
+        // Enqueue timestamps of the oldest still-waiting mailbox in each queue.
+        // Zero for an empty queue; running mailboxes are excluded.
+        ui64 OldestNormalActivationTs = 0;
+        ui64 OldestHighActivationTs = 0;
     };
 
     struct TActivationTime {

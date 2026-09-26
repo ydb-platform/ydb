@@ -83,6 +83,8 @@ struct TExecutorPoolCounters {
     NMonitoring::TDynamicCounters::TCounterPtr NotEnoughCpuExecutions;
     NMonitoring::TDynamicCounters::TCounterPtr SpinningTimeUs;
     NMonitoring::TDynamicCounters::TCounterPtr SpinThresholdUs;
+    NMonitoring::TDynamicCounters::TCounterPtr NormalActivationQueueOldestAgeUs;
+    NMonitoring::TDynamicCounters::TCounterPtr HighActivationQueueOldestAgeUs;
 
 
     THistogramCounters LegacyActivationTimeHistogram;

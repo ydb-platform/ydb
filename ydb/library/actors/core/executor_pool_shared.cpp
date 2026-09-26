@@ -731,7 +731,7 @@ namespace NActors {
         ForeignThreadSlots[poolId].fetch_add(slots - current, std::memory_order_relaxed);
     }
 
-    void TSharedExecutorPool::SetBasicPool(TBasicExecutorPool* pool) {
+    void TSharedExecutorPool::SetBasicPool(TBasicExecutorPoolBase* pool) {
         Pools[pool->PoolId] = pool;
         HasWakerPools |= pool->EnableWaker;
     }

@@ -2,6 +2,7 @@
 #include "activity_guard.h"
 #include "actor.h"
 #include "executor_pool_base.h"
+#include "executor_pool_priority_state.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "executor_thread.h"
 #include "mailbox.h"
@@ -139,7 +140,8 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::SpecificScheduleActivation(TMailbox* mailbox) {
-        if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
+        // Priority pools publish every activation so capture cannot bypass High.
+        if (!PriorityState && (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this))) {
             mailbox = TlsThreadContext->CaptureMailbox(mailbox);
         }
         if (!mailbox) {
@@ -171,6 +173,9 @@ namespace NActors {
 
         // Free mailboxes are not executing, lock to a normal state
         mailbox->LockFromFree();
+        if (PriorityState) {
+            PriorityState->Initialize(mailbox->Hint, actor->GetMailboxPriority() == EMailboxPriority::High);
+        }
 
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);

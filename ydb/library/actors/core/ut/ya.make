@@ -33,6 +33,7 @@ SRCS(
     event_pb_ut.cpp
     executor_thread_stats_ut.cpp
     executor_pool_basic_ut.cpp
+    executor_pool_priority_ut.cpp
     executor_pool_semaphore_ut.cpp
     executor_pools_ut.cpp
     inmemory_metrics_ut.cpp

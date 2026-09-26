@@ -37,6 +37,8 @@ namespace NActors {
         // tiny-ydb configs
         std::vector<i16> AdjacentPools;
         i16 ForcedForeignSlotCount = 0;
+        // Poll High before Normal and disable mailbox capture in this pool.
+        bool UsePriority = false;
     };
 
     struct TSharedExecutorPoolConfig {

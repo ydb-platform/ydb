@@ -83,6 +83,9 @@ void AddExecutorPool(
     Y_ABORT_UNLESS(!poolConfig.HasEnableWaker()
         || poolConfig.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC,
         "EnableWaker is supported only for BASIC executors");
+    Y_ABORT_UNLESS(!poolConfig.HasUsePriority()
+        || poolConfig.GetType() == TExecutorConfig::BASIC,
+        "UsePriority is supported only for BASIC executors");
 
     switch (poolConfig.GetType()) {
         case TExecutorConfig::BASIC: {
@@ -110,6 +113,7 @@ void AddExecutorPool(
             basic.RealtimePriority = poolConfig.GetRealtimePriority();
             basic.HasSharedThread = poolConfig.GetHasSharedThread();
             basic.EnableWaker = poolConfig.GetEnableWaker();
+            basic.UsePriority = poolConfig.GetUsePriority();
             if (poolConfig.HasTimePerMailboxMicroSecs()) {
                 basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
             } else if (systemConfig.HasTimePerMailboxMicroSecs()) {

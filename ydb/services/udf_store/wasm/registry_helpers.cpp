@@ -164,6 +164,62 @@ TCurrentCompartmentGuard::~TCurrentCompartmentGuard() {
     SetCurrentCompartment(Previous_);
 }
 
+namespace {
+
+std::string ReadGuestExceptionMessage(
+    IWebAssemblyCompartment* compartment,
+    void* runtimeFunction,
+    const WAVM::Runtime::Exception* exception)
+{
+    if (WAVM::Runtime::describeExceptionType(WAVM::Runtime::getExceptionType(exception)) != "__cpp_exception") {
+        return {};
+    }
+
+    // An opt-in export in the throwing module decodes the C++ ABI's unwind
+    // pointer. The host cannot interpret arbitrary guest C++ object layouts.
+    void* messageFunction = compartment->GetFunctionInSameModule(
+        runtimeFunction, "__ydb_wasm_exception_message");
+    if (!messageFunction) {
+        return {};
+    }
+
+    const std::array<EWebAssemblyValueType, 1> argumentTypes = {EWebAssemblyValueType::UintPtr};
+    const auto runtimeType = GetTypeId(
+        /*intrinsic*/ false,
+        EWebAssemblyValueType::UintPtr,
+        TRange(argumentTypes.data(), argumentTypes.size()));
+    TWavmPodValue argument{};
+    TWavmPodValue result{};
+    argument.Data = WAVM::Runtime::getExceptionArgument(exception, 0).u64;
+    NYdb::NWasm::NDetail::WavmInvoke(
+        compartment,
+        runtimeType,
+        messageFunction,
+        &result,
+        TRange(&argument, 1));
+
+    if (!result.Data) {
+        return {};
+    }
+
+    constexpr size_t maxMessageLength = 4096;
+    std::string message;
+    for (size_t i = 0; i < maxMessageLength; ++i) {
+        if (result.Data > std::numeric_limits<ui64>::max() - i) {
+            return {};
+        }
+        const auto* character = static_cast<const char*>(
+            compartment->GetHostPointer(result.Data + i, 1));
+        if (!*character) {
+            return message;
+        }
+        message.push_back(*character);
+    }
+    return message + "...";
+}
+
+} // namespace
+
 void InvokeUdfExport(
     IWebAssemblyCompartment* compartment,
     void* runtimeFunction,
@@ -208,6 +264,20 @@ void InvokeUdfExport(
     } catch (WAVM::Runtime::Exception* exception) {
         // Type/args from WAVM, but only user wasm frames in the stack (like ThrowException).
         std::string message = WAVM::Runtime::describeException(exception);
+        const auto stackPos = message.find("\nCall stack:");
+        if (stackPos != std::string::npos) {
+            message.resize(stackPos);
+        }
+        try {
+            const auto guestMessage = ReadGuestExceptionMessage(compartment, runtimeFunction, exception);
+            if (!guestMessage.empty()) {
+                message += ": " + guestMessage;
+            }
+        } catch (WAVM::Runtime::Exception* nestedException) {
+            WAVM::Runtime::destroyException(nestedException);
+        } catch (const std::exception&) {
+            // A malformed or absent guest diagnostic must not hide the original exception.
+        }
         TString stack;
         try {
             stack = FormatUserWasmCallStack(WAVM::Runtime::getExceptionCallStack(exception));
@@ -217,11 +287,6 @@ void InvokeUdfExport(
             stack = "<wasm call stack unavailable>\n";
         }
         WAVM::Runtime::destroyException(exception);
-
-        const auto stackPos = message.find("\nCall stack:");
-        if (stackPos != std::string::npos) {
-            message.resize(stackPos);
-        }
 
         // Plain throw: do not prefix with registry_helpers.cpp:line for users.
         throw yexception()

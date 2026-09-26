@@ -10,6 +10,7 @@ IF (OS_EMSCRIPTEN)
         text
         trie
         types
+        yexception
     )
 ELSE()
     # Guest-side code that is plain C++ and worth testing on the host. The

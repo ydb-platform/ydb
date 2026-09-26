@@ -204,16 +204,18 @@ struct TTabletChannelInfo {
         ui32 FromGeneration;
         ui32 GroupID;
         TInstant Timestamp; // for diagnostics usage only
+        ui32 Version = 0; // storage info version that introduced this entry, maintained by hive only
 
         THistoryEntry()
             : FromGeneration(0)
             , GroupID(0)
         {}
 
-        THistoryEntry(ui32 fromGeneration, ui32 groupId, TInstant timestamp = TInstant()) // groupId could be zero
+        THistoryEntry(ui32 fromGeneration, ui32 groupId, TInstant timestamp = TInstant(), ui32 version = 0) // groupId could be zero
             : FromGeneration(fromGeneration)
             , GroupID(groupId)
             , Timestamp(timestamp)
+            , Version(version)
         {}
 
         struct TCmp {

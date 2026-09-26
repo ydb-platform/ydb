@@ -107,11 +107,25 @@ bool TLeaderTabletInfo::InitiateAssignTabletGroups() {
     return true;
 }
 
+ui32 TLeaderTabletInfo::GetBlockStorageGeneration() const {
+    // We block right below the first unconfirmed history entry: a tablet running at that generation
+    // or later has blocked at least this generation itself, so our versioned block fails and reveals it.
+    // KnownGeneration can't always be used here, since it is increased on reassign and may be updated by the tablet.
+    ui32 firstUnconfirmedGeneration = KnownGeneration + 1;
+    for (const TTabletChannelInfo& channel : TabletStorageInfo->Channels) {
+        auto unconfirmedIt = std::ranges::upper_bound(channel.History, ConfirmedStorageVersion, std::less<ui32>(), [] (auto&& entry) { return entry.Version; });
+        if (unconfirmedIt != channel.History.end()) {
+            firstUnconfirmedGeneration = std::min(firstUnconfirmedGeneration, unconfirmedIt->FromGeneration);
+        }
+    }
+    return firstUnconfirmedGeneration - 1;
+}
+
 bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects) {
     // attempt to kill tablet before blocking the storage group
     Kill(sideEffects);
     // blocks PREVIOUS entry of tablet history
-    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true);
+    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), GetBlockStorageGeneration(), true);
     sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }

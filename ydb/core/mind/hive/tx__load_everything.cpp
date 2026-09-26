@@ -624,7 +624,8 @@ public:
                         tablet->TabletStorageInfo->Channels.emplace_back();
                         tablet->TabletStorageInfo->Channels.back().Channel = tablet->TabletStorageInfo->Channels.size() - 1;
                     }
-                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp);
+                    ui32 version = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::Version>();
+                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp, version);
                     auto deletedAtGeneration = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>();
                     if (deletedAtGeneration) {
                         tablet->DeletedHistory.emplace(channelId, entry, deletedAtGeneration);

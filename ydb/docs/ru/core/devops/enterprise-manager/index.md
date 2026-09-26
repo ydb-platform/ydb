@@ -80,5 +80,6 @@ flowchart LR
 ## Основные материалы {#materials}
 
 - [{#T}](initial-deployment.md)
+- [{#T}](sso.md)
 - [{#T}](s3-backups.md)
 - [{#T}](ai-assistant.md)

@@ -351,6 +351,35 @@ TExprNode::TPtr MaybeAssumeChopped(TPositionHandle pos, TExprNode::TPtr sorted,
 }
 
 template <typename TPartition>
+TExprNode::TPtr PrepareWideSortInput(
+    const TPartition& partition,
+    TExprNode::TPtr input,
+    TExprContext& ctx)
+{
+    const auto pos = partition.Pos();
+    constexpr ui32 wideLimit = 101;
+    const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+    if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return input;
+    }
+
+    const auto& structType = *itemType->template Cast<TStructExprType>();
+    if (structType.GetSize() == 0 || structType.GetSize() > wideLimit) {
+        return input;
+    }
+
+    TVector<TString> columns;
+    columns.reserve(structType.GetSize());
+    for (const auto* item : structType.GetItems()) {
+        columns.emplace_back(item->GetName());
+    }
+    if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        input = ctx.NewCallable(pos, "ToFlow", {std::move(input)});
+    }
+    return MakeNarrowMap(pos, columns, MakeExpandMap(pos, columns, std::move(input), ctx), ctx);
+}
+
+template <typename TPartition>
 TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto pos = partition.Pos();
     const auto& keyExtractor = partition.KeySelectorLambda();
@@ -588,7 +617,8 @@ TExprBase DqBuildPartitionsStageStub(
         if (useSortForPartitionsByKeys) {
             // Sort + AssumeChopped, then apply handler via ForwardList/ToFlow
             const auto pos = node.Pos();
-            auto sorted = BuildSortForPartitionsByKeys(partition, newPartitionsInput, ctx);
+            auto sorted = BuildSortForPartitionsByKeys(
+                partition, PrepareWideSortInput(partition, newPartitionsInput, ctx), ctx);
 
             auto handlerResult = ctx.ReplaceNode(handler.Body().Ptr(), handler.Args().Arg(0).Ref(),
                 ctx.NewCallable(pos, "ForwardList", {std::move(sorted)}));

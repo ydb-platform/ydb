@@ -388,7 +388,9 @@ runs:
             exit $RC
           fi
 
+          record_ci_start checkout_head
           git checkout $ORIGINAL_HEAD
+          record_ci_end checkout_head success
           YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
@@ -405,6 +407,7 @@ runs:
             $YA_MAKE_TARGET
         fi
 
+        record_ci_start prepare_ya_make 1
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
@@ -448,6 +451,7 @@ runs:
         do
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
+            record_ci_start prepare_ya_make "$RETRY"
           else
             IS_RETRY=0
           fi
@@ -516,6 +520,7 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          record_ci_end prepare_ya_make success
           if [ -n "${CI_BUILD_SPAN:-}" ]; then
             record_ci_start "$CI_BUILD_SPAN" "$RETRY" "${CI_BUILD_SPAN_SOURCE:-ya_phase}"
           else

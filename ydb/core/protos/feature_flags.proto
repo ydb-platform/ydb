@@ -416,4 +416,8 @@ message TFeatureFlags {
     // safe, but may leave some garbage of already deleted tablets until it is turned on again.
     optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
     optional bool EnableKqpRuntimeStats = 342 [default = false];
+    // Creating this sysview persists EUdfModules (47), unknown to older binaries.
+    // Enable only after rollback to those versions is no longer required.
+    // Disabling prevents creation but preserves existing views and their ACLs.
+    optional bool EnableUdfModulesSystemView = 343 [default = false, (RequireRestart) = true];
 }

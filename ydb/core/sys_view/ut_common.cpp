@@ -135,6 +135,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     // in some tests we check data size, which depends on compaction,
     NKikimrConfig::TFeatureFlags featureFlags;
+    // Exercise the complete sysview registry, including opt-in views.
+    featureFlags.SetEnableUdfModulesSystemView(true);
     featureFlags.SetEnableBackgroundCompaction(false);
     featureFlags.SetEnableResourcePools(true);
     featureFlags.SetEnableFollowerStats(true);

@@ -642,13 +642,16 @@ private:
             TString error;
 
             const auto& pathDescription = describeResult.GetPathDescription();
-            if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
-                YDB_LOG_INFO("TImport::TTxProgress: ProcessSysViewRestore: path is not a system view",
-                    {"item", item.ToString(itemIdx)},
-                );
-
+            if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSysView) {
                 item.State = EState::Done;
                 return;
+            }
+            if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
+                YDB_LOG_INFO("TImport::TTxProgress: ProcessSysViewRestore: cannot describe system view",
+                    {"item", item.ToString(itemIdx)},
+                    {"error", error},
+                );
+                return CancelAndPersist(db, importInfo, itemIdx, error, "cannot describe system view");
             }
 
             const auto compatibilityStatus = NYdb::NDump::CheckSysViewCompatibility(*item.SysView, describeSysViewResult);

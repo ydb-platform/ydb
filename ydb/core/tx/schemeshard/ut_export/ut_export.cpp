@@ -2,6 +2,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
@@ -3507,7 +3508,10 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
+        const auto* metadata = S3Mock().GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
+        // Snapshot identifiers depend on the system views created during startup.
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, NKikimr::NBackup::ComputeChecksum(*metadata) + " metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3574,7 +3578,10 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
+        const auto* metadata = S3Mock().GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
+        // Snapshot identifiers depend on the system views created during startup.
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, NKikimr::NBackup::ComputeChecksum(*metadata) + " metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -4052,6 +4059,44 @@ state: STATE_ENABLED
               }
             }
         )"));
+    }
+
+    Y_UNIT_TEST(UnknownSystemViewTypeIsNotExported) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        const TString path = "/MyRoot/.sys/partition_stats";
+        const auto pathId = DescribePath(Runtime(), path).GetPathDescription().GetSelf().GetPathId();
+        constexpr ui32 futureType = 1000000;
+        UNIT_ASSERT(!NKikimrSysView::ESysViewType_IsValid(futureType));
+
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        const auto status = LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, Sprintf(R"((
+            (let key '('('PathId (Uint64 '%lu))))
+            (let row '('('SysViewType (Uint32 '%u))))
+            (return (AsList (UpdateRow 'SysView key row)))
+        ))", pathId, futureType), result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+
+        const auto description = DescribePath(Runtime(), path);
+        UNIT_ASSERT(!description.GetPathDescription().GetSysViewDescription().HasType());
+
+        ui64 txId = 100;
+        auto request = NDescUT::TExportRequest(S3Port(), {
+            R"(
+                items {
+                    source_path: "/MyRoot/.sys/partition_stats"
+                    destination_prefix: "/partition_stats"
+                }
+            )",
+        });
+        TestExport(Runtime(), ++txId, "/MyRoot", request.GetRequest());
+        Env().TestWaitNotification(Runtime(), txId);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(!HasS3File("/partition_stats/system_view.pb"));
+        UNIT_ASSERT(!DescribePath(Runtime(), path).GetPathDescription().GetSysViewDescription().HasType());
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {

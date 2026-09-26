@@ -1488,6 +1488,7 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
     def setup_class(cls):
         cls.cluster = cls._start_cluster(KikimrConfigGenerator(
             extra_feature_flags=[
+                "enable_udf_modules_system_view",
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
                 "enable_database_admin"
@@ -1710,6 +1711,7 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
 
         cfg = KikimrConfigGenerator(
             extra_feature_flags=[
+                "enable_udf_modules_system_view",
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
                 "enable_database_admin"

@@ -497,6 +497,10 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
             auto* record = ev->Get()->MutableRecord();
             auto& descr = *record->MutablePathDescription();
 
+            if (!descr.GetSysViewDescription().HasType()) {
+                ReportError(NKikimrScheme::StatusPathDoesNotExist, "Unknown system view type", ctx);
+                return Die(ctx);
+            }
             if (auto schema = NSysView::GetSystemViewResolver()
                 .GetSystemViewSchema(descr.GetSysViewDescription().GetType()))
             {

@@ -1225,7 +1225,15 @@ void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPath
 
     auto entry = Result->Record.MutablePathDescription()->MutableSysViewDescription();
     entry->SetName(pathEl->Name);
-    entry->SetType(sysViewInfo->Type);
+    if (NKikimrSysView::ESysViewType_IsValid(sysViewInfo->Type)) {
+        entry->SetType(sysViewInfo->Type);
+    } else {
+        // Preserve a future enum value on the wire without calling the checked
+        // proto2 enum setter. Older readers must check HasType() before GetType().
+        entry->GetReflection()->MutableUnknownFields(entry)->AddVarint(
+            NKikimrSchemeOp::TSysViewDescription::kTypeFieldNumber,
+            static_cast<ui32>(sysViewInfo->Type));
+    }
     sourceObjectPath.GetPathIdForDomain().ToProto(entry->MutableSourceObject());
 }
 

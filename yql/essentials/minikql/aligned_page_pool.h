@@ -1,5 +1,8 @@
 #pragma once
 
+#include "page_pool_constants.h"
+#include "system_mmap.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/yexception.h>
@@ -8,6 +11,7 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
+#include <functional>
 #include <stack>
 #include <queue>
 
@@ -49,29 +53,10 @@ public:
     virtual ~TMemoryLimitExceededException() = default;
 };
 
-class TSystemMmap {
-public:
-    void* Mmap(size_t size);
-    int Munmap(void* addr, size_t size) noexcept;
-
-    static TSystemMmap& GetInstance();
-};
-
-class TFakeMmap {
-public:
-    std::function<void*(size_t size)> OnMmap;
-    std::function<void(void* addr, size_t size)> OnMunmap;
-
-    void* Mmap(size_t size);
-    int Munmap(void* addr, size_t size) noexcept;
-
-    static TFakeMmap& GetInstance();
-};
-
 template <typename TMmap = TSystemMmap>
 class TAlignedPagePoolImpl {
 public:
-    static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
+    static constexpr ui64 POOL_PAGE_SIZE = PoolPageSize;
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
@@ -329,7 +314,5 @@ template <typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();
 template <typename TMmap = TSystemMmap>
 i64 GetTotalFreeListBytes();
-
-size_t GetMemoryMapsCount();
 
 } // namespace NKikimr

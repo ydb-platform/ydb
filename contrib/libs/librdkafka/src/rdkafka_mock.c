@@ -96,11 +96,16 @@ static void rd_kafka_mock_msgset_destroy(rd_kafka_mock_partition_t *mpart,
 /**
  * @brief Create a new msgset object with a copy of \p bytes
  *        and appends it to the partition log.
+ *
+ * @param MagicByte the MsgVersion of \p bytes: v2 MessageSets get their
+ *        BaseOffset and PartitionLeaderEpoch updated, while legacy v0..v1
+ *        MessageSets get an absolute offset assigned to each message.
  */
 static rd_kafka_mock_msgset_t *
 rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
                          const rd_kafkap_bytes_t *bytes,
-                         size_t msgcnt) {
+                         size_t msgcnt,
+                         int8_t MagicByte) {
         rd_kafka_mock_msgset_t *mset;
         size_t totsize = sizeof(*mset) + RD_KAFKAP_BYTES_LEN(bytes);
         int64_t BaseOffset;
@@ -127,15 +132,39 @@ rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
         memcpy((void *)mset->bytes.data, bytes->data, mset->bytes.len);
         mpart->size += mset->bytes.len;
 
-        /* Update the base Offset in the MessageSet with the
-         * actual absolute log offset. */
-        BaseOffset = htobe64(mset->first_offset);
-        memcpy((void *)mset->bytes.data, &BaseOffset, sizeof(BaseOffset));
-        /* Update the base PartitionLeaderEpoch in the MessageSet with the
-         * actual partition leader epoch. */
-        PartitionLeaderEpoch = htobe32(mset->leader_epoch);
-        memcpy(((char *)mset->bytes.data) + 12, &PartitionLeaderEpoch,
-               sizeof(PartitionLeaderEpoch));
+        if (MagicByte >= 2) {
+                /* Update the base Offset in the MessageSet with the
+                 * actual absolute log offset. */
+                BaseOffset = htobe64(mset->first_offset);
+                memcpy((void *)mset->bytes.data, &BaseOffset,
+                       sizeof(BaseOffset));
+                /* Update the base PartitionLeaderEpoch in the MessageSet with
+                 * the actual partition leader epoch. */
+                PartitionLeaderEpoch = htobe32(mset->leader_epoch);
+                memcpy(((char *)mset->bytes.data) + 12, &PartitionLeaderEpoch,
+                       sizeof(PartitionLeaderEpoch));
+        } else {
+                /* Legacy v0..v1 MessageSet: update the Offset of each
+                 * message in the set with the actual absolute log offset.
+                 * The MessageSet layout was validated by the caller. */
+                size_t of      = 0;
+                int64_t offset = mset->first_offset;
+                char *data     = (char *)mset->bytes.data;
+
+                while (of + RD_KAFKAP_MESSAGESET_V0_HDR_SIZE <=
+                       (size_t)mset->bytes.len) {
+                        int64_t Offset = htobe64(offset++);
+                        int32_t MessageSize;
+
+                        memcpy(data + of, &Offset, sizeof(Offset));
+                        memcpy(&MessageSize,
+                               data + of + RD_KAFKAP_MSGSET_V0_OF_MessageSize,
+                               sizeof(MessageSize));
+                        MessageSize = be32toh(MessageSize);
+                        of += RD_KAFKAP_MESSAGESET_V0_HDR_SIZE +
+                              (size_t)MessageSize;
+                }
+        }
 
         /* Remove old msgsets until within limits */
         while (mpart->cnt > 1 &&
@@ -423,7 +452,7 @@ void rd_kafka_mock_partition_write_control_batch(
         bytes.data = buf;
 
         /* msgset_new copies the bytes, assigns offsets, and appends. */
-        rd_kafka_mock_msgset_new(mpart, &bytes, 1);
+        rd_kafka_mock_msgset_new(mpart, &bytes, 1, 2 /*MagicByte*/);
 
         rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCK",
                      "Wrote %s control batch to %s [%" PRId32
@@ -552,6 +581,58 @@ err_parse:
 }
 
 /**
+ * @brief Parse and validate an uncompressed legacy (MsgVersion v0..v1)
+ *        MessageSet and return the number of messages it contains
+ *        in \p msgcntp.
+ *
+ * Compressed legacy MessageSets are not supported and are rejected
+ * with RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_msgset_legacy_count(rd_kafka_buf_t *rkbuf,
+                                  size_t len,
+                                  size_t *msgcntp) {
+        const int log_decode_errors = LOG_ERR;
+        size_t of                   = 0;
+        size_t msgcnt               = 0;
+
+        while (of < len) {
+                int32_t MessageSize;
+                int8_t Attributes;
+
+                if (of + RD_KAFKAP_MESSAGE_V0_OVERHEAD > len)
+                        return RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE;
+
+                rd_kafka_buf_peek_i32(rkbuf,
+                                      of + RD_KAFKAP_MSGSET_V0_OF_MessageSize,
+                                      &MessageSize);
+                rd_kafka_buf_peek_i8(
+                    rkbuf, of + RD_KAFKAP_MSGSET_V0_OF_Attributes, &Attributes);
+
+                if (Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK)
+                        return RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION;
+
+                if (MessageSize < RD_KAFKAP_MESSAGE_V0_HDR_SIZE ||
+                    of + RD_KAFKAP_MESSAGESET_V0_HDR_SIZE +
+                            (size_t)MessageSize >
+                        len)
+                        return RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE;
+
+                of += RD_KAFKAP_MESSAGESET_V0_HDR_SIZE + (size_t)MessageSize;
+                msgcnt++;
+        }
+
+        if (msgcnt == 0)
+                return RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE;
+
+        *msgcntp = msgcnt;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        return rkbuf->rkbuf_err;
+}
+
+/**
  * @brief Append the MessageSets in \p bytes to the \p mpart partition log.
  *
  * @param BaseOffset will contain the first assigned offset of the message set.
@@ -577,10 +658,29 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
 
         rd_kafka_buf_peek_i8(rkbuf, RD_KAFKAP_MSGSET_V2_OF_MagicByte,
                              &MagicByte);
-        if (MagicByte != 2) {
-                /* We only support MsgVersion 2 for now */
-                err = RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION;
-                goto err;
+        if (MagicByte < 2) {
+                /* Legacy uncompressed v0..v1 MessageSet, as produced to
+                 * clusters with log.message.format.version < 0.11. */
+                size_t legacy_msgcnt;
+
+                err = rd_kafka_mock_msgset_legacy_count(
+                    rkbuf, RD_KAFKAP_BYTES_LEN(records), &legacy_msgcnt);
+                if (err)
+                        goto err;
+
+                rd_kafka_buf_destroy(rkbuf);
+
+                mset = rd_kafka_mock_msgset_new(mpart, records, legacy_msgcnt,
+                                                MagicByte);
+
+                *BaseOffset = mset->first_offset;
+
+                mtx_lock(&mpart->topic->cluster->lock);
+                rd_kafka_mock_partition_update_lso(mpart,
+                                                   mpart->topic->cluster);
+                mtx_unlock(&mpart->topic->cluster->lock);
+
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
         rd_kafka_buf_peek_i32(rkbuf, RD_KAFKAP_MSGSET_V2_OF_RecordCount,
@@ -606,7 +706,8 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
 
         rd_kafka_buf_destroy(rkbuf);
 
-        mset = rd_kafka_mock_msgset_new(mpart, records, (size_t)RecordCount);
+        mset = rd_kafka_mock_msgset_new(mpart, records, (size_t)RecordCount,
+                                        MagicByte);
 
         *BaseOffset = mset->first_offset;
 
@@ -3151,6 +3252,13 @@ void rd_kafka_mock_group_initial_rebalance_delay_ms(
     int32_t delay_ms) {
         mtx_lock(&mcluster->lock);
         mcluster->defaults.group_initial_rebalance_delay_ms = delay_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+void rd_kafka_mock_set_controller_id(rd_kafka_mock_cluster_t *mcluster,
+                                     int32_t controller_id) {
+        mtx_lock(&mcluster->lock);
+        mcluster->controller_id = controller_id;
         mtx_unlock(&mcluster->lock);
 }
 

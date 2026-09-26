@@ -98,6 +98,7 @@ SRCS(
 
     journal_client/public.cpp
     journal_client/config.cpp
+    journal_client/helpers.cpp
 
     cypress_client/public.cpp
 

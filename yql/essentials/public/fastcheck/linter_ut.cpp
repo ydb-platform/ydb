@@ -820,6 +820,36 @@ Y_UNIT_TEST(UdfFilter) {
     UNIT_ASSERT_C(err.find("Unknown function: Math::FOO") != TString::npos, err);
 }
 
+Y_UNIT_TEST(TypeCheckResourceLimitIsWarning) {
+    TChecksRequest request;
+    request.Program = R"sql(
+        $o = ($o) -> { RETURN $o($o); };
+        SELECT $o($o);
+    )sql";
+    request.ClusterMode = EClusterMode::Unknown;
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+    request.LimitStrictnessFactor = 10;
+
+    const auto res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
+    UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+
+    bool hasResourceLimitWarning = false;
+    for (const auto& topIssue : res.Checks[0].Issues) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/false, [&](const TIssue& issue, ui16) {
+            UNIT_ASSERT_C(
+                issue.GetSeverity() > TSeverityIds::S_ERROR,
+                res.Checks[0].Issues.ToString());
+            hasResourceLimitWarning |= issue.GetMessage() ==
+                                       "Partial type annotation: resource limit exceeded, type inference precision is lowered";
+        });
+    }
+    UNIT_ASSERT(hasResourceLimitWarning);
+}
+
 Y_UNIT_TEST(TypeCheckBasicOk) {
     TChecksRequest request;
     request.Program = R"sql(

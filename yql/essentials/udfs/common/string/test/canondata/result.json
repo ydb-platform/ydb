@@ -216,5 +216,17 @@
         {
             "uri": "file://test.test_To-Results_/results.txt"
         }
+    ],
+    "test.test[soundex-Peephole]": [
+        {
+            "checksum": "a66beb2a512c0c23149dee4aea9f32b5",
+            "size": 773,
+            "uri": "https://{canondata_backend}/1937001/07aaab43b6b70e6fc52dd4ca32f72fe06f75a0cb/resource.tar.gz#test.test_soundex-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[soundex-Results]": [
+        {
+            "uri": "file://test.test_soundex-Results_/results.txt"
+        }
     ]
 }

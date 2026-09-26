@@ -1,0 +1,3 @@
+USE plato;
+
+DROP SYMLINK IF EXISTS Missing;

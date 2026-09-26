@@ -21,6 +21,7 @@ public:
         Folder,
         WalkFolders,
         WalkFoldersImpl,
+        Link,
         View
     };
 
@@ -89,6 +90,11 @@ public:
         return View;
     }
 
+    const TMaybe<TString>& GetTarget() const {
+        YQL_ENSURE(Type == EType::Link);
+        return Target;
+    }
+
     bool IsAnonymous() const {
         return Anonymous;
     }
@@ -124,6 +130,7 @@ private:
     const TExprNode* KeyNode = nullptr;
     TString Path;
     TString View;
+    TMaybe<TString> Target;
     bool Anonymous = false;
     TMaybe<TRange> Range;
     TMaybe<TFolderList> Folder;

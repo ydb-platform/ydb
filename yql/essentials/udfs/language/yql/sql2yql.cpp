@@ -55,14 +55,26 @@ void ParseLangVersion(TStringBuf langVersion, NSQLTranslation::TTranslationSetti
     YQL_ENSURE(NYql::ParseLangVersion(langVersion, settings.LangVer));
 }
 
-void ParseGatewaysConfig(TStringBuf cfg, NSQLTranslation::TTranslationSettings& settings) {
-    if (cfg.empty()) {
+void ParseGatewaysConfig(
+    TStringBuf cfg,
+    TStringBuf cfgPatch,
+    NSQLTranslation::TTranslationSettings& settings)
+{
+    if (cfg.empty() && cfgPatch.empty()) {
         return;
     }
 
     NYql::TGatewaysConfig config;
-    if (!google::protobuf::TextFormat::ParseFromString(cfg, &config)) {
+    if (!cfg.empty() && !google::protobuf::TextFormat::ParseFromString(cfg, &config)) {
         ythrow yexception() << "Failed to parse gateways config";
+    }
+
+    if (!cfgPatch.empty()) {
+        NYql::TGatewaysConfig configPatch;
+        if (!google::protobuf::TextFormat::ParseFromString(cfgPatch, &configPatch)) {
+            ythrow yexception() << "Failed to parse gateways config patch";
+        }
+        config.MergeFrom(configPatch);
     }
 
     NSQLTranslation::TExtendedSqlFlags sqlFlags = NYql::TGatewaySQLFlags::FromTesting(config).ToMap();
@@ -74,7 +86,7 @@ void ParseGatewaysConfig(TStringBuf cfg, NSQLTranslation::TTranslationSettings& 
 void ParseTranslationSettings(const TSql2YqlInput& input, NSQLTranslation::TTranslationSettings& settings) {
     settings.SyntaxVersion = 1;
     ParseLangVersion(input.LangVersion, settings);
-    ParseGatewaysConfig(input.GatewaysCfg, settings);
+    ParseGatewaysConfig(input.GatewaysCfg, input.GatewaysCfgPatch, settings);
 }
 
 NSQLTranslation::TTranslators Translators(TMaybe<size_t> maxParseTreeDepth) {

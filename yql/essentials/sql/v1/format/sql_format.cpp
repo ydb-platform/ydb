@@ -1183,6 +1183,16 @@ private:
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateSymlink(const TRule_create_symlink_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_symlink_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropSymlink(const TRule_drop_symlink_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_symlink_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAnalyze(const TRule_analyze_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_analyze_stmt::GetDescriptor(), msg);
@@ -2676,6 +2686,20 @@ private:
         NewLine();
     }
 
+    void VisitOrdinaryGroupingSetList(const TRule_ordinary_grouping_set_list& msg) {
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_ordinary_grouping_set1());
+        for (const auto& block : msg.GetBlock2()) {
+            Visit(block.GetToken1());
+            NewLine();
+            Visit(block.GetRule_ordinary_grouping_set2());
+        }
+
+        PopCurrentIndent();
+        NewLine();
+    }
+
     void VisitGroupingSetsSpecification(const TRule_grouping_sets_specification& msg) {
         Visit(msg.GetToken1());
         Visit(msg.GetToken2());
@@ -3311,6 +3335,7 @@ TStaticData::TStaticData()
           {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
           {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
           {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+          {TRule_ordinary_grouping_set_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrdinaryGroupingSetList)},
           {TRule_grouping_sets_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingSetsSpecification)},
           {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
           {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
@@ -3358,6 +3383,8 @@ TStaticData::TStaticData()
           {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
           {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
           {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},
+          {TRule_create_symlink_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateSymlink)},
+          {TRule_drop_symlink_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropSymlink)},
           {TRule_use_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUse)},
           {TRule_into_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoTable)},
           {TRule_commit_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCommit)},

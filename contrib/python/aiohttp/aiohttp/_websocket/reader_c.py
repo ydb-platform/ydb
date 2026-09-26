@@ -3,7 +3,7 @@
 import asyncio
 import builtins
 from collections import deque
-from typing import Deque, Final, Optional, Set, Tuple, Union
+from typing import Final
 
 from ..base_protocol import BaseProtocol
 from ..compression_utils import ZLibDecompressor
@@ -15,10 +15,11 @@ from .models import (
     WebSocketError,
     WSCloseCode,
     WSMessage,
+    WSMessageTextBytes,
     WSMsgType,
 )
 
-ALLOWED_CLOSE_CODES: Final[Set[int]] = {int(i) for i in WSCloseCode}
+ALLOWED_CLOSE_CODES: Final[set[int]] = {int(i) for i in WSCloseCode}
 
 # States for the reader, used to parse the WebSocket frame
 # integer values are used so they can be cythonized
@@ -65,16 +66,16 @@ class WebSocketDataQueue:
         self._limit = limit * 2
         self._loop = loop
         self._eof = False
-        self._waiter: Optional[asyncio.Future[None]] = None
-        self._exception: Union[BaseException, None] = None
-        self._buffer: Deque[Tuple[WSMessage, int]] = deque()
+        self._waiter: asyncio.Future[None] | None = None
+        self._exception: BaseException | None = None
+        self._buffer: deque[tuple[WSMessage | WSMessageTextBytes, int]] = deque()
         self._get_buffer = self._buffer.popleft
         self._put_buffer = self._buffer.append
 
     def is_eof(self) -> bool:
         return self._eof
 
-    def exception(self) -> Optional[BaseException]:
+    def exception(self) -> BaseException | None:
         return self._exception
 
     def set_exception(
@@ -100,14 +101,16 @@ class WebSocketDataQueue:
         self._release_waiter()
         self._exception = None  # Break cyclic references
 
-    def feed_data(self, data: "WSMessage", size: "cython_int") -> None:
+    def feed_data(
+        self, data: "WSMessage | WSMessageTextBytes", size: "cython_int"
+    ) -> None:
         self._size += size
         self._put_buffer((data, size))
         self._release_waiter()
         if self._size > self._limit and not self._protocol._reading_paused:
             self._protocol.pause_reading()
 
-    async def read(self) -> WSMessage:
+    async def read(self) -> WSMessage | WSMessageTextBytes:
         if not self._buffer and not self._eof:
             assert not self._waiter
             self._waiter = self._loop.create_future()
@@ -118,7 +121,7 @@ class WebSocketDataQueue:
                 raise
         return self._read_from_buffer()
 
-    def _read_from_buffer(self) -> WSMessage:
+    def _read_from_buffer(self) -> WSMessage | WSMessageTextBytes:
         if self._buffer:
             data, size = self._get_buffer()
             self._size -= size
@@ -132,12 +135,17 @@ class WebSocketDataQueue:
 
 class WebSocketReader:
     def __init__(
-        self, queue: WebSocketDataQueue, max_msg_size: int, compress: bool = True
+        self,
+        queue: WebSocketDataQueue,
+        max_msg_size: int,
+        compress: bool,
+        decode_text: bool,
     ) -> None:
         self.queue = queue
         self._max_msg_size = max_msg_size
+        self._decode_text = decode_text
 
-        self._exc: Optional[Exception] = None
+        self._exc: Exception | None = None
         self._partial = bytearray()
         self._state = READ_HEADER
 
@@ -149,11 +157,11 @@ class WebSocketReader:
 
         self._tail: bytes = b""
         self._has_mask = False
-        self._frame_mask: Optional[bytes] = None
+        self._frame_mask: bytes | None = None
         self._payload_bytes_to_read = 0
         self._payload_len_flag = 0
         self._compressed: int = COMPRESSED_NOT_SET
-        self._decompressobj: Optional[ZLibDecompressor] = None
+        self._decompressobj: ZLibDecompressor | None = None
         self._compress = compress
 
     def feed_eof(self) -> None:
@@ -162,9 +170,7 @@ class WebSocketReader:
     # data can be bytearray on Windows because proactor event loop uses bytearray
     # and asyncio types this to Union[bytes, bytearray, memoryview] so we need
     # coerce data to bytes if it is not
-    def feed_data(
-        self, data: Union[bytes, bytearray, memoryview]
-    ) -> Tuple[bool, bytes]:
+    def feed_data(self, data: bytes | bytearray | memoryview) -> tuple[bool, bytes]:
         if type(data) is not bytes:
             data = bytes(data)
 
@@ -183,33 +189,29 @@ class WebSocketReader:
     def _handle_frame(
         self,
         fin: bool,
-        opcode: Union[int, cython_int],  # Union intended: Cython pxd uses C int
-        payload: Union[bytes, bytearray],
-        compressed: Union[int, cython_int],  # Union intended: Cython pxd uses C int
+        opcode: int | cython_int,  # Union intended: Cython pxd uses C int
+        payload: bytes | bytearray,
+        compressed: int | cython_int,  # Union intended: Cython pxd uses C int
     ) -> None:
         msg: WSMessage
         if opcode in {OP_CODE_TEXT, OP_CODE_BINARY, OP_CODE_CONTINUATION}:
+            # Validate continuation frames before processing
+            if opcode == OP_CODE_CONTINUATION and self._opcode == OP_CODE_NOT_SET:
+                raise WebSocketError(
+                    WSCloseCode.PROTOCOL_ERROR,
+                    "Continuation frame for non started message",
+                )
+
             # load text/binary
             if not fin:
                 # got partial frame payload
                 if opcode != OP_CODE_CONTINUATION:
                     self._opcode = opcode
                 self._partial += payload
-                if self._max_msg_size and len(self._partial) >= self._max_msg_size:
-                    raise WebSocketError(
-                        WSCloseCode.MESSAGE_TOO_BIG,
-                        f"Message size {len(self._partial)} "
-                        f"exceeds limit {self._max_msg_size}",
-                    )
                 return
 
             has_partial = bool(self._partial)
             if opcode == OP_CODE_CONTINUATION:
-                if self._opcode == OP_CODE_NOT_SET:
-                    raise WebSocketError(
-                        WSCloseCode.PROTOCOL_ERROR,
-                        "Continuation frame for non started message",
-                    )
                 opcode = self._opcode
                 self._opcode = OP_CODE_NOT_SET
             # previous frame was non finished
@@ -221,19 +223,12 @@ class WebSocketReader:
                     f"to be zero, got {opcode!r}",
                 )
 
-            assembled_payload: Union[bytes, bytearray]
+            assembled_payload: bytes | bytearray
             if has_partial:
                 assembled_payload = self._partial + payload
                 self._partial.clear()
             else:
                 assembled_payload = payload
-
-            if self._max_msg_size and len(assembled_payload) >= self._max_msg_size:
-                raise WebSocketError(
-                    WSCloseCode.MESSAGE_TOO_BIG,
-                    f"Message size {len(assembled_payload)} "
-                    f"exceeds limit {self._max_msg_size}",
-                )
 
             # Decompress process must to be done after all packets
             # received.
@@ -264,21 +259,30 @@ class WebSocketReader:
                 payload_merged = bytes(assembled_payload)
 
             if opcode == OP_CODE_TEXT:
-                try:
-                    text = payload_merged.decode("utf-8")
-                except UnicodeDecodeError as exc:
-                    raise WebSocketError(
-                        WSCloseCode.INVALID_TEXT, "Invalid UTF-8 text message"
-                    ) from exc
+                if self._decode_text:
+                    try:
+                        text = payload_merged.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise WebSocketError(
+                            WSCloseCode.INVALID_TEXT, "Invalid UTF-8 text message"
+                        ) from exc
 
-                # XXX: The Text and Binary messages here can be a performance
-                # bottleneck, so we use tuple.__new__ to improve performance.
-                # This is not type safe, but many tests should fail in
-                # test_client_ws_functional.py if this is wrong.
-                self.queue.feed_data(
-                    TUPLE_NEW(WSMessage, (WS_MSG_TYPE_TEXT, text, "")),
-                    len(payload_merged),
-                )
+                    # XXX: The Text and Binary messages here can be a performance
+                    # bottleneck, so we use tuple.__new__ to improve performance.
+                    # This is not type safe, but many tests should fail in
+                    # test_client_ws_functional.py if this is wrong.
+                    self.queue.feed_data(
+                        TUPLE_NEW(WSMessage, (WS_MSG_TYPE_TEXT, text, "")),
+                        len(payload_merged),
+                    )
+                else:
+                    # Return raw bytes for TEXT messages when decode_text=False
+                    self.queue.feed_data(
+                        TUPLE_NEW(
+                            WSMessageTextBytes, (WS_MSG_TYPE_TEXT, payload_merged, "")
+                        ),
+                        len(payload_merged),
+                    )
             else:
                 self.queue.feed_data(
                     TUPLE_NEW(WSMessage, (WS_MSG_TYPE_BINARY, payload_merged, "")),
@@ -359,6 +363,19 @@ class WebSocketReader:
                         "Received frame with non-zero reserved bits",
                     )
 
+                if opcode not in {
+                    OP_CODE_CONTINUATION,
+                    OP_CODE_TEXT,
+                    OP_CODE_BINARY,
+                    OP_CODE_CLOSE,
+                    OP_CODE_PING,
+                    OP_CODE_PONG,
+                }:
+                    raise WebSocketError(
+                        WSCloseCode.PROTOCOL_ERROR,
+                        f"Unexpected opcode={opcode!r}",
+                    )
+
                 if opcode > 0x7 and fin == 0:
                     raise WebSocketError(
                         WSCloseCode.PROTOCOL_ERROR,
@@ -387,7 +404,11 @@ class WebSocketReader:
                         "Received frame with non-zero reserved bits",
                     )
 
-                self._frame_fin = bool(fin)
+                # Control frames (opcode > 0x7) may be interleaved between the
+                # fragments of a data message.
+                # https://datatracker.ietf.org/doc/html/rfc6455#section-5.4
+                if opcode <= 0x7:
+                    self._frame_fin = bool(fin)
                 self._frame_opcode = opcode
                 self._has_mask = bool(has_mask)
                 self._payload_len_flag = length
@@ -410,6 +431,22 @@ class WebSocketReader:
                     start_pos += 8
                 else:
                     self._payload_bytes_to_read = len_flag
+
+                # Reject oversized data frames before buffering any payload
+                # bytes. Control frames are capped at 125 bytes (checked in
+                # READ_HEADER) so only text/binary/continuation need this.
+                if self._max_msg_size and self._frame_opcode in {
+                    OP_CODE_TEXT,
+                    OP_CODE_BINARY,
+                    OP_CODE_CONTINUATION,
+                }:
+                    projected_size = self._payload_bytes_to_read + len(self._partial)
+                    if projected_size >= self._max_msg_size:
+                        raise WebSocketError(
+                            WSCloseCode.MESSAGE_TOO_BIG,
+                            f"Message size {projected_size} "
+                            f"exceeds limit {self._max_msg_size}",
+                        )
 
                 self._state = READ_PAYLOAD_MASK if self._has_mask else READ_PAYLOAD
 
@@ -441,7 +478,7 @@ class WebSocketReader:
                     self._payload_fragments.append(data_cstr[f_start_pos:f_end_pos])
                     break
 
-                payload: Union[bytes, bytearray]
+                payload: bytes | bytearray
                 if had_fragments:
                     # We have to join the payload fragments get the payload
                     self._payload_fragments.append(data_cstr[f_start_pos:f_end_pos])

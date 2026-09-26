@@ -1,4 +1,6 @@
 #include "server.h"
+
+#include "compression.h"
 #include "http.h"
 #include "config.h"
 #include "stream.h"
@@ -9,6 +11,7 @@
 #include <yt/yt/core/net/connection.h>
 
 #include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
@@ -61,6 +64,7 @@ public:
         IPollerPtr poller,
         IPollerPtr acceptor,
         IInvokerPtr invoker,
+        IInvokerPtr compressionInvoker,
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
@@ -73,7 +77,13 @@ public:
         , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
         , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName), Config_->EnablePerPathRequestProfiling)
         , RequestPathMatcher_(std::move(requestPathMatcher))
-    { }
+        , CompressionInvoker_(std::move(compressionInvoker))
+    {
+        if (Config_->EnableContentEncoding && !CompressionInvoker_) {
+            CompressionThreadPool_ = CreateThreadPool(Config_->CompressionThreadCount, Config_->ServerName + "Compress");
+            CompressionInvoker_ = CompressionThreadPool_->GetInvoker();
+        }
+    }
 
     void AddHandler(const std::string& path, const IHttpHandlerPtr& handler) override
     {
@@ -119,6 +129,10 @@ public:
 
         if (OwnPoller_) {
             Poller_->Shutdown();
+        }
+
+        if (CompressionThreadPool_) {
+            CompressionThreadPool_->Shutdown();
         }
 
         YT_TLOG_INFO("Server stopped");
@@ -228,6 +242,8 @@ private:
 
     TProfiling Profiling_;
     IRequestPathMatcherPtr RequestPathMatcher_;
+    IInvokerPtr CompressionInvoker_;
+    IThreadPoolPtr CompressionThreadPool_;
     bool Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
@@ -309,6 +325,10 @@ private:
             auto handler = RequestPathMatcher_->Match(path);
             if (handler) {
                 closeResponse = false;
+
+                if (Config_->EnableContentEncoding) {
+                    handler = CreateContentEncodingHttpHandler(std::move(handler), CompressionInvoker_);
+                }
 
                 if (request->IsExpecting100Continue()) {
                     response->Flush100Continue();
@@ -499,6 +519,7 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker,
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
@@ -508,6 +529,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         std::move(handlers),
         ownPoller);
 }
@@ -517,6 +539,7 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker,
     bool ownPoller)
 {
     return CreateServer(
@@ -525,6 +548,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         ownPoller);
 }
 
@@ -545,6 +569,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*compressionInvoker*/ nullptr,
         /*ownPoller*/ false);
 }
 
@@ -552,7 +577,8 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     IListenerPtr listener,
     IPollerPtr poller,
-    IPollerPtr acceptor)
+    IPollerPtr acceptor,
+    IInvokerPtr compressionInvoker)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -561,6 +587,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         /*ownPoller*/ false);
 }
 
@@ -575,6 +602,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*compressionInvoker*/ nullptr,
         /*ownPoller*/ false);
 }
 
@@ -604,13 +632,15 @@ IServerPtr CreateServer(TServerConfigPtr config, int pollerThreadCount)
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*compressionInvoker*/ nullptr,
         /*ownPoller*/ true);
 }
 
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller,
-    IInvokerPtr invoker)
+    IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker)
 {
     auto acceptor = poller;
     return CreateServer(
@@ -618,6 +648,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         /*ownPoller*/ false);
 }
 

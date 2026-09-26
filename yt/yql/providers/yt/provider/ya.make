@@ -14,6 +14,7 @@ SRCS(
     yql_yt_datasink.cpp
     yql_yt_datasource_constraints.cpp
     yql_yt_datasource_exec.cpp
+    yql_yt_datasource_trackable.cpp
     yql_yt_datasource_type_ann.cpp
     yql_yt_datasource.cpp
     yql_yt_epoch.cpp

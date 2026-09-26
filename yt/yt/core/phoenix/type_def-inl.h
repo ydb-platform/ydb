@@ -215,11 +215,11 @@ decltype(auto) RunRegistrar(auto&& registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTypeSchemaBuilderRegistar
+class TTypeSchemaBuilderRegistrar
     : public TTypeRegistrarBase
 {
 public:
-    TTypeSchemaBuilderRegistar(
+    TTypeSchemaBuilderRegistrar(
         std::vector<const std::type_info*> typeInfos,
         TTypeTag tag,
         bool isTemplate,
@@ -287,7 +287,7 @@ std::vector<const std::type_info*> GetTypeInfos()
 template <class TThis, bool Template>
 auto MakeTypeSchemaBuilderRegistrar()
 {
-    return TTypeSchemaBuilderRegistar(
+    return TTypeSchemaBuilderRegistrar(
         GetTypeInfos<TThis>(),
         TThis::TypeTag,
         Template,
@@ -345,6 +345,8 @@ public:
     TFieldSaveRegistrar(TFieldSaveRegistrar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : This_(other.This_)
         , Context_(other.Context_)
+        , VersionFilter_(other.VersionFilter_)
+        , BeforeVersion_(other.BeforeVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -397,6 +399,8 @@ template <class TThis, class TContext>
 class PHOENIX_REGISTRAR_NODISCARD TVirtualFieldSaveRegistrar
 {
 public:
+    using TVersion = typename TTraits<TThis>::TVersion;
+
     TVirtualFieldSaveRegistrar(
         const TThis* this_,
         TContext& context,
@@ -410,6 +414,8 @@ public:
         : This_(other.This_)
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
+        , VersionFilter_(other.VersionFilter_)
+        , BeforeVersion_(other.BeforeVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -417,13 +423,15 @@ public:
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
-    auto BeforeVersion(auto /*version*/) &&
+    auto BeforeVersion(TVersion version) &&
     {
+        BeforeVersion_ = version;
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
@@ -434,13 +442,18 @@ public:
 
     void operator()() &&
     {
-        SaveHandler_(This_, Context_);
+        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+            SaveHandler_(This_, Context_);
+        }
     }
 
 private:
     const TThis* const This_;
     TContext& Context_;
     const TFieldSaveHandler<TThis, TContext> SaveHandler_;
+
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
@@ -566,7 +579,6 @@ public:
         return TFieldLoadRegistrar(std::move(*this));
     }
 
-
     template <class TFieldSerializer_>
     auto Serializer() &&
     {
@@ -655,7 +667,6 @@ public:
         VersionFilter_ = filter;
         return TVirtualFieldLoadRegistrar(std::move(*this));
     }
-
 
     void operator()() &&
     {
@@ -776,17 +787,17 @@ struct TRuntimeFieldDescriptor
 };
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
-class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar
+class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistrar
 {
 public:
     using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
-    explicit TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
+    explicit TRuntimeFieldDescriptorBuilderRegistrar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
     { }
 
     template <class TFieldSerializer_>
-    TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TFieldSerializer_>&& other)
+    TRuntimeFieldDescriptorBuilderRegistrar(TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : Descriptor_(other.Descriptor_)
     { }
 
@@ -814,7 +825,7 @@ public:
     template <class TFieldSerializer_>
     auto Serializer() &&
     {
-        return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
+        return TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
     }
 
     void operator()() &&
@@ -826,18 +837,18 @@ public:
 
 private:
     template <auto Member_, class TThis_, class TContext_, class TFieldSerializer_>
-    friend class TRuntimeFieldDescriptorBuilderRegistar;
+    friend class TRuntimeFieldDescriptorBuilderRegistrar;
 
     TRuntimeFieldDescriptor* const Descriptor_;
 };
 
 template <class TThis, class TContext>
-class TRuntimeVirtualFieldDescriptorBuilderRegistar
+class TRuntimeVirtualFieldDescriptorBuilderRegistrar
 {
 public:
     using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
-    TRuntimeVirtualFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
+    TRuntimeVirtualFieldDescriptorBuilderRegistrar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
     { }
 
@@ -920,7 +931,7 @@ public:
                 this_->*Member = {};
             }
         };
-        return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
+        return TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
     }
 
     template <TFieldTag::TUnderlying TagValue>
@@ -930,7 +941,7 @@ public:
     {
         auto* descriptor = AddField<TagValue>();
         descriptor->LoadHandler = loadHandler;
-        return TRuntimeVirtualFieldDescriptorBuilderRegistar<TThis, TContext>(descriptor);
+        return TRuntimeVirtualFieldDescriptorBuilderRegistrar<TThis, TContext>(descriptor);
     }
 
     template <TFieldTag::TUnderlying TagValue>
@@ -1135,7 +1146,6 @@ struct TSerializer
         }
         Save(context, *ptr);
     }
-
 
     template <class T, class C>
     static void Load(C& context, TIntrusivePtr<T>& ptr)

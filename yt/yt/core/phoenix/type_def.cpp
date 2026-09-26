@@ -4,7 +4,7 @@ namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTypeSchemaBuilderRegistar::TTypeSchemaBuilderRegistar(
+TTypeSchemaBuilderRegistrar::TTypeSchemaBuilderRegistrar(
     std::vector<const std::type_info*> typeInfos,
     TTypeTag tag,
     bool isTemplate,
@@ -19,7 +19,7 @@ TTypeSchemaBuilderRegistar::TTypeSchemaBuilderRegistar(
     TypeDescriptor_->ConcreteConstructor_ = concreteConstructor;
 }
 
-const TTypeDescriptor& TTypeSchemaBuilderRegistar::operator()() &&
+const TTypeDescriptor& TTypeSchemaBuilderRegistrar::operator()() &&
 {
     const auto& result = *TypeDescriptor_;
     ::NYT::NPhoenix::ITypeRegistry::Get()->RegisterTypeDescriptor(std::move(TypeDescriptor_));

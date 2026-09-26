@@ -8,6 +8,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_gc_transformer.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_partial.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
@@ -973,11 +974,15 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
 
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
+    const TPartialAnnotationConfig config = {
+        .LangVer = LangVer_,
+        .ConfigProviderFactory = [](TTypeAnnotationContext& newTypeCtx) {
+            return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        },
+    };
+
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
-        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
-    },
-                                    /*typeParser=*/{}, /*typeWriter=*/{})
+    auto ret = PartiallyAnnotateTypes(AstRoot_, issues, config)
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);

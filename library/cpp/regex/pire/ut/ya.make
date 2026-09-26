@@ -18,6 +18,7 @@ SRCS(
     glyph_ut.cpp
     easy_ut.cpp
     read_unicode_ut.cpp
+    re_lexer_ut.cpp
     regexp_ut.cpp
     approx_matching_ut.cpp
 )

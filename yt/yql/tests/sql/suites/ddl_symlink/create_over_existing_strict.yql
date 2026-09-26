@@ -1,0 +1,4 @@
+/* custom error: "Input1" already exists */
+USE plato;
+
+CREATE SYMLINK Input1 TO Input;

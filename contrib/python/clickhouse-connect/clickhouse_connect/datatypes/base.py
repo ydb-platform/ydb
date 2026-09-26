@@ -2,6 +2,7 @@ import array
 import logging
 from abc import ABC
 from collections.abc import Collection, MutableSequence, Sequence
+from dataclasses import dataclass
 from math import log
 from typing import Any, NamedTuple
 
@@ -20,17 +21,42 @@ ch_read_formats: dict[type, str] = {}
 ch_write_formats: dict[type, str] = {}
 
 
+@dataclass(frozen=True)
+class _TypeArgs:
+    """Models the strict type-hint validator contract, not the full server grammar.
+
+    The default describes a zero-argument type.
+    """
+
+    min_args: int = 0
+    max_args: int | None = 0
+    nested: tuple[int, ...] = ()
+    variadic_nested: int | None = None
+    integer_bounds: tuple[tuple[int | str, int | None, int | None], ...] = ()
+
+    def bounds_for(self, index: int | str) -> tuple[int | None, int | None] | None:
+        for bound_index, minimum, maximum in self.integer_bounds:
+            if bound_index == index:
+                return minimum, maximum
+        return None
+
+    def nested_indexes(self, arg_count: int) -> tuple[int, ...]:
+        if self.variadic_nested is None:
+            return self.nested
+        return self.nested + tuple(range(self.variadic_nested, arg_count))
+
+
 class TypeDef(NamedTuple):
     """
     Immutable tuple that contains all additional information needed to construct a particular ClickHouseType
     """
 
-    wrappers: tuple = ()
-    keys: tuple = ()
-    values: tuple = ()
+    wrappers: tuple[str, ...] = ()
+    keys: tuple[Any, ...] = ()
+    values: tuple[Any, ...] = ()
 
     @property
-    def arg_str(self):
+    def arg_str(self) -> str:
         return f"({', '.join(str(v) for v in self.values)})" if self.values else ""
 
 
@@ -46,6 +72,7 @@ class ClickHouseType(ABC):  # noqa: B024
     nano_divisor = 0  # Only relevant for date like objects
     byte_size = 0
     valid_formats: str | tuple[str, ...] = "native"
+    _type_args = _TypeArgs()
 
     python_type: type | None = None
     base_type: str | None = None
@@ -123,6 +150,8 @@ class ClickHouseType(ABC):  # noqa: B024
     def _data_size(self, sample: Collection) -> int:
         if self.byte_size:
             return self.byte_size
+        if len(sample) == 0:
+            return 1
         total = 0
         for x in sample:
             total += len(str(x))

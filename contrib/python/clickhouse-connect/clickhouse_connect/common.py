@@ -1,4 +1,6 @@
 import getpass
+import logging
+import os
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -6,6 +8,10 @@ from typing import Any
 
 from clickhouse_connect._version import version as _version_string
 from clickhouse_connect.driver.exceptions import ProgrammingError
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+_NATIVE_CODEC_OPTIONS = ("python", "rust", "rust_strict")
 
 
 def version() -> str:
@@ -68,6 +74,17 @@ def _init_common(name: str, options: Sequence[Any], default: Any) -> None:
     _common_settings[name] = CommonSetting(name, options, default)
 
 
+def _native_codec_env_default() -> str:
+    raw = os.environ.get("CLICKHOUSE_CONNECT_NATIVE_CODEC")
+    if raw is None:
+        return "python"
+    value = raw.strip().lower()
+    if value in _NATIVE_CODEC_OPTIONS:
+        return value
+    logger.warning("Ignoring invalid CLICKHOUSE_CONNECT_NATIVE_CODEC=%r; using 'python'", raw)
+    return "python"
+
+
 _init_common("autogenerate_session_id", (True, False), True)
 _init_common("autogenerate_query_id", (True, False), True)
 _init_common("dict_parameter_format", ("json", "map"), "json")
@@ -78,6 +95,10 @@ _init_common("max_connection_age", (), 10 * 60)  # Max time in seconds to keep r
 _init_common("product_name", (), "")  # Product name used as part of client identification for ClickHouse query_log
 _init_common("readonly", (0, 1), 0)  # Deprecated no-op retained for 1.x compatibility
 _init_common("send_os_user", (True, False), True)
+
+# Selects the codec for client-managed FORMAT Native query and insert paths. Seeded by
+# CLICKHOUSE_CONNECT_NATIVE_CODEC; overridable per client via the native_codec kwarg.
+_init_common("native_codec", _NATIVE_CODEC_OPTIONS, _native_codec_env_default())
 
 # Include integration tags (library name/version) in the User-Agent, e.g.:
 # pandas/2.2.5; polars/0.20.x; sqlalchemy/2.0.x. These tags are only included

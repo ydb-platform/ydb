@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: clickhouse-connect
-Version: 1.7.2
+Version: 1.8.0
 Summary: ClickHouse Database Core Driver for Python, Pandas, and Superset
 Home-page: https://github.com/ClickHouse/clickhouse-connect
 Author: ClickHouse Inc.
@@ -28,7 +28,7 @@ Provides-Extra: sqlalchemy
 Requires-Dist: sqlalchemy<3.0,>=1.4.40; extra == "sqlalchemy"
 Provides-Extra: alembic
 Requires-Dist: sqlalchemy<3.0,>=1.4.40; extra == "alembic"
-Requires-Dist: alembic>=1.16; extra == "alembic"
+Requires-Dist: alembic>=1.18; extra == "alembic"
 Provides-Extra: numpy
 Requires-Dist: numpy; extra == "numpy"
 Provides-Extra: pandas
@@ -48,6 +48,8 @@ Provides-Extra: async
 Requires-Dist: aiohttp>=3.9.0; extra == "async"
 Provides-Extra: chdb
 Requires-Dist: chdb>=4.1.7; extra == "chdb"
+Provides-Extra: rust
+Requires-Dist: clickhouse-connect-core<0.3,>=0.2.0; extra == "rust"
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier

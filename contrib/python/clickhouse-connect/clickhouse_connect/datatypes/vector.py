@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     import numpy
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, _TypeArgs
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import options
 from clickhouse_connect.driver.ctypes import data_conv
@@ -47,6 +47,7 @@ class QBit(ClickHouseType):
     _BIT_SHIFTS = [1 << i for i in range(8)]
     _ELEMENT_BITS = {"BFloat16": 16, "Float32": 32, "Float64": 64}
     _numpy_warned = False
+    _type_args = _TypeArgs(2, 2, nested=(0,), integer_bounds=((1, 1, None),))
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)

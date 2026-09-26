@@ -2647,4 +2647,5 @@ message TStreamingQueryProperties {
 message TStreamingQueryDescription {
     optional string Name = 1;
     optional TStreamingQueryProperties Properties = 2;
+    optional NActorsProto.TActorId OperationOwnerActorId = 3;
 }

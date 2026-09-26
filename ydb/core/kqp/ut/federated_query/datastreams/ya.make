@@ -21,6 +21,7 @@ SRCS(
     kqp_has_path_ut.cpp
     streaming_aggregation_ut.cpp
     streaming_ddl_ut.cpp
+    streaming_operation_continuation_ut.cpp
     streaming_deferrd_commit_write_ut.cpp
     streaming_sys_view_ut.cpp
 )
@@ -37,6 +38,7 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/core/testlib
     ydb/library/grpc/server/actors
+    ydb/library/table_creator
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/testlib/s3_recipe_helper
@@ -44,6 +46,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     ydb/public/lib/ydb_cli/commands/interactive/common
+    ydb/services/metadata/abstract
     ydb/services/workload_manager/ut/common
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg

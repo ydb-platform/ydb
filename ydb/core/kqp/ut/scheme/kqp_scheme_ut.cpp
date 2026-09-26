@@ -14616,6 +14616,19 @@ END DO)",
         CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = TRUE ");
     }
 
+    bool IsStreamingQueryOperationConflict(TStringBuf issues) {
+        return (issues.Contains(" failed StatusPreconditionFailed ")
+                && (issues.Contains("(reason: Streaming query already under operation)")
+                    || issues.Contains("(reason: fail user constraint in ApplyIf section: path version mistmach,")))
+            || (issues.Contains(" failed StatusMultipleModifications ")
+                && (issues.Contains(", error: path exists but creating right now (")
+                    || issues.Contains(", error: path is under operation (")
+                    || issues.Contains(", error: path is being deleted right now (")))
+            || issues.Contains("Streaming query info was changed due to multiple modifications inflight")
+            || issues.Contains("Streaming query has multiple modifications inflight")
+            || (issues.Contains("Lock streaming query failed") && issues.Contains("Transaction locks invalidated"));
+    }
+
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {
         auto kikimr = SetupStreamingSource();
         auto db = kikimr->GetQueryClient();
@@ -14639,14 +14652,12 @@ END DO)",
                 ++successCount;
             } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
                 const auto& issues = result.GetIssues().ToString();
-                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already exists") &&
-                    !issues.contains("Scheme transaction ESchemeOpCreateStreamingQuery failed StatusAlreadyExists: execution completed, streaming query /Root/MyFolder/MyStreamingQuery already exists")) {
+                if (!issues.contains("query /Root/MyFolder/MyStreamingQuery already exists")) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected SCHEME_ERROR error: " << issues);
                 }
             } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
-                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation CREATE STREAMING QUERY") &&
-                    !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
+                if (!IsStreamingQueryOperationConflict(issues)) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
@@ -14838,8 +14849,7 @@ END DO)",
                 ++successCount;
             } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
-                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation ALTER STREAMING QUERY") &&
-                    !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
+                if (!IsStreamingQueryOperationConflict(issues)) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
@@ -14970,8 +14980,7 @@ END DO)",
                 }
             } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
-                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation DROP STREAMING QUERY") &&
-                    !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
+                if (!IsStreamingQueryOperationConflict(issues)) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {

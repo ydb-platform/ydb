@@ -107,6 +107,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnViaSelect
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateWhereGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningAllColumns
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningGeneratedWithDependencies
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
@@ -123,6 +124,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionDuplicateKeys
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionLiteralDefaultDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithGlobalUniqueIndex
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithPlainFulltextIndex
 ydb/core/kqp/ut/scheme GeneratedVirtual.SyncAndUniqueIndexBuildsIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
@@ -139,6 +141,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultNoExistingDefault
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite

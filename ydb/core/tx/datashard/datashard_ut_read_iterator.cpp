@@ -6296,6 +6296,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        // Isolate the reader's pinned graph and journal from rebuild buffers.
+        serverSettings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         TTestHelper helper(serverSettings);
         helper.CreateCustomTable("table-vector-memory", {
             {"parent", "Uint32", true, false},
@@ -6388,7 +6390,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.SetNeedStatsCollectors(true);
-        serverSettings.AppConfig->MutableDataShardConfig()->SetEnableHnswMvcc(true);
         serverSettings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
@@ -6484,7 +6485,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        settings.AppConfig->MutableDataShardConfig()->SetEnableHnswMvcc(true);
         settings.AppConfig->MutableDataShardConfig()->SetKeepSnapshotTimeout(1000);
         settings.AppConfig->MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
         settings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(Rebuild ? 50 : 1000);
@@ -6619,7 +6619,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        settings.AppConfig->MutableDataShardConfig()->SetEnableHnswMvcc(true);
         TTestHelper helper(settings);
         helper.CreateCustomTable("hnsw-cold", {
             {"key", "Uint32", true, false}, {"emb", "String", false, false}});

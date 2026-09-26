@@ -2921,6 +2921,7 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         .HnswConnectivity = proto.has_hnsw_connectivity() ? proto.hnsw_connectivity() : 16,
         .HnswConstructionCandidates = proto.has_hnsw_construction_candidates() ? proto.hnsw_construction_candidates() : 200,
         .HnswSearchCandidates = proto.has_hnsw_search_candidates() ? proto.hnsw_search_candidates() : 15,
+        .HnswRebuildThresholdPercent = proto.has_hnsw_rebuild_threshold_percent() ? proto.hnsw_rebuild_threshold_percent() : 10,
     };
 }
 
@@ -2975,6 +2976,9 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     }
     if (HnswSearchCandidates != 15) {
         settings.set_hnsw_search_candidates(HnswSearchCandidates);
+    }
+    if (HnswRebuildThresholdPercent != 10) {
+        settings.set_hnsw_rebuild_threshold_percent(HnswRebuildThresholdPercent);
     }
 }
 

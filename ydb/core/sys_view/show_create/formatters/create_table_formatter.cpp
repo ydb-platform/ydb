@@ -729,6 +729,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             Stream << del << "hnsw_search_candidates=" << vectorSettings.hnsw_search_candidates();
             del = ", ";
         }
+        if (vectorSettings.has_hnsw_rebuild_threshold_percent()) {
+            Stream << del << "hnsw_rebuild_threshold_percent="
+                << vectorSettings.hnsw_rebuild_threshold_percent();
+            del = ", ";
+        }
 
         Stream << ")";
     }

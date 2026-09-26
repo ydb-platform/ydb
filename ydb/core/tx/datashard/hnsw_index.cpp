@@ -38,6 +38,7 @@ constexpr ui32 DefaultHnswConnectivity = 16;
 constexpr ui32 DefaultHnswConstructionCandidates = 200;
 constexpr ui32 DefaultHnswSearchCandidates = 15;
 constexpr ui64 DefaultHnswMinRows = 10000;
+constexpr ui32 DefaultHnswRebuildThresholdPercent = 10;
 
 std::unique_ptr<similarity::Space<float>> CreateSpace(VectorIndexSettings::Metric metric, TString& error) {
     switch (metric) {
@@ -96,6 +97,11 @@ struct TFloatVectorView {
 
 ui64 GetHnswMinRows(const VectorIndexSettings& settings) {
     return settings.has_hnsw_min_rows() ? settings.hnsw_min_rows() : DefaultHnswMinRows;
+}
+
+ui32 GetHnswRebuildThresholdPercent(const VectorIndexSettings& settings) {
+    return settings.has_hnsw_rebuild_threshold_percent()
+        ? settings.hnsw_rebuild_threshold_percent() : DefaultHnswRebuildThresholdPercent;
 }
 
 bool AreHnswIndexSettingsCompatible(

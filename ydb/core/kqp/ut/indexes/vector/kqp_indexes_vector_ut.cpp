@@ -2264,7 +2264,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswView` ADD INDEX vidx GLOBAL USING vector_kmeans_tree ON (emb)
             WITH (distance=euclidean, vector_type="float", vector_dimension=2,
-                  levels=1, clusters=2, hnsw_min_rows=1, hnsw_search_candidates=16);
+                  levels=1, clusters=2, hnsw_min_rows=1, hnsw_search_candidates=16,
+                  hnsw_rebuild_threshold_percent=5);
         )"));
         const TString posting = "/Root/HnswView/vidx/indexImplPostingTable";
         if (Followers) {
@@ -2461,7 +2462,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        appConfig.MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto reader = db.CreateSession().GetValueSync().GetSession();
@@ -2482,7 +2482,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswPending` ADD INDEX index GLOBAL USING vector_kmeans_tree ON (emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                    levels=1, clusters=2, hnsw_min_rows=1);
+                    levels=1, clusters=2, hnsw_min_rows=1,
+                    hnsw_rebuild_threshold_percent=1000);
         )"));
         const TString search(Q_(R"(
             $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);

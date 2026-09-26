@@ -99,6 +99,13 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 0u);
     }
 
+    Y_UNIT_TEST(OmittedRebuildThresholdUsesDocumentedDefault) {
+        Ydb::Table::VectorIndexSettings settings;
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswRebuildThresholdPercent(settings), 10u);
+        settings.set_hnsw_rebuild_threshold_percent(5);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswRebuildThresholdPercent(settings), 5u);
+    }
+
     Y_UNIT_TEST(CacheSettingsIdentityIsNormalizedAndComplete) {
         auto cached = MakeSettings(
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,

@@ -350,6 +350,7 @@ public:
     uint32_t HnswConnectivity = 16;
     uint32_t HnswConstructionCandidates = 200;
     uint32_t HnswSearchCandidates = 15;
+    uint32_t HnswRebuildThresholdPercent = 10;
 
     static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
 

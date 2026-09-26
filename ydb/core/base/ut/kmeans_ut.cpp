@@ -843,10 +843,12 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(FillSetting(settings, "hnsw_connectivity", "24", error));
         UNIT_ASSERT(FillSetting(settings, "hnsw_construction_candidates", "200", error));
         UNIT_ASSERT(FillSetting(settings, "hnsw_search_candidates", "15", error));
+        UNIT_ASSERT(FillSetting(settings, "hnsw_rebuild_threshold_percent", "5", error));
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), 10000);
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_connectivity(), 24);
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_construction_candidates(), 200);
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_search_candidates(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_rebuild_threshold_percent(), 5);
 
         UNIT_ASSERT(FillSetting(settings, "hnsw_min_rows", "4294967296", error));
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), 4294967296ULL);

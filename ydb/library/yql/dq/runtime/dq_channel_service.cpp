@@ -1146,12 +1146,19 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         }
     }
 
-    {
-        // in Reconciliation state we do not send new messages
-        std::lock_guard lock(Mutex);
-        if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes && Queue.size() < MaxInflightMessages) {
-            if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
-                descriptor->AddPopChunk(bytes, rows);
+    // A lock free guess at the admission below: the message is built before the lock when it is likely to go,
+    // and the chunk goes straight to the WaitQueue when it is not. The admission is decided under Mutex as
+    // before, and a wrong guess costs a wasted build, or a turn as a waiter which the next ack or
+    // TEvSendWaiters ends
+    if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes) {
+        // declared before the lock: one which is not sent is destroyed after it
+        auto ev = BuildDataEvent(data, *descriptor);
+        bool sent = false;
+        {
+            // in Reconciliation state we do not send new messages
+            std::lock_guard lock(Mutex);
+            if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes && Queue.size() < MaxInflightMessages
+                && descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor, quoted);
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = descriptor->SeqNo.fetch_add(1) + 1;
@@ -1160,15 +1167,20 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                     LastQueueProgress.store(TInstant::Now());
                 }
                 Queue.push_back(item);
-                SendMessage(item);
-                SendCount++;
-                (*SessionMessagesSent)++;
+                SendDataEvent(std::move(ev), *item);
                 InflightBytes += bytes;
-                *OutputBufferInflightBytes += bytes;
-                (*OutputBufferInflightMessages)++;
-                return;
+                sent = true;
             }
         }
+        if (sent) {
+            descriptor->AddPopChunk(bytes, rows);
+            SendCount++;
+            (*SessionMessagesSent)++;
+            *OutputBufferInflightBytes += bytes;
+            (*OutputBufferInflightMessages)++;
+            return;
+        }
+        PrebuildMisses++;
     }
 
     bool result = false;
@@ -1215,46 +1227,50 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     }
 }
 
-void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
-    Y_ENSURE(InputNodeActorId);
+THolder<TEvDqCompute::TEvChannelDataV2> TNodeState::BuildDataEvent(const TDataChunk& data, const TOutputDescriptor& descriptor) {
     auto ev = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
+
+    // the channel id and the actor ids of Info never change, unlike the stage ids, see GetOrCreateOutputDescriptor
+    NActors::ActorIdToProto(descriptor.Info.OutputActorId, ev->Record.MutableSrcActorId());
+    NActors::ActorIdToProto(descriptor.Info.InputActorId, ev->Record.MutableDstActorId());
+    ev->Record.SetChannelId(descriptor.Info.ChannelId);
+
+    if (!data.Buffer.Empty()) {
+        ev->Record.SetPayloadId(ev->AddPayload(MakeReadOnlyRope(data.Buffer)));
+        ev->Record.SetTransportVersion(data.TransportVersion);
+        ev->Record.SetValuePackerVersion(ToProto(data.PackerVersion));
+    }
+    ev->Record.SetRows(data.Rows);
+    ev->Record.SetBytes(data.Bytes);
+    if (data.Finished) {
+        ev->Record.SetFinished(true);
+    }
+    if (data.ConfirmFinish) {
+        ev->Record.SetConfirmFinish(true);
+    }
+
+    if (data.Checkpoint) {
+        *ev->Record.MutableCheckpoint() = data.Checkpoint.GetRef();
+    }
+
+    if (data.Watermark) {
+        *ev->Record.MutableWatermark() = data.Watermark.GetRef();
+    }
+
+    return ev;
+}
+
+void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const TOutputItem& item) {
+    Y_ENSURE(InputNodeActorId);
 
     ev->Record.SetGenMajor(GenMajor);
     ev->Record.SetGenMinor(GenMinor);
-    ev->Record.SetSeqNo(item->SeqNo);
-    ev->Record.SetChannelSeqNo(item->ChannelSeqNo);
-    // ev->Record.SetConfirmedSeqNo(???);
-
-    NActors::ActorIdToProto(item->Descriptor->Info.OutputActorId, ev->Record.MutableSrcActorId());
-    NActors::ActorIdToProto(item->Descriptor->Info.InputActorId, ev->Record.MutableDstActorId());
-    ev->Record.SetChannelId(item->Descriptor->Info.ChannelId);
-
-    if (!item->Data.Buffer.Empty()) {
-        ev->Record.SetPayloadId(ev->AddPayload(MakeReadOnlyRope(item->Data.Buffer)));
-        ev->Record.SetTransportVersion(item->Data.TransportVersion);
-        ev->Record.SetValuePackerVersion(ToProto(item->Data.PackerVersion));
-    }
-    ev->Record.SetRows(item->Data.Rows);
-    ev->Record.SetBytes(item->Data.Bytes);
-    if (item->Leading) {
+    ev->Record.SetSeqNo(item.SeqNo);
+    ev->Record.SetChannelSeqNo(item.ChannelSeqNo);
+    if (item.Leading) {
         ev->Record.SetLeading(true);
     }
-    if (item->Data.Finished) {
-        ev->Record.SetFinished(true);
-    }
-    if (item->Data.ConfirmFinish) {
-        ev->Record.SetConfirmFinish(true);
-    }
-    Y_ABORT_UNLESS(!item->Descriptor->Leading.load());
-    ev->Record.SetConfirmedPopBytes(item->Descriptor->RemotePopBytes.load());
-
-    if (item->Data.Checkpoint) {
-        *ev->Record.MutableCheckpoint() = item->Data.Checkpoint.GetRef();
-    }
-
-    if (item->Data.Watermark) {
-        *ev->Record.MutableWatermark() = item->Data.Watermark.GetRef();
-    }
+    Y_ABORT_UNLESS(!item.Descriptor->Leading.load());
 
     ui32 flags = SendFlags();
 #if !defined(NDEBUG)
@@ -1265,16 +1281,20 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
             FailureDoubleSend.store(failCount - 1);
             auto ev2 = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
             ev2->Record = ev->Record;
-            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(), flags, item->SeqNo));
+            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(), flags, item.SeqNo));
         }
 #endif
-        LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item->SeqNo
-            << ", ChannelSeqNo=" << item->ChannelSeqNo << ", ChannelId=" << item->Descriptor->Info.ChannelId
-            << ", Leading=" << item->Leading << ", Finished=" << item->Data.Finished << ", Bytes=" << item->Data.Bytes);
-        ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
+        LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item.SeqNo
+            << ", ChannelSeqNo=" << item.ChannelSeqNo << ", ChannelId=" << item.Descriptor->Info.ChannelId
+            << ", Leading=" << item.Leading << ", Finished=" << item.Data.Finished << ", Bytes=" << item.Data.Bytes);
+        ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev.Release(), flags, item.SeqNo));
 #if !defined(NDEBUG)
     }
 #endif
+}
+
+void TNodeState::SendMessage(const TOutputItem& item) {
+    SendDataEvent(BuildDataEvent(item.Data, *item.Descriptor), item);
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
@@ -1734,7 +1754,7 @@ now may need to send very last msg from terminated descriptor
                     LastQueueProgress.store(TInstant::Now());
                 }
                 Queue.push_back(item);
-                SendMessage(item);
+                SendMessage(*item);
                 SendCount++;
                 (*SessionMessagesSent)++;
                 InflightBytes += bytes;
@@ -1917,8 +1937,8 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             LastQueueProgress.store(now);
             LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << ", Released=" << deltaBytes);
             if (!Queue.empty()) {
-                for (auto item : Queue) {
-                    SendMessage(item);
+                for (auto& item : Queue) {
+                    SendMessage(*item);
                     ResendCount++;
                     (*SessionMessagesResent)++;
                     item->Descriptor->CheckGenMajor(GenMajor, [&]() {
@@ -2847,6 +2867,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "InflightBytes"}}) {str << "InflightB";}
                         TABLEH_ATTRS({{"title", "SendCount"}}) {str << "Send";}
                         TABLEH_ATTRS({{"title", "ResendCount"}}) {str << "Resend";}
+                        TABLEH_ATTRS({{"title", "PrebuildMisses: messages built off the lock for the window and then not admitted to it"}}) {str << "PMiss";}
                         TABLEH_ATTRS({{"title", "ReconCount"}}) {str << "Recon";}
                         TABLEH() {str << "ReconSent";}
                         TABLEH_ATTRS({{"title", "since the Queue last moved: the watchdog of the outbound half"}}) {str << "Q/Idle";}
@@ -2902,6 +2923,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                             TABLED() {str << state->InflightBytes.load();}
                             TABLED() {str << state->SendCount.load();}
                             TABLED() {str << state->ResendCount.load();}
+                            TABLED() {str << state->PrebuildMisses.load();}
                             TABLED() {str << state->ReconCount.load();}
                             TABLED() {str << state->ReconSent.load();}
                             TABLED() {str << (TInstant::Now() - state->LastQueueProgress.load());}

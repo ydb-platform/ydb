@@ -2001,6 +2001,16 @@ struct TFreeQuotaTest : public TSessionTest {
     }
 };
 
+// The resends of the reconciliations and the waiters interleave with the messages built off the session lock:
+// every consumer checks the order of what it gets
+struct TOrderedReconTest : public TReconTest {
+
+    void Prepare() override {
+        TReconTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(4096);
+    }
+};
+
 // Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
 // pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
 // where a push could overtake a waiting message. Every consumer checks the order of what it gets.
@@ -2249,6 +2259,17 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TFreeQuotaTest test;
 
         test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(OrderedUnderReconciliation2n) {
+        TOrderedReconTest test;
+
+        test.Count = 10;
+        test.Local = false;
+        test.ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 4, .MaxMessageSize = 1000, .CheckOrder = true };
+        test.ConsumerSettings = test.ProducerSettings;
 
         test.Run();
     }

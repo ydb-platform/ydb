@@ -709,7 +709,12 @@ public:
     virtual ~TNodeState();
     void FailDescriptors(const TString& reason);
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
-    void SendMessage(std::shared_ptr<TOutputItem> item);
+    // The part of a data message which does not depend on the session, built off Mutex where possible
+    static THolder<TEvDqCompute::TEvChannelDataV2> BuildDataEvent(const TDataChunk& data, const TOutputDescriptor& descriptor);
+    // Stamps the session and the numbers of the item onto the message and sends it. Under Mutex, together with the
+    // numbering: the messages must go in SeqNo order, a gap makes the receiver ask to resend
+    void SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const TOutputItem& item);
+    void SendMessage(const TOutputItem& item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev);
@@ -834,6 +839,8 @@ public:
     std::deque<char> ReconciliationLog;
     TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
     std::atomic<ui64> SendCount = 0;
+    // messages built off Mutex for the window and then not admitted to it, see PushDataChunk
+    std::atomic<ui64> PrebuildMisses = 0;
     std::atomic<ui64> ResendCount = 0;
     std::atomic<ui64> ReconCount = 0;
     std::atomic<TInstant> ReconSent;

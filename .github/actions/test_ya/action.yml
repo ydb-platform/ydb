@@ -540,6 +540,12 @@ runs:
           else
             record_ci_end "$YA_MAKE_NAME" failure "ya make rc=${RC}"
           fi
+          if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
+            python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
+              --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+              --parent "$YA_MAKE_NAME" \
+              --ya-attempt "$RETRY" || true
+          fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"

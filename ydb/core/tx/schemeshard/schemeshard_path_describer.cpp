@@ -703,13 +703,14 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
-            TTabletId TabletId;
-            const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
+                TTabletId TabletId;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
-            // it is sorted list of partitions by partition id
-            TVector<TPartitionDesc> descriptions; // index is pqId
-            descriptions.resize(pqGroupInfo->Partitions.size());
+            // Not indexed by PqId: ids may have gaps, so a vector of size NextPartitionId
+            // would be sparse. Reserve for the partitions we actually store and sort later.
+            TVector<TPartitionDesc> descriptions;
+            descriptions.reserve(pqGroupInfo->Partitions.size());
 
             for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
                 auto it = Self->ShardInfos.find(shardIdx);
@@ -731,12 +732,14 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     //   visible via AlterVersion <= committed
                     if (partition->CreateVersion <= pqGroupInfo->AlterVersion
                             || partition->AlterVersion <= pqGroupInfo->AlterVersion) {
-                        Y_VERIFY_S(partition->PqId < pqGroupInfo->NextPartitionId,
-                                   "Wrong pqId: " << partition->PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
-                        descriptions[partition->PqId] = {it->second.TabletID, partition.Get()};
+                        descriptions.push_back({it->second.TabletID, partition.Get()});
                     }
                 }
             }
+
+            Sort(descriptions, [](const TPartitionDesc& lhs, const TPartitionDesc& rhs) {
+                return lhs.Info->PqId < rhs.Info->PqId;
+            });
 
             for (const auto& desc : descriptions) {
                 if (desc.Info == nullptr || desc.Info->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
@@ -746,7 +749,6 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 auto& partition = *entry->AddPartitions();
 
                 Y_VERIFY_S(desc.TabletId, "Unassigned tabletId for partition: " << pqId);
-                Y_VERIFY_S(desc.Info, "Empty info for partition: " << pqId);
 
                 partition.SetPartitionId(pqId);
                 partition.SetTabletId(ui64(desc.TabletId));

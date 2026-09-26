@@ -286,27 +286,27 @@ def convert_filled(
 
     if fill_type_from == FillType.OuterCode:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_OuterCode, filled)
+            filled = cast("cpy.FillReturn_OuterCode", filled)
         return _convert_filled_from_OuterCode(filled, fill_type_to)
     elif fill_type_from == FillType.OuterOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_OuterOffset, filled)
+            filled = cast("cpy.FillReturn_OuterOffset", filled)
         return _convert_filled_from_OuterOffset(filled, fill_type_to)
     elif fill_type_from == FillType.ChunkCombinedCode:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedCode, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedCode", filled)
         return _convert_filled_from_ChunkCombinedCode(filled, fill_type_to)
     elif fill_type_from == FillType.ChunkCombinedOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedOffset", filled)
         return _convert_filled_from_ChunkCombinedOffset(filled, fill_type_to)
     elif fill_type_from == FillType.ChunkCombinedCodeOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedCodeOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedCodeOffset", filled)
         return _convert_filled_from_ChunkCombinedCodeOffset(filled, fill_type_to)
     elif fill_type_from == FillType.ChunkCombinedOffsetOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedOffsetOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedOffsetOffset", filled)
         return _convert_filled_from_ChunkCombinedOffsetOffset(filled, fill_type_to)
     else:
         raise ValueError(f"Invalid FillType {fill_type_from}")
@@ -536,23 +536,23 @@ def convert_lines(
 
     if line_type_from == LineType.Separate:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_Separate, lines)
+            lines = cast("cpy.LineReturn_Separate", lines)
         return _convert_lines_from_Separate(lines, line_type_to)
     elif line_type_from == LineType.SeparateCode:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_SeparateCode, lines)
+            lines = cast("cpy.LineReturn_SeparateCode", lines)
         return _convert_lines_from_SeparateCode(lines, line_type_to)
     elif line_type_from == LineType.ChunkCombinedCode:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedCode, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedCode", lines)
         return _convert_lines_from_ChunkCombinedCode(lines, line_type_to)
     elif line_type_from == LineType.ChunkCombinedOffset:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedOffset, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedOffset", lines)
         return _convert_lines_from_ChunkCombinedOffset(lines, line_type_to)
     elif line_type_from == LineType.ChunkCombinedNan:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedNan, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedNan", lines)
         return _convert_lines_from_ChunkCombinedNan(lines, line_type_to)
     else:
         raise ValueError(f"Invalid LineType {line_type_from}")

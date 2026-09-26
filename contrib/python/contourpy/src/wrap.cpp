@@ -20,7 +20,7 @@ static contourpy::FillType mpl20xx_fill_type = contourpy::FillType::OuterCode;
 
 PYBIND11_MODULE(_contourpy, m, py::mod_gil_not_used()) {
     m.doc() =
-        "C++11 extension module wrapped using `pybind11`_.\n\n"
+        "C++11 extension module wrapped using pybind11.\n\n"
         "It should not be necessary to access classes and functions in this extension module "
         "directly. Instead, :func:`~contourpy.contour_generator` should be used to create "
         ":class:`~.ContourGenerator` objects, and the enums "
@@ -149,6 +149,9 @@ PYBIND11_MODULE(_contourpy, m, py::mod_gil_not_used()) {
         ".. code-block:: python\n\n"
         "    ret = [cont_gen.lines(level) for level in levels]\n\n"
         ".. versionadded:: 1.3.0";
+    const char* name_doc =
+        "Return the algorithm name, such as ``\"serial\"``.\n\n"
+        ".. versionadded:: 1.4.0";
     const char* quad_as_tri_doc = "Return whether ``quad_as_tri`` is set or not.";
     const char* supports_corner_mask_doc =
         "Return whether this algorithm supports ``corner_mask``.";
@@ -191,6 +194,7 @@ PYBIND11_MODULE(_contourpy, m, py::mod_gil_not_used()) {
         .def_property_readonly(
             "line_type", [](py::object /* self */) {return contourpy::LineType::Separate;},
             line_type_doc)
+        .def_property_readonly("name", &contourpy::ContourGenerator::get_name, name_doc)
         .def_property_readonly(
             "quad_as_tri", [](py::object /* self */) {return false;}, quad_as_tri_doc)
         .def_property_readonly(

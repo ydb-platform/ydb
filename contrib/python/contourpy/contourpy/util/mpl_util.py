@@ -44,7 +44,7 @@ def filled_to_mpl_paths(filled: FillReturn, fill_type: FillType) -> list[mpath.P
 def lines_to_mpl_paths(lines: LineReturn, line_type: LineType) -> list[mpath.Path]:
     if line_type == LineType.Separate:
         if TYPE_CHECKING:
-            lines = cast(LineReturn_Separate, lines)
+            lines = cast("LineReturn_Separate", lines)
         paths = []
         for line in lines:
             # Drawing as Paths so that they can be closed correctly.

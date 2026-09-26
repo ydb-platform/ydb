@@ -121,6 +121,10 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
         return Output_.NItems;
     }
 
+    i64 SizeBytes() const {
+        return Output_.Data.Build.AllocatedBytes() + Output_.Data.Probe.AllocatedBytes();
+    }
+
     auto MakeConsumeFn() {
         return [this](TSides<TSingleTuple> tuples) {
             for(ESide side: EachSide) {
@@ -251,7 +255,7 @@ private:
 
         EFetchResult FillBuffer() {
             auto outputIsFull = [&]() {
-                return Output_.SizeTuples() >= Threshold_;
+                return Output_.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes);
             };
             while (!outputIsFull()) {
                 auto res = Join_.MatchRows(*JoinCtx_, Output_.MakeConsumeFn(), outputIsFull);
@@ -289,7 +293,6 @@ private:
         TRenamesScalarOutput Output_;
         std::optional<TRenamesScalarOutput::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
-        const int Threshold_ = 10000;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {

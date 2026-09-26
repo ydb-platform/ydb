@@ -310,6 +310,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
             ExpectEqualSysViewDescription(describeResult, "query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute,
                                           describedPathId);
         }
+        {
+            const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/query_metrics_one_hour");
+            const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
+            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+            ExpectEqualSysViewDescription(describeResult, "query_metrics_one_hour", ESysViewType::EQueryMetricsOneHour,
+                                          describedPathId);
+        }
     }
 
     Y_UNIT_TEST(RestoreAbsentSysViews) {

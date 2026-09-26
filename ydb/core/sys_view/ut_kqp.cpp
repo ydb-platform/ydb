@@ -148,6 +148,7 @@ void WaitForStats(TTableClient& client, const TString& tableName, const TString&
     }
     UNIT_ASSERT_GE(rowCount, 0);
 }
+
 class TYsonFieldChecker {
     NYT::TNode Root;
     NYT::TNode::TListType::const_iterator RowIterator;
@@ -2024,7 +2025,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2032,6 +2033,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("query_metrics_one_minute"));
+            UNIT_ASSERT(names.contains("query_metrics_one_hour"));
             UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
@@ -2045,7 +2048,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2053,6 +2056,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("query_metrics_one_minute"));
+            UNIT_ASSERT(names.contains("query_metrics_one_hour"));
             UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
@@ -2439,10 +2444,36 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        UNIT_ASSERT_GE(rowCount, 0);
+        UNIT_ASSERT_GT(rowCount, 0);
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
+
+        rowCount = 0;
+        for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT SumReadBytes
+                FROM `/Root/Tenant1/.sys/query_metrics_one_hour`
+                WHERE QueryText = 'SELECT * FROM `/Root/Tenant1/Table1`';
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            ysonString = NKqp::StreamResultToYson(it);
+
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+            UNIT_ASSERT(node.IsList());
+            rowCount = node.AsList().size();
+
+            if (!rowCount) {
+                Sleep(TDuration::Seconds(5));
+            }
+        }
+
+        UNIT_ASSERT_GT(rowCount, 0);
+        NKqp::CompareYson(R"([
+            [[0u]];
+        ])", ysonString);
+
     }
 
     Y_UNIT_TEST(UdfModulesEmpty) {
@@ -2457,6 +2488,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         NKqp::CompareYson(R"([])", NKqp::StreamResultToYson(it));
     }
+
 }
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {
 

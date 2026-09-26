@@ -87,6 +87,10 @@ struct TEvSysView {
         EvRegisterDbDetailedCounters,
         EvUnregisterDbDetailedCounters,
 
+        EvFailNextIntervalMetricsRequest,
+
+        EvSetNextIntervalMetricsRequestFault,
+
         EvEnd,
     };
 
@@ -94,6 +98,26 @@ struct TEvSysView {
         TEvRosterUpdateFinished,
         EvRosterUpdateFinished>
     {
+    };
+
+    // Test-only fault injection. Production-mode SysViewService ignores it.
+    struct TEvSetNextIntervalMetricsRequestFault : public TEventLocal<
+        TEvSetNextIntervalMetricsRequestFault,
+        EvSetNextIntervalMetricsRequestFault>
+    {
+        enum class EAction {
+            Undelivered,
+            Drop,
+        };
+
+        EAction Action;
+        ui32 FailureCount;
+
+        explicit TEvSetNextIntervalMetricsRequestFault(
+            EAction action, ui32 failureCount = 1)
+            : Action(action)
+            , FailureCount(failureCount)
+        {}
     };
 
     struct TEvSendPartitionStats : public TEventLocal<
@@ -451,6 +475,7 @@ struct TEvSysView {
             , Service(service)
         {}
     };
+
 
     struct TEvInitPartitionStatsCollector : public TEventLocal<
         TEvInitPartitionStatsCollector,

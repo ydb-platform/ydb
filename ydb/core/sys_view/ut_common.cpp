@@ -140,6 +140,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableFollowerStats(true);
     featureFlags.SetEnableTieringInColumnShard(true);
     featureFlags.SetEnableExternalDataSources(true);
+    featureFlags.SetCollectHourMetric(true);
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);

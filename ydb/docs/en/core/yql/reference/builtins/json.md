@@ -874,12 +874,42 @@ Unlike many programming languages, JsonPath doesn't support creating new variabl
 All functions for JSON accept:
 
 1. A JSON value (can be an arbitrary `Json` or `Json?` expression)
-2. A JsonPath query (must be explicitly specified with a string literal)
+2. A JsonPath query (must be explicitly specified with a string literal; a
+   query parameter or another expression cannot be used here)
 3. **(Optional)** `PASSING` section
+
+{% note warning %}
+
+The JsonPath query itself cannot be passed as a YQL query parameter, including
+a parameter bound by an SDK. `JsonPath` is not a YQL data type. Therefore,
+neither `$path` nor `CAST($path AS JsonPath)` can be used as the second argument
+of a JSON function.
+
+To pass dynamic values into a fixed JsonPath query, use the `PASSING` section.
+If an application must choose between different paths, choose a query template
+from an application-defined allowlist. Do not insert an untrusted path into YQL
+query text.
+
+{% endnote %}
 
 ### PASSING section
 
 Lets you pass values to a JsonPath query as variables.
+A YQL query parameter can be used as the expression in this section:
+
+```yql
+DECLARE $increment AS Int64;
+
+$json = CAST(@@{"catalog":{"price":10}}@@ AS Json);
+
+SELECT JSON_VALUE(
+    $json,
+    "$.catalog.price + $value"
+    PASSING $increment AS value
+    RETURNING Int64
+);
+-- With $increment = 5, the result is 15.
+```
 
 #### Syntax
 

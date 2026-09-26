@@ -578,6 +578,43 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         UNIT_ASSERT(fixture.Callbacks.Finished);
     }
 
+    // A late retryable rejection of a superseded message (the resend carries
+    // a fresh cookie) must be dropped by the cookie filter instead of failing
+    // the query or burning the resend budget; the query then completes on the
+    // resend's own result.
+    Y_UNIT_TEST(LateSupersededRetryableResultIsDropped) {
+        TSinkFixture fixture;
+        fixture.Write(1, Nothing(), true);
+        const auto original = fixture.GrabWrite();
+
+        fixture.Retry(original);
+        const auto retried = fixture.GrabWrite();
+
+        fixture.FailWrite(original, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+        UNIT_ASSERT(!fixture.Callbacks.Finished);
+
+        fixture.Acknowledge(retried);
+        UNIT_ASSERT(fixture.Callbacks.Finished);
+        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+    }
+
+    // A late fatal error of a superseded message must fail the query
+    // immediately instead of being dropped: the latest attempt would hit the
+    // same shard-side problem, so waiting for its answer only delays the
+    // inevitable failure.
+    Y_UNIT_TEST(LateSupersededFatalResultFailsImmediately) {
+        TSinkFixture fixture;
+        fixture.Write(1, Nothing(), true);
+        const auto original = fixture.GrabWrite();
+
+        fixture.Retry(original);
+        const auto retried = fixture.GrabWrite();
+
+        fixture.FailWriteTerminally(original, NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+        UNIT_ASSERT(!fixture.Callbacks.Finished);
+    }
+
     Y_UNIT_TEST(ResumesAfterDataShardReplacementFreesSpace) {
         TSinkFixture fixture(ETableKind::Row, 1);
         fixture.Write(1, MakeCheckpoint(1));

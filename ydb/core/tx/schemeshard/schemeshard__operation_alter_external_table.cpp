@@ -137,6 +137,7 @@ private:
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
+            .NotDeleted()
             .NotUnderDeleting()
             .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalTable)
@@ -288,7 +289,7 @@ public:
         TExternalDataSourceInfo::TPtr oldDataSource;
         {
             const auto oldExternalTableRecord = context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-            Y_ABORT_UNLESS(oldExternalTableRecord);
+            AFL_ENSURE(oldExternalTableRecord)("path", dstPath.PathString())("path_id", dstPath->PathId);
             const auto oldDataSourcePath = TPath::Resolve(oldExternalTableRecord->DataSourcePath, context.SS);
             RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, oldDataSourcePath));
 
@@ -303,7 +304,7 @@ public:
 
         const auto oldExternalTableInfo =
             context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-        Y_ABORT_UNLESS(oldExternalTableInfo);
+        AFL_ENSURE(oldExternalTableInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
         auto [externalTableInfo, maybeError] =
             NExternalTable::CreateExternalTable(externalDataSource->SourceType,
                                                 externalTableDescription,

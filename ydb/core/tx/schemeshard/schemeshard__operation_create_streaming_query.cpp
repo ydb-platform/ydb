@@ -310,6 +310,7 @@ ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransactio
         const TPath dstPath = parentPath.Child(tx.GetCreateStreamingQuery().GetName());
         const auto isAlreadyExists = dstPath.Check()
             .IsResolved()
+            .NotDeleted()
             .NotUnderDeleting();
 
         if (isAlreadyExists) {

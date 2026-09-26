@@ -543,16 +543,13 @@ bool TAttachmentsOutputStream::CanPullMore(bool first) const
     return false;
 }
 
-TDuration TAttachmentsOutputStream::GetWindowDrainedTime()
+TAttachmentsOutputStreamStatistics TAttachmentsOutputStream::GetStatistics()
 {
     auto guard = Guard(Lock_);
-    return WindowDrainedTimer_.GetElapsedTime();
-}
-
-TDuration TAttachmentsOutputStream::GetWriteStallTime()
-{
-    auto guard = Guard(Lock_);
-    return WriteStallTimer_.GetElapsedTime();
+    return TAttachmentsOutputStreamStatistics{
+        .WriteStallTime = WriteStallTimer_.GetElapsedTime(),
+        .WindowDrainedTime = WindowDrainedTimer_.GetElapsedTime(),
+    };
 }
 
 std::vector<TErrorAttribute> TAttachmentsOutputStream::GetErrorAttributes() const
@@ -830,7 +827,8 @@ TFuture<IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStreamFromInvokedReq
 
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,
-    const std::function<TSharedRef()>& blockGenerator)
+    const std::function<TSharedRef()>& blockGenerator,
+    const std::function<void()>& finalizer)
 {
     auto inputStream = context->GetRequestAttachmentsStream();
     YT_VERIFY(inputStream);
@@ -847,6 +845,10 @@ void HandleInputStreamingRequest(
 
     WaitFor(outputStream->Close())
         .ThrowOnError();
+
+    if (finalizer) {
+        finalizer();
+    }
 
     context->Reply(TError());
 }

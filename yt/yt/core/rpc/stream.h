@@ -93,6 +93,17 @@ DEFINE_REFCOUNTED_TYPE(TAttachmentsInputStream)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Cumulative timings of an attachments output stream.
+struct TAttachmentsOutputStreamStatistics
+{
+    //! Time writes were blocked because the window was full.
+    TDuration WriteStallTime;
+    //! Time the window was drained, i.e. everything written was already read by the peer.
+    TDuration WindowDrainedTime;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TAttachmentsOutputStream
     : public NConcurrency::IAsyncZeroCopyOutputStream
 {
@@ -113,11 +124,7 @@ public:
     void HandleFeedback(const TStreamingFeedback& feedback);
     std::optional<TStreamingPayload> TryPull();
 
-    //! Returns the cumulative time the window was drained (ReadPosition_ == WritePosition_).
-    TDuration GetWindowDrainedTime();
-
-    //! Returns the cumulative time writes were blocked because the window was full.
-    TDuration GetWriteStallTime();
+    TAttachmentsOutputStreamStatistics GetStatistics();
 
     DEFINE_SIGNAL(void(), Aborted);
 
@@ -298,10 +305,11 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Handles an incoming streaming request that uses the #CreateRpcClientInputStream
-//! function.
+//! function. #finalizer is invoked after the response stream is closed and before the reply is sent.
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,
-    const std::function<TSharedRef()>& blockGenerator);
+    const std::function<TSharedRef()>& blockGenerator,
+    const std::function<void()>& finalizer = {});
 
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,

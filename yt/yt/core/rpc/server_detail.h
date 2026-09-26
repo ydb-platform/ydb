@@ -103,6 +103,7 @@ public:
 
     std::vector<TSharedRef>& ResponseAttachments() override;
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() override;
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override;
 
     const NProto::TRequestHeader& RequestHeader() const override;
     NProto::TRequestHeader& RequestHeader() override;
@@ -287,6 +288,7 @@ public:
 
     std::vector<TSharedRef>& ResponseAttachments() override;
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() override;
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override;
 
     const NProto::TRequestHeader& RequestHeader() const override;
 

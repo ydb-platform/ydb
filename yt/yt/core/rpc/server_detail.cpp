@@ -7,6 +7,7 @@
 #include "helpers.h"
 #include "message.h"
 #include "private.h"
+#include "stream.h"
 
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/direct_placement_transfer.h>
@@ -353,6 +354,11 @@ std::vector<TSharedRef>& TServiceContextBase::ResponseAttachments()
 IAsyncZeroCopyOutputStreamPtr TServiceContextBase::GetResponseAttachmentsStream()
 {
     return nullptr;
+}
+
+std::optional<TAttachmentsOutputStreamStatistics> TServiceContextBase::GetResponseAttachmentsStreamStatistics()
+{
+    return std::nullopt;
 }
 
 const NProto::TRequestHeader& TServiceContextBase::GetRequestHeader() const
@@ -823,6 +829,11 @@ const NProto::TRequestHeader& TServiceContextWrapper::RequestHeader() const
 IAsyncZeroCopyOutputStreamPtr TServiceContextWrapper::GetResponseAttachmentsStream()
 {
     return UnderlyingContext_->GetResponseAttachmentsStream();
+}
+
+std::optional<TAttachmentsOutputStreamStatistics> TServiceContextWrapper::GetResponseAttachmentsStreamStatistics()
+{
+    return UnderlyingContext_->GetResponseAttachmentsStreamStatistics();
 }
 
 NProto::TRequestHeader& TServiceContextWrapper::RequestHeader()

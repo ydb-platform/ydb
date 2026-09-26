@@ -8,7 +8,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 
 class TpchSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.TPC_H
-    iterations: int = 3
+    iterations: int = 5
     tables_size: dict[str, int] = {}
     skip_tests: list = []
     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
@@ -93,7 +93,7 @@ class TestTpch10000(TpchSuiteBase):
     }
 
     scale: int = 10000
-    iterations: int = 1
+    iterations: int = 5
     timeout = max(TpchSuiteBase.timeout, 14400.)
 
 

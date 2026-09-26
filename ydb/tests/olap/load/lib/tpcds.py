@@ -8,7 +8,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 
 class TpcdsSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.TPC_DS
-    iterations: int = 3
+    iterations: int = 5
     tables_size: dict[str, int] = {}
     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
 
@@ -125,7 +125,7 @@ class TestTpcds100(TpcdsSuiteBase):
 
 class TestTpcds1000(TpcdsSuiteBase):
     scale: int = 1000
-    iterations: int = 1
+    iterations: int = 5
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     tables_size: dict[str, int] = {
         'call_center': 42,

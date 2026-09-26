@@ -26,6 +26,7 @@ private:
     using TBase = NCommon::TSpecialReadContext;
     mutable TSpinLock DuplicatesManagerLock;
     NActors::TActorId DuplicatesManager = NActors::TActorId();
+    const std::shared_ptr<TAtomicCounter> DuplicatesAbortionFlag = std::make_shared<TAtomicCounter>(0);
     ui64 DuplicateFilterPortionCount = 0;
 
 private:
@@ -77,6 +78,10 @@ public:
 
     void RegisterActors(NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
+
+    const std::shared_ptr<TAtomicCounter>& GetDuplicatesAbortionFlag() const {
+        return DuplicatesAbortionFlag;
+    }
 
     NActors::TActorId GetDuplicatesManager() const {
         TGuard<TSpinLock> g(DuplicatesManagerLock);

@@ -76,6 +76,7 @@ public:
         CannotAddInFlight /* "CannotAddInFlight" */,
         ProblemOnStart /*ProblemOnStart*/,
         BrokenLock /* "BrokenLock" */,
+        Poisoned /* "Poisoned" */,
 
         COUNT
     };

@@ -1,4 +1,4 @@
-// Copyright 2020 The TCMalloc Authors
+// Copyright 2022 The TCMalloc Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "tcmalloc/mock_transfer_cache.h"
-
 #include "absl/base/attributes.h"
 
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
-ABSL_CONST_INIT bool
-    ArenaBasedFakeTransferCacheManager::partial_legacy_transfer_cache_(false);
-ABSL_CONST_INIT bool FakeShardedTransferCacheManager::enable_generic_cache_(
-    false);
-ABSL_CONST_INIT bool
-    FakeShardedTransferCacheManager::enable_cache_for_large_classes_only_(
-        false);
+// This - if linked into a binary - allows dense-trackers-sorted-on-spans
+// feature to be disabled.
+extern "C" ABSL_ATTRIBUTE_UNUSED bool
+default_want_disable_dense_trackers_sorted_on_spans_allocated() {
+  return true;
+}
+
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc

@@ -1545,6 +1545,7 @@ message TBackupTask {
     optional TCompressionOptions Compression = 13;
     optional bool EnableChecksums = 16;
     optional bool EnablePermissions = 18;
+    optional bool EnableTableBackupAsSql = 21;
 
     // Encryption (currently available only for s3):
     message TEncryptionSettings {

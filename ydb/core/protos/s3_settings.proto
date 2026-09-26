@@ -44,6 +44,7 @@ message TS3Settings {
     optional bool UseVirtualAddressing = 15 [default = true];
 
     optional TExportDataSettings ExportDataSettings = 18;
+    optional string SourceTablePath = 19; // Table path used to format the SQL backup schema
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

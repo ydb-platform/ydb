@@ -9,6 +9,8 @@ message TFSSettings {
 
     optional TExportDataSettings ExportDataSettings = 5;
 
+    optional string SourceTablePath = 6; // Table path used to format the SQL backup schema
+
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
         optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB

@@ -502,7 +502,12 @@ IF (OS_WINDOWS)
         -DKIKIMR_DISABLE_S3_OPS
     )
 ELSE()
+    PEERDIR(
+        ydb/core/sys_view/show_create/formatters
+        ydb/library/conclusion
+    )
     SRCS(
+        export_create_table.cpp
         export_parquet.cpp
         export_s3_buffer.cpp
         export_s3_uploader.cpp

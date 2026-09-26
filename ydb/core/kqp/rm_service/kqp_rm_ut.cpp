@@ -421,6 +421,7 @@ public:
         UNIT_TEST(OptionalMemorySpillingThreshold);
         UNIT_TEST(OptionalMemoryPoolThreshold);
         UNIT_TEST(OptionalMemoryConcurrent);
+        UNIT_TEST(OptionalMemoryRefusedByBroker);
         UNIT_TEST(ServiceMemoryQuota);
         UNIT_TEST(ConcurrentServiceMemoryQuota);
         UNIT_TEST(SnapshotSharingByExchanger);
@@ -491,6 +492,7 @@ public:
     void OptionalMemorySpillingThreshold();
     void OptionalMemoryPoolThreshold();
     void OptionalMemoryConcurrent();
+    void OptionalMemoryRefusedByBroker();
     void ServiceMemoryQuota();
     void ConcurrentServiceMemoryQuota();
     void SnapshotSharing();
@@ -1369,6 +1371,46 @@ void KqpRm::OptionalMemoryConcurrent() {
     }
 
     AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// An optional request that passes the spilling threshold of the node total and of its pool, but that the resource
+// broker refuses (a node wide shortage, here the kqp queue limit of the broker), is a failure like a mandatory one:
+// counted in RM/NotEnoughMemory and recorded as the failed allocation of the tx, not taken for a quiet refusal at
+// the threshold. The node total, the pool and the execution units are given back
+void KqpRm::OptionalMemoryRefusedByBroker() {
+    auto config = MakeKqpResourceManagerConfig();
+    config.SetQueryMemoryLimit(100'000'000); // the node total is far above the kqp queue limit of the broker
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1'000}));
+        const i64 totalAvailability = tx->TotalMemoryCookie->MemoryAvailability.load();
+        const i64 poolAvailability = tx->PoolMemoryCookie->MemoryAvailability.load();
+        UNIT_ASSERT_GT(tx->GetMemoryAvailability(), 100'000); // both thresholds admit the request below
+        auto denied = GetPoolSensorGroup("db", "pool")->GetCounter("MemoryDeniedRequests", true);
+
+        auto result = rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100'000, .Optional = true});
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT(result.GetStatus() == NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 100'000);
+        UNIT_ASSERT_VALUES_EQUAL(denied->Val(), 0); // not a pool denial either
+
+        UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), totalAvailability);
+        UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), poolAvailability);
+        AssertResourceManagerStats(rm, config.GetQueryMemoryLimit() - 1'000, 100);
+        AssertResourceBrokerSensors(0, 1'000, 0, 0, 1);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1'000});
+    }
+
+    AssertResourceManagerStats(rm, config.GetQueryMemoryLimit(), 100);
 }
 
 void KqpRm::SnapshotSharing() {

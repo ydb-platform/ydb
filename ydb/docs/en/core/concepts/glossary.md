@@ -233,6 +233,10 @@ A **full-text index** is an additional data structure used to speed up text sear
 
 The capabilities of full-text search and index parameters are described in the articles [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
+##### SuperLemmer {#superlemmer}
+
+**SuperLemmer** is a dictionary-based filter that normalizes word forms for full-text search, primarily optimized for Russian. It is available only in [Yandex Enterprise Database](../downloads/yandex-enterprise-database.md). For configuration and examples, see [Lemmatization with SuperLemmer](../dev/fulltext-indexes.md#superlemmer).
+
 #### JSON index {#json-index}
 
 A **JSON index** is an additional data structure used to speed up predicates with the [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) and [JSON_VALUE](../yql/reference/builtins/json.md#json_value) functions on a column of type `Json` or `JsonDocument`. Unlike traditional secondary indexes optimized for equality or range search on individual table columns, a JSON index works with arbitrary [JsonPath](../yql/reference/builtins/json.md#jsonpath) paths inside a JSON document.

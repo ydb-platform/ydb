@@ -535,6 +535,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateAlterTable(NextPartId(nextId, result), mainTableAltering));
     } else {
         auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);
+        *mainTableIndexDropping.MutableLockGuard() = tx.GetLockGuard();
         auto operation = mainTableIndexDropping.MutableDropIndex();
         operation->SetTableName(mainTablePath.LeafName());
         operation->SetIndexName(indexPath.LeafName());

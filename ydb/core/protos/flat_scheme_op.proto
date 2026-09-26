@@ -1961,6 +1961,11 @@ message TUpgradeSubDomain {
 message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
+<<<<<<< HEAD
+=======
+    optional bool IsRebuild = 3 [ default = false ];
+    optional string RebuildIndexName = 4;
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
 }
 
 message TIndexBuildControl {

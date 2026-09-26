@@ -16,6 +16,7 @@
 #include <util/random/random.h>
 #include <util/datetime/base.h>
 #include <util/stream/str.h>
+#include <util/string/join.h>
 #include <util/system/unaligned_mem.h>
 
 #include <atomic>
@@ -1825,6 +1826,95 @@ struct TWaiterCountersTest : public TSessionTest {
     }
 };
 
+// WaitersQueue served the channel whose waiting message was the newest first, so under a full window an old
+// channel waited for as long as newer ones kept coming. Channels which start to wait one after another must
+// get the window in the same order.
+struct TWaiterOrderTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        // a single message fills the window, so every ack lets exactly one waiter go
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(100);
+    }
+
+    static std::vector<ui64> GetQueueChannels(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        std::vector<ui64> result;
+        for (const auto& item : state->Queue) {
+            result.push_back(item->Descriptor->Info.ChannelId);
+        }
+        return result;
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
+
+        std::shared_ptr<TNodeState> sender;
+        UNIT_ASSERT_C(WaitFor([&]() { return (sender = FindNodeState(Service0, receiverNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "sender node session not found");
+        WaitSettled(sender);
+
+        // nothing is confirmed until the test replays it, and nobody finishes before the test lets them
+        receiver->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 1, .MinMessageSize = 150, .MaxMessageSize = 151,
+            .FinishOnStep = true };
+        ConsumerSettings = ProducerSettings;
+
+        // the 1st channel takes the window, the others start to wait for it one after another
+        const ui64 waiterCount = 5;
+        std::vector<std::pair<NActors::TActorId, NActors::TActorId>> channels;
+        for (ui64 channelId = 1; channelId <= waiterCount + 1; ++channelId) {
+            channels.push_back(StartChannel(channelId, false));
+            UNIT_ASSERT_C(WaitFor([&]() {
+                if (channelId == 1) {
+                    return GetQueueSize(sender) == 1;
+                }
+                auto descriptor = FindOutputDescriptor(sender, channelId);
+                return descriptor && descriptor->WaitQueueSize.load() == 1;
+            }, TDuration::Seconds(10)), TStringBuilder() << "channel " << channelId << " did not start to wait");
+        }
+
+        // every replayed message is confirmed, and the window it frees goes to the next waiter
+        std::vector<ui64> order;
+        auto last = GetQueueChannels(sender);
+        for (ui64 i = 0; i < waiterCount; ++i) {
+            receiver->ProcessPending(1);
+            std::vector<ui64> queue;
+            UNIT_ASSERT_C(WaitFor([&]() {
+                queue = GetQueueChannels(sender);
+                return queue.size() == 1 && queue != last;
+            }, TDuration::Seconds(10)), TStringBuilder() << "no waiter got the window after " << order.size() << " of them");
+            order.push_back(queue.front());
+            last = queue;
+        }
+
+        receiver->ResumeChannelData();
+        for (const auto& channel : channels) {
+            StartConsumer(channel);
+            Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
+        }
+        for (ui64 i = 0; i < channels.size(); ++i) {
+            WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", order), "2,3,4,5,6");
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 // Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
 // pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
 // where a push could overtake a waiting message. Every consumer checks the order of what it gets.
@@ -2055,6 +2145,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(WaiterCountersOnAbort) {
         TWaiterCountersTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(WaitersServedOldestFirst) {
+        TWaiterOrderTest test;
 
         test.Local = false;
 

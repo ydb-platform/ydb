@@ -711,6 +711,8 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
         ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         TDataChunk data;
         data.ConfirmFinish = true;
+        // the age of the chunk orders it among the waiters, a zero one would be served first
+        data.Timestamp = TInstant::Now();
         PushDataChunk(std::move(data), nodeState, self);
         LOG_T(nodeState->LogPrefix << "SEND CONFIRM, ChannelId=" << Info.ChannelId
             << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId

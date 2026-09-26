@@ -439,9 +439,10 @@ private:
     std::atomic<bool> QuotaManagerAssigned;
 };
 
+// std::priority_queue keeps on top what compares greatest: the channel whose waiting chunk is the oldest one
 struct TOutputDescriptorCompare {
     constexpr bool operator()(const std::shared_ptr<TOutputDescriptor>& a, const std::shared_ptr<TOutputDescriptor>& b) const noexcept {
-        return a->WaitTimestamp < b->WaitTimestamp;
+        return a->WaitTimestamp > b->WaitTimestamp;
     }
 };
 

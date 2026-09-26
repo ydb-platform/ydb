@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 import pickle
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
 from importlib import import_module
 from types import ModuleType
-from typing import Callable, Type, Union
 
 import pytest
 
@@ -90,7 +90,7 @@ def any_multidict_class_name(request: pytest.FixtureRequest) -> str:
 def any_multidict_class(
     any_multidict_class_name: str,
     multidict_module: ModuleType,
-) -> Type[MutableMultiMapping[str]]:
+) -> type[MutableMultiMapping[str]]:
     """Return a class object of a mutable multidict implementation."""
     return getattr(multidict_module, any_multidict_class_name)  # type: ignore[no-any-return]
 
@@ -98,7 +98,7 @@ def any_multidict_class(
 @pytest.fixture(scope="session")
 def case_sensitive_multidict_class(
     multidict_module: ModuleType,
-) -> Type[MultiDict[str]]:
+) -> type[MultiDict[str]]:
     """Return a case-sensitive mutable multidict class."""
     return multidict_module.MultiDict  # type: ignore[no-any-return]
 
@@ -106,13 +106,13 @@ def case_sensitive_multidict_class(
 @pytest.fixture(scope="session")
 def case_insensitive_multidict_class(
     multidict_module: ModuleType,
-) -> Type[CIMultiDict[str]]:
+) -> type[CIMultiDict[str]]:
     """Return a case-insensitive mutable multidict class."""
     return multidict_module.CIMultiDict  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
-def case_insensitive_str_class(multidict_module: ModuleType) -> Type[str]:
+def case_insensitive_str_class(multidict_module: ModuleType) -> type[str]:
     """Return a case-insensitive string class."""
     return multidict_module.istr  # type: ignore[no-any-return]
 
@@ -127,7 +127,7 @@ def any_multidict_proxy_class_name(any_multidict_class_name: str) -> str:
 def any_multidict_proxy_class(
     any_multidict_proxy_class_name: str,
     multidict_module: ModuleType,
-) -> Type[MultiMapping[str]]:
+) -> type[MultiMapping[str]]:
     """Return an immutable multidict implementation class object."""
     return getattr(multidict_module, any_multidict_proxy_class_name)  # type: ignore[no-any-return]
 
@@ -135,7 +135,7 @@ def any_multidict_proxy_class(
 @pytest.fixture(scope="session")
 def case_sensitive_multidict_proxy_class(
     multidict_module: ModuleType,
-) -> Type[MutableMultiMapping[str]]:
+) -> type[MutableMultiMapping[str]]:
     """Return a case-sensitive immutable multidict class."""
     return multidict_module.MultiDictProxy  # type: ignore[no-any-return]
 
@@ -143,7 +143,7 @@ def case_sensitive_multidict_proxy_class(
 @pytest.fixture(scope="session")
 def case_insensitive_multidict_proxy_class(
     multidict_module: ModuleType,
-) -> Type[MutableMultiMapping[str]]:
+) -> type[MutableMultiMapping[str]]:
     """Return a case-insensitive immutable multidict class."""
     return multidict_module.CIMultiDictProxy  # type: ignore[no-any-return]
 
@@ -151,7 +151,7 @@ def case_insensitive_multidict_proxy_class(
 @pytest.fixture(scope="session")
 def multidict_getversion_callable(
     multidict_module: ModuleType,
-) -> Callable[[Union[MultiDict[object], MultiDictProxy[object]]], int]:
+) -> Callable[[MultiDict[object] | MultiDictProxy[object]], int]:
     """Return a ``getversion()`` function for current implementation."""
     return multidict_module.getversion  # type: ignore[no-any-return]
 

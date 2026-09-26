@@ -67,6 +67,9 @@ done
 
 {% block move_to_output %}
 {{super()}}
+# Upstream tests are not built in Arcadia, so do not import them or their
+# fixtures.
+rm -rf tcmalloc/testing tcmalloc/testdata tcmalloc/internal/testdata
 cp -R tcmalloc common.inc ${OUTPUT}
 cp no_percpu_cache/aligned_alloc.c ${OUTPUT}/no_percpu_cache/
 {% endblock %}

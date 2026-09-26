@@ -1422,6 +1422,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::btrim",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::cbrt",
     "kind": "Normal"
   },
@@ -1431,6 +1435,10 @@
   },
   {
     "name": "Spark::ceiling",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::char",
     "kind": "Normal"
   },
   {
@@ -1462,6 +1470,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::crc32",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::csc",
     "kind": "Normal"
   },
@@ -1470,11 +1482,19 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::div",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::e",
     "kind": "Normal"
   },
   {
     "name": "Spark::endswith",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::equal_null",
     "kind": "Normal"
   },
   {
@@ -1510,11 +1530,19 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::if",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::ifnull",
     "kind": "Normal"
   },
   {
     "name": "Spark::instr",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::is_valid_utf8",
     "kind": "Normal"
   },
   {
@@ -1606,6 +1634,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::nullifzero",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::nvl",
     "kind": "Normal"
   },
@@ -1618,11 +1650,19 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::overlay",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::pi",
     "kind": "Normal"
   },
   {
     "name": "Spark::pmod",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::position",
     "kind": "Normal"
   },
   {
@@ -1635,6 +1675,10 @@
   },
   {
     "name": "Spark::power",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::quote",
     "kind": "Normal"
   },
   {
@@ -1682,6 +1726,22 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::sha2",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::shiftleft",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::shiftright",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::shiftrightunsigned",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::sign",
     "kind": "Normal"
   },
@@ -1695,6 +1755,10 @@
   },
   {
     "name": "Spark::sinh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::soundex",
     "kind": "Normal"
   },
   {
@@ -1738,7 +1802,27 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::try_add",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::try_divide",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::try_mod",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::try_multiply",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::try_subtract",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::try_validate_utf8",
     "kind": "Normal"
   },
   {
@@ -1755,6 +1839,10 @@
   },
   {
     "name": "Spark::upper",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::validate_utf8",
     "kind": "Normal"
   },
   {

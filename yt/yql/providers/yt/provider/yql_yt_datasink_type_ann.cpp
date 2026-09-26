@@ -105,7 +105,9 @@ public:
         AddHandler({TYtFill::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleFill));
         AddHandler({TYtTouch::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTouch));
         AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCreateTable));
+        AddHandler({TYtCreateSymlink::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCreateSymlink));
         AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDrop));
+        AddHandler({TYtDropSymlink::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDrop));
         AddHandler({TYtCreateView::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCreateView));
         AddHandler({TYtDropView::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDrop));
         AddHandler({TCoCommit::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCommit));
@@ -669,6 +671,7 @@ private:
                 nextMetadata->DoesExist = true;
                 nextMetadata->YqlCompatibleScheme = true;
                 nextMetadata->IsDynamic = meta->IsDynamic;
+                nextMetadata->IsLink = meta->IsLink;
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
@@ -1822,6 +1825,110 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateSymlink(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 5U, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOpBase(input, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto dataSink = TYtDSink(input->ChildPtr(TYtCreateSymlink::idx_DataSink));
+        for (const auto index : {TYtCreateSymlink::idx_Table, TYtCreateSymlink::idx_Target}) {
+            const auto table = input->ChildPtr(index);
+            if (!EnsureCallable(*table, ctx)) {
+                return TStatus::Error;
+            }
+            if (!table->IsCallable(TYtTable::CallableName())) {
+                ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), TStringBuilder() << "Expected " << TYtTable::CallableName()
+                    << " callable, but got " << table->Content()));
+                return TStatus::Error;
+            }
+            if (!EnsureDataSinkClusterMatchesTable(dataSink, TYtTable(table), ctx)) {
+                return TStatus::Error;
+            }
+            if (NYql::HasSetting(TYtTable(table).Settings().Ref(), EYtSettingType::Anonymous)) {
+                ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), "Anonymous tables are not supported in symlink operations"));
+                return TStatus::Error;
+            }
+        }
+
+        const auto settings = input->Child(TYtCreateSymlink::idx_Settings);
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+        if (!ValidateSettings(*settings, EYtSettingType::Initial | EYtSettingType::Mode, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get()
+            .GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+        for (const auto index : {TYtCreateSymlink::idx_Table, TYtCreateSymlink::idx_Target}) {
+            const auto table = input->ChildPtr(index);
+            TExprNode::TPtr newTable;
+            const auto status = UpdateTableMeta(table, newTable, State_->TablesData, false,
+                State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
+            if (TStatus::Ok != status.Level) {
+                if (TStatus::Error != status.Level && newTable != table) {
+                    output = ctx.ChangeChild(*input, index, std::move(newTable));
+                }
+                return status.Combine(TStatus::Repeat);
+            }
+        }
+
+        const TYtCreateSymlink create(input);
+        const TYtTableInfo linkInfo(create.Table());
+        const TYtTableInfo targetInfo(create.Target());
+        YQL_ENSURE(linkInfo.Meta);
+        YQL_ENSURE(targetInfo.Meta);
+
+        const bool initial = NYql::HasSetting(create.Settings().Ref(), EYtSettingType::Initial);
+        if (linkInfo.Meta->DoesExist || linkInfo.Meta->IsLink || !initial) {
+            if (const auto mode = NYql::GetSetting(*settings, EYtSettingType::Mode);
+                mode && EYtWriteMode::CreateSymlinkIfNotExists == FromString<EYtWriteMode>(mode->Tail().Content())) {
+                YQL_CLOG(INFO, ProviderYt) << linkInfo.Name
+                    << " already exists. 'CREATE SYMLINK IF NOT EXISTS' statement will do nothing.";
+                output = create.World().Ptr();
+                return TStatus::Repeat;
+            }
+
+            ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder()
+                << linkInfo.Name.Quote() << " already exists."));
+            return TStatus::Error;
+        }
+
+        if (!targetInfo.Meta->DoesExist) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Target().Pos()), TStringBuilder()
+                << "Target " << targetInfo.Name.Quote() << " does not exist."));
+            return TStatus::Error;
+        }
+
+        if (const auto commitEpoch = linkInfo.CommitEpoch) {
+            auto& next = State_->TablesData->GetOrAddTable(create.DataSink().Cluster().StringValue(), linkInfo.Name, commitEpoch);
+            if (!next.Meta) {
+                next.Meta = MakeIntrusive<TYtTableMetaInfo>();
+                next.Meta->CanWrite = targetInfo.Meta->CanWrite;
+                next.Meta->DoesExist = true;
+                next.Meta->YqlCompatibleScheme = targetInfo.Meta->YqlCompatibleScheme;
+                next.Meta->InferredScheme = targetInfo.Meta->InferredScheme;
+                next.Meta->IsDynamic = targetInfo.Meta->IsDynamic;
+                next.Meta->IsLink = true;
+                next.Meta->HasRLS = targetInfo.Meta->HasRLS;
+                next.Meta->SqlView = targetInfo.Meta->SqlView;
+                next.Meta->SqlViewSyntaxVersion = targetInfo.Meta->SqlViewSyntaxVersion;
+                next.Meta->Attrs = targetInfo.Meta->Attrs;
+            }
+            next.Stat = targetInfo.Stat;
+            next.RowSpec = targetInfo.RowSpec;
+            next.RowType = State_->TablesData->GetTable(targetInfo.Cluster, targetInfo.Name, targetInfo.Epoch).RowType;
+            next.IsReplaced = true;
+        }
+
+        input->SetTypeAnn(create.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
 
     TStatus HandleCreateTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (!EnsureArgsCount(*input, 6U, ctx)) {
@@ -2012,7 +2119,12 @@ private:
         }
 
         const bool isDropTable = input->IsCallable(TYtDropTable::CallableName());
-        const auto settings = input->Child(isDropTable ? TYtDropTable::idx_Settings : TYtDropView::idx_Settings);
+        const bool isDropSymlink = input->IsCallable(TYtDropSymlink::CallableName());
+        if (isDropSymlink && NYql::HasSetting(TYtTable(table).Settings().Ref(), EYtSettingType::Anonymous)) {
+            ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), "Anonymous tables are not supported in symlink operations"));
+            return TStatus::Error;
+        }
+        const auto settings = input->TailPtr();
         if (!EnsureTuple(*settings, ctx)) {
             return TStatus::Error;
         }
@@ -2023,10 +2135,15 @@ private:
 
         bool ifExists = false;
         if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
-            ifExists = (isDropTable ? EYtWriteMode::DropIfExists : EYtWriteMode::DropObjectIfExists) == FromString<EYtWriteMode>(m->Tail().Content());
+            const auto ifExistsMode = isDropTable
+                ? EYtWriteMode::DropIfExists
+                : isDropSymlink ? EYtWriteMode::DropSymlinkIfExists : EYtWriteMode::DropObjectIfExists;
+            ifExists = ifExistsMode == FromString<EYtWriteMode>(m->Tail().Content());
         }
 
         const TYtIsolatedOpBase drop(input);
+        const TStringBuf objectKind = isDropTable ? "Table" : isDropSymlink ? "Symlink" : "View";
+        const TStringBuf statementKind = isDropTable ? "TABLE" : isDropSymlink ? "SYMLINK" : "VIEW";
         if (!TYtTableInfo::HasSubstAnonymousLabel(drop.Table())) {
             const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
 
@@ -2056,16 +2173,17 @@ private:
                     }
                     else if (nextMetadata->DoesExist) {
                         ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
-                            (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                            objectKind << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
                         return TStatus::Error;
                     }
                 }
             }
 
-            if (!tableInfo.Meta->DoesExist && ifExists) {
+            const bool doesObjectExist = tableInfo.Meta->DoesExist || (isDropSymlink && tableInfo.Meta->IsLink);
+            if (!doesObjectExist && ifExists) {
                 YQL_CLOG(INFO, ProviderYt) <<
-                    (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name <<
-                    " does not exist. 'DROP " << (isDropTable ? "TABLE" : "VIEW") << " IF EXISTS' statement will do nothing.";
+                    objectKind << ' ' << tableInfo.Name <<
+                    " does not exist. 'DROP " << statementKind << " IF EXISTS' statement will do nothing.";
 
                 if (fixLoop) {
                     // TODO: the object we are dropping is missing, but we cannot remove DropTable from graph
@@ -2086,6 +2204,17 @@ private:
                         "Drop of dynamic table " << tableInfo.Name.Quote() << " is not supported"));
                     return TStatus::Error;
                 }
+            } else if (isDropSymlink) {
+                if (!doesObjectExist) {
+                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                        "Symlink " << tableInfo.Name.Quote() << " does not exist."));
+                    return TStatus::Error;
+                }
+                if (!tableInfo.Meta->IsLink) {
+                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                        tableInfo.Name.Quote() << " is not a symlink."));
+                    return TStatus::Error;
+                }
             } else {
                 if (!tableInfo.Meta->DoesExist) {
                     ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
@@ -2094,7 +2223,7 @@ private:
                 }
             }
 
-            if (const bool isTable = tableInfo.Meta->SqlView.empty(); isTable != isDropTable) {
+            if (const bool isTable = tableInfo.Meta->SqlView.empty(); !isDropSymlink && isTable != isDropTable) {
                 ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder()
                     << "Drop of " << tableInfo.Name.Quote() << ' ' << (isTable ? "table" : "view")
                     << " can not be done via DROP " << (isDropTable ? "TABLE" : "VIEW") << " statement."));
@@ -2115,7 +2244,7 @@ private:
                     }
                     else if (nextMetadata->DoesExist) {
                         ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
-                            (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                            objectKind << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
                         return TStatus::Error;
                     }
                 }

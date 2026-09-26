@@ -5913,7 +5913,7 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
                                                TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
                                                TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
                                                TRuntimeNode farFutureCountMax, TRuntimeNode farFutureTimeMax,
-                                               TRuntimeNode earlyPolicy, TRuntimeNode latePolicy)
+                                               TRuntimeNode earlyPolicy, TRuntimeNode latePolicy, bool checkMinWindowStart)
 {
     auto streamType = AS_TYPE(TStreamType, list);
     auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
@@ -5983,14 +5983,15 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     callableBuilder.Add(delay);
     callableBuilder.Add(dataWatermarks);
     callableBuilder.Add(watermarksMode);
-    if (farFutureCountMax || farFutureTimeMax || earlyPolicy || latePolicy) {
+    if (farFutureCountMax || farFutureTimeMax || earlyPolicy || latePolicy || checkMinWindowStart) {
         if constexpr (RuntimeVersion < 70U) {
             THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
         }
-        callableBuilder.Add(farFutureCountMax);
-        callableBuilder.Add(farFutureTimeMax);
-        callableBuilder.Add(earlyPolicy);
-        callableBuilder.Add(latePolicy);
+        callableBuilder.Add(farFutureCountMax ? farFutureCountMax : NewVoid());
+        callableBuilder.Add(farFutureTimeMax ? farFutureTimeMax : NewVoid());
+        callableBuilder.Add(earlyPolicy ? earlyPolicy : NewVoid());
+        callableBuilder.Add(latePolicy ? latePolicy : NewVoid());
+        callableBuilder.Add(NewDataLiteral(checkMinWindowStart));
     }
 
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);

@@ -12,6 +12,7 @@ SRCS(
     type_ann_join.cpp
     type_ann_list.cpp
     type_ann_pg.cpp
+    type_ann_partial.cpp
     type_ann_sql.cpp
     type_ann_types.cpp
     type_ann_wide.cpp
@@ -43,4 +44,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-

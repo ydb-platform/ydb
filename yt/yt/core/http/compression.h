@@ -44,4 +44,12 @@ NConcurrency::IAsyncInputStreamPtr CreateDecompressingAdapter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Decodes the request body per Content-Encoding and encodes the response body
+//! per Accept-Encoding, transparently to |underlying|.
+IHttpHandlerPtr CreateContentEncodingHttpHandler(
+    IHttpHandlerPtr underlying,
+    IInvokerPtr compressionInvoker);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NHttp

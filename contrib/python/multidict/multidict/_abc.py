@@ -22,24 +22,24 @@ class SupportsIKeys(Protocol[_V_co]):
     def __getitem__(self, key: istr, /) -> _V_co: ...
 
 
-MDArg = Union[SupportsKeys[_V], SupportsIKeys[_V], Iterable[tuple[str, _V]], None]
+MDArg = SupportsKeys[_V] | SupportsIKeys[_V] | Iterable[tuple[str, _V]] | None
 
 
 class MultiMapping(Mapping[str, _V_co]):
     @overload
     def getall(self, key: str) -> list[_V_co]: ...
     @overload
-    def getall(self, key: str, default: _T) -> Union[list[_V_co], _T]: ...
+    def getall(self, key: str, default: _T) -> list[_V_co] | _T: ...
     @abc.abstractmethod
-    def getall(self, key: str, default: _T = ...) -> Union[list[_V_co], _T]:
+    def getall(self, key: str, default: _T = ...) -> list[_V_co] | _T:
         """Return all values for key."""
 
     @overload
     def getone(self, key: str) -> _V_co: ...
     @overload
-    def getone(self, key: str, default: _T) -> Union[_V_co, _T]: ...
+    def getone(self, key: str, default: _T) -> _V_co | _T: ...
     @abc.abstractmethod
-    def getone(self, key: str, default: _T = ...) -> Union[_V_co, _T]:
+    def getone(self, key: str, default: _T = ...) -> _V_co | _T:
         """Return first value for key."""
 
 
@@ -59,15 +59,15 @@ class MutableMultiMapping(MultiMapping[_V], MutableMapping[str, _V]):
     @overload
     def popone(self, key: str) -> _V: ...
     @overload
-    def popone(self, key: str, default: _T) -> Union[_V, _T]: ...
+    def popone(self, key: str, default: _T) -> _V | _T: ...
     @abc.abstractmethod
-    def popone(self, key: str, default: _T = ...) -> Union[_V, _T]:
+    def popone(self, key: str, default: _T = ...) -> _V | _T:
         """Remove specified key and return the corresponding value."""
 
     @overload
     def popall(self, key: str) -> list[_V]: ...
     @overload
-    def popall(self, key: str, default: _T) -> Union[list[_V], _T]: ...
+    def popall(self, key: str, default: _T) -> list[_V] | _T: ...
     @abc.abstractmethod
-    def popall(self, key: str, default: _T = ...) -> Union[list[_V], _T]:
+    def popall(self, key: str, default: _T = ...) -> list[_V] | _T:
         """Remove all occurrences of key and return the list of corresponding values."""

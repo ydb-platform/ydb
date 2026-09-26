@@ -58,9 +58,9 @@
 // atomic_64
 #define ATOMIC_OP(OP1,OP2,PTR,VAL) __atomic_ ## OP1 ## _ ## OP2(PTR, VAL, __ATOMIC_SEQ_CST)
 // parseversion
-#define RDKAFKA_VERSION_STR "2.15.0"
+#define RDKAFKA_VERSION_STR "2.15.1"
 // parseversion
-#define MKL_APP_VERSION "2.15.0"
+#define MKL_APP_VERSION "2.15.1"
 // libdl
 #define WITH_LIBDL 1
 // WITH_PLUGINS

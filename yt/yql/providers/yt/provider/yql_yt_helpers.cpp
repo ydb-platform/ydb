@@ -451,6 +451,22 @@ TExprNode::TListType GetNodesToCalculateImpl(const TExprNode::TPtr& input, bool 
                 }
             }
         }
+        else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
+            TYtPublish publish = maybePublish.Cast();
+            for (auto setting: publish.Settings()) {
+                switch (FromString<EYtSettingType>(setting.Name().Value())) {
+                case EYtSettingType::UserAttrs:
+                    if (uniqNodes.insert(setting.Value().Cast().Raw()).second) {
+                        if (NeedCalc(setting.Value().Cast())) {
+                            needCalc.push_back(setting.Value().Cast().Ptr());
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
         else if (auto maybeSection = TMaybeNode<TYtSection>(node)) {
             TYtSection section = maybeSection.Cast();
             for (auto setting: section.Settings()) {

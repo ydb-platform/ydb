@@ -1,6 +1,7 @@
 #include "client_impl.h"
 
 #include "config.h"
+#include "file_reader.h"
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
@@ -2016,18 +2017,61 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
 }
 
 TFuture<TFilePartitions> TClient::PartitionFile(
-    const NYPath::TYPath& /*path*/,
-    const std::vector<TFileReadRange>& /*ranges*/,
-    const TPartitionFileOptions& /*options*/)
+    const NYPath::TYPath& path,
+    const std::vector<TFileReadRange>& ranges,
+    const TPartitionFileOptions& options)
 {
-    THROW_ERROR_EXCEPTION("PartitionFile is not implemented yet");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PartitionFile();
+    SetTimeoutOptions(*req, options);
+
+    req->set_path(path);
+    for (const auto& range : ranges) {
+        auto* protoRange = req->add_ranges();
+        protoRange->set_begin(range.Begin);
+        if (range.End) {
+            protoRange->set_end(*range.End);
+        }
+    }
+
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
+    req->set_fetch_cookie_node_descriptors(options.FetchCookieNodeDescriptors);
+
+    ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
+    req->Annotate().With(MakePartitionFileRequestTags(*req));
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionFilePtr& rsp) {
+        return FromProto<TFilePartitions>(*rsp);
+    }));
 }
 
 TFuture<IFileReaderPtr> TClient::CreateFilePartitionReader(
-    const TFilePartitionCookiePtr& /*cookie*/,
-    const TReadFilePartitionOptions& /*options*/)
+    const TFilePartitionCookiePtr& cookie,
+    const TReadFilePartitionOptions& options)
 {
-    THROW_ERROR_EXCEPTION("CreateFilePartitionReader is not implemented yet");
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
+
+    auto req = proxy.ReadFilePartition();
+    InitStreamingRequest(*req);
+
+    req->set_cookie(ToProto(ConvertToYsonString(cookie)));
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+
+    req->Annotate().With(MakeReadFilePartitionRequestTags(*req));
+
+    return NRpcProxy::CreateFilePartitionReader(std::move(req));
 }
 
 TFuture<TClusterMeta> TClient::GetClusterMeta(

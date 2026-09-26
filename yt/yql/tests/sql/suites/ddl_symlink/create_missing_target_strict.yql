@@ -1,0 +1,4 @@
+/* custom error: Target "Missing" does not exist */
+USE plato;
+
+CREATE SYMLINK Link TO Missing;

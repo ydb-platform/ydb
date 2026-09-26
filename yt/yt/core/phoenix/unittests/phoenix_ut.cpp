@@ -922,6 +922,132 @@ TEST(TPhoenixTest, SaveLoadVirtualField)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NSaveVersionConstraints {
+
+struct TMarkedSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& value)
+    {
+        NYT::Save<bool>(context, true);
+        NYT::Save(context, value);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& value)
+    {
+        EXPECT_TRUE(NYT::Load<bool>(context));
+        NYT::Load(context, value);
+    }
+};
+
+enum EVersion
+{
+    Initial = 1,
+    RemoveBD = 2,
+};
+
+bool IsOddVersion(int version)
+{
+    return version % 2 == 1;
+}
+
+struct S
+{
+    int A = 0;
+    int B = 0;
+    int C = 0;
+    int D = 0;
+    int E = 0;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x5e1d7a93);
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+    PHOENIX_REGISTER_FIELD(2, B,
+        .BeforeVersion(RemoveBD)
+        .template Serializer<TMarkedSerializer>());
+    PHOENIX_REGISTER_FIELD(3, C,
+        .InVersions(IsOddVersion)
+        .template Serializer<TMarkedSerializer>());
+
+    registrar.template VirtualField<4>("D", [] (TThis* this_, auto& context) {
+        this_->D = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->D);
+    })
+        .BeforeVersion(RemoveBD)();
+
+    registrar.template VirtualField<5>("E", [] (TThis* this_, auto& context) {
+        this_->E = Load<int>(context);
+    }, [] (const TThis* this_, auto& context) {
+        NYT::Save(context, this_->E);
+    })
+        .InVersions(IsOddVersion)();
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+S MakeS()
+{
+    return {
+        .A = 1,
+        .B = 2,
+        .C = 3,
+        .D = 4,
+        .E = 5,
+    };
+}
+
+} // namespace NSaveVersionConstraints
+
+TEST(TPhoenixTest, SaveAllFieldsInInitialVersion)
+{
+    using namespace NSaveVersionConstraints;
+
+    auto s1 = MakeS();
+    auto buffer = Serialize(s1, Initial);
+    EXPECT_EQ(buffer.length(), 5 * sizeof(int) + 2 * sizeof(bool));
+
+    auto s2 = Deserialize<S>(buffer, Initial);
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, SaveHonorsBeforeVersionAndInVersions)
+{
+    using namespace NSaveVersionConstraints;
+
+    auto s1 = MakeS();
+
+    {
+        auto buffer = Serialize(s1, RemoveBD);
+        EXPECT_EQ(buffer.length(), sizeof(int));
+
+        auto s2 = Deserialize<S>(buffer, RemoveBD);
+        S expected;
+        expected.A = 1;
+        EXPECT_EQ(s2, expected);
+    }
+
+    {
+        auto buffer = Serialize(s1, RemoveBD + 1);
+        EXPECT_EQ(buffer.length(), 3 * sizeof(int) + sizeof(bool));
+
+        auto s2 = Deserialize<S>(buffer, RemoveBD + 1);
+        S expected;
+        expected.A = 1;
+        expected.C = 3;
+        expected.E = 5;
+        EXPECT_EQ(s2, expected);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TPhoenixTest, Pair)
 {
     TPair<std::string, double> p1{.First = "hello", .Second = 3.14};

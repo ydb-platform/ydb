@@ -142,6 +142,12 @@ void SyncWithStaticGateways(TStaticGatewaysConfig& staticGateways, TGatewaysConf
         }
     }
 
+    if (gateways.HasYtflow()) {
+        if (!staticGateways.GetYtflow().HasYtflowWorkerBin() && gateways.GetYtflow().HasYtflowWorkerBin()) {
+            staticGateways.MutableYtflow()->SetYtflowWorkerBin(gateways.GetYtflow().GetYtflowWorkerBin());
+        }
+    }
+
     // remove all static settings from dynamic config
     if (gateways.HasYt()) {
         gateways.MutableYt()->ClearMrJobBin();
@@ -153,6 +159,10 @@ void SyncWithStaticGateways(TStaticGatewaysConfig& staticGateways, TGatewaysConf
     if (gateways.HasRtmr()) {
         gateways.MutableRtmr()->ClearYqlRtmrDynLib();
         gateways.MutableRtmr()->ClearArtifacts();
+    }
+
+    if (gateways.HasYtflow()) {
+        gateways.MutableYtflow()->ClearYtflowWorkerBin();
     }
 }
 

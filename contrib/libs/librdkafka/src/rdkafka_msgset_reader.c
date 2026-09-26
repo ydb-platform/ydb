@@ -684,11 +684,15 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
         }
 
 
+        /* Key and Value always use the fixed-width BYTES encoding, also
+         * when this MessageSet is contained in a flexible-version
+         * FetchResponse (v12+) whose buffer has the flexver flag set. */
+
         /* Extract key */
-        rd_kafka_buf_read_kbytes(rkbuf, &Key);
+        rd_kafka_buf_read_kbytes_fixed(rkbuf, &Key);
 
         /* Extract Value */
-        rd_kafka_buf_read_kbytes(rkbuf, &Value);
+        rd_kafka_buf_read_kbytes_fixed(rkbuf, &Value);
         Value_len = RD_KAFKAP_BYTES_LEN(&Value);
 
         /* MessageSets may contain offsets earlier than we

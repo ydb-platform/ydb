@@ -18,7 +18,7 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ERequestInfoState,
+DEFINE_ENUM(ERequestAnnotationState,
     (Missing)
     (Set)
     (Flushed)
@@ -108,9 +108,8 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(std::string info, bool incremental) override;
-    void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(std::string info, bool incremental) override;
+    void CommitRequestAnnotations(bool flush) override;
+    void SuppressMissingRequestAnnotationCheck() override;
     NLogging::TLoggingTagList* GetRequestAnnotations() override;
     NLogging::TLoggingTagList* GetResponseAnnotations() override;
 
@@ -166,9 +165,7 @@ protected:
     TSharedRef ResponseBody_;
     std::vector<TSharedRef> ResponseAttachments_;
 
-    ERequestInfoState RequestInfoState_ = ERequestInfoState::Missing;
-    TCompactVector<std::string, 4> RequestInfos_;
-    TCompactVector<std::string, 4> ResponseInfos_;
+    ERequestAnnotationState RequestAnnotationState_ = ERequestAnnotationState::Missing;
     NLogging::TLoggingTagList RequestLoggingTags_;
     NLogging::TLoggingTagList ResponseLoggingTags_;
 
@@ -200,8 +197,8 @@ protected:
     virtual void LogRequest();
     virtual void LogResponse() = 0;
 
-    //! Tags identifying the request, spliced into the request info alerts.
-    NLogging::TLoggingTagList MakeRequestInfoAlertTags() const;
+    //! Tags identifying the request, spliced into the annotation alerts.
+    NLogging::TLoggingTagList MakeRequestAnnotationAlertTags() const;
 
     //! Installs the request attachments direct placement transfer (adapting the
     //! bus-layer one). Until the service drives it to completion, #RequestAttachments
@@ -296,9 +293,8 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(std::string info, bool incremental) override;
-    void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(std::string info, bool incremental) override;
+    void CommitRequestAnnotations(bool flush) override;
+    void SuppressMissingRequestAnnotationCheck() override;
     NLogging::TLoggingTagList* GetRequestAnnotations() override;
     NLogging::TLoggingTagList* GetResponseAnnotations() override;
 

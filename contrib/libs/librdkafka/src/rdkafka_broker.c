@@ -142,7 +142,52 @@ static void rd_kafka_mk_nodename(char *dest,
                                  size_t dsize,
                                  const char *name,
                                  uint16_t port) {
-        rd_snprintf(dest, dsize, "%s:%hu", name, port);
+        /* An IPv6 literal must be enclosed in brackets so the trailing
+         * ":port" is not mistaken for part of the address. Only a bare
+         * (unbracketed) literal needs wrapping; a hostname or IPv4 address
+         * never contains a ':'. */
+        if (strchr(name, ':') && *name != '[')
+                rd_snprintf(dest, dsize, "[%s]:%hu", name, port);
+        else
+                rd_snprintf(dest, dsize, "%s:%hu", name, port);
+}
+
+/**
+ * @brief Extract the bare hostname from a broker nodename: the inverse of
+ *        rd_kafka_mk_nodename().
+ *
+ * Strips the ":port" suffix, the brackets enclosing an IPv6 literal
+ * ("[2001:db8::1]:9092" -> "2001:db8::1"), and the zone id of a scoped IPv6
+ * literal
+ * ("fe80::1%eth0" -> "fe80::1", also "%25eth0" when percent-encoded per
+ * RFC 6874): the zone identifies the local link the address is reachable on
+ * (RFC 4007), not the peer, so it has no place in a hostname used to
+ * identify the remote end (SNI, certificate verification, SASL).
+ */
+void rd_kafka_nodename_to_hostname(const char *nodename,
+                                   char *dest,
+                                   size_t dsize) {
+        char *t;
+
+        rd_strlcpy(dest, nodename, dsize);
+
+        /* Strip the ":port" suffix. Use the last ':' so an IPv6 literal such
+         * as "[2001:db8::1]:9092" is not truncated at a ':' within the address.
+         */
+        if ((t = strrchr(dest, ':')))
+                *t = '\0';
+
+        /* Strip the enclosing brackets from an IPv6 literal, leaving the bare
+         * address: "[2001:db8::1]" -> "2001:db8::1". */
+        if (*dest == '[') {
+                memmove(dest, dest + 1, strlen(dest));
+                if ((t = strrchr(dest, ']')))
+                        *t = '\0';
+        }
+
+        /* Strip the zone id from a scoped IPv6 literal. */
+        if (strchr(dest, ':') && (t = strchr(dest, '%')))
+                *t = '\0';
 }
 
 /**
@@ -6720,6 +6765,107 @@ static int rd_ut_ApiVersion_at_least(void) {
 }
 
 /**
+ * @brief Unittest for broker nodename construction.
+ *
+ * A nodename produced by rd_kafka_mk_nodename() must be split back into the
+ * original host and port by rd_addrinfo_prepare() (the parsing that feeds
+ * getaddrinfo()). This exercises IPv6 literals, in particular compressed
+ * forms ending in "::", which otherwise concatenate into an unresolvable
+ * ":::port" and fail name resolution.
+ */
+static int rd_ut_mk_nodename(void) {
+        static const struct {
+                const char *host;
+                uint16_t port;
+                const char *exp_host; /* NULL: same as host */
+        } hosts[] = {
+            {"broker.example.com", 9092},
+            {"192.0.2.1", 9092},
+            {"2001:db8:0:0:0:0:0:1", 9092}, /* full IPv6 */
+            {"2001:db8::", 9092},           /* compressed tail */
+            {"fe80::", 9092},               /* compressed */
+            {"::1", 9092},                  /* IPv6 loopback */
+            /* An IPv6 literal that is already enclosed in brackets, as it is
+             * when configured that way in bootstrap.servers, must not be
+             * bracketed a second time. */
+            {"[::1]", 9092, "::1"},
+            {"[2001:db8::]", 9092, "2001:db8::"},
+            {NULL, 0},
+        };
+        int i;
+        char nodename[256];
+        char expected_port[16];
+        char *node, *svc;
+        const char *errstr;
+        const char *exp_host;
+
+        for (i = 0; hosts[i].host; i++) {
+                rd_kafka_mk_nodename(nodename, sizeof(nodename), hosts[i].host,
+                                     hosts[i].port);
+
+                exp_host =
+                    hosts[i].exp_host ? hosts[i].exp_host : hosts[i].host;
+
+                errstr = rd_addrinfo_prepare(nodename, &node, &svc);
+                RD_UT_ASSERT(!errstr,
+                             "host '%s' -> nodename '%s': "
+                             "rd_addrinfo_prepare failed: %s",
+                             hosts[i].host, nodename, errstr);
+
+                RD_UT_ASSERT(!strcmp(node, exp_host),
+                             "host '%s' -> nodename '%s': parsed host '%s' "
+                             "does not match expected '%s'",
+                             hosts[i].host, nodename, node, exp_host);
+
+                rd_snprintf(expected_port, sizeof(expected_port), "%hu",
+                            hosts[i].port);
+                RD_UT_ASSERT(!strcmp(svc, expected_port),
+                             "host '%s' -> nodename '%s': parsed port '%s' "
+                             "does not match expected '%s'",
+                             hosts[i].host, nodename, svc, expected_port);
+        }
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Unittest for hostname extraction from a broker nodename.
+ *
+ * The nodename carries a ":port" suffix, IPv6 literals are bracketed
+ * ("[2001:db8::1]:9092") and may be scoped ("[fe80::1%eth0]:9092"); the
+ * hostname must be the bare address.
+ */
+static int rd_ut_nodename_to_hostname(void) {
+        static const struct {
+                const char *nodename;
+                const char *exp;
+        } tests[] = {
+            {"broker.example.com:9092", "broker.example.com"},
+            {"192.0.2.1:9092", "192.0.2.1"},
+            {"[2001:db8::]:9092", "2001:db8::"},
+            {"[fe80::]:9092", "fe80::"},
+            {"[::1]:9092", "::1"},
+            /* The zone id of a scoped literal is stripped, both plain and
+             * percent-encoded (RFC 6874). */
+            {"[fe80::1%eth0]:9092", "fe80::1"},
+            {"[fe80::1%25eth0]:9092", "fe80::1"},
+            {NULL, NULL},
+        };
+        int i;
+        char hostname[RD_KAFKA_NODENAME_SIZE];
+
+        for (i = 0; tests[i].nodename; i++) {
+                rd_kafka_nodename_to_hostname(tests[i].nodename, hostname,
+                                              sizeof(hostname));
+                RD_UT_ASSERT(!strcmp(hostname, tests[i].exp),
+                             "nodename '%s': expected hostname '%s', got '%s'",
+                             tests[i].nodename, tests[i].exp, hostname);
+        }
+
+        RD_UT_PASS();
+}
+
+/**
  * @name Unit tests
  * @{
  *
@@ -6729,6 +6875,8 @@ int unittest_broker(void) {
 
         fails += rd_ut_reconnect_backoff();
         fails += rd_ut_ApiVersion_at_least();
+        fails += rd_ut_mk_nodename();
+        fails += rd_ut_nodename_to_hostname();
 
         return fails;
 }

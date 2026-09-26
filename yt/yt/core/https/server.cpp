@@ -106,7 +106,8 @@ IServerPtr CreateServer(
     const IPollerPtr& poller,
     const IPollerPtr& acceptor,
     const IInvokerPtr& controlInvoker,
-    std::optional<NCrypto::TCertProfiler> certProfiler)
+    std::optional<NCrypto::TCertProfiler> certProfiler,
+    IInvokerPtr compressionInvoker)
 {
     auto sslConfig = config->Credentials;
     auto sslContext =  New<TSslContext>();
@@ -159,7 +160,8 @@ IServerPtr CreateServer(
         configCopy,
         tlsListener,
         poller,
-        acceptor);
+        acceptor,
+        std::move(compressionInvoker));
 
     TPeriodicExecutorPtr certificateSensorsUpdater;
     if (certProfiler && sslConfig && sslConfig->CertificateChain) {

@@ -23,9 +23,16 @@ message TRtmrStaticGatewayConfig {
     repeated string Artifacts = 2;     // local artifacts
 }
 
+///////////////////////////// YTFLOW /////////////////////////////
+
+message TYtflowStaticGatewayConfig {
+    optional string YtflowWorkerBin = 1; // Path to ytflow worker executable.
+}
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TStaticGatewaysConfig {
     optional TYtStaticGatewayConfig Yt = 1;
     optional TRtmrStaticGatewayConfig Rtmr = 2;
+    optional TYtflowStaticGatewayConfig Ytflow = 3;
 }

@@ -3720,7 +3720,7 @@ bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& typ
 }
 
 bool EnsureType(const TExprNode& node, TExprContext& ctx) {
-    YQL_ENSURE(!node.IsCallable({"SqlColumnOrType", "SqlPlainColumnOrType", "SqlColumnFromType"}),
+    YQL_ENSURE(!node.IsCallable({"SqlColumnOrType", "SqlPlainColumnOrType", "SqlColumnFromType", "YqlColumnOrType"}),
                "Unexpected " << node.Content() << " it should be processed earlier");
     if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
@@ -3744,7 +3744,7 @@ IGraphTransformer::TStatus EnsureTypeRewrite(TExprNode::TPtr& node, TExprContext
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (node->IsCallable({"SqlColumnOrType", "SqlPlainColumnOrType", "SqlColumnFromType"})) {
+    if (node->IsCallable({"SqlColumnOrType", "SqlPlainColumnOrType", "SqlColumnFromType", "YqlColumnOrType"})) {
         ui32 typeNameIdx = node->IsCallable("SqlColumnFromType") ? 2 : 1;
         auto typeNameNode = node->Child(typeNameIdx);
         YQL_ENSURE(typeNameNode->IsAtom());

@@ -97,7 +97,7 @@ public:
         if (!Socket)
             return;
         Socket->ShutDown(SHUT_RDWR);
-        Socket.Destroy();
+        Socket.reset();
     }
 
     void SetSocket(SOCKET fd) {

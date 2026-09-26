@@ -2080,7 +2080,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         UNIT_ASSERT_VALUES_EQUAL(cacheHits, 2);
 
-        // Hold a snapshot across a write so the current graph cannot answer it.
+        // Hold a read-only snapshot across a write. The versioned graph must
+        // preserve the old result and accelerate it without taking read locks.
         auto snapshot = session.ExecuteDataQuery(query,
             TTxControl::BeginTx(TTxSettings::SnapshotRW()),
             values, settings).ExtractValueSync();
@@ -2097,7 +2098,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             values, settings).ExtractValueSync();
         UNIT_ASSERT_C(snapshot.IsSuccess(), snapshot.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(snapshot.GetResultSet(0)), "[[3]]");
-        AssertTableReads(snapshot, "/Root/HnswFullRange/index/indexImplPostingTable", 3);
+        AssertTableReads(snapshot, "/Root/HnswFullRange/index/indexImplPostingTable", 1);
     }
 
     Y_UNIT_TEST_QUAD(HnswFullRangeRebuildUsesStoredSettings, Followers, Split) {
@@ -2460,7 +2461,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        appConfig.MutableDataShardConfig()->SetEnableHnswMvcc(true);
         appConfig.MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
@@ -2520,7 +2520,67 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(nearest(), Commit ? "[[3]]" : "[[1]]");
     }
 
-    Y_UNIT_TEST(HnswCacheBypassedForMvccSnapshot) {
+    Y_UNIT_TEST(HnswSnapshotReadsUseCacheByDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto reader = db.CreateSession().GetValueSync().GetSession();
+        auto writer = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            const auto result = writer.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        auto write = [&](const TString& query) {
+            const auto result = writer.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswSnapshotDefault` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        write(Q_(R"(
+            UPSERT INTO `/Root/HnswSnapshotDefault` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )"));
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswSnapshotDefault` ADD INDEX index
+                GLOBAL USING vector_kmeans_tree ON (emb)
+                WITH (distance=euclidean, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, hnsw_min_rows=1);
+        )"));
+        const TString posting = "/Root/HnswSnapshotDefault/index/indexImplPostingTable";
+        const TString search = "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f]); SELECT pk FROM `"
+            + posting + "` ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;";
+        const auto stats = TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic);
+        auto check = [&](const TDataQueryResult& result, const TString& expected) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), expected);
+            AssertTableReads(result, posting, 1);
+        };
+        // No feature flag or inconsistent-read option: a consistent snapshot
+        // must use the graph immediately after index construction.
+        auto snapshot = reader.ExecuteDataQuery(search,
+            TTxControl::BeginTx(TTxSettings::SnapshotRO()), stats).ExtractValueSync();
+        check(snapshot, "[[1]]");
+        auto tx = snapshot.GetTransaction();
+        UNIT_ASSERT(tx);
+        write(Q_(R"(
+            UPSERT INTO `/Root/HnswSnapshotDefault` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"));
+        const auto current = writer.ExecuteDataQuery(search,
+            TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), stats).ExtractValueSync();
+        check(current, "[[2]]");
+        // The held snapshot still sees its original nearest vector through
+        // the versioned cache after a newer committed value becomes visible.
+        snapshot = reader.ExecuteDataQuery(search, TTxControl::Tx(*tx).CommitTx(), stats).ExtractValueSync();
+        check(snapshot, "[[1]]");
+    }
+
+    Y_UNIT_TEST(HnswSnapshotConsistencyAcrossWrites) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
@@ -2593,11 +2653,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswRetriesAfterCacheMemoryIsReleased) {
         NKikimrConfig::TAppConfig appConfig;
-        // One two-vector graph fits, while two graphs exceed this budget.
-        // Keep page-cache retention at zero so graphs compete for the budget.
+        // One two-vector graph and its snapshot-scan buffer fit, while two
+        // graphs exceed this budget. Keep page-cache retention at zero so
+        // graphs compete for the budget.
         appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(1024);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(1024);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(1536);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(1536);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

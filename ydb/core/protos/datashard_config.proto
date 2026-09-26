@@ -30,11 +30,10 @@ message TDataShardConfig {
     optional uint32 IncrementalRestoreScanBatchMinRows = 32 [default = 100];
     optional uint32 IncrementalRestoreScanBatchMaxRows = 33 [default = 10000];
     // HNSW caches use the memory controller's SharedCache budget.
-    optional bool EnableHnswMvcc = 35 [default = false];
     // Distinct committed vector changes / rows in the base graph, in percent.
     optional uint32 HnswRebuildThresholdPercent = 36 [default = 10];
-    reserved 34;
-    reserved "VectorIndexHnswCacheMaxSize";
+    reserved 34, 35;
+    reserved "VectorIndexHnswCacheMaxSize", "EnableHnswMvcc";
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
     optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
     optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];

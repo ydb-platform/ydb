@@ -36,20 +36,11 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
     if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
         return false;
     }
-    if (AppData()->DataShardConfig.GetEnableHnswMvcc()) {
-        if (!shard.IsFollower()) {
-            return !state.ReadVersion.IsMax();
-        }
-        const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
-        return repeatable && state.ReadVersion <= edge;
-    }
     if (!shard.IsFollower()) {
-        return state.IsHeadRead;
+        return !state.ReadVersion.IsMax();
     }
-    // A stale HEAD read is normally pinned to the follower's repeatable edge.
-    // It may use a graph of that version, but an explicitly older snapshot may not.
     const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
-    return state.RequestedHeadRead && repeatable && state.ReadVersion == edge;
+    return repeatable && state.ReadVersion <= edge;
 }
 
 } // namespace
@@ -2874,12 +2865,10 @@ public:
                     && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
                         hnswSettings, buildVersion)) {
                 Self->TrackHnswOpenTransactions(localTid, txc.DB);
-                if (!Self->IsFollower() && AppData()->DataShardConfig.GetEnableHnswMvcc()) {
+                if (!Self->IsFollower()) {
                     Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
                 } else {
-                    // Compatibility/restart path: eager construction only runs at
-                    // index finalization, so an index created before deployment or
-                    // lost on tablet restart must be reconstructed on demand.
+                    // Followers reconstruct directly at their repeatable read version.
                     bool pageFault = false;
                     ui64 reservedBytes = 0;
                     std::shared_ptr<void> memoryReservation;

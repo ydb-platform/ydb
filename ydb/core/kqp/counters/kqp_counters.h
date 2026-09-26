@@ -407,6 +407,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOptionalMemoryRefused; // optional Memory refused at the spilling threshold
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnStartAllocs;

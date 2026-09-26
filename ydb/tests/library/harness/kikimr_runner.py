@@ -31,6 +31,19 @@ from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 logger = logging.getLogger(__name__)
 
+# Same sentinel as TConfigState::CheckGeneration: cmdGen == Max<ui64>() skips the check.
+_ITEM_CONFIG_GENERATION_ANY = (1 << 64) - 1
+
+
+def _allow_applied_bs_config_retry(request):
+    for command in request.Command:
+        name = command.WhichOneof("Command")
+        if not name:
+            continue
+        submessage = getattr(command, name)
+        if "ItemConfigGeneration" in submessage.DESCRIPTOR.fields_by_name:
+            submessage.ItemConfigGeneration = _ITEM_CONFIG_GENERATION_ANY
+
 
 def get_unique_path_for_current_test(output_path, sub_folder):
     # TODO: remove current function, don't rely on test environment, use explicit paths
@@ -980,8 +993,19 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         timeout = 240
         sleep = 5
         retries, success = timeout / sleep, False
+        attempt = 0
         while retries > 0 and not success:
             try:
+                # Each command in the request is its own BS controller transaction.
+                # The invoke may already have been committed when the CLI call fails,
+                # which bumps ItemConfigGeneration. Resending generation 0 is then
+                # rejected. Max<ui64> skips CheckGeneration and redefines the same item.
+                if attempt:
+                    logger.warning(
+                        "Retrying blobstorage config invoke with ItemConfigGeneration bypass; "
+                        "a previous attempt may already have been committed"
+                    )
+                    _allow_applied_bs_config_retry(request)
                 self.__call_kikimr_new_cli(
                     [
                         "admin",
@@ -996,6 +1020,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             except Exception as e:
                 logger.error("Failed to execute, %s", str(e))
                 retries -= 1
+                attempt += 1
                 time.sleep(sleep)
 
                 if retries == 0:

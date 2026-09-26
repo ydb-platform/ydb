@@ -12,6 +12,7 @@ PEERDIR(
 
 TEST_SRCS(
     kikimr_config.py
+    test_bs_config_invoke.py
 )
 
 END()

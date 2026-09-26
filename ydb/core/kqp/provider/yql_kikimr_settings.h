@@ -249,6 +249,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     TKikimrSettings::TConstPtr Snapshot() const;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
+    std::function<TString(TStringBuf)> NormalizePath;
 
     NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
     NSQLTranslation::EBindingsMode GetYqlBindingsMode() const;

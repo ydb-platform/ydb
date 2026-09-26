@@ -12,6 +12,7 @@ ADDINCL(
 )
 
 SRCS(
+    operation_budget_ut.cpp
     pire_ut.cpp
     capture_ut.cpp
     count_ut.cpp

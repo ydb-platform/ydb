@@ -306,6 +306,18 @@ message TQueryResponseExtraInfo {
     optional TQueryResponsePgInfo PgInfo = 1;
 }
 
+enum EWmState {
+    // The query is not managed by the workload manager (no resource pool),
+    // or the state is unknown/unset.
+    WM_STATE_NONE = 0;
+
+    // The query is in the workload manager queue, waiting for available resources.
+    WM_STATE_QUEUED = 1;
+
+    // The query has exited the workload manager queue and is now executing.
+    WM_STATE_EXECUTING = 2;
+}
+
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
@@ -325,6 +337,8 @@ message TQueryResponse {
     optional TQueryResponseExtraInfo ExtraInfo = 16;
     optional string EffectivePoolId = 17;
     optional Ydb.VirtualTimestamp CommitTimestamp = 18;
+    optional EWmState WmState = 19;
+    optional string WmClassifiedBy = 20;
 }
 
 message TEvQueryResponse {

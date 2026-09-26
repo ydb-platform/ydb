@@ -110,7 +110,7 @@ public:
         ClassifiedBy = std::move(classifiedBy);
     }
 
-    EState GetState() const {
+    EState GetState() const override {
         return State.load(std::memory_order_acquire);
     }
 
@@ -127,7 +127,7 @@ public:
         return PoolId;
     }
 
-    TString GetClassifiedBy() const {
+    TString GetClassifiedBy() const override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         return ClassifiedBy;
     }

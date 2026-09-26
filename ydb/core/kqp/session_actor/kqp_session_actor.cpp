@@ -3199,6 +3199,14 @@ public:
                 response->SetEffectivePoolId(QueryState->UserRequestContext->PoolId);
             }
         }
+        if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+            const auto state = updater->GetState();
+            response->SetWmState(NWorkloadManager::WmStateToProto(state));
+            const auto classifiedBy = updater->GetClassifiedBy();
+            if (!classifiedBy.empty()) {
+                response->SetWmClassifiedBy(classifiedBy);
+            }
+        }
     }
 
     void UpdateQueryExecutionCounters() {

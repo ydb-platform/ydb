@@ -1901,6 +1901,8 @@ message TEvReshuffleKMeansResponse {
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 
     optional bytes LastKeyAck = 13;
+
+    repeated uint32 EmptyClusters = 14;
 }
 
 message TEvRecomputeKMeansRequest {

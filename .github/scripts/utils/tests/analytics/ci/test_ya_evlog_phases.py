@@ -41,6 +41,27 @@ class EvlogPhasesTest(unittest.TestCase):
             ],
         )
 
+    def test_object_run_after_tests_is_rebuild(self):
+        events = [
+            _node("Run(rnd-aaa$(BUILD_ROOT)/ydb/lib/ut/test-results/unittest)", 10, 40),
+            _node(
+                "Run(hash$(BUILD_ROOT)/ydb/core/hive/tx.cpp.o)",
+                50,
+                200,
+            ),
+            _node("Run(hash$(BUILD_ROOT)/ydb/core/hive/lib.a)", 180, 220),
+            _node("PutInDistCache(hash)", 210, 211),
+            _node("Run(rnd-bbb$(BUILD_ROOT)/ydb/lib/ut/test-results/unittest)", 400, 460),
+        ]
+        self.assertEqual(
+            phases_from_events(events, gap=15),
+            [
+                ("ya_tests", 10, 40),
+                ("ya_rebuild", 50, 220),
+                ("ya_tests", 400, 460),
+            ],
+        )
+
     def test_cache_hit_has_tests_only(self):
         events = [
             _node("FromDistCache(hash)", 1, 2),

@@ -81,6 +81,7 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TVectorIndexSettings, stream, value) {
         ", hnsw_connectivity: " << value.HnswConnectivity <<
         ", hnsw_construction_candidates: " << value.HnswConstructionCandidates <<
         ", hnsw_search_candidates: " << value.HnswSearchCandidates <<
+        ", hnsw_rebuild_threshold_percent: " << value.HnswRebuildThresholdPercent <<
         " }";
 }
 

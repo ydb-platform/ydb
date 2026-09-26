@@ -102,6 +102,10 @@ message VectorIndexSettings {
     optional uint32 hnsw_connectivity = 5;
     optional uint32 hnsw_construction_candidates = 6;
     optional uint32 hnsw_search_candidates = 7;
+
+    // Rebuild the in-memory HNSW graph when the number of committed vector
+    // changes exceeds this percentage of the graph size. The default is 10.
+    optional uint32 hnsw_rebuild_threshold_percent = 8;
 }
 
 message KMeansTreeSettings {

@@ -305,7 +305,6 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_hnsw.cpp
-    follower_edge.cpp
     hnsw_index.cpp
     hnsw_index_build_unit.cpp
     hnsw_index_build_actor.cpp

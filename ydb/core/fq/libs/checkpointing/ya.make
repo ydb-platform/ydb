@@ -10,12 +10,15 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/core/fq/libs/config/protos
-    ydb/core/fq/libs/checkpointing_common
+    library/cpp/threading/future
     ydb/core/fq/libs/checkpoint_storage/events
-    ydb/library/yql/dq/actors/compute
+    ydb/core/fq/libs/checkpointing_common
+    ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/state
+    ydb/library/actors/core
+    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/proto
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

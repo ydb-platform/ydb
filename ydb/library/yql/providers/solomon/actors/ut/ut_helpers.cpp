@@ -13,10 +13,10 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme) {
+void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme, NUdf::TDataTypeId timestampType) {
     scheme.MutableTimestamp()->SetKey("ts");
     scheme.MutableTimestamp()->SetIndex(0);
-    scheme.MutableTimestamp()->SetDataTypeId(NUdf::TDataType<NUdf::TTimestamp>::Id);
+    scheme.MutableTimestamp()->SetDataTypeId(timestampType);
 
     NSo::NProto::TDqSolomonSchemeItem label;
     label.SetKey("label1");
@@ -59,7 +59,7 @@ void InitAsyncOutput(
     });
 }
 
-NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
+NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud, NUdf::TDataTypeId timestampType) {
     NSo::NProto::TDqSolomonShard settings;
     settings.SetEndpoint(TString(getenv("SOLOMON_HTTP_ENDPOINT")));
     if (isCloud) {
@@ -75,7 +75,7 @@ NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
     settings.SetClusterType(isCloud ? NSo::NProto::ESolomonClusterType::CT_MONITORING : NSo::NProto::ESolomonClusterType::CT_SOLOMON);
     settings.SetUseSsl(false);
 
-    FillDqSolomonScheme(*settings.MutableScheme());
+    FillDqSolomonScheme(*settings.MutableScheme(), timestampType);
 
     return settings;
 }

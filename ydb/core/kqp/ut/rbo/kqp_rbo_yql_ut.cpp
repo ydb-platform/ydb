@@ -6216,6 +6216,7 @@ FROM (
                 d Int64,
                 e Int64,
                 f Decimal(22,9),
+                g Utf8,
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -6270,6 +6271,13 @@ FROM (
                     rows.BeginOptional().Decimal(NYdb::TDecimalValue(TStringBuilder() << *e << ".5", 22, 9)).EndOptional();
                 } else {
                     rows.EmptyOptional(NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(22, 9)).Build());
+                }
+                const THashMap<i64, TString> names = {{10, "ddd"}, {20, "aaa"}, {30, "ccc"}, {40, "bbb"}};
+                rows.AddMember("g");
+                if (c) {
+                    rows.BeginOptional().Utf8(names.at(*c)).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::EPrimitiveType::Utf8);
                 }
                 rows.EndStruct();
             }
@@ -6439,6 +6447,47 @@ FROM (
                 )
                 ORDER BY a;
             )"},
+            {"range whole partition frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS partition_sum,
+                    Max(e) OVER w AS partition_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range default frame written out", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range default frame implied", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                )
+                ORDER BY a;
+            )"},
             {"range frame with ties", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -6450,6 +6499,45 @@ FROM (
                     PARTITION BY b
                     ORDER BY c
                     RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g, e,
+                    Sum(e) OVER w AS range_sum,
+                    Count(e) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g
+                )
+                ORDER BY a;
+            )"},
+            {"ranking over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g,
+                    Rank() OVER w AS rank_in_group,
+                    DenseRank() OVER w AS dense_rank_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g
+                )
+                ORDER BY a;
+            )"},
+            {"running sum over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g, e,
+                    Sum(e) OVER w AS running_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 )
                 ORDER BY a;
             )"},
@@ -6642,9 +6730,7 @@ FROM (
         "centred frame",
         "forward looking frame",
         "trailing frame",
-        // A RANGE frame runs to the last peer row, which a per-row chain cannot express.
-        "range frame with ties",
-        "named window shared by several functions over aggregates",
+        "range frame over a string order key",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {

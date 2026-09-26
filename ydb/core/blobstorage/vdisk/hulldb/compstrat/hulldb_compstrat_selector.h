@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
 #include "hulldb_compstrat_utils.h"
+#include "hulldb_compstrat_ranks.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
 #include <util/stream/file.h>
@@ -41,10 +42,21 @@ namespace NKikimr {
                 , Task(task)
                 , Params(params)
                 , AllowGarbageCollection(allowGarbageCollection)
+                , Ranks(*Params.Boundaries, LevelSnap.SliceSnap)
             {
                 Y_DEBUG_ABORT_UNLESS(Task);
                 Task->Clear();
+                Task->Priority = {Ranks.GetMaxRank(), Params.EmergencyMode};
                 Task->FullCompactionInfo.first = Params.FullCompactionAttrs;
+
+                double maxSortedRank = 0.0;
+                for (ui32 i = 2; i < Ranks.Ranks.size(); ++i) {
+                    maxSortedRank = Max(maxSortedRank, Ranks.Ranks[i]);
+                }
+                auto &mon = HullCtx->LsmCompactionRankGroups[ui32(TKeyToEHullDbType<TKey>())];
+                mon.Rank0() = Ranks.Ranks[0] * NMonGroup::TLsmCompactionRankGroup::RankScale;
+                mon.Rank1_16() = Ranks.Ranks[1] * NMonGroup::TLsmCompactionRankGroup::RankScale;
+                mon.Rank17Plus() = maxSortedRank * NMonGroup::TLsmCompactionRankGroup::RankScale;
             }
 
             // Select an action to perform
@@ -54,7 +66,8 @@ namespace NKikimr {
                     // Every job that writes chunks has to say how many, so the compaction
                     // broker can hand out the shared pool instead of letting each VDisk
                     // guess at it. A strategy that knows better fills this in itself.
-                    Task->Forecast = TUtils::ForecastCompactSsts(Task->CompactSsts, HullCtx->ChunkSize);
+                    Task->Forecast = TUtils::ForecastCompactSsts(Task->CompactSsts, HullCtx->ChunkSize,
+                        Params.AppendBlockSize, Params.StripeSstBytes);
                 }
                 return action;
             }
@@ -71,6 +84,7 @@ namespace NKikimr {
             TTask *Task;
             TSelectorParams Params;
             const bool AllowGarbageCollection;
+            const TLevelRanks Ranks;
         };
 
         // Declared here so that Select() above always calls the specialization, whatever

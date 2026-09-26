@@ -413,6 +413,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
+    // Memory arena (see TKqpResourceManager::ResizeArenaLocked)
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaUsed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaDeficit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaShrinks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrowFailures;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaBurstGrows; // growth rounds made by AllocateResources itself
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
     NMonitoring::THistogramPtr NodeServiceProcessTime;

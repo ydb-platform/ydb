@@ -415,4 +415,5 @@ message TFeatureFlags {
     // without waiting for the hard barrier that follows it. Turning it off after it has been on is
     // safe, but may leave some garbage of already deleted tablets until it is turned on again.
     optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
+    optional bool EnableKqpRuntimeStats = 342 [default = false];
 }

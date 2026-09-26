@@ -10,6 +10,7 @@
 #include <ydb/library/conclusion/status.h>
 
 #include <cmath>
+#include <util/datetime/base.h>
 
 namespace NKikimr::NConveyorComposite::NConfig {
 
@@ -65,6 +66,18 @@ public:
     TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo);
 };
 
+class THeavyLimit {
+private:
+    YDB_READONLY(TDuration, CpuLimit, TDuration::Zero());
+    YDB_READONLY(ui32, ThreadLimit, 0);
+
+public:
+    bool operator==(const THeavyLimit&) const = default;
+
+    TString DebugString() const;
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::THeavyLimit& proto);
+};
+
 class TWorkersPool {
 private:
     TString PoolName;
@@ -72,6 +85,7 @@ private:
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
     YDB_READONLY(ui64, MaxBatchSize, 30);
+    YDB_READONLY_DEF(std::vector<THeavyLimit>, HeavyLimits);
 
 public:
     bool operator==(const TWorkersPool&) const = default;
@@ -153,6 +167,11 @@ public:
 
     static NKikimrConfig::TCompositeConveyorConfig BuildDefaultProto();
     static TConfig BuildDefault();
+
+    // Overlay YAML worker_pools onto synthesized defaults: pools with no links apply heavy_limits
+    // (and other set fields) by exact name; a full list with links replaces the pool topology.
+    static TConclusion<NKikimrConfig::TCompositeConveyorConfig> OverlayYamlOnDefaults(
+        const NKikimrConfig::TCompositeConveyorConfig& defaults, const NKikimrConfig::TCompositeConveyorConfig& yaml);
 
     static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TCompositeConveyorConfig& protoConfig) {
         TConfig config;

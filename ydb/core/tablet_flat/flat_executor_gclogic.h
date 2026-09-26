@@ -5,6 +5,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_history_cutter.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <ydb/core/util/backoff.h>
@@ -39,7 +40,7 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
-    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
+    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>, const TFeatureFlags& flags);
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
@@ -59,6 +60,9 @@ public:
     void Confirm(const TActorContext &ctx);
 
     THistoryCutter HistoryCutter;
+    // Needed so we do not cut history if the feature flag was
+    // enabled halfway through the booting process
+    bool IsCutHistoryEnabled() const { return CutHistoryEnabled; }
 
     // Marks dropped by the sentinel guard since the last drain; the executor moves
     // this into the GcSentinelDroppedMarks cumulative counter on its periodic
@@ -91,6 +95,7 @@ public:
 
     TIntrospection IntrospectStateSize() const;
 protected:
+    const bool CutHistoryEnabled;
     const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo;
     const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
     const ui32 Generation;

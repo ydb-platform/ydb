@@ -17,12 +17,19 @@ bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeA
 } // anonymous namespace
 
 bool TDisableBlocksOnColumnsLimitRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Limit;
+    return input->Kind == EOperator::Limit || input->Kind == EOperator::Window;
 }
 
 TIntrusivePtr<IOperator> TDisableBlocksOnColumnsLimitRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
     auto& typesCtx = rboCtx.TypeCtx;
+    if (input->GetKind() == EOperator::Window) {
+        if (rboCtx.KqpCtx.Config->GetWindowFunctionsV2()) {
+            typesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+        }
+        return input;
+    }
+
     const ui32 columnsLimit = rboCtx.KqpCtx.Config->GetDisableOlapBlocksOnColumnsLimit();
 
     if (!IsSuitableToDisableOlapBlocks(input, typesCtx, columnsLimit)) {

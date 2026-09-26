@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_compaction_priority.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
@@ -13,14 +14,14 @@ namespace NKikimr {
         TPDiskId PDiskId;
         TGroupId GroupId;
         TVDiskIdShort VDiskId;
-        double Ratio;
+        TCompactionPriority Priority;
 
-        TEvCompactionTokenRequest(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, double ratio)
-            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Ratio(ratio) {}
+        TEvCompactionTokenRequest(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionPriority priority)
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Priority(priority) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Ratio# " << Ratio << "}";
+            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Priority# " << Priority.ToString() << "}";
             return str.Str();
         }
     };

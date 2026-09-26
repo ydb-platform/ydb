@@ -28,14 +28,7 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMi
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
 
-    // Take the average of the number of tasks and the peak of wanting ones, but keep at least 1 if there are any tasks.
-    const auto tasks = CpuMaxDemand.load();
-    newQuery->Tasks = tasks;
-    newQuery->CpuMaxDemand = (tasks + CpuPeakDemand.load()) >> 1;
-    if (newQuery->CpuMaxDemand == 0 && tasks > 0) {
-        newQuery->CpuMaxDemand = 1;
-    }
-    CpuPeakDemand = 0;
+    newQuery->CpuMaxDemand = CpuMaxDemand.load();
 
     // The actual demand is smoothed with the one of the previous snapshot.
     if (const auto prevQuery = GetSnapshot()) {
@@ -110,12 +103,6 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     }
 
     return run;
-}
-
-void TQuery::UpdatePeakDemand() {
-    auto demand = CpuUsage + CpuThrottle + 1;
-    auto peakDemand = CpuPeakDemand.load();
-    while (peakDemand < demand && !CpuPeakDemand.compare_exchange_weak(peakDemand, demand)) {}
 }
 
 

@@ -40,6 +40,7 @@ namespace NKikimr {
                 EAction action = FreeSpace();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::FreeSpace;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());

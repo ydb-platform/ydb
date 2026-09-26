@@ -1,5 +1,6 @@
 // we define this to allow using sdk build info.
 #define INCLUDE_YDB_INTERNAL_H
+#include <ydb/core/base/auth.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
@@ -12,6 +13,9 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 namespace NKikimr {
 namespace NKqp {
 
@@ -1594,6 +1598,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 auto m = parser.ColumnParser("Metadata").GetOptionalUtf8().value_or("");
                 NJson::TJsonValue json;
                 if (!m.empty() && NJson::ReadJsonTree(m, &json) && json.Has("parameters")) {
+                    UNIT_ASSERT(!json.Has("user_group_sids"));
                     paramsByQuery[q] = NJson::WriteJson(json["parameters"], /*formatOutput=*/false, /*sortKeys=*/true);
                 }
             }
@@ -1708,109 +1713,192 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             << response->Get()->Record.GetCacheCacheQueries().size() << " entries");
     }
 
+    Y_UNIT_TEST(CompileCacheRejectsServerlessAndSharedDatabases) {
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePools(false)
+            .CreateSamplePool(false)
+            .Create([](Tests::TServerSettings& settings) {
+                settings.CreateTicketParser = NKikimr::CreateTicketParser;
+            });
+        auto& runtime = *ydb->GetRuntime();
+        const NACLib::TUserToken adminToken("root@builtin", TVector<NACLib::TSID>{});
+        UNIT_ASSERT(IsAdministrator(&runtime.GetAppData(ydb->GetSharedTenantInfo().NodeIdx), &adminToken));
+
+        for (const auto& database : {ydb->GetSettings().GetDedicatedTenantName(), ydb->GetSettings().GetSharedTenantName()}) {
+            const auto nodeIndex = database == ydb->GetSettings().GetDedicatedTenantName()
+                ? ydb->GetDedicatedTenantInfo().NodeIdx : ydb->GetSharedTenantInfo().NodeIdx;
+            auto edge = runtime.AllocateEdgeActor(nodeIndex);
+            ydb->WaitFor(TDuration::Seconds(65), "compile cache database type", [&](TString& error) {
+                const auto serviceId = MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex));
+                if (!runtime.GetLocalServiceId(serviceId, nodeIndex)) {
+                    error = "Compile service is not registered yet";
+                    return false;
+                }
+                auto request = MakeHolder<TEvKqp::TEvListQueryCacheQueriesRequest>();
+                request->Record.SetTenantName(database);
+                request->Record.SetFreeSpace(1024 * 1024);
+                runtime.Send(new IEventHandle(serviceId, edge, request.Release()), nodeIndex);
+                auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(edge, TDuration::Seconds(5));
+                UNIT_ASSERT(response);
+                const auto& record = response->Get()->Record;
+                error = record.ShortDebugString();
+                if (record.HasStatus() && record.GetStatus() == Ydb::StatusIds::UNAVAILABLE) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetCacheCacheQueries().size(), 0);
+                    return false;
+                }
+                if (database == ydb->GetSettings().GetSharedTenantName()) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), Ydb::StatusIds::UNSUPPORTED);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetCacheCacheQueries().size(), 0);
+                } else {
+                    UNIT_ASSERT(!record.HasStatus() || record.GetStatus() == Ydb::StatusIds::SUCCESS);
+                }
+                return true;
+            });
+        }
+
+        auto checkWarmup = [&](const TString& database, ui32 nodeIndex, EStatus expected, TStringBuf reason) {
+            auto edge = runtime.AllocateEdgeActor(nodeIndex);
+            TKqpWarmupConfig config;
+            auto actor = runtime.Register(CreateKqpWarmupActor(config, database, "", {edge}), nodeIndex);
+            runtime.Send(new IEventHandle(actor, edge,
+                new TEvStartWarmup(1, {runtime.GetNodeId(nodeIndex)})), nodeIndex);
+            auto complete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(edge,
+                config.HardDeadline + TDuration::Seconds(1));
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
+            if (expected == EStatus::UNSUPPORTED) {
+                UNIT_ASSERT_STRING_CONTAINS(complete->Get()->Message, "Skipped: Compile cache is not available for");
+                UNIT_ASSERT_STRING_CONTAINS(complete->Get()->Message, reason);
+                UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
+            } else {
+                UNIT_ASSERT(!complete->Get()->Message.Contains("not available"));
+            }
+        };
+
+        auto check = [&](const TString& database, const auto& tenant, EStatus expected, TStringBuf reason) {
+            auto grant = ydb->GetSchemeClient().ModifyPermissions(database,
+                TModifyPermissionsSettings().AddGrantPermissions(TPermissions("root@builtin",
+                    {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"}))).GetValueSync();
+            UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+            TDriver driver(TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << tenant.GrpcPort)
+                .SetDatabase(database).SetAuthToken("root@builtin"));
+            TTableClient client(driver);
+            auto session = client.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+            auto result = session.GetSession().ExecuteDataQuery(
+                "SELECT Query FROM `.sys/compile_cache_queries`;",
+                TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
+            if (expected == EStatus::UNSUPPORTED) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), reason);
+                UNIT_ASSERT(HasIssue(result.GetIssues(),
+                    NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE));
+                UNIT_ASSERT(result.GetResultSets().empty());
+            }
+            driver.Stop(true);
+            checkWarmup(database, tenant.NodeIdx, expected, reason);
+        };
+
+        check(ydb->GetSettings().GetDedicatedTenantName(), ydb->GetDedicatedTenantInfo(),
+            EStatus::SUCCESS, "");
+        check(ydb->GetSettings().GetServerlessTenantName(), ydb->GetServerlessTenantInfo(),
+            EStatus::UNSUPPORTED, "serverless databases");
+        check(ydb->GetSettings().GetSharedTenantName(), ydb->GetSharedTenantInfo(),
+            EStatus::UNSUPPORTED, "shared resource (serverless compute) databases");
+    }
+
     Y_UNIT_TEST(CompileCacheUserIsolation) {
         TKikimrSettings settings;
-        settings.SetAuthToken("root@builtin");
+        settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        kikimr.RunCall([&] {
+            auto permissions = TModifyPermissionsSettings().AddChangeOwner("db-owner@builtin");
+            for (const auto& user : {"root@builtin", "db-owner@builtin", "user1@builtin", "user2@builtin"}) {
+                permissions.AddGrantPermissions(TPermissions(user,
+                    {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"}));
+            }
+            auto result = kikimr.GetSchemeClient().ModifyPermissions("/Root", permissions).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return true;
+        });
+        auto& appData = runtime.GetAppData();
+        appData.AdministrationAllowedSIDs = {"root@builtin"};
+        appData.FeatureFlags.SetEnableDatabaseAdmin(true);
+        appData.FeatureFlags.SetEnableCompileCacheView(false);
+        appData.EnforceUserTokenRequirement = true;
 
-        // Grant user1 and user2 permissions to access tables and sys views
-        {
-            auto schemeClient = kikimr.GetSchemeClient();
-            for (const auto& user : {"user1@builtin", "user2@builtin"}) {
-                TPermissions permissions(user,
-                    {
-                        "ydb.database.connect",
-                        "ydb.granular.describe_schema",
-                        "ydb.granular.select_row",
+        auto withSession = [&](const TString& user, const auto& action) {
+            return kikimr.RunCall([&] {
+                TDriver driver(TDriverConfig().SetEndpoint(kikimr.GetEndpoint())
+                    .SetDatabase("/Root").SetAuthToken(user));
+                TTableClient client(driver);
+                auto session = client.CreateSession().GetValueSync();
+                UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+                auto result = action(session.GetSession());
+                driver.Stop(true);
+                return result;
+            });
+        };
+        const TString query = "DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;";
+        for (const auto& user : {"user1@builtin", "user2@builtin"}) {
+            auto result = withSession(user, [&](auto session) {
+                return session.PrepareDataQuery(query).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto observer = runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
+            [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
+                auto& record = ev->Get()->Record;
+                TVector<NKikimrKqp::TCompileCacheQueryInfo> inaccessible;
+                for (const auto& entry : record.GetCacheCacheQueries()) {
+                    if (entry.GetQuery() != query) {
+                        continue;
                     }
-                );
-                auto result = schemeClient.ModifyPermissions("/Root",
-                    TModifyPermissionsSettings().AddGrantPermissions(permissions)
-                ).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            }
-        }
-
-        // User1 compiles a query -> cache entry with UserSid="user1@builtin"
-        {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetDatabase("/Root")
-                .SetAuthToken("user1@builtin");
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-            auto session = client.CreateSession().GetValueSync().GetSession();
-            auto result = session.PrepareDataQuery(
-                R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
-            ).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            driver.Stop(true);
-        }
-
-        // User2 compiles the same query -> separate cache entry with UserSid="user2@builtin"
-        {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetDatabase("/Root")
-                .SetAuthToken("user2@builtin");
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-            auto session = client.CreateSession().GetValueSync().GetSession();
-            auto result = session.PrepareDataQuery(
-                R"(DECLARE $k AS Uint64; SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)"
-            ).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            driver.Stop(true);
-        }
-
-        // User1 queries compile_cache -> should see only their own entries
-        {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetDatabase("/Root")
-                .SetAuthToken("user1@builtin");
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-            auto session = client.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteDataQuery(
-                R"(SELECT UserSID FROM `/Root/.sys/compile_cache_queries`;)",
-                TTxControl::BeginTx().CommitTx()
-            ).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            auto resultSet = result.GetResultSet(0);
-            NYdb::TResultSetParser parser(resultSet);
-            while (parser.TryNextRow()) {
-                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
-                UNIT_ASSERT_C(userSid && *userSid == "user1@builtin",
-                    "user1 must see only their own queries, but saw UserSID=" << (userSid ? *userSid : "null"));
-            }
-            driver.Stop(true);
-        }
-
-        // Admin queries compile_cache -> should see entries from both users
-        {
-            auto tableClient = kikimr.GetTableClient();
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteDataQuery(
-                R"(SELECT UserSID FROM `/Root/.sys/compile_cache_queries`;)",
-                TTxControl::BeginTx().CommitTx()
-            ).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            auto resultSet = result.GetResultSet(0);
-            std::unordered_set<std::string> seenUsers;
-            NYdb::TResultSetParser parser(resultSet);
-            while (parser.TryNextRow()) {
-                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
-                if (userSid) {
-                    seenUsers.insert(*userSid);
+                    for (const TString database : {"/Root/other-db", "", "missing"}) {
+                        auto copy = entry;
+                        copy.SetQueryId(entry.GetQueryId() + "-excluded-" + database);
+                        if (database == "missing") {
+                            copy.ClearDatabase();
+                        } else {
+                            copy.SetDatabase(database);
+                        }
+                        inaccessible.push_back(std::move(copy));
+                    }
                 }
+                for (auto& entry : inaccessible) {
+                    *record.AddCacheCacheQueries() = std::move(entry);
+                }
+            });
+
+        for (const TString user : {"user1@builtin", "root@builtin", "db-owner@builtin"}) {
+            auto result = withSession(user, [&](auto session) {
+                return session.ExecuteDataQuery(
+                    "SELECT QueryId, UserSID, Metadata FROM `/Root/.sys/compile_cache_queries` WHERE Query = '" + query + "';",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            std::unordered_set<std::string> seenUsers;
+            TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                const auto id = parser.ColumnParser("QueryId").GetOptionalUtf8();
+                UNIT_ASSERT(id);
+                UNIT_ASSERT_C(id->find("-excluded-") == TString::npos, "Foreign or missing database: " << *id);
+                const auto sid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                UNIT_ASSERT(sid);
+                seenUsers.insert(*sid);
+                const auto metadata = parser.ColumnParser("Metadata").GetOptionalUtf8();
+                UNIT_ASSERT(metadata);
+                UNIT_ASSERT(!TString(*metadata).Contains("user_group_sids"));
             }
-            UNIT_ASSERT_C(seenUsers.contains("user1@builtin"),
-                "Admin must see user1's queries");
-            UNIT_ASSERT_C(seenUsers.contains("user2@builtin"),
-                "Admin must see user2's queries");
+            const bool isAdmin = user != "user1@builtin";
+            UNIT_ASSERT(seenUsers.contains("user1@builtin"));
+            UNIT_ASSERT_VALUES_EQUAL(seenUsers.contains("user2@builtin"), isAdmin);
+            UNIT_ASSERT_VALUES_EQUAL(seenUsers.size(), isAdmin ? 2u : 1u);
         }
     }
 }

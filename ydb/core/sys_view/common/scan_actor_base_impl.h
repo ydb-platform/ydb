@@ -304,6 +304,7 @@ private:
 
         TenantName = CanonizePath(entry.Path);
         DomainKey = entry.DomainInfo->DomainKey;
+        IsServerlessDatabase = entry.DomainInfo->IsServerless();
 
         DatabaseOwner = entry.Self->Info.GetOwner();
         Y_ABORT_UNLESS(entry.Self->Info.GetOwner() == entry.SecurityObject->GetOwnerSID());
@@ -385,6 +386,7 @@ protected:
     ui64 SchemeShardId = 0;
     TPathId DomainKey;
     TString TenantName;
+    bool IsServerlessDatabase = false;
     NACLib::TSID DatabaseOwner;
     THashSet<ui32> TenantNodes;
     ui64 HiveId = 0;

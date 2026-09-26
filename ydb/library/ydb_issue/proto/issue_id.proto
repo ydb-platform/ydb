@@ -46,6 +46,7 @@ message TIssuesIds {
         YDB_AUTH_UNAVAILABLE = 200801;
         YDB_DB_NOT_READY = 200802;
         YDB_RESOURCE_USAGE_LIMITED = 200803;
+        COMPILE_CACHE_UNSUPPORTED_DATABASE = 200804;
     }
 
     message TIssueId {

@@ -198,13 +198,20 @@ TConsumer::~TConsumer() {
 }
 
 TString BootstrapServers() {
-    const TString port = GetEnv("YDB_KAFKA_PROXY_PORT");
-    UNIT_ASSERT_C(port, "YDB_KAFKA_PROXY_PORT is not set");
+    TString port = GetEnv("YDB_KAFKA_PROXY_PORT");
+    if (port.empty()) {
+        port = GetEnv("cluster_a_prod_kafka_dynamic_port");
+    }
+    UNIT_ASSERT_C(port, "Neither YDB_KAFKA_PROXY_PORT nor cluster_a_prod_kafka_dynamic_port is set");
     return "localhost:" + port;
 }
 
 ui16 KafkaProxyPort() {
-    return FromString<ui16>(GetEnv("YDB_KAFKA_PROXY_PORT"));
+    TString port = GetEnv("YDB_KAFKA_PROXY_PORT");
+    if (port.empty()) {
+        port = GetEnv("cluster_a_prod_kafka_dynamic_port");
+    }
+    return FromString<ui16>(port);
 }
 
 TString DatabasePath() {
@@ -232,7 +239,10 @@ bool TopicMessagesBatchingEnabled() {
     return GetEnv("YDB_FEATURE_FLAGS").Contains("enable_topic_messages_batching");
 }
 
-NYdb::TDriver MakeYdbDriver() {
+NYdb::TDriver MakeYdbDriver(std::optional<TString> ydbEndpoint, std::optional<TString> ydbDatabase) {
+    if (ydbEndpoint.has_value() && ydbDatabase.has_value()) {
+        return NYdb::TDriver(NYdb::TDriverConfig().SetEndpoint(ydbEndpoint.value()).SetDatabase(ydbDatabase.value()));
+    }
     TString connectionString = GetEnv("YDB_CONNECTION_STRING");
     if (!connectionString) {
         connectionString = GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE");
@@ -240,8 +250,8 @@ NYdb::TDriver MakeYdbDriver() {
     return NYdb::TDriver(NYdb::TDriverConfig(connectionString));
 }
 
-void CreateYdbTopic(const TString& name, ui32 partitions) {
-    auto driver = MakeYdbDriver();
+void CreateYdbTopic(const TString& name, ui32 partitions, std::optional<TString> ydbEndpoint, std::optional<TString> ydbDatabase) {
+    auto driver = MakeYdbDriver(ydbEndpoint, ydbDatabase);
     NYdb::NTopic::TTopicClient client(driver);
     auto settings = NYdb::NTopic::TCreateTopicSettings()
         .PartitioningSettings(partitions, partitions);

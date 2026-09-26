@@ -62,7 +62,9 @@ Add the specified prefix to the cluster table paths. It uses standard file syste
 `PRAGMA TablePathPrefix = "home/yql";
 SELECT * FROM test;`
 
-The prefix is not added if the table name is an absolute path (starts with /).
+Relative prefixes, such as `folder` or `./folder`, are resolved from the query base path — the path used to resolve table names by default. A prefix starting with `/` is considered absolute.
+
+The prefix is not added if the table name in the query is an absolute path (starts with /).
 
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 

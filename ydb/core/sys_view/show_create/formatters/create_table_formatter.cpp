@@ -414,6 +414,12 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         printed |= Format(createRequest.read_replicas_settings(), del, !printed);
     }
 
+    FillMetricsSettings(createRequest, tableDesc);
+
+    if (createRequest.has_metrics_settings()) {
+        printed |= Format(createRequest.metrics_settings(), del, !printed);
+    }
+
     FillKeyBloomFilter(createRequest, tableDesc);
 
     if (createRequest.key_bloom_filter() == Ydb::FeatureFlag::ENABLED) {
@@ -1058,6 +1064,41 @@ bool TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readR
                 Stream << " WITH (\n";
             }
             Stream << del << "\tREAD_REPLICAS_SETTINGS = \"ANY_AZ:" << readReplicasSettings.any_az_read_replicas_count() << "\"";
+            del = ",\n";
+            return true;
+        }
+        default:
+            break;
+    }
+    return false;
+}
+
+bool TCreateTableFormatter::Format(const Ydb::Table::MetricsSettings& metricsSettings, TString& del, bool needWith) {
+    switch (metricsSettings.metrics_level()) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"DATABASE\"";
+            del = ",\n";
+            return true;
+        }
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"TABLE\"";
+            del = ",\n";
+            return true;
+        }
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"PARTITION\"";
             del = ",\n";
             return true;
         }

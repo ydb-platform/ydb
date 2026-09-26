@@ -178,7 +178,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs || ExternalDataChannelsCount;
+        || StoreExternalBlobs || ExternalDataChannelsCount || MetricsLevel;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
@@ -340,6 +340,55 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
             outTier->mutable_delete_();
         }
     }
+}
+
+bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error) {
+    static constexpr Ydb::Table::MetricsSettings::MetricsLevel numericLevels[] = {
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION,
+    };
+
+    const TString value = to_lower(TString(raw));
+    ui64 numericVal = 0;
+    if (TryFromString<ui64>(value, numericVal) && numericVal >= 1 && numericVal <= std::size(numericLevels)) {
+        out = numericLevels[numericVal - 1];
+    } else if (value == "database") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE;
+    } else if (value == "table") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE;
+    } else if (value == "partition") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION;
+    } else {
+        error = TStringBuilder() << "METRICS_LEVEL is invalid: " << raw;
+        return false;
+    }
+
+    return true;
+}
+
+bool ParseDatabaseTablesMetricsLevel(TStringBuf raw,
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error)
+{
+    Ydb::Table::MetricsSettings::MetricsLevel level;
+    if (ParseTablesMetricsLevel(raw, level, error)) {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+            return true;
+        default:
+            break;
+        }
+    }
+
+    error = TStringBuilder() << "TABLES_METRICS_LEVEL is invalid: " << raw;
+    return false;
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

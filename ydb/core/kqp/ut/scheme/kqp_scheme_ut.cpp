@@ -633,6 +633,308 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(TableMetricsLevelCreatePartition) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTable` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = "PARTITION");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describe = session.DescribeTable("/Root/MetricsTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metrics.has_value());
+        UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Partition);
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelCreateNumeric) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTable` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = 2);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describe = session.DescribeTable("/Root/MetricsTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metrics.has_value());
+        UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Table);
+
+        auto resultSuffixed = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTableSuffixed` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = 2u);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resultSuffixed.GetStatus(), EStatus::SUCCESS, resultSuffixed.GetIssues().ToString());
+
+        auto describeSuffixed = session.DescribeTable("/Root/MetricsTableSuffixed").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeSuffixed.GetStatus(), EStatus::SUCCESS, describeSuffixed.GetIssues().ToString());
+        const auto metricsSuffixed = describeSuffixed.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metricsSuffixed.has_value());
+        UNIT_ASSERT(metricsSuffixed->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Table);
+
+        auto resultDatabase = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTableNumericDatabase` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = 1);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resultDatabase.GetStatus(), EStatus::SUCCESS, resultDatabase.GetIssues().ToString());
+
+        auto describeDatabase = session.DescribeTable("/Root/MetricsTableNumericDatabase").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describeDatabase.GetStatus(), EStatus::SUCCESS, describeDatabase.GetIssues().ToString());
+        const auto metricsDatabase = describeDatabase.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metricsDatabase.has_value());
+        UNIT_ASSERT(metricsDatabase->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Database);
+
+        // 3 is the top of the numeric range: PARTITION must be reachable numerically,
+        // not only by literal.
+        auto resultPartition = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTableNumericPartition` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = 3);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resultPartition.GetStatus(), EStatus::SUCCESS, resultPartition.GetIssues().ToString());
+
+        auto describePartition = session.DescribeTable("/Root/MetricsTableNumericPartition").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describePartition.GetStatus(), EStatus::SUCCESS, describePartition.GetIssues().ToString());
+        const auto metricsPartition = describePartition.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metricsPartition.has_value());
+        UNIT_ASSERT(metricsPartition->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Partition);
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelCreateLowerCase) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTable` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (metrics_level = "table");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describe = session.DescribeTable("/Root/MetricsTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metrics.has_value());
+        UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Table);
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelAlterSetAndReset) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTable` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        // ALTER TABLE whose only action is METRICS_LEVEL must succeed
+        // (regression check for GetAlterOperationKinds).
+        auto alterSet = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/MetricsTable` SET (METRICS_LEVEL = "PARTITION");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alterSet.GetStatus(), EStatus::SUCCESS, alterSet.GetIssues().ToString());
+
+        {
+            auto describe = session.DescribeTable("/Root/MetricsTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+            UNIT_ASSERT(metrics.has_value());
+            UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Partition);
+        }
+
+        auto alterReset = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/MetricsTable` RESET (METRICS_LEVEL);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alterReset.GetStatus(), EStatus::SUCCESS, alterReset.GetIssues().ToString());
+
+        {
+            auto describe = session.DescribeTable("/Root/MetricsTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            UNIT_ASSERT(!describe.GetTableDescription().GetMetricsSettings().has_value());
+        }
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelAlterSetDatabase) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsTable` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        // DATABASE preserves an explicit override that disables detailed metrics.
+        auto alter = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/MetricsTable` SET (METRICS_LEVEL = "DATABASE");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(), EStatus::SUCCESS, alter.GetIssues().ToString());
+
+        auto describe = session.DescribeTable("/Root/MetricsTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+        UNIT_ASSERT(metrics.has_value());
+        UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Database);
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelInvalidValue) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsAlter` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = "TABLE");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        for (const auto* level : {"\"DISABLED\"", "0", "\"NOPE\"", "9"}) {
+            auto badCreate = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE TABLE `/Root/MetricsInvalidCreate` (
+                    Key Uint64,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                )
+                WITH (METRICS_LEVEL = )" << level << ");"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(badCreate.GetStatus(), EStatus::SUCCESS, level);
+            UNIT_ASSERT_STRING_CONTAINS(badCreate.GetIssues().ToString(), "METRICS_LEVEL is invalid:");
+
+            auto badAlter = session.ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER TABLE `/Root/MetricsAlter` SET (METRICS_LEVEL = " << level << ");"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(badAlter.GetStatus(), EStatus::SUCCESS, level);
+            UNIT_ASSERT_STRING_CONTAINS(badAlter.GetIssues().ToString(), "METRICS_LEVEL is invalid:");
+
+            auto describe = session.DescribeTable("/Root/MetricsAlter").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+            UNIT_ASSERT(metrics.has_value());
+            UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Table);
+        }
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelFeatureFlagOff) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        for (const auto* level : {"TABLE", "DATABASE"}) {
+            auto create = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE TABLE `/Root/MetricsFlagOff` (
+                    Key Uint64,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                )
+                WITH (METRICS_LEVEL = ")" << level << "\");"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(create.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_STRING_CONTAINS(create.GetIssues().ToString(),
+                "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics");
+        }
+
+        auto createNoMetrics = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsFlagOff` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createNoMetrics.GetStatus(), EStatus::SUCCESS, createNoMetrics.GetIssues().ToString());
+
+        for (const auto* level : {"TABLE", "DATABASE"}) {
+            auto alter = session.ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER TABLE `/Root/MetricsFlagOff` SET (METRICS_LEVEL = \"" << level << "\");"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(alter.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_STRING_CONTAINS(alter.GetIssues().ToString(),
+                "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics");
+        }
+
+        auto reset = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/MetricsFlagOff` RESET (METRICS_LEVEL);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(reset.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(reset.GetIssues().ToString(),
+            "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics");
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelColumnTableRejected) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/MetricsColumnTable` (
+                Key Uint64 NOT NULL,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN, METRICS_LEVEL = "TABLE");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "METRICS_LEVEL is not supported for column tables");
+    }
+
+
     Y_UNIT_TEST(ColumnTableMultiColumnStatisticsWithoutWithMeansAllTypes) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableColumnStatistics(true);
@@ -6347,6 +6649,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         return description.GetSchemeLimits();
     }
 
+    ui32 GetTablesMetricsLevel(Tests::TServer& server, TString&& database) {
+        auto& runtime = *server.GetRuntime();
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto result = DescribeTable(&server, sender, database);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT(result.HasPathDescription());
+        UNIT_ASSERT(result.GetPathDescription().HasDomainDescription());
+        return result.GetPathDescription().GetDomainDescription().GetTablesMetricsLevel();
+    }
+
     Y_UNIT_TEST_TWIN(AlterDatabaseChangeSchemeLimits, EnableAlterDatabase) {
         /* Default Kikimr runner can not create extsubdomain. */
         TTestExtEnv::TEnvSettings settings;
@@ -6382,6 +6694,236 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(limits, expectedLimits),
                 "Scheme limits mismatch, expected: " << expectedLimits.ShortDebugString().Quote() << ", actual: " << limits.ShortDebugString().Quote()
             );
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterDatabaseTablesMetricsLevel, EnableDataShardDetailedMetrics) {
+        TTestExtEnv::TEnvSettings settings;
+        settings.FeatureFlags.SetEnableAlterDatabase(true);
+        settings.FeatureFlags.SetEnableDataShardDetailedMetrics(EnableDataShardDetailedMetrics);
+
+        TTestExtEnv env(settings);
+        env.CreateDatabase("Test");
+
+        NQuery::TQueryClient client(env.GetDriver());
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        if (!EnableDataShardDetailedMetrics) {
+            for (const auto* level : {"TABLE", "DATABASE"}) {
+                auto result = session.ExecuteQuery(TStringBuilder()
+                        << "ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = \"" << level << "\");",
+                    NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TABLES_METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off");
+            }
+            return;
+        }
+
+        // A fresh database carries no default.
+        UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(env.GetServer(), "/Root/Test"),
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+
+        for (const auto* level : {"\"TABLE\"", "2"}) {
+            auto result = session.ExecuteQuery(TStringBuilder()
+                    << "ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = " << level << ");",
+                NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(env.GetServer(), "/Root/Test"),
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+        }
+
+        // Test: symbolic "PARTITION"
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "PARTITION");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto level = GetTablesMetricsLevel(env.GetServer(), "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(level, ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+        }
+
+        // Test: lowercase accepted
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "partition");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto level = GetTablesMetricsLevel(env.GetServer(), "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(level, ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+        }
+
+        // DATABASE and numeric 1 both disable detailed metrics by default.
+        for (const auto* level : {"\"DATABASE\"", "\"database\"", "1"}) {
+            auto result = session.ExecuteQuery(TStringBuilder()
+                    << "ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = " << level << ");",
+                NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(env.GetServer(), "/Root/Test"),
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled));
+        }
+
+        // Test: numeric 3 -> MetricsLevelPartition
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = 3);
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto level = GetTablesMetricsLevel(env.GetServer(), "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(level, ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+        }
+
+        // DATABASE restores database-level metrics after enabling partition-level metrics.
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "DATABASE");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto level = GetTablesMetricsLevel(env.GetServer(), "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(level, ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled));
+        }
+
+        // Invalid values must keep the current default.
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "PARTITION");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        for (const auto* level : {"\"DISABLED\"", "0"}) {
+            auto result = session.ExecuteQuery(TStringBuilder()
+                    << "ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = " << level << ");",
+                NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TABLES_METRICS_LEVEL is invalid:");
+            UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(env.GetServer(), "/Root/Test"),
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+        }
+
+        // Test: combined with MAX_PATHS
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (MAX_PATHS = 15, TABLES_METRICS_LEVEL = "TABLE");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto limits = GetSchemeLimits(env.GetServer(), "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxPaths(), 15);
+            const auto level = GetTablesMetricsLevel(env.GetServer(), "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(level, ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+        }
+
+        // Test: invalid symbolic value "NOPE"
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "NOPE");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TABLES_METRICS_LEVEL is invalid");
+        }
+
+        // Test: invalid numeric value 9
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = 9);
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TABLES_METRICS_LEVEL is invalid");
+        }
+
+        // Test: the root database is rejected on working-dir check. /Root has no parent
+        // directory, so ALTER DATABASE sends an empty WorkingDir; AlterExtSubDomain rejects
+        // it there before any path-type or metrics-level check runs. CheckTablesMetricsLevel's
+        // own root-database guard is unreachable through SQL (only via raw ESchemeOpAlterSubDomain).
+        {
+            auto result = session.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root` SET (TABLES_METRICS_LEVEL = "TABLE");
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "no working dir");
+        }
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelDatabaseOverrideAndReset) {
+        TTestExtEnv::TEnvSettings settings;
+        settings.FeatureFlags.SetEnableAlterDatabase(true);
+        settings.FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+        TTestExtEnv env(settings);
+        env.CreateDatabase("Test");
+
+        NQuery::TQueryClient domainClient(env.GetDriver());
+        auto setDefault = domainClient.ExecuteQuery(R"(
+            ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "TABLE");
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(setDefault.IsSuccess(), setDefault.GetIssues().ToString());
+
+        TTableClient tenantClient(env.GetDriver(),
+            TClientSettings().Database("/Root/Test").DiscoveryMode(EDiscoveryMode::Off));
+        auto session = tenantClient.CreateSession().GetValueSync().GetSession();
+
+        auto verifyOverride = [&](bool configured) {
+            UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(env.GetServer(), "/Root/Test"),
+                ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+            auto describe = session.DescribeTable("/Root/Test/MetricsTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+            UNIT_ASSERT_VALUES_EQUAL(metrics.has_value(), configured);
+            if (configured) {
+                UNIT_ASSERT(metrics->GetMetricsLevel() == TMetricsSettings::EMetricsLevel::Database);
+            }
+        };
+
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Test/MetricsTable` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = "DATABASE");
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+        verifyOverride(true);
+
+        auto addColumn = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/Test/MetricsTable` ADD COLUMN Extra Utf8;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(addColumn.GetStatus(), EStatus::SUCCESS, addColumn.GetIssues().ToString());
+        verifyOverride(true);
+
+        for (const auto* level : {"\"DATABASE\"", "1"}) {
+            auto reset = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Test/MetricsTable` RESET (METRICS_LEVEL);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(reset.GetStatus(), EStatus::SUCCESS, reset.GetIssues().ToString());
+            verifyOverride(false);
+
+            auto setDatabase = session.ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER TABLE `/Root/Test/MetricsTable` SET (METRICS_LEVEL = " << level << ");"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(setDatabase.GetStatus(), EStatus::SUCCESS, setDatabase.GetIssues().ToString());
+            verifyOverride(true);
         }
     }
 

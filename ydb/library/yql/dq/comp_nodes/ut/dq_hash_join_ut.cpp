@@ -2455,6 +2455,8 @@ void RunFinalDumpSpillingIsBatchedTest() {
     auto stream = graph->GetValue();
     i64 outputRows = 0;
     bool stoppedRegularSpilling = false;
+    constexpr size_t MaxWritesPerPage = 2; // tuple page and optional probe match bitmap
+    constexpr size_t MaxPendingPuts = TestStorageSettings.SpillingPagesAtTime * MaxWritesPerPage;
 
     while (true) {
         const auto status = stream.WideFetch(output.data(), tupleWidth);
@@ -2471,10 +2473,10 @@ void RunFinalDumpSpillingIsBatchedTest() {
         if (pendingPuts == 0) {
             continue;
         }
-        UNIT_ASSERT_LE(pendingPuts, static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime));
+        UNIT_ASSERT_LE(pendingPuts, MaxPendingPuts);
         if (!stoppedRegularSpilling) {
             // Leave enough pages in memory for the end-of-input dump. Before the batching fix that dump
-            // submitted all of them at once, exceeding SpillingPagesAtTime.
+            // submitted all of them at once instead of limiting the batch to SpillingPagesAtTime pages.
             descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
             stoppedRegularSpilling = true;
         }
@@ -2484,7 +2486,7 @@ void RunFinalDumpSpillingIsBatchedTest() {
     UNIT_ASSERT(stoppedRegularSpilling);
     UNIT_ASSERT_VALUES_EQUAL(outputRows, 0);
     UNIT_ASSERT_GT(spillerFactory->TotalPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime * 2));
-    UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime));
+    UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), MaxPendingPuts);
 }
 
 // The mock spiller resolves every future at once, so the states that wait for spilling are only

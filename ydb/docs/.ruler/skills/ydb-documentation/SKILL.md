@@ -1,8 +1,25 @@
+---
+name: ydb-documentation
+description: >-
+  Use when documenting YDB features or functionality, including new articles,
+  glossary entries, references, recipes, cross-links, TOC, or redirects in
+  Russian and English.
+---
+
 # YDB Documentation Skill
 
 This skill helps developers write documentation for YDB while following all structure, style, and language rules.
 
 **Usage:** A developer describes what needs to be documented, the skill automatically determines where and how to place it, which sections to propagate to, and generates articles in RU and EN simultaneously.
+
+---
+
+## PR scope
+
+Keep implementation and documentation separate. A documentation PR changes only
+documentation files and must not include production code, code tests, or other
+implementation changes. Use the implementation PR as factual evidence, then
+open a separate documentation PR that references it.
 
 ---
 

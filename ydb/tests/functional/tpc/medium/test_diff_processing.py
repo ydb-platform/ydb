@@ -2,13 +2,13 @@ from ydb.tests.olap.load.lib.tpch import TestTpch1 as Tpch1
 from ydb.tests.olap.load.lib.tpcds import TestTpcds1 as Tpcds1
 from ydb.tests.olap.load.lib.clickbench import TestClickbench as Clickbench
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
-from ydb.tests.olap.lib.ydb_cli import CheckCanonicalPolicy
+from ydb.tests.olap.lib.ydb_cli import CheckCanonicalPolicy, WorkloadError
 import pytest
 
 
 EXPECTED_ERRORS = {
     CheckCanonicalPolicy.NO: None.__class__,
-    CheckCanonicalPolicy.WARNING: Exception,
+    CheckCanonicalPolicy.WARNING: WorkloadError,
     CheckCanonicalPolicy.ERROR: pytest.fail.Exception,
 }
 

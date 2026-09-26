@@ -2,7 +2,7 @@ from __future__ import annotations
 from .conftest import LoadSuiteBase
 from .tpch import TpchSuiteBase
 from time import time, sleep
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadError
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 import allure
@@ -56,7 +56,6 @@ class UploadSuiteBase(LoadSuiteBase):
         start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
-        result.traceback = None
         nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(start_time - 600, first_node_start_time)
@@ -71,10 +70,11 @@ class UploadSuiteBase(LoadSuiteBase):
                 cls.after_import_data()
                 cls.wait_compaction()
                 cls.after_compaction()
+        except WorkloadError as e:
+            result.add_custom_error(e)
         except BaseException as e:
             logging.error(f'Error: {e}')
-            result.add_error(str(e))
-            result.traceback = e.__traceback__
+            result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
             raise e
         result.iterations[0].time = time() - start_time
         cls.validate(result)

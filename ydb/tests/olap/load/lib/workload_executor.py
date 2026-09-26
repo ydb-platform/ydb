@@ -15,7 +15,7 @@ from ydb.tests.olap.lib.remote_execution import (
     deploy_binaries_to_hosts,
     copy_file,
 )
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, ErrorArea, ErrorPriority
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 
@@ -95,7 +95,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Добавляем ошибку если есть проблема с кластером
             if cluster_issue.get("issue_type") is not None:
-                result.add_error(cluster_issue["issue_description"])
+                result.add_error(cluster_issue["issue_description"], area=ErrorArea.YDB_INFRA)
 
             # Устанавливаем start_time для _Verification
             try:
@@ -916,7 +916,8 @@ class WorkloadTestBase(LoadSuiteBase):
         # Проверяем на timeout сначала (это warning, не error)
         if is_timeout:
             result.add_warning(
-                f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}"
+                f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}",
+                area=ErrorArea.TIMEOUT,
             )
         else:
             # Проверяем явные ошибки (только если не timeout)
@@ -988,7 +989,7 @@ class WorkloadTestBase(LoadSuiteBase):
             iteration.error_message = "Workload execution timed out"
         elif error_found:
             # Устанавливаем ошибку в iteration для consistency
-            iteration.error_message = result.error_message
+            iteration.error_message = str(result.get_integrated_error())
 
         result.iterations[iteration_number] = iteration
 
@@ -1018,7 +1019,7 @@ class WorkloadTestBase(LoadSuiteBase):
         logging.info(
             f"Workload result created - final success: {
                 result.success}, error_message: {
-                result.error_message}"
+                result.get_integrated_error()}"
         )
 
         return result
@@ -2591,7 +2592,7 @@ class WorkloadTestBase(LoadSuiteBase):
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
-                result.add_warning(f"Error getting nodes state: {e}")
+                result.add_warning(f"Error getting nodes state: {e}", area=ErrorArea.YDB_INFRA)
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
 
             # Вычисляем время выполнения
@@ -2647,7 +2648,6 @@ class WorkloadTestBase(LoadSuiteBase):
 
                 # Формируем списки ошибок для выгрузки
                 node_error_messages = []
-                workload_error_messages = []
 
                 # Собираем ошибки нод с подробностями
                 for node_error in node_errors:
@@ -2662,10 +2662,9 @@ class WorkloadTestBase(LoadSuiteBase):
                         node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
-                if result.errors:
-                    for err in result.errors:
-                        if "coredump" not in err.lower() and "oom" not in err.lower():
-                            workload_error_messages.append(err)
+                workload_error_messages = [
+                    str(e) for e in result.get_errors(ErrorPriority.ERROR) if e.area != ErrorArea.NODE_FAIL
+                ]
 
                 # Добавляем в статистику
                 result.add_stat(workload_name, "node_error_messages", node_error_messages)
@@ -2676,11 +2675,9 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
 
                 # Собираем workload предупреждения (исключая node-специфичные)
-                workload_warning_messages = []
-                if result.warnings:
-                    for warn in result.warnings:
-                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
-                            workload_warning_messages.append(warn)
+                workload_warning_messages = [
+                    str(e) for e in result.get_errors(ErrorPriority.WARNING) if e.area != ErrorArea.NODE_FAIL
+                ]
 
                 result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
                 result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)

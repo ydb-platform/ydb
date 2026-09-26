@@ -2,6 +2,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 import allure
 import json
+import yaml
 import logging
 import re as regex
 import os
@@ -15,7 +16,7 @@ from datetime import datetime
 from pytz import timezone
 from time import time
 from typing import Optional, Union, Any
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy, ErrorArea, WorkloadError, ErrorPriority
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -461,7 +462,7 @@ class LoadSuiteBase:
             node.was_oom = node.node.host in ooms
 
         for err in node_errors:
-            result.add_error(f'Node {err.node.slot} {err.message}')
+            result.add_error(f'Node {err.node.slot} {err.message}', area=ErrorArea.YDB_INFRA)
         return node_errors
 
     @classmethod
@@ -561,13 +562,36 @@ class LoadSuiteBase:
                 median_duration=_get_duraton(stats, 'Median'),
                 statistics=stats,
             )
+
+        errors = sorted(result.get_errors(), key=lambda x: (-x.priority.value, x.area.value))
+        rp = os.getenv('RESULT_RESOURCES_PATH')
+        if rp and errors:
+            fn = os.path.join(rp, 'errors.yaml')
+            tmp_fn = fn + '_'
+            try:
+                data = {}
+                if os.path.exists(fn):
+                    with open(fn, 'r') as f:
+                        data = yaml.safe_load(f)
+                        if not isinstance(data, dict):
+                            data = {}
+                data[query_name] = [e.serialize() for e in errors]
+                with open(tmp_fn, 'w') as f:
+                    yaml.safe_dump(data, f, allow_unicode=True)
+                os.replace(tmp_fn, fn)
+            except BaseException as e:
+                result.add_warning(f'Error while write {fn}: {e}', area=ErrorArea.TEST_INFRA)
+                if os.path.exists(tmp_fn):
+                    os.remove(tmp_fn)
         if not result.success:
-            exc = pytest.fail.Exception('\n'.join([result.error_message, result.warning_message]))
-            if result.traceback is not None:
-                exc = exc.with_traceback(result.traceback)
+            ie = result.get_integrated_error()
+            exc = pytest.fail.Exception(str(ie))
+            if ie.__traceback__ is not None:
+                exc = exc.with_traceback(ie.__traceback__)
             raise exc
-        if result.warning_message:
-            raise Exception(result.warning_message)
+        wm = result.get_integrated_error(ErrorPriority.WARNING)
+        if wm is not None:
+            raise wm
 
     @classmethod
     def perform_verification(cls) -> None:
@@ -578,14 +602,14 @@ class LoadSuiteBase:
         cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
-        result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
-        result.traceback = None
-        if not result.error_message and hasattr(cls, 'do_setup_class'):
+        result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))), area=ErrorArea.YDB_INFRA)
+        if result.success and hasattr(cls, 'do_setup_class'):
             try:
                 cls.do_setup_class()
+            except WorkloadError as e:
+                result.add_custom_error(e)
             except BaseException as e:
-                result.add_error(str(e))
-                result.traceback = e.__traceback__
+                result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
         result.iterations[0].time = time() - cls._setup_start_time
         query_name = '_Verification'
         result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
@@ -770,13 +794,13 @@ class LoadSuiteBase:
 
                 # Добавляем ошибки в результат (cores и OOM - это errors)
                 if has_verifies:
-                    result.add_error(f'Node {node.host} had {hosts_with_verifies[node.host]} VERIFY fails')
+                    result.add_error(f'Node {node.host} had {hosts_with_verifies[node.host]} VERIFY fails', area=ErrorArea.NODE_FAIL)
                 if has_cores:
-                    result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
+                    result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)', area=ErrorArea.NODE_FAIL)
                 if has_oom:
-                    result.add_error(f'Node {node.slot} experienced OOM')
+                    result.add_error(f'Node {node.slot} experienced OOM', area=ErrorArea.NODE_FAIL)
                 if has_san_errors:
-                    result.add_error(f'Node {node.host} has SAN errors')
+                    result.add_error(f'Node {node.host} has SAN errors', area=ErrorArea.NODE_FAIL)
 
         cls.__nodes_state = None
         return node_errors
@@ -814,7 +838,7 @@ class LoadSuiteBase:
             node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
         except Exception as e:
             logging.error(f"Error getting nodes state: {e}")
-            result.add_warning(f"Error getting nodes state: {e}")
+            result.add_warning(f"Error getting nodes state: {e}", area=ErrorArea.YDB_INFRA)
             node_errors = []
         return node_errors
 
@@ -856,11 +880,9 @@ class LoadSuiteBase:
         """Обрабатывает финальный статус теста: fail, broken, etc."""
         stats = result.get_stats(workload_name)
         node_issues = stats.get("nodes_with_issues", 0) if stats else 0
-        workload_errors = []
-        if result.errors:
-            for err in result.errors:
-                if "coredump" not in err.lower() and "oom" not in err.lower():
-                    workload_errors.append(err)
+        workload_errors = [
+            str(e) for e in result.get_errors(ErrorPriority.ERROR) if e.area != ErrorArea.NODE_FAIL
+        ]
 
         # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
         cluster_log_mode = get_external_param('cluster_log', 'default')
@@ -887,11 +909,12 @@ class LoadSuiteBase:
             raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
 
         # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
-        if not result.success and result.error_message:
+        if not result.success:
             # Создаем детальное сообщение об ошибке с контекстом
+            integrated_error = result.get_integrated_error(ErrorPriority.ERROR)
             error_details = []
             error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
-            error_details.append(f"Main error: {result.error_message}")
+            error_details.append(f"Main error: {integrated_error}")
             if result.iterations:
                 error_details.append("\nExecution details:")
                 error_details.append(f"Total iterations attempted: {len(result.iterations)}")
@@ -946,11 +969,12 @@ class LoadSuiteBase:
                             error_details.append(f"  {key}: {value}")
             detailed_error_message = "\n".join(error_details)
             exc = pytest.fail.Exception(detailed_error_message)
-            if result.traceback is not None:
-                exc = exc.with_traceback(result.traceback)
+            if integrated_error is not None and integrated_error.__traceback__ is not None:
+                exc = exc.with_traceback(integrated_error.__traceback__)
             raise exc
-        if result.warning_message:
-            logging.warning(f"Workload completed with warnings: {result.warning_message}")
+        wm = result.get_integrated_error(ErrorPriority.WARNING)
+        if wm is not None:
+            logging.warning(f"Workload completed with warnings: {wm}")
 
     def _upload_results(self, result, workload_name):
         stats = result.get_stats(workload_name)

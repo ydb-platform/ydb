@@ -70,12 +70,13 @@ public:
             diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericUse, usedSid);
         }
 
-        auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;
-        for (const auto& userSID : AppData()->DefaultUserSIDs) {
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, userSID);
+        for (const auto access : {NACLib::EAccessRights::SelectRow, NACLib::EAccessRights::DescribeSchema}) {
+            for (const auto& userSID : AppData()->DefaultUserSIDs) {
+                diffAcl.AddAccess(NACLib::EAccessType::Allow, access, userSID);
+            }
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, access, AppData()->AllAuthenticatedUsers);
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, access, BUILTIN_ACL_ROOT);
         }
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, AppData()->AllAuthenticatedUsers);
-        diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
 
         auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
         Register(CreatePoolCreatorActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, PoolSettingsFromConfig(WorkloadManagerConfig), token, diffAcl));

@@ -540,6 +540,7 @@ runs:
           else
             record_ci_end "$YA_MAKE_NAME" failure "ya make rc=${RC}"
           fi
+          record_ci_start postprocess_try "$RETRY"
           if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
             python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
               --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
@@ -577,6 +578,7 @@ runs:
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
+          record_ci_end postprocess_try success
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -601,6 +603,7 @@ runs:
           gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
           # postprocess build results report (add links, logs, mute tests etc)
+          record_ci_start transform_build_results "$RETRY"
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
@@ -610,6 +613,7 @@ runs:
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || true
+          record_ci_end transform_build_results success
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0

@@ -274,9 +274,10 @@ private:
                 }
             }
 
-            // If we already have some data and encounter new message that doesn't fit into current response, we don't go any further, just stop;
-            // (And throw away that message to)
-            if (partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
+            // A non-direct read throws away a message that does not fit this response.
+            // DirectRead keeps it and completes the missing parts with a follow-up,
+            // otherwise that message is lost.
+            if (!isDirectRead && partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
                 currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > readResult.ResultSize())
             {
                 TailClipped = true;

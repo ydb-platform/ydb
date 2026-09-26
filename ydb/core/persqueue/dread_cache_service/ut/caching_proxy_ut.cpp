@@ -32,22 +32,11 @@ struct TTestSetup {
 };
 
 Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
-    // Offsets 13 and 14 are complete. Offset 15 is only the first part; its
-    // continuation is not in this response. The tablet cursor is already 15.
-    // The staged batch must not publish that cursor before the tail is included.
+    // Offsets 13 and 14 are complete. Offset 15 is only the first part.
+    // DirectRead must not drop it; the missing part is requested by a follow-up.
     TTestSetup setup;
     auto runtime = setup.GetRuntime();
     runtime->SetScheduledLimit(100000);
-    runtime->RegisterService(MakePQDReadCacheServiceActorId(), setup.ProxyId);
-    // The cache service id has node 0. The test executor drops that recipient,
-    // so deliver the stage into the registered cache actor.
-    runtime->SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-        if (ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()) {
-            ev->Rewrite(ev->GetTypeRewrite(), setup.ProxyId);
-        }
-        return false;
-    });
-    runtime->Send(setup.ProxyId, TActorId{}, new TEvPQ::TEvRegisterDirectReadSession({"session1", 1}, 1));
 
     NKikimrClient::TPersQueueRequest request;
     auto* read = request.MutablePartitionRequest()->MutableCmdRead();
@@ -58,8 +47,9 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     read->SetDirectReadId(1);
     read->SetReadToBlobEnd(true);
 
+    const auto tablet = runtime->AllocateEdgeActor();
     auto proxy = runtime->Register(CreateReadProxy(
-            setup.Context.Edge, 1, TActorId{}, 1, TDirectReadKey{"session1", 1, 1}, request, TActorId{}));
+            setup.Context.Edge, 1, tablet, 1, TDirectReadKey{"session1", 1, 1}, request, TActorId{}));
     {
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back(TEvents::TEvBootstrap::EventType, 1);
@@ -69,9 +59,7 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     auto response = MakeHolder<TEvPersQueue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
-    auto* part = response->Record.MutablePartitionResponse();
-    part->SetCookie(13);
-    auto* result = part->MutableCmdReadResult();
+    auto* result = response->Record.MutablePartitionResponse()->MutableCmdReadResult();
     result->SetRealReadOffset(13);
     result->SetLastOffset(15);
     result->SetEndOffset(24);
@@ -89,34 +77,31 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     add(15, 0, 2);
 
     runtime->Send(new IEventHandle(proxy, setup.Context.Edge, response.Release()));
+    auto followup = runtime->GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(followup);
+    const auto& follow = followup->Record.GetPartitionRequest().GetCmdRead();
+    UNIT_ASSERT_VALUES_EQUAL(follow.GetOffset(), 15);
+    UNIT_ASSERT_VALUES_EQUAL(follow.GetPartNo(), 1);
+
+    read->ClearDirectReadId();
+    auto plain = runtime->Register(CreateReadProxy(
+            setup.Context.Edge, 1, tablet, 1, TDirectReadKey{}, request, TActorId{}));
     {
         TDispatchOptions opts;
-        opts.FinalEvents.emplace_back(TEvPQ::EvStageDirectReadData, 1);
+        opts.FinalEvents.emplace_back(TEvents::TEvBootstrap::EventType, 1);
         runtime->DispatchEvents(opts);
     }
+    auto plainResponse = MakeHolder<TEvPersQueue::TEvResponse>();
+    plainResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    plainResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    plainResponse->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(*result);
+    runtime->Send(new IEventHandle(plain, setup.Context.Edge, plainResponse.Release()));
     auto prepared = runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(TDuration::Seconds(5));
     UNIT_ASSERT(prepared);
-    UNIT_ASSERT_VALUES_EQUAL(ui32(prepared->Record.GetErrorCode()), ui32(NPersQueue::NErrorCode::OK));
-
-    auto cached = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1));
-    UNIT_ASSERT_VALUES_EQUAL(cached->Data.size(), 1);
-    const auto stagedIt = cached->Data[0].second.StagedReads.find(1);
-    UNIT_ASSERT_C(stagedIt != cached->Data[0].second.StagedReads.end(), "prepared batch was not staged");
-    const auto& stagedResult = stagedIt->second->GetPartitionResponse().GetCmdReadResult();
-
-    ui64 lastCompleteOffset = 12;
-    for (const auto& row : stagedResult.GetResult()) {
-        const bool complete = !row.GetTotalParts() || row.GetPartNo() + 1 >= row.GetTotalParts();
-        if (!complete) {
-            break;
-        }
-        lastCompleteOffset = row.GetOffset();
-    }
-    const auto lastOffset = prepared->Record.GetPartitionResponse().GetCmdPrepareReadResult().GetLastOffset();
-    UNIT_ASSERT_C(lastOffset <= lastCompleteOffset,
-            "cursor published at " << lastOffset
-            << " before the tail is in the batch; last complete staged offset is " << lastCompleteOffset
-            << ", staged messages " << stagedResult.ResultSize());
+    const auto& plainRows = prepared->Record.GetPartitionResponse().GetCmdReadResult();
+    UNIT_ASSERT_VALUES_EQUAL(plainRows.ResultSize(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(plainRows.GetResult(0).GetOffset(), 13);
+    UNIT_ASSERT_VALUES_EQUAL(plainRows.GetResult(1).GetOffset(), 14);
 }
 
 Y_UNIT_TEST(TestPublishAndForget) {

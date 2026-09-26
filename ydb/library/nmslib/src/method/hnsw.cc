@@ -745,7 +745,7 @@ namespace similarity {
         if (this->data_.empty() && this->data_rearranged_.empty()) {
           return;
         }
-        bool useOld = searchAlgoType_ == kOld || (searchAlgoType_ == kHybrid && ef_ >= 1000);
+        bool useOld = searchAlgoType_ == kOld || (searchAlgoType_ == kHybrid && max<size_t>(ef_, query->GetK()) >= 1000);
         // cout << "Ef = " << ef_ << " use old = " << useOld << endl;
         switch (searchMethod_) {
         case 0:
@@ -1140,6 +1140,9 @@ namespace similarity {
     void
     Hnsw<dist_t>::baseSearchAlgorithmOld(KNNQuery<dist_t> *query)
     {
+        // A filtered caller may request more candidates than the configured
+        // efSearch. Widen this query only; the index is shared by readers.
+        const size_t ef = max<size_t>(ef_, query->GetK());
         VisitedList *vl = visitedlistpool->getFreeVisitedList();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
@@ -1218,12 +1221,12 @@ namespace similarity {
                     massVisited[curId] = currentV;
                     currObj = (*iter)->getData();
                     d = query->DistanceObjLeft(currObj);
-                    if (closestDistQueue1.top().getDistance() > d || closestDistQueue1.size() < ef_) {
+                    if (closestDistQueue1.top().getDistance() > d || closestDistQueue1.size() < ef) {
                         {
                             query->CheckAndAddToResult(d, currObj);
                             candidateQueue.emplace(d, *iter);
                             closestDistQueue1.emplace(d, *iter);
-                            if (closestDistQueue1.size() > ef_) {
+                            if (closestDistQueue1.size() > ef) {
                                 closestDistQueue1.pop();
                             }
                         }
@@ -1238,6 +1241,9 @@ namespace similarity {
     void
     Hnsw<dist_t>::baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query)
     {
+        // A filtered caller may request more candidates than the configured
+        // efSearch. Widen this query only; the index is shared by readers.
+        const size_t ef = max<size_t>(ef_, query->GetK());
         VisitedList *vl = visitedlistpool->getFreeVisitedList();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
@@ -1272,7 +1278,7 @@ namespace similarity {
             }
         }
 
-        SortArrBI<dist_t, HnswNode *> sortedArr(max<size_t>(ef_, query->GetK()));
+        SortArrBI<dist_t, HnswNode *> sortedArr(ef);
         sortedArr.push_unsorted_grow(curdist, curNode);
 
         int_fast32_t currElem = 0;
@@ -1289,7 +1295,7 @@ namespace similarity {
         // Extraction of the neighborhood to find k nearest neighbors.
         ////////////////////////////////////////////////////////////////////////////////
 
-        while (currElem < min(sortedArr.size(), ef_)) {
+        while (currElem < min(sortedArr.size(), ef)) {
             auto &e = queueData[currElem];
             CHECK(!e.used);
             e.used = true;
@@ -1318,7 +1324,7 @@ namespace similarity {
                     currObj = (*iter)->getData();
                     d = query->DistanceObjLeft(currObj);
 
-                    if (d < topKey || sortedArr.size() < ef_) {
+                    if (d < topKey || sortedArr.size() < ef) {
                         CHECK_MSG(itemBuff.size() > itemQty,
                                   "Perhaps a bug: buffer size is not enough " + 
                                   ConvertToString(itemQty) + " >= " + ConvertToString(itemBuff.size()));

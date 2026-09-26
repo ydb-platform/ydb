@@ -161,6 +161,27 @@ enum ECumulativeCounters {
     COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS = 116           [(CounterOpts) = {Name: "ChangeQueueOverflowRejects"}];
 }
 
+enum EHnswLabeledCounters {
+    option (GlobalGroupNamesOpts) = {
+        Names: "table_path"
+        Names: "index_path"
+    };
+
+    COUNTER_HNSW_CACHE_HITS = 0   [(LabeledCounterOpts) = {Name: "HnswCacheHits" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_CACHE_MISSES = 1 [(LabeledCounterOpts) = {Name: "HnswCacheMisses" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_GENERATIONS = 2 [(LabeledCounterOpts) = {Name: "HnswGenerations" AggrFunc: EAF_SUM Type: CT_SIMPLE}];
+    COUNTER_HNSW_CHANGED_ROWS = 3 [(LabeledCounterOpts) = {Name: "HnswChangedRows" AggrFunc: EAF_SUM Type: CT_SIMPLE}];
+    COUNTER_HNSW_DELTA_VERSIONS = 4 [(LabeledCounterOpts) = {Name: "HnswDeltaVersions" AggrFunc: EAF_SUM Type: CT_SIMPLE}];
+    COUNTER_HNSW_DELTA_BYTES = 5 [(LabeledCounterOpts) = {Name: "HnswDeltaBytes" AggrFunc: EAF_SUM Type: CT_SIMPLE}];
+    COUNTER_HNSW_PENDING_BYTES = 6 [(LabeledCounterOpts) = {Name: "HnswPendingBytes" AggrFunc: EAF_SUM Type: CT_SIMPLE}];
+    COUNTER_HNSW_REBUILDS = 7 [(LabeledCounterOpts) = {Name: "HnswRebuilds" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_BASE_VERSION_STEP = 8 [(LabeledCounterOpts) = {Name: "HnswBaseVersionStep" AggrFunc: EAF_MIN Type: CT_SIMPLE}];
+    COUNTER_HNSW_UNSUPPORTED_READS = 9 [(LabeledCounterOpts) = {Name: "HnswUnsupportedReads" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_RANGE_FALLBACKS = 10 [(LabeledCounterOpts) = {Name: "HnswRangeFallbacks" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_CANDIDATE_FALLBACKS = 11 [(LabeledCounterOpts) = {Name: "HnswCandidateFallbacks" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_BASE_ROWS = 12 [(LabeledCounterOpts) = {Name: "HnswBaseRows" AggrFunc: EAF_SUM Type: CT_SIMPLE}];
+}
+
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
         Ranges: { Value: 500         Name: "(1) < 500 us"      }

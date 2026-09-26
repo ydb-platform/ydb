@@ -386,7 +386,12 @@ public:
         if (Settings->GetUseFollowers() && !Snapshot.IsValid()) {
             // reading from followers is allowed only of snapshot is not specified and
             // specific flag is set. otherwise we always read from main replicas.
-            PipeCacheId = FollowersPipeCacheId;
+            // One node-wide pipe pins every query for a tablet to the same
+            // follower. Spread independent vector searches across connections,
+            // while ACKs, retries and cancellation keep the same read affinity.
+            PipeCacheId = Settings->HasVectorTopK()
+                ? MakeVectorReadFollowerPipeCacheID(computeActorId.Hash() % VectorReadFollowerPipeCacheCount)
+                : FollowersPipeCacheId;
             UseFollowers = true;
         }
 
@@ -1627,7 +1632,7 @@ public:
             }
             Send(::MainPipeCacheId, new TEvPipeCache::TEvUnlink(0));
             if (UseFollowers) {
-                Send(::FollowersPipeCacheId, new TEvPipeCache::TEvUnlink(0));
+                Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
             }
         }
         if (ReadActorSpan) {

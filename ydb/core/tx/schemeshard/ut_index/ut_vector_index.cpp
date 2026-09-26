@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "covered"}, {}, {ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "embedding", "covered"}, {}, {ParentColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id"}, {}, {ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "embedding"}, {}, {ParentColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "covered"}, {}, {ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "embedding", "covered"}, {}, {ParentColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {ParentColumn, "id1", "id2"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "embedding", "covered1", "covered2"}, {}, {ParentColumn, "id1", "id2"}, true) });
     }
 
     Y_UNIT_TEST(VectorKmeansTreeImplTable) {

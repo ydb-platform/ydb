@@ -346,6 +346,11 @@ public:
     EMetric Metric = EMetric::Unspecified;
     EVectorType VectorType = EVectorType::Unspecified;
     uint32_t VectorDimension = 0;
+    uint64_t HnswMinRows = 10000;
+    uint32_t HnswConnectivity = 16;
+    uint32_t HnswConstructionCandidates = 200;
+    uint32_t HnswSearchCandidates = 15;
+    uint32_t HnswRebuildThresholdPercent = 10;
 
     static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
 

@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\2\n"
                 "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\2\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 9223372036854775849, key = 14, data = 1-four\n"
                 "__ydb_parent = 9223372036854775849, key = 15, data = 1-five\n"
                 "__ydb_parent = 9223372036854775850, key = 11, data = 1-one\n"
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\2\n"
                 "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\2\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
                 "__ydb_parent = 9223372036854775849, key = 12, data = 1-two\n"
                 "__ydb_parent = 9223372036854775849, key = 13, data = 1-three\n"
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 : "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \xFF\xFF\2\n"
                   "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = \xFF\xFF\2\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
                 "__ydb_parent = 9223372036854775849, key = 12, data = 1-two\n"
                 "__ydb_parent = 9223372036854775849, key = 13, data = 1-three\n"
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \xFF\xE7\x02\n"
                 "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \xFF\x20\x02\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
                 "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
                 "__ydb_parent = 9223372036854775849, key = 5, data = five\n"
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\2\n"
                 "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\2\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 14, embedding = \x65\x65\2, data = 1-four\n"
                 "__ydb_parent = 41, key = 15, embedding = \x75\x75\2, data = 1-five\n"
                 "__ydb_parent = 42, key = 11, embedding = \x30\x30\2, data = 1-one\n"
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\2\n"
                 "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\2\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 11, embedding = \x30\x30\2, data = 1-one\n"
                 "__ydb_parent = 41, key = 12, embedding = \x31\x31\2, data = 1-two\n"
                 "__ydb_parent = 41, key = 13, embedding = \x32\x32\2, data = 1-three\n"
@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 : "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \xFF\xFF\2\n"
                   "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = \xFF\xFF\2\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 11, embedding = \x30\x30\2, data = 1-one\n"
                 "__ydb_parent = 41, key = 12, embedding = \x31\x31\2, data = 1-two\n"
                 "__ydb_parent = 41, key = 13, embedding = \x32\x32\2, data = 1-three\n"
@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 44, __ydb_id = 46, __ydb_centroid = \xFF\xE7\x02\n"
                 "__ydb_parent = 44, __ydb_id = 47, __ydb_centroid = \xFF\x20\x02\n"
             );
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 9.424325546e-06, embedding = \x10\x80\x02, data = one\n"
                 "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.164636578e-07, embedding = \x80\x10\x02, data = two\n"
                 "key = 3, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"

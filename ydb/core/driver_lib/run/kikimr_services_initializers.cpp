@@ -1659,6 +1659,16 @@ void TTabletPipePerNodeCachesInitializer::InitializeServices(
     setup->LocalServices.emplace_back(
         MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
         TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+
+    TIntrusivePtr<TPipePerNodeCacheConfig> vectorFollowerConfig = new TPipePerNodeCacheConfig();
+    vectorFollowerConfig->PipeRefreshTime = followerPipeConfig->PipeRefreshTime;
+    vectorFollowerConfig->PipeConfig = followerPipeConfig->PipeConfig;
+    vectorFollowerConfig->Counters = counters->GetSubgroup("type", "VECTOR_FOLLOWER_PIPE_CACHE");
+    for (ui32 i = 0; i < VectorReadFollowerPipeCacheCount; ++i) {
+        setup->LocalServices.emplace_back(
+            MakeVectorReadFollowerPipeCacheID(i),
+            TActorSetupCmd(CreatePipePerNodeCache(vectorFollowerConfig), TMailboxType::ReadAsFilled, appData->UserPoolId));
+    }
 }
 
 // TTabletMonitoringProxyInitializer

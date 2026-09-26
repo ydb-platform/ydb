@@ -20,6 +20,7 @@ namespace NKikimr {
     namespace NPathAliasing {
         class TPathNormalizer;
     }
+
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }

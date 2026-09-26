@@ -299,6 +299,11 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 }
 
 void TDataShard::Die(const TActorContext& ctx) {
+    InvalidateHnswIndexes();
+    if (HnswCacheMemoryTracker) {
+        Send(NMemory::MakeMemoryControllerId(),
+            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+    }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
     }
@@ -423,6 +428,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        InvalidateHnswIndexes();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -4167,12 +4173,92 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
             static_cast<ui32>(GetEffectiveMetricsLevel(*table))));
 }
 
+namespace {
+
+TString EncodeHnswCounterPath(TStringBuf path) {
+    static constexpr char Hex[] = "0123456789ABCDEF";
+    TString result;
+    result.reserve(path.size() * 3);
+    for (const unsigned char c : path) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9') || c == '-' || c == '_'
+                || c == '.' || c == '~') {
+            result += static_cast<char>(c);
+        } else {
+            result += '%';
+            result += Hex[c >> 4];
+            result += Hex[c & 0x0f];
+        }
+    }
+    return result;
+}
+
+} // anonymous namespace
+
+void TDataShard::SendHnswCountersToAggregator(const TActorContext& ctx) {
+    if (HnswCounterEventsInFlight && HnswCounterEventsInFlight.RefCount() > 1) {
+        return;
+    }
+    if (!HnswCounterEventsInFlight) {
+        HnswCounterEventsInFlight = new TEvTabletCounters::TInFlightCookie;
+    }
+
+    for (const auto& [localTid, entry] : HnswIndexCache) {
+        const TUserTable* table = nullptr;
+        for (const auto& [_, candidate] : TableInfos) {
+            if (candidate->LocalTid == localTid) {
+                table = candidate.Get();
+                break;
+            }
+        }
+        if (!table || table->VectorIndexTablePath.empty() || table->VectorIndexPath.empty()) {
+            continue;
+        }
+
+        const TString group = TStringBuilder()
+            << EncodeHnswCounterPath(table->VectorIndexTablePath) << '/'
+            << EncodeHnswCounterPath(table->VectorIndexPath);
+        TAutoPtr<TTabletLabeledCountersBase> counters(new TTabletLabeledCountersBase(
+            CreateProtobufTabletLabeledCounters<EHnswLabeledCounters_descriptor>(group, localTid)));
+        counters->GetCounters()[COUNTER_HNSW_CACHE_HITS].Set(entry.CacheHits);
+        counters->GetCounters()[COUNTER_HNSW_CACHE_MISSES].Set(entry.CacheMisses);
+        ui64 generations = 0;
+        for (const auto& generation : entry.Generations) {
+            generations += !generation.expired();
+        }
+        ui64 pendingBytes = entry.PendingReservations.size() * THnswIndexCacheEntry::PendingTransactionBytes;
+        for (const auto& [_, rows] : entry.Pending) {
+            for (const auto& [key, change] : rows) {
+                pendingBytes += THnswIndexChanges::EstimateBytes(key, change.Vector ? change.Vector->size() : 0);
+            }
+        }
+        counters->GetCounters()[COUNTER_HNSW_GENERATIONS].Set(generations);
+        counters->GetCounters()[COUNTER_HNSW_CHANGED_ROWS].Set(entry.Index ? entry.Index->ChangeCount() : 0);
+        counters->GetCounters()[COUNTER_HNSW_BASE_ROWS].Set(entry.Index ? entry.Index->Size() : 0);
+        counters->GetCounters()[COUNTER_HNSW_DELTA_VERSIONS].Set(entry.Changes->GetVersionCount());
+        counters->GetCounters()[COUNTER_HNSW_DELTA_BYTES].Set(entry.Changes->GetEstimatedBytes());
+        counters->GetCounters()[COUNTER_HNSW_PENDING_BYTES].Set(pendingBytes);
+        counters->GetCounters()[COUNTER_HNSW_REBUILDS].Set(entry.Rebuilds);
+        counters->GetCounters()[COUNTER_HNSW_BASE_VERSION_STEP].Set(entry.Index ? entry.Index->GetBaseVersion().Step : 0);
+        counters->GetCounters()[COUNTER_HNSW_UNSUPPORTED_READS].Set(entry.UnsupportedReads);
+        counters->GetCounters()[COUNTER_HNSW_RANGE_FALLBACKS].Set(entry.RangeFallbacks);
+        counters->GetCounters()[COUNTER_HNSW_CANDIDATE_FALLBACKS].Set(entry.CandidateFallbacks);
+
+        ctx.Send(MakeTabletCountersAggregatorID(ctx.SelfID.NodeId()),
+            new TEvTabletCounters::TEvTabletAddLabeledCounters(
+                HnswCounterEventsInFlight, TabletID(), TTabletTypes::DataShard,
+                counters.Release()));
+    }
+}
+
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
+    PruneHnswIndexes();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
     SendTableInfoToCountersAggregator(ctx);
+    SendHnswCountersToAggregator(ctx);
     CollectCpuUsage(ctx);
 
     if (CurrentKeySampler == EnabledKeySampler && ctx.Now() > StopKeyAccessSamplingAt) {
@@ -4636,6 +4722,15 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
 }
 
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
+        // Some embedded runtimes, including tests, have no controller.
+        // Distinguish that disabled cache from a pending first limit grant.
+        if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->SetLimit(0);
+        }
+        return;
+    }
+
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
         op->AddInputEvent(ev.Release());

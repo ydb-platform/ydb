@@ -32,11 +32,10 @@ PEERDIR(
 )
 
 DEPENDS(
-    yql/tools/yqlrun
+    yql/essentials/tools/minirun
     yql/essentials/udfs/common/re2
 )
 
 END()
 
 ENDIF()
-

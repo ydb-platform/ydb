@@ -4,6 +4,8 @@ items:
   include:
     mode: link
     path: initial-deployment/toc_p.yaml
+- name: Получение текущей конфигурации кластера
+  href: get-current-configuration.md
 - name: Подготовка виртуальных машин с Terraform
   href: preparing-vms-with-terraform.md
 - name: Перезапуск

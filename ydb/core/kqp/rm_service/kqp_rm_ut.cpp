@@ -418,6 +418,9 @@ public:
         UNIT_TEST(SpillingPercentReconfigure);
         UNIT_TEST(TotalLimitReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
+        UNIT_TEST(OptionalMemorySpillingThreshold);
+        UNIT_TEST(OptionalMemoryPoolThreshold);
+        UNIT_TEST(OptionalMemoryConcurrent);
         UNIT_TEST(ServiceMemoryQuota);
         UNIT_TEST(ConcurrentServiceMemoryQuota);
         UNIT_TEST(SnapshotSharingByExchanger);
@@ -485,6 +488,9 @@ public:
     void SpillingPercentReconfigure();
     void TotalLimitReconfigure();
     void TaskQuotaManagerOptional();
+    void OptionalMemorySpillingThreshold();
+    void OptionalMemoryPoolThreshold();
+    void OptionalMemoryConcurrent();
     void ServiceMemoryQuota();
     void ConcurrentServiceMemoryQuota();
     void SnapshotSharing();
@@ -1106,11 +1112,11 @@ void KqpRm::TotalLimitReconfigure() {
     AssertResourceManagerStats(rm, 1000, 100);
 }
 
-// The quota managers refuse optional requests in advance when the tx availability cannot cover the aligned
-// step: no resource manager round trip, even when the resource manager itself would have granted the request.
-// The resource manager records every refusal it handles in TxFailedAllocationSize, so a zero there proves it
-// was not asked. Their availability follows the sign of the tx value, and an optional request that fits goes
-// to the resource manager as usual
+// The quota managers pass the optional flag on to the resource manager, which refuses an optional request once it
+// would take the node total past the spilling threshold, even with the memory there. The refusal is quiet:
+// RM/OptionalMemoryRefused counts it, RM/NotEnoughMemory and the failed allocation of the tx (reported on OOM) do
+// not. The decision is taken on the state of the resource manager, the cookies the quota managers report do not
+// steer it
 void KqpRm::TaskQuotaManagerOptional() {
     StartRms();
     NKikimr::TActorSystemStub stub;
@@ -1125,68 +1131,241 @@ void KqpRm::TaskQuotaManagerOptional() {
         // charges it to the node total (900 left, the spilling threshold at 800) until the task quota manager dies
         UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialLimit}));
         AssertResourceBrokerSensors(0, 100, 0, 0, 1);
-        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100}));
-        AssertResourceBrokerSensors(0, 200, 0, 0, 2);
-        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 600);
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
-        const auto statsBefore = rm->GetLocalResources();
-        UNIT_ASSERT_VALUES_EQUAL(statsBefore.Memory, 800);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 900);
 
-        // task level manager: 1 MB allocation step, more than the tx availability
+        // task level manager: 1 MB allocation step, more than the node has
         auto qm = CreateTaskQuotaManager(rm, tx, taskId, initialLimit);
         UNIT_ASSERT(qm->AllocateQuota(50, /* isOptional = */ true)); // fits in the prepaid limit
-        UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 600 + 50); // tx value plus the local leftover
-        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // 1 MB step > 600: refused in advance
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // the resource manager was not asked
+        UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 700 + 50); // tx value plus the local leftover
+        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // the 1 MB step is past the threshold
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 1); // the flag reached the resource manager
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 900);
+        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ false)); // the same request, mandatory: a failure
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 1_MB);
         // a negative tx value dominates the local leftover
+        const i64 saved = tx->TotalMemoryCookie->MemoryAvailability.load();
         tx->TotalMemoryCookie->MemoryAvailability.store(-7);
         UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), -7);
-        tx->TotalMemoryCookie->MemoryAvailability.store(700);
+        tx->TotalMemoryCookie->MemoryAvailability.store(saved);
         qm->FreeQuota(50);
         qm.reset();
         // the task quota manager returned the prepay, and the periodic pass the arena memory to the node total
         TickArenaAdjust();
-        const auto statsAfterTask = rm->GetLocalResources();
-        UNIT_ASSERT_VALUES_EQUAL(statsAfterTask.Memory, statsBefore.Memory + initialLimit);
-        AssertResourceBrokerSensors(0, 100, 0, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 1000);
 
-        // channel level manager: 16 byte allocation step. The tx reports less than the aligned request although
-        // the resource manager has 700 bytes and would grant it: refused in advance, the resource manager not asked
+        // channel level manager: 16 byte allocation step
         auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
-        tx->TotalMemoryCookie->MemoryAvailability.store(100);
-        UNIT_ASSERT(!cm->AllocateQuota(200, /* isOptional = */ true)); // 208 > 100: refused in advance
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory);
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 100); // nothing prepaid here
-        tx->TotalMemoryCookie->MemoryAvailability.store(700);
-        UNIT_ASSERT(cm->AllocateQuota(200, /* isOptional = */ true)); // 208 <= 700: the same request is granted by the resource manager
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory - 208);
-        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700 - 208); // the cookie follows the allocation
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
-        cm->FreeQuota(200); // the 208 stay prepaid in the channel manager until it dies
-        // a mandatory request beyond the node memory does reach the resource manager and is refused there:
-        // 1500 - 208 prepaid = 1292, aligned to 1296 > 692 left on the node
-        UNIT_ASSERT(!cm->AllocateQuota(1500, /* isOptional = */ false));
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 1296);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600})); // 400 left, availability 200
+        // the cookie reports plenty, the resource manager refuses on its own state: 208 > 200
+        tx->TotalMemoryCookie->MemoryAvailability.store(1'000'000);
+        UNIT_ASSERT(!cm->AllocateQuota(200, /* isOptional = */ true));
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000); // nothing prepaid, nothing lost
+        UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 1'000'000); // a refusal moves no cookie
+        tx->TotalMemoryCookie->MemoryAvailability.store(200);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 400);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 1_MB);
 
-        // the resource manager refuses a small request (below 10 steps) that the pre-check let through: a
-        // mandatory one is tolerated as over-quoting, an optional one is refused and the prepaid quota restored
-        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600})); // 92 bytes left on the node
-        tx->TotalMemoryCookie->MemoryAvailability.store(1'000'000); // the pre-check passes
-        UNIT_ASSERT(!cm->AllocateQuota(300, /* isOptional = */ true)); // 300 - 208 prepaid = 92, aligned to 96 > 92
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 96); // refused by the resource manager
-        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208); // the prepaid quota is intact
-        UNIT_ASSERT(cm->AllocateQuota(300, /* isOptional = */ false)); // the mandatory request is over-quoted
-        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208 - 300);
-        cm->FreeQuota(300);
-        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208);
-        tx->TotalMemoryCookie->MemoryAvailability.store(700);
+        UNIT_ASSERT(cm->AllocateQuota(150, /* isOptional = */ true)); // 160 <= 200: granted
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 40);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 10 + 40); // 10 bytes of the step prepaid
+        UNIT_ASSERT(!cm->AllocateQuota(100, /* isOptional = */ true)); // 100 - 10 prepaid = 90, aligned to 96 > 40
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 10 + 40); // the prepaid quota is restored
+        UNIT_ASSERT(cm->AllocateQuota(100, /* isOptional = */ false)); // mandatory: past the threshold, up to the limit
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -56);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), -56); // a negative node value dominates the 6 prepaid
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 144);
+
+        // a mandatory request beyond the node memory is a failure: 300 - 6 prepaid = 294, aligned to 304 > 144
+        UNIT_ASSERT(!cm->AllocateQuota(300, /* isOptional = */ false));
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 304);
+
+        // a small request (below 10 steps) the node cannot cover: a mandatory one is tolerated as over-quoting, an
+        // optional one is refused
+        UNIT_ASSERT(rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.Memory = 120})); // 24 bytes left on the node
+        UNIT_ASSERT(!cm->AllocateQuota(100, /* isOptional = */ true)); // 100 - 6 prepaid = 94, aligned to 96 > 24
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 4);
+        UNIT_ASSERT(cm->AllocateQuota(100, /* isOptional = */ false)); // refused by the resource manager, over-quoted
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 96);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 24);
+
+        cm->FreeQuota(100);
+        cm->FreeQuota(100);
+        cm->FreeQuota(150);
+        rm->FreeResources(*tx, 3, NRm::TKqpResourcesRequest{.Memory = 120});
         rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600});
         cm.reset();
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 1000);
+    }
 
-        rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100});
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// An optional Memory request is refused once it would take the node total past the spilling threshold (800 used
+// here) although the memory is there, a mandatory one only past the limit. The refusal is quiet: no resource broker
+// task, neither RM/NotEnoughMemory nor the failed allocation of the tx see it, and the execution units of the
+// request come back. The resource manager decides on its own state, not on the cookies
+void KqpRm::OptionalMemorySpillingThreshold() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 700}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 100);
+        AssertResourceBrokerSensors(0, 700, 0, 0, 1);
+
+        auto result = rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExecutionUnits = 5, .Memory = 150, .Optional = true});
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT(result.GetStatus() == NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY);
+        AssertResourceManagerStats(rm, 300, 100); // the memory is there, the units came back
+        AssertResourceBrokerSensors(0, 700, 0, 0, 1);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 0);
+
+        // up to the threshold, not past it
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 100, .Optional = true}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 0);
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1, .Optional = true}));
+
+        // the cookie does not steer the decision
+        tx->TotalMemoryCookie->MemoryAvailability.store(1'000'000);
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1, .Optional = true}));
+        tx->TotalMemoryCookie->MemoryAvailability.store(0);
+
+        // a mandatory request goes past the threshold, an optional one stays refused there
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 150}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -150);
+        tx->TotalMemoryCookie->MemoryAvailability.store(1'000'000);
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1, .Optional = true}));
+        tx->TotalMemoryCookie->MemoryAvailability.store(-150);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        AssertResourceManagerStats(rm, 50, 100);
+
+        // SpillingPercent = 100: the threshold is the limit, an optional request is refused where a mandatory one is
+        SetSpillingPercent(100);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 50);
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 51, .Optional = true}));
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 5);
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 51}));
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 51);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 50, .Optional = true}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 0);
+
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 100 + 150 + 50});
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 700});
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 1000);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A tx of a resource pool also meets the threshold of its pool (50%: pool limit 500, threshold at 400 used). A quiet
+// optional refusal is no pool denial, a mandatory request past the pool limit still is one
+void KqpRm::OptionalMemoryPoolThreshold() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 350}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 450);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 50);
+        auto denied = GetPoolSensorGroup("db", "pool")->GetCounter("MemoryDeniedRequests", true);
+
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100, .Optional = true})); // the node would take it
+        AssertResourceManagerStats(rm, 650, 100); // the node total is not charged, not even for a moment
+        UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 450);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(denied->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 0);
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 50, .Optional = true}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 0);
+
+        // mandatory: past the pool threshold up to the pool limit, a pool denial past it
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1}));
+        UNIT_ASSERT_VALUES_EQUAL(denied->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 1);
+        AssertResourceManagerStats(rm, 500, 100);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 350 + 50 + 100});
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// Concurrent optional requests are decided one at a time under the resource manager lock: together they never take
+// the node total past the spilling threshold, whatever the lock-free cookies said when they were issued
+void KqpRm::OptionalMemoryConcurrent() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        // 200 left below the threshold: a single thread is refused already, it asks for 340 and more between its frees
+        UNIT_ASSERT(rm->AllocateResources(*tx, 0, NRm::TKqpResourcesRequest{.Memory = 600}));
+
+        NPar::LocalExecutor().RunAdditionalThreads(10);
+        std::atomic<ui64> granted = 0;
+        std::atomic<ui64> refused = 0;
+        std::atomic<bool> overThreshold = false;
+
+        NPar::LocalExecutor().ExecRange([&](int index) {
+            const ui64 taskId = index + 1;
+            ui64 held = 0;
+            for (auto j = 0u; j < 200u; j++) {
+                const ui64 memory = (j % 7 + 1) * 10;
+                if (rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = memory, .Optional = true})) {
+                    granted++;
+                    held += memory;
+                    if (tx->GetMemoryAvailability() < 0) {
+                        overThreshold = true;
+                    }
+                } else {
+                    refused++;
+                }
+                if (j % 10 == 9 && held) {
+                    rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = held});
+                    held = 0;
+                }
+            }
+            if (held) {
+                rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = held});
+            }
+        }, 0, 10, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+
+        UNIT_ASSERT(!overThreshold.load());
+        UNIT_ASSERT_GT(granted.load(), 0);
+        UNIT_ASSERT_GT(refused.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), static_cast<i64>(refused.load()));
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 200);
+
+        rm->FreeResources(*tx, 0, NRm::TKqpResourcesRequest{.Memory = 600});
     }
 
     AssertResourceManagerStats(rm, 1000, 100);
@@ -2193,8 +2372,8 @@ void KqpRm::ArenaConcurrent() {
     AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
 }
 
-// The arena charge moves the spilling cookie like any other allocation: the prepaid memory past the threshold
-// makes the quota managers refuse optional requests in advance and the node total refuse memory requests
+// The arena charge counts toward the spilling threshold like any other allocation: the prepaid memory past the
+// threshold makes the resource manager refuse optional requests and the node total refuse memory requests
 void KqpRm::ArenaSpillingPressure() {
     StartRms();
     NKikimr::TActorSystemStub stub;
@@ -2209,7 +2388,8 @@ void KqpRm::ArenaSpillingPressure() {
 
         auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
         UNIT_ASSERT(!cm->AllocateQuota(16, /* isOptional = */ true));
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // refused in advance
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/OptionalMemoryRefused"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // refused quietly
         cm.reset();
 
         UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 200}));

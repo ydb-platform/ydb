@@ -39,10 +39,16 @@ public:
 
     void StartCommitFail(const ui64 txId);
     [[nodiscard]] NTxUT::TPlanStep StartCommit(const ui64 txId);
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus StartCommitWithLock(const ui64 txId, const NKikimrDataEvents::TLock& lock);
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort();
 
-    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult WriteWithResult(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId);
+
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
+        return WriteWithResult(batch, columnIds, txId).GetStatus();
+    }
 };
 
 }   // namespace NKikimr::NTxUT

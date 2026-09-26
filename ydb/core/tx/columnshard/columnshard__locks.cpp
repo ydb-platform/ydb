@@ -46,6 +46,16 @@ void TColumnShard::TransactionToAbort(const ui64 lockId) {
     }
 }
 
+void TColumnShard::AbortNotProposedTransactions() {
+    for (const ui64 lockId : OperationsManager->GetLockIdsOfNotProposedTransactions()) {
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+            {"event", "abort_not_proposed_transaction"},
+            {"tabletId", TabletID()},
+            {"lockId", lockId});
+        TransactionToAbort(lockId);
+    }
+}
+
 void TColumnShard::MaybeAbortTransaction(const ui64 lockId) {
     auto lock = OperationsManager->GetLockOptional(lockId);
     if (!lock || !lock->ReadyForAborting() || lock->IsTxIdAssigned()) {

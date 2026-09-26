@@ -573,15 +573,6 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId, const TString& data,
-                     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& intWriteIds) {
-        bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &intWriteIds);
-        if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-        return ok;
-    };
-
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
         const auto result = ProposeCommit(runtime, sender, txId, writeIds);
         if (reboots) {
@@ -618,7 +609,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // write 1: ins:1, cmt:0, idx:0
 
     std::vector<ui64> intWriteIds;
-    UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[0], ydbSchema), ydbSchema, intWriteIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob(portion[0], ydbSchema), ydbSchema, true, &intWriteIds));
 
     // read
     TAutoPtr<IEventHandle> handle;
@@ -701,7 +692,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         TString triggerData = MakeTestBlob(portion[1], ydbSchema);
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-        UNIT_ASSERT(write(runtime, sender, writeId, tableId, triggerData, ydbSchema, intWriteIds));
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &intWriteIds));
     }
 
     // commit 2 (init indexation): ins:0, cmt:0, idx:1
@@ -714,7 +705,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++writeId;
     intWriteIds.clear();
-    UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[2], ydbSchema), ydbSchema, intWriteIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob(portion[2], ydbSchema), ydbSchema, true, &intWriteIds));
 
     // read 6, planstep 0
     {
@@ -770,7 +761,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++writeId;
     intWriteIds.clear();
-    UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[3], ydbSchema), ydbSchema, intWriteIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob(portion[3], ydbSchema), ydbSchema, true, &intWriteIds));
 
     // read 9 (committed, indexed)
     {
@@ -890,15 +881,6 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId, const TString& data,
-                     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& writeIds) {
-        bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &writeIds);
-        if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-        return ok;
-    };
-
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
         auto result = ProposeCommit(runtime, sender, txId, writeIds);
         if (reboots) {
@@ -949,10 +931,6 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &ids));
         }
 
-        if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-
         planStep = proposeCommit(runtime, sender, txId, ids);
         planCommit(runtime, sender, planStep, txId);
     }
@@ -964,7 +942,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
 
     for (ui32 i = 0; i < numTxs; ++i, ++writeId, ++txId) {
         std::vector<ui64> writeIds;
-        UNIT_ASSERT(write(runtime, sender, writeId, tableId, triggerData, ydbSchema, writeIds));
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
         planStep = proposeCommit(runtime, sender, txId, writeIds);
         planCommit(runtime, sender, planStep, txId);

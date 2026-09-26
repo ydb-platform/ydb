@@ -15,8 +15,11 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
 #include <util/datetime/base.h>
+#include <util/stream/str.h>
+#include <util/system/unaligned_mem.h>
 
 #include <atomic>
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_CHANNELS
 
@@ -40,6 +43,7 @@ struct TEvTestPrivate {
     enum EEv {
         EvStart = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvFinished,
+        EvStep,
         EvEnd
     };
 
@@ -54,6 +58,10 @@ struct TEvTestPrivate {
         TEvFinished(ERole role, bool error) : Role(role), Error(error) {}
         ERole Role;
         bool Error;
+    };
+
+    // the test lets a worker take its next step, see TWorkerSettings::FinishOnStep
+    struct TEvStep : public NActors::TEventLocal<TEvStep, EvStep> {
     };
 };
 
@@ -111,6 +119,11 @@ struct TWorkerSettings {
     bool EarlyFinish = false;
     int PauseMessageIndex = -1;
     int PauseDelayMs = 0;
+    // the producer writes the index of each message into its 1st bytes and the consumer fails on any
+    // message out of order, missing or cut short by the finish; needs MinMessageSize >= 4
+    bool CheckOrder = false;
+    // the producer sends the finish only once the test has sent it TEvStep
+    bool FinishOnStep = false;
 };
 
 struct TFailureSettings {
@@ -137,6 +150,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
             hFunc(TEvTestPrivate::TEvStart, HandleStart);
+            hFunc(TEvTestPrivate::TEvStep, HandleStep);
             hFunc(TEvDqCompute::TEvResumeExecution, HandleResume);
             hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbort);
         }
@@ -149,6 +163,11 @@ public:
     }
 
     virtual void HandleResume(TEvDqCompute::TEvResumeExecution::TPtr&) {
+        Run();
+    }
+
+    virtual void HandleStep(TEvTestPrivate::TEvStep::TPtr&) {
+        Stepped = true;
         Run();
     }
 
@@ -185,6 +204,7 @@ public:
     IMemoryQuotaManager::TPtr QuotaManager;
     int MessageIndex = 0;
     bool Started = false;
+    bool Stepped = false;
 };
 
 class TProducerActor : public TWorkerActor<TProducerActor> {
@@ -221,10 +241,15 @@ public:
                 }
             }
             auto bytes = Settings.MinMessageSize + RandomNumber<ui64>(Settings.MaxMessageSize - Settings.MinMessageSize);
-            Buffer->Push(TDataChunk(NYql::TChunkedBuffer(TString(bytes, 'a')), 1, false));
+            TString payload(bytes, 'a');
+            if (Settings.CheckOrder) {
+                Y_ENSURE(bytes >= sizeof(ui32));
+                WriteUnaligned<ui32>(payload.begin(), MessageIndex);
+            }
+            Buffer->Push(TDataChunk(NYql::TChunkedBuffer(std::move(payload)), 1, false));
             MessageIndex++;
         }
-        if (MessageIndex == Settings.MessageCount) {
+        if (MessageIndex == Settings.MessageCount && (!Settings.FinishOnStep || Stepped)) {
             Buffer->SendFinish();
         }
     }
@@ -263,6 +288,9 @@ public:
             if (!Buffer->Pop(data)) {
                 break;
             }
+            if (!CheckOrder(data)) {
+                return;
+            }
             MessageIndex++;
         }
         if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
@@ -271,13 +299,45 @@ public:
             MessageIndex++;
         }
         if (MessageIndex <= Settings.MessageCount && Buffer->Pop(data)) {
+            if (MessageIndex < Settings.MessageCount && !CheckOrder(data)) {
+                return;
+            }
             MessageIndex++;
         }
         if (Buffer->IsFinished()) {
             LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
-            Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, false));
+            // the finish itself is popped as one more message
+            auto error = Settings.CheckOrder && MessageIndex != Settings.MessageCount + 1;
+            if (error) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST ORDER SelfId=" << SelfId()
+                    << ", ChannelId=" << ChannelId << ", finished after " << MessageIndex << " message(s) of " << Settings.MessageCount);
+            }
+            Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, error));
             PassAway();
         }
+    }
+
+    // a data message must carry the index of the next one, the finish comes after all of them
+    bool CheckOrder(const TDataChunk& data) {
+        if (!Settings.CheckOrder) {
+            return true;
+        }
+        std::optional<ui32> index;
+        if (data.Buffer.Size() >= sizeof(ui32)) {
+            TString head;
+            TStringOutput output(head);
+            data.Buffer.CopyTo(output, sizeof(ui32));
+            index = ReadUnaligned<ui32>(head.data());
+        }
+        if (index == static_cast<ui32>(MessageIndex)) {
+            return true;
+        }
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST ORDER SelfId=" << SelfId()
+            << ", ChannelId=" << ChannelId << ", expected message " << MessageIndex << ", got "
+            << (index ? ToString(*index) : TString("the finish")));
+        Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, true));
+        PassAway();
+        return false;
     }
 
     TInstant ResumeTime;
@@ -654,6 +714,16 @@ struct TSessionTest : public TLoadTest {
             bytes += descriptor->PopStats.Bytes.load();
         }
         return bytes;
+    }
+
+    static std::shared_ptr<TOutputDescriptor> FindOutputDescriptor(const std::shared_ptr<TNodeState>& state, ui64 channelId) {
+        std::lock_guard lock(state->Mutex);
+        for (const auto& [info, descriptor] : state->OutputDescriptors) {
+            if (info.ChannelId == channelId) {
+                return descriptor;
+            }
+        }
+        return {};
     }
 
     static std::vector<ui64> GetQueueSeqNos(const std::shared_ptr<TNodeState>& state) {
@@ -1555,6 +1625,76 @@ struct TStaleBounceTest : public TSessionTest {
     bool Genuine = false;
 };
 
+// SendFromWaiters published that the last waiting message of a channel was gone from its WaitQueue before
+// the message had its SeqNo, so a push of the channel in between skipped the WaitQueue and overtook it. With
+// the finish overtaking, the receiver dropped the message as late and the channel finished short of it.
+// Staged by parking the session right there and pushing the finish meanwhile.
+struct TWaiterOvertakeTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        // a single message fills the window, so the 2nd one has to wait for the ack of the 1st
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(100);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        auto sender = Service0->CreateDebugNodeState(receiverNodeId);
+        sender->StartSession();
+        WaitSettled(sender);
+
+        // the ack of the 1st message is held back until the 2nd one waits for the window
+        sender->PauseChannelAck();
+
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 2, .MinMessageSize = 150, .MaxMessageSize = 151,
+            .CheckOrder = true, .FinishOnStep = true };
+        ConsumerSettings = ProducerSettings;
+        auto channel = StartChannel(1, true);
+
+        std::shared_ptr<TOutputDescriptor> descriptor;
+        UNIT_ASSERT_C(WaitFor([&]() {
+            descriptor = FindOutputDescriptor(sender, 1);
+            return descriptor && descriptor->WaitQueueSize.load() == 1 && GetQueueSize(sender) == 1;
+        }, TDuration::Seconds(10)), "the 2nd message does not wait for the window");
+
+        sender->HoldWaiterDequeue.store(true);
+        sender->ResumeChannelAck();
+        UNIT_ASSERT_C(WaitFor([&]() { return sender->WaiterDequeueHeld.load(); }, TDuration::Seconds(5)),
+            "the waiting message was not taken off its WaitQueue");
+
+        // the finish is pushed while the waiting message has no SeqNo yet; it must queue up behind it
+        Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
+        Sleep(TDuration::MilliSeconds(200));
+        sender->HoldWaiterDequeue.store(false);
+
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
+// pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
+// where a push could overtake a waiting message. Every consumer checks the order of what it gets.
+struct TOrderTest : public TLoadTest {
+
+    void Prepare() override {
+        TLoadTest::Prepare();
+        auto* config = settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig();
+        config->SetRemoteSessionInflightBytes(4096);
+        config->SetRemoteChannelInflightBytes(2048);
+        config->SetRemoteChannelColdInflightBytes(1024);
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1738,6 +1878,25 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TLivenessProbeTest test;
 
         test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(WaiterNotOvertakenByFastPath) {
+        TWaiterOvertakeTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(OrderUnderWaiterPressure) {
+        TOrderTest test;
+
+        test.Count = 20;
+        test.Local = false;
+        test.ProducerSettings = TWorkerSettings{ .MessageCount = 200, .MinMessageSize = 4, .MaxMessageSize = 1000, .CheckOrder = true };
+        test.ConsumerSettings = test.ProducerSettings;
 
         test.Run();
     }

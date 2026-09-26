@@ -1108,6 +1108,8 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         return;
     }
 
+    // WaitQueueSize counts a chunk SendFromWaiters has taken off the WaitQueue until the chunk has its SeqNo,
+    // so that the lock free check below never lets a push of the channel overtake an older chunk
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
         std::lock_guard lock(descriptor->WaitQueueMutex);
@@ -1697,7 +1699,7 @@ now may need to send very last msg from terminated descriptor
                 item = std::make_shared<TOutputItem>(std::move(data), waiter, quoted);
                 waiter->WaitQueue.pop();
                 waiter->WaitQueueBytes -= bytes;
-                waiter->WaitQueueSize--;
+                OnWaiterDequeued();
 
                 std::lock_guard lock1(Mutex);
 
@@ -1721,6 +1723,9 @@ now may need to send very last msg from terminated descriptor
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
+                // Only now, when the chunk has its SeqNo: until then a push of the channel must not skip the
+                // WaitQueue, see TNodeState::PushDataChunk, or it would overtake this chunk
+                waiter->WaitQueueSize--;
             }
 
             WaiterBytes -= bytes;
@@ -2386,6 +2391,17 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     evAck->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
 
     SendAck(evAck, ev->Cookie);
+}
+
+void TDebugNodeState::OnWaiterDequeued() {
+    if (!HoldWaiterDequeue.load()) {
+        return;
+    }
+    WaiterDequeueHeld.store(true);
+    auto deadline = TInstant::Now() + TDuration::Seconds(10);
+    while (HoldWaiterDequeue.load() && TInstant::Now() < deadline) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
 }
 
 void TDebugNodeState::StartSession() {

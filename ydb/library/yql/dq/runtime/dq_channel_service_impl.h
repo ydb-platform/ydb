@@ -721,6 +721,9 @@ public:
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
+    // SendFromWaiters has taken a chunk off the WaitQueue of a channel and not sequenced it yet
+    virtual void OnWaiterDequeued() {}
+
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major, char logSymbol);
     void DoReconciliation(char logSymbol);
@@ -811,6 +814,10 @@ public:
 
     void HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
 
+    // Parks the session thread while HoldWaiterDequeue is set, for a test to act in between (a timeout
+    // keeps a failed test from hanging the session for good)
+    void OnWaiterDequeued() override;
+
     // A debug session discovers its peer only here, so that a test can register every one it needs first
     void StartSession();
 
@@ -835,6 +842,8 @@ public:
     std::atomic<ui64> DropOkAckUpToSeqNo = 0;
     // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
     std::atomic<ui64> PendingDataCount = 0;
+    std::atomic<bool> HoldWaiterDequeue = false;
+    std::atomic<bool> WaiterDequeueHeld = false;
     std::atomic<double> DataLossProbability;
     std::atomic<ui64> DataLossCount;
     std::atomic<double> AckLossProbability;

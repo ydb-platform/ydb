@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 void TWasmCompileActor::Bootstrap() {
@@ -106,9 +108,9 @@ void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed:
     if (Step_ == EStep::DeleteStaleArtifactChunks || Step_ == EStep::DeleteStaleArtifacts) {
         // Leftover rows of replaced uploads are not worth failing over, but
         // still confirm we own the modules row before anyone loads us.
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmCompileActor: failed to drop stale artifacts of name=" << Name_
-            << ": " << ev->Get()->GetErrorMessage();
+        YDB_LOG_WARN("TWasmCompileActor: failed to drop stale artifacts",
+            {"name", Name_},
+            {"errorMessage", ev->Get()->GetErrorMessage()});
         Step_ = EStep::ConfirmStillCurrent;
         ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
         return;
@@ -478,22 +480,24 @@ void TWasmCompileActor::FailAndPersist(const TString& message) {
 }
 
 void TWasmCompileActor::ReplyError(const TString& message) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmCompileActor: " << message;
+    YDB_LOG_ERROR("TWasmCompileActor",
+        {"errorMessage", message});
     Send(ReplyTo_, new TEvWasmCompileResponse(false, Name_, message));
     PassAway();
 }
 
 void TWasmCompileActor::ReplyDeferred(const TString& reason) {
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileActor: deferred WASM UDF '" << Name_ << "': " << reason;
+    YDB_LOG_INFO("TWasmCompileActor: deferred WASM UDF",
+        {"name", Name_},
+        {"reason", reason});
     Send(ReplyTo_, new TEvWasmCompileResponse(false, Name_, reason, true));
     PassAway();
 }
 
 void TWasmCompileActor::ReplySuccess() {
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileActor: compiled WASM UDF '" << Name_
-        << "' for cpu_spec='" << CpuSpec_ << "'";
+    YDB_LOG_INFO("TWasmCompileActor: compiled WASM UDF",
+        {"name", Name_},
+        {"cpuSpec", CpuSpec_});
     Send(ReplyTo_, new TEvWasmCompileResponse(true, Name_));
     PassAway();
 }

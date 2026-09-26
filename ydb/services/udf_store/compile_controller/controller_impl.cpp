@@ -13,6 +13,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 namespace {
@@ -151,8 +153,8 @@ void TWasmCompileController::SubscribeForConfigChanges(const TActorContext& ctx)
 void TWasmCompileController::HandleConfig(
     NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&)
 {
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileController[" << TabletID() << "]: subscribed for config changes";
+    YDB_LOG_INFO("TWasmCompileController subscribed for config changes",
+        {"tabletID", TabletID()});
 }
 
 void TWasmCompileController::HandleConfig(
@@ -225,9 +227,10 @@ void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberDa
                 // A manifest that does not parse can never be compiled anyway.
                 // The dinode reports the parse error when it gets to it; the
                 // controller just treats the module as having no dependencies.
-                ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-                    << "TWasmCompileController[" << TabletID() << "]: cannot read the manifest of "
-                    << entry.Name << ": " << CurrentExceptionMessage();
+                YDB_LOG_WARN("TWasmCompileController[ cannot read the manifest of",
+                    {"tabletID", TabletID()},
+                    {"name", entry.Name},
+                    {"currentExceptionMessage", CurrentExceptionMessage()});
             }
         }
         for (const auto& libraryName : entry.RequiredLibraries) {
@@ -257,9 +260,9 @@ void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberDa
         ModuleIndex[MakeArtifactKey(entry.Name, entry.Kind, entry.Uid)] = index;
     }
 
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileController[" << TabletID() << "]: snapshot with " << Modules.size()
-        << " compilable modules";
+    YDB_LOG_INFO("TWasmCompileController snapshot with compilable modules",
+        {"tabletID", TabletID()},
+        {"modulesSize", Modules.size()});
 
     // A fresh upload changes the uid, so what the artifact tables already cover
     // has to be re-read before anything is handed out for the new one.
@@ -633,9 +636,11 @@ void TWasmCompileController::ScheduleAssignments() {
             proto.SetUid(libraryUid);
         }
 
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmCompileController[" << TabletID() << "]: assign " << key.ToString()
-            << " to node " << worker->NodeId << " as " << assignment.AssignmentId;
+        YDB_LOG_INFO("TWasmCompileController assign to node as",
+            {"tabletID", TabletID()},
+            {"key", key},
+            {"nodeId", worker->NodeId},
+            {"assignmentId", assignment.AssignmentId});
 
         // Reserved in memory right away so that the rest of this round sees the
         // budget as taken; the event itself waits for the row to be durable.
@@ -681,9 +686,10 @@ void TWasmCompileController::ReleaseAssignment(const TGapKey& key, TStringBuf re
     // No decrement here: the next scheduling round recounts the budget from
     // `Assignments`, and decrementing a count this assignment may never have
     // been part of is what used to drive it below the truth.
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileController[" << TabletID() << "]: release " << key.ToString()
-        << " (" << reason << ")";
+    YDB_LOG_INFO("TWasmCompileController release",
+        {"tabletID", TabletID()},
+        {"key", key},
+        {"reason", reason});
     Assignments.erase(it);
 }
 
@@ -694,9 +700,9 @@ void TWasmCompileController::CollectExpiredAssignments(TStateUpdate& update) {
     for (auto& [nodeId, worker] : Workers) {
         if (worker.Alive && now - worker.LastHeartbeat > HeartbeatTimeout) {
             worker.Alive = false;
-            ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-                << "TWasmCompileController[" << TabletID() << "]: worker node " << nodeId
-                << " missed heartbeats";
+            YDB_LOG_WARN("TWasmCompileController worker node missed heartbeats",
+                {"tabletID", TabletID()},
+                {"nodeId", nodeId});
         }
     }
 
@@ -755,9 +761,10 @@ void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
         if (it == Workers.end()) {
             continue;
         }
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmCompileController[" << TabletID() << "]: forgetting node " << nodeId
-            << " of cpu_spec " << it->second.CpuSpec;
+        YDB_LOG_INFO("TWasmCompileController forgetting node of cpu_spec",
+            {"tabletID", TabletID()},
+            {"nodeId", nodeId},
+            {"cpuSpec", it->second.CpuSpec});
         NodeByPipeServer.erase(it->second.PipeServer);
         Workers.erase(it);
     }
@@ -811,9 +818,10 @@ void TWasmCompileController::Handle(TEvCompileController::TEvRegister::TPtr& ev)
     response->Record.SetControllerGeneration(Executor()->Generation());
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileController[" << TabletID() << "]: node " << nodeId
-        << " registered with cpu_spec " << worker.CpuSpec;
+    YDB_LOG_INFO("TWasmCompileController node registered with cpu_spec",
+        {"tabletID", TabletID()},
+        {"nodeId", nodeId},
+        {"cpuSpec", worker.CpuSpec});
 
     RunTxRegisterWorker(nodeId, worker.CpuSpec, worker.Capacity);
 }
@@ -921,8 +929,9 @@ void TWasmCompileController::Handle(TEvCompileController::TEvCompileFailed::TPtr
     if (record.GetStale()) {
         // A stale report means a re-upload won the race, not that this module
         // is broken, so it must not bring the poison pill any closer.
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmCompileController[" << TabletID() << "]: " << key.ToString() << " is stale";
+        YDB_LOG_INFO("TWasmCompileController is stale",
+            {"tabletID", TabletID()},
+            {"key", key});
     } else {
         TabletCounters->Cumulative()[COUNTER_COMPILES_FAILED].Increment(1);
         TAttemptState attempt = Attempts.Value(key, TAttemptState{});
@@ -930,9 +939,11 @@ void TWasmCompileController::Handle(TEvCompileController::TEvCompileFailed::TPtr
         attempt.LastError = record.GetError();
         attempt.Poisoned = attempt.FailCount >= MaxCompileAttempts;
         if (attempt.Poisoned) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-                << "TWasmCompileController[" << TabletID() << "]: " << key.ToString()
-                << " poisoned after " << attempt.FailCount << " failures: " << attempt.LastError;
+            YDB_LOG_ERROR("TWasmCompileController[ poisoned after",
+                {"tabletID", TabletID()},
+                {"key", key},
+                {"failCount", attempt.FailCount},
+                {"failures", attempt.LastError});
         }
         update.UpdatedAttempts.emplace_back(key, std::move(attempt));
     }
@@ -971,8 +982,9 @@ void TWasmCompileController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
         }
     }
 
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmCompileController[" << TabletID() << "]: node " << nodeId << " disconnected";
+    YDB_LOG_INFO("TWasmCompileController node disconnected",
+        {"tabletID", TabletID()},
+        {"nodeId", nodeId});
 
     ApplyStateUpdate(std::move(update));
     RebuildQueue();

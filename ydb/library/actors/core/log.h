@@ -688,16 +688,6 @@ namespace NActors {
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
 
-#define ALS_TRACE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_TRACE, component)
-#define ALS_DEBUG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_DEBUG, component)
-#define ALS_INFO(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_INFO, component)
-#define ALS_NOTICE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_NOTICE, component)
-#define ALS_WARN(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_WARN, component)
-#define ALS_ERROR(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ERROR, component)
-#define ALS_CRIT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_CRIT, component)
-#define ALS_ALERT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ALERT, component)
-#define ALS_EMERG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_EMERG, component)
-
 #define AFL_TRACE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, component)
 #define AFL_DEBUG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, component)
 #define AFL_INFO(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, component)

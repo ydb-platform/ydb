@@ -7,6 +7,8 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 namespace {
@@ -61,8 +63,8 @@ void TUdfStoreInitializer::CreateNextTable() {
             tablePath.push_back("binaries");
             KvVolumePath = NKikimr::CombinePath(cbegin(tablePath), cend(tablePath));
 
-            ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-                << "TUdfStoreInitializer: creating KV volume at " << KvVolumePath;
+            YDB_LOG_INFO("TUdfStoreInitializer: creating KV volume",
+                {"kvVolumePath", KvVolumePath});
 
             NACLib::TUserToken userToken("metadata@system", {});
 
@@ -107,15 +109,15 @@ void TUdfStoreInitializer::HandleTableCreated(TEvTableCreator::TEvCreateTableRes
             << "failed to create UDF store table at step "
             << static_cast<int>(InitStep_)
             << ": " << ev->Get()->Issues.ToString();
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreInitializer: " << errorMessage;
+        YDB_LOG_ERROR("TUdfStoreInitializer",
+            {"errorMessage", errorMessage});
         Send(ParentId, new TEvStoreInitFailed(errorMessage));
         PassAway();
         return;
     }
 
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TUdfStoreInitializer: table created at step " << static_cast<int>(InitStep_);
+    YDB_LOG_INFO("TUdfStoreInitializer: table created at step",
+        {"initStep", static_cast<int>(InitStep_)});
 
     AdvanceInitStep();
     if (InitStep_ == EInitStep::Done) {
@@ -129,8 +131,8 @@ void TUdfStoreInitializer::HandleTableCreated(TEvTableCreator::TEvCreateTableRes
 void TUdfStoreInitializer::HandleKvVolumeCreated(
     NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogCreateKvVolume>::TPtr& /*ev*/)
 {
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TUdfStoreInitializer: KV volume '" << KvVolumePath << "' created successfully";
+    YDB_LOG_INFO("TUdfStoreInitializer: KV volume created successfully",
+        {"kvVolumePath", KvVolumePath});
     AdvanceInitStep();
     Send(ParentId, new TEvStoreInitialized{KvVolumePath});
     PassAway();
@@ -139,8 +141,8 @@ void TUdfStoreInitializer::HandleKvVolumeCreated(
 void TUdfStoreInitializer::HandleRequestFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
     const TString errorMessage = TStringBuilder()
         << "failed to create KV volume: " << ev->Get()->GetErrorMessage();
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-        << "TUdfStoreInitializer: " << errorMessage;
+    YDB_LOG_ERROR("TUdfStoreInitializer",
+        {"errorMessage", errorMessage});
     Send(ParentId, new TEvStoreInitFailed(errorMessage));
     PassAway();
 }

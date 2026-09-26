@@ -10,6 +10,8 @@ The `import nfs` command starts a server-side import process from the network fi
 
 {% include [conn_options_ref.md](../commands/_includes/conn_options_ref.md) %}
 
+{% include [limitation](_includes/limitation-restore-column-tables.md) %}
+
 Unlike the [`tools restore` command](./tools-restore.md), the `import nfs` command always creates objects entirely, so for it to succeed, none of the imported objects (neither directories nor tables) must exist.
 
 If you need to load additional data into existing tables, use the [`tools restore` command](./tools-restore.md) directly on the mounted NFS directory.

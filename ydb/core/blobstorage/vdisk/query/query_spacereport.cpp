@@ -889,6 +889,11 @@ namespace {
         using TCounterGroup = TIntrusivePtr<NMonitoring::TDynamicCounters>;
         using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
 
+        struct TPendingRequest {
+            TActorId Recipient;
+            ui64 Cookie;
+        };
+
         static constexpr TDuration WatchdogTimeout = TDuration::Minutes(30);
         static constexpr TDuration DisabledControlPollPeriod = TDuration::Minutes(1);
         static constexpr TDuration FailureLogPeriod = TDuration::Minutes(1);
@@ -1073,6 +1078,24 @@ namespace {
             TThis::Schedule(WatchdogTimeout, new TEvWatchdog(ActiveAttemptId));
         }
 
+        void ReplyForcedRequests(const NKikimrVDisk::TGetVDiskSpaceReportResponse& record) {
+            for (const TPendingRequest& request : ForcedRequests) {
+                auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
+                    NKikimrProto::OK, TString(), TActivationContext::Now(), nullptr, nullptr);
+                response->Record.CopyFrom(record);
+                SendVDiskResponse(TActivationContext::AsActorContext(), request.Recipient,
+                    response.release(), request.Cookie, HullCtx->VCtx, {});
+            }
+            ForcedRequests.clear();
+        }
+
+        void ReplyForcedRequests(NKikimrProto::EReplyStatus status, const TString& errorReason) {
+            NKikimrVDisk::TGetVDiskSpaceReportResponse record;
+            record.SetStatus(NKikimrProto::EReplyStatus_Name(status));
+            record.SetErrorReason(errorReason);
+            ReplyForcedRequests(record);
+        }
+
         void Reply(TEvGetVDiskSpaceReportRequest::TPtr& ev) {
             if (CachedReport) {
                 auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
@@ -1084,9 +1107,9 @@ namespace {
             }
 
             ColdCacheRequests->Inc();
-            StartRefresh();
 
-            TString errorReason = "VDisk space report cache is not ready";
+            TString errorReason = "VDisk space report cache is not ready; "
+                "set ForceRecalculation or wait for periodic refresh";
             if (LastAttemptError) {
                 errorReason += ": ";
                 errorReason += LastAttemptError;
@@ -1195,7 +1218,12 @@ namespace {
         }
 
         void Handle(TEvGetVDiskSpaceReportRequest::TPtr& ev) {
-            Reply(ev);
+            if (ev->Get()->Record.GetForceRecalculation()) {
+                ForcedRequests.push_back({ev->Sender, ev->Cookie});
+                StartRefresh();
+            } else {
+                Reply(ev);
+            }
         }
 
         void Handle(TEvPeriodicTick::TPtr& ev) {
@@ -1240,6 +1268,7 @@ namespace {
                         : TString(record.GetErrorReason()),
                     result->Metrics);
             }
+            ReplyForcedRequests(record);
             FinishAttempt();
         }
 
@@ -1248,10 +1277,12 @@ namespace {
                 return;
             }
 
+            const TString errorReason = "SpaceReport refresh exceeded the 30 minute watchdog";
             TThis::Send(ActiveWorkerId, new TEvents::TEvPoisonPill);
             RecordFailure(
-                "SpaceReport refresh exceeded the 30 minute watchdog",
+                errorReason,
                 {.Duration = TActivationContext::Monotonic() - AttemptStarted});
+            ReplyForcedRequests(NKikimrProto::ERROR, errorReason);
             // Keep the worker as active until TEvGone arrives. Poison cannot
             // interrupt an activation, so clearing it here could let a second
             // scan overlap a worker that is still unwinding.
@@ -1267,13 +1298,19 @@ namespace {
             if (!ActiveAttemptId) {
                 ActiveWorkerId = {};
                 RefreshInProgress->Set(0);
-                ScheduleNext(false);
+                if (ForcedRequests.empty()) {
+                    ScheduleNext(false);
+                } else {
+                    StartRefresh();
+                }
                 return;
             }
 
+            const TString errorReason = "SpaceReport worker terminated without a completion event";
             RecordFailure(
-                "SpaceReport worker terminated without a completion event",
+                errorReason,
                 {.Duration = TActivationContext::Monotonic() - AttemptStarted});
+            ReplyForcedRequests(NKikimrProto::ERROR, errorReason);
             FinishAttempt();
         }
 
@@ -1286,6 +1323,7 @@ namespace {
                 TThis::Send(ActiveWorkerId, new TEvents::TEvPoisonPill);
                 ActiveWorkerId = {};
             }
+            ReplyForcedRequests(NKikimrProto::ERROR, "VDisk space report manager stopped");
             PassAway();
         }
 
@@ -1409,6 +1447,7 @@ namespace {
         const TCounterPtr ColdCacheRequests;
 
         std::unique_ptr<NKikimrVDisk::TVDiskSpaceReport> CachedReport;
+        std::vector<TPendingRequest> ForcedRequests;
         TString LastAttemptError;
         TActorId ActiveWorkerId;
         ui64 ActiveAttemptId = 0;

@@ -8,9 +8,14 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mon.h>
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+
+#include <util/stream/format.h>
+
+#include <array>
 
 namespace NKikimr {
 
@@ -1038,6 +1043,417 @@ namespace NKikimr {
         {}
     };
 
+    ////////////////////////////////////////////////////////////////////////////
+    // TSkeletonFrontMonSpaceReportActor
+    ////////////////////////////////////////////////////////////////////////////
+    class TSkeletonFrontMonSpaceReportActor : public TActorBootstrapped<TSkeletonFrontMonSpaceReportActor> {
+    public:
+        enum class EOutputFormat {
+            RawProto,
+            Visualization,
+        };
+
+    private:
+        struct TBreakdownItem {
+            const char* Name;
+            const char* Group;
+            ui64 Bytes;
+            const char* ProgressBarClass;
+        };
+
+        static constexpr size_t BreakdownItemCount = 15;
+        using TBreakdownItems = std::array<TBreakdownItem, BreakdownItemCount>;
+
+        enum EWakeupTag : ui64 {
+            Retry = 1,
+            Timeout = 2,
+        };
+
+        const TActorId NotifyId;
+        const TActorId SkeletonFrontID;
+        NMon::TEvHttpInfo::TPtr Ev;
+        const EOutputFormat OutputFormat;
+        const bool ForceRecalculation;
+
+        friend class TActorBootstrapped<TSkeletonFrontMonSpaceReportActor>;
+
+        static TString FormatBytes(ui64 bytes) {
+            return TStringBuilder() << HumanReadableSize(bytes, SF_BYTES) << " (" << bytes << " bytes)";
+        }
+
+        static TString FormatBytes(i64 bytes) {
+            return TStringBuilder() << HumanReadableSize(bytes, SF_BYTES) << " (" << bytes << " bytes)";
+        }
+
+        static TString FormatTimestamp(ui64 unixMs) {
+            return unixMs ? TInstant::MilliSeconds(unixMs).ToString() : TString("Unknown");
+        }
+
+        static TString FormatAge(ui64 unixMs) {
+            const ui64 nowMs = TInstant::Now().MilliSeconds();
+            return unixMs && unixMs <= nowMs
+                ? TDuration::MilliSeconds(nowMs - unixMs).ToString()
+                : TString("Unknown");
+        }
+
+        static TBreakdownItems GetBreakdownItems(
+                const NKikimrVDisk::TVDiskSpaceBreakdown& breakdown)
+        {
+            return {{
+                {"Useful blob data", "Useful data", breakdown.GetUsefulBlobDataBytes(),
+                    "progress-bar progress-bar-success"},
+                {"Live metadata", "Metadata", breakdown.GetLiveMetadataBytes(),
+                    "progress-bar progress-bar-info"},
+                {"Live auxiliary data", "System data", breakdown.GetLiveAuxiliaryDataBytes(),
+                    "progress-bar"},
+                {"GC-dead blob data", "Garbage", breakdown.GetGcDeadBlobDataBytes(),
+                    "progress-bar progress-bar-danger"},
+                {"GC-dead metadata", "Garbage", breakdown.GetGcDeadMetadataBytes(),
+                    "progress-bar progress-bar-danger"},
+                {"Merge-redundant blob data", "Garbage", breakdown.GetMergeRedundantBlobDataBytes(),
+                    "progress-bar progress-bar-danger"},
+                {"Merge-redundant metadata", "Garbage", breakdown.GetMergeRedundantMetadataBytes(),
+                    "progress-bar progress-bar-danger"},
+                {"Write padding", "Fragmentation", breakdown.GetWritePaddingBytes(),
+                    "progress-bar progress-bar-warning"},
+                {"Slot internal fragmentation", "Fragmentation", breakdown.GetSlotInternalFragmentationBytes(),
+                    "progress-bar progress-bar-warning"},
+                {"Free slot space", "Fragmentation", breakdown.GetFreeSlotBytes(),
+                    "progress-bar progress-bar-warning"},
+                {"Free stripe space", "Fragmentation", breakdown.GetFreeStripeBytes(),
+                    "progress-bar progress-bar-warning"},
+                {"Chunk tail", "Other", breakdown.GetChunkTailBytes(),
+                    "progress-bar progress-bar-striped"},
+                {"Free chunk reserve", "Other", breakdown.GetFreeChunkReserveBytes(),
+                    "progress-bar progress-bar-striped"},
+                {"Locked or quarantined", "Other", breakdown.GetLockedOrQuarantinedBytes(),
+                    "progress-bar progress-bar-striped"},
+                {"Unclassified", "Other", breakdown.GetUnclassifiedBytes(),
+                    "progress-bar progress-bar-striped"},
+            }};
+        }
+
+        static ui64 GetAccountedBytes(const NKikimrVDisk::TVDiskSpaceBreakdown& breakdown) {
+            ui64 result = 0;
+            for (const TBreakdownItem& item : GetBreakdownItems(breakdown)) {
+                result += item.Bytes;
+            }
+            return result;
+        }
+
+        static double GetPercentage(ui64 bytes, ui64 totalBytes) {
+            return totalBytes ? 100.0 * static_cast<double>(bytes) / static_cast<double>(totalBytes) : 0.0;
+        }
+
+        static void RenderBreakdownMarker(IOutputStream& str, const TBreakdownItem& item) {
+            str << "<span class=\"progress\" aria-hidden=\"true\" "
+                << "style=\"display:inline-block;width:1em;height:1em;margin:0 0.25em 0 0;vertical-align:middle\">"
+                << "<span class=\"" << item.ProgressBarClass
+                << "\" style=\"width:100%;height:100%\"></span></span>";
+        }
+
+        static void RenderBreakdownBar(
+                IOutputStream& str,
+                const NKikimrVDisk::TVDiskSpaceBreakdown& breakdown,
+                ui64 totalBytes)
+        {
+            const auto items = GetBreakdownItems(breakdown);
+            totalBytes = Max(totalBytes, GetAccountedBytes(breakdown));
+            str << "<div class=\"progress\" style=\"margin-bottom:0\">";
+            for (const TBreakdownItem& item : items) {
+                if (!item.Bytes) {
+                    continue;
+                }
+                const double percentage = GetPercentage(item.Bytes, totalBytes);
+                str << "<div class=\"" << item.ProgressBarClass
+                    << "\" role=\"progressbar\" style=\"width:" << Sprintf("%.6f", percentage)
+                    << "%\" title=\"" << item.Name << ": " << FormatBytes(item.Bytes)
+                    << " (" << Sprintf("%.2f", percentage) << "%)\"></div>";
+            }
+            str << "</div>";
+        }
+
+        static void RenderSummaryRow(IOutputStream& str, const char* name, const TString& value) {
+            HTML(str) {
+                TABLER() {
+                    TABLED() { str << name; }
+                    TABLED() { str << value; }
+                }
+            }
+        }
+
+        static void RenderComponentRow(
+                IOutputStream& str,
+                const TString& name,
+                const NKikimrVDisk::TVDiskSpaceComponent& component)
+        {
+            const ui64 accountedBytes = GetAccountedBytes(component.GetBreakdown());
+            HTML(str) {
+                TABLER() {
+                    TABLED() { str << name; }
+                    TABLED_ATTRS({{"data-text", ToString(component.GetChunkCount())}}) {
+                        str << component.GetChunkCount();
+                    }
+                    TABLED_ATTRS({{"data-text", ToString(component.GetAllocatedBytes())}}) {
+                        str << FormatBytes(component.GetAllocatedBytes());
+                    }
+                    TABLED_ATTRS({{"data-text", ToString(component.GetStripedBytes())}}) {
+                        str << FormatBytes(component.GetStripedBytes());
+                    }
+                    TABLED_ATTRS({{"data-text", ToString(accountedBytes)}}) {
+                        str << FormatBytes(accountedBytes);
+                    }
+                    TABLED_ATTRS({{"data-text", ToString(accountedBytes)}}) {
+                        RenderBreakdownBar(str, component.GetBreakdown(), component.GetAllocatedBytes());
+                    }
+                }
+            }
+        }
+
+        static void RenderVisualization(const NKikimrVDisk::TGetVDiskSpaceReportResponse& response, IOutputStream& str) {
+            HTML(str) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << "VDisk Space Report"
+                            << "<a class=\"btn btn-primary btn-xs navbar-right\""
+                            << " href=\"?type=spacereport\">Raw Proto</a>"
+                            << "<a class=\"btn btn-warning btn-xs navbar-right\" style=\"margin-right:5px\""
+                            << " href=\"?type=spacereportvisual&force=1\">Recalculate</a>";
+                    }
+                    DIV_CLASS("panel-body") {
+                        const bool ok = response.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::OK);
+                        DIV_CLASS(ok ? "alert alert-success" : "alert alert-warning") {
+                            STRONG() { str << "Status: "; }
+                            str << NHtml::EscapeText(response.GetStatus());
+                            if (response.GetErrorReason()) {
+                                str << "<br>" << NHtml::EscapeText(response.GetErrorReason());
+                            }
+                        }
+
+                        if (!response.HasReport()) {
+                            return;
+                        }
+
+                        const auto& report = response.GetReport();
+                        H4_CLASS("text-info") { str << "Summary"; }
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEBODY() {
+                                RenderSummaryRow(str, "Chunk size", FormatBytes(report.GetChunkSizeBytes()));
+                                RenderSummaryRow(str, "PDisk allocated chunks", ToString(report.GetPDiskAllocatedChunks()));
+                                RenderSummaryRow(str, "PDisk allocated space", FormatBytes(report.GetPDiskAllocatedBytes()));
+                                RenderSummaryRow(str, "Accounted space", FormatBytes(report.GetAccountedBytes()));
+                                RenderSummaryRow(str, "Reconciliation delta", FormatBytes(report.GetReconciliationDeltaBytes()));
+                                RenderSummaryRow(str, "Collection started",
+                                    FormatTimestamp(report.GetCollectionStartedAtUnixMs()));
+                                RenderSummaryRow(str, "Collection completed",
+                                    FormatTimestamp(report.GetCollectionCompletedAtUnixMs()));
+                                if (report.GetCollectionStartedAtUnixMs()
+                                        && report.GetCollectionCompletedAtUnixMs() >= report.GetCollectionStartedAtUnixMs()) {
+                                    RenderSummaryRow(str, "Collection duration", TDuration::MilliSeconds(
+                                        report.GetCollectionCompletedAtUnixMs()
+                                            - report.GetCollectionStartedAtUnixMs()).ToString());
+                                }
+                                RenderSummaryRow(str, "Report age",
+                                    FormatAge(report.GetCollectionCompletedAtUnixMs()));
+                            }
+                        }
+                        DIV_CLASS("text-muted") {
+                            str << "This is the latest report cached by the VDisk. Values are sampled without a global "
+                                << "snapshot; reconciliation delta and unclassified space may be nonzero.";
+                        }
+
+                        H4_CLASS("text-info") { str << "Total breakdown"; }
+                        RenderBreakdownBar(str, report.GetTotal(), report.GetPDiskAllocatedBytes());
+                        TABLE_SORTABLE_CLASS("table table-condensed table-striped") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "Category"; }
+                                    TABLEH() { str << "Group"; }
+                                    TABLEH() { str << "Space"; }
+                                    TABLEH() { str << "% of PDisk allocation"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                for (const TBreakdownItem& item : GetBreakdownItems(report.GetTotal())) {
+                                    TABLER() {
+                                        TABLED() {
+                                            RenderBreakdownMarker(str, item);
+                                            str << item.Name;
+                                        }
+                                        TABLED() { str << item.Group; }
+                                        TABLED_ATTRS({{"data-text", ToString(item.Bytes)}}) {
+                                            str << FormatBytes(item.Bytes);
+                                        }
+                                        const double percentage = GetPercentage(item.Bytes, report.GetPDiskAllocatedBytes());
+                                        TABLED_ATTRS({{"data-text", Sprintf("%.12f", percentage)}}) {
+                                            str << Sprintf("%.2f%%", percentage);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        H4_CLASS("text-info") { str << "Components"; }
+                        TABLE_SORTABLE_CLASS("table table-condensed table-striped") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "Component"; }
+                                    TABLEH() { str << "Chunks"; }
+                                    TABLEH() { str << "Allocated"; }
+                                    TABLEH() { str << "Striped"; }
+                                    TABLEH() { str << "Accounted"; }
+                                    TABLEH() { str << "Breakdown"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                RenderComponentRow(str, "LogoBlobs / Inplace", report.GetLogoBlobs());
+                                RenderComponentRow(str, "LogoBlobs / Huge", report.GetHuge().GetTotal());
+                                RenderComponentRow(str, "Blocks", report.GetBlocks());
+                                RenderComponentRow(str, "Barriers", report.GetBarriers());
+                                RenderComponentRow(str, "SyncLog", report.GetSyncLog());
+                                for (const auto& chunkKeeper : report.GetChunkKeeper()) {
+                                    RenderComponentRow(str,
+                                        TStringBuilder() << "ChunkKeeper " << chunkKeeper.GetSubsystemId(),
+                                        chunkKeeper.GetTotal());
+                                }
+                                RenderComponentRow(str, "Unattributed", report.GetUnattributed());
+                            }
+                        }
+
+                        if (report.HasStripeHeap()) {
+                            const auto& stripeHeap = report.GetStripeHeap();
+                            H4_CLASS("text-info") { str << "Stripe heap"; }
+                            TABLE_CLASS("table table-condensed") {
+                                TABLEBODY() {
+                                    RenderSummaryRow(str, "Chunks", ToString(stripeHeap.GetChunkCount()));
+                                    RenderSummaryRow(str, "Allocated", FormatBytes(stripeHeap.GetAllocatedBytes()));
+                                    RenderSummaryRow(str, "Used", FormatBytes(stripeHeap.GetUsedBytes()));
+                                    RenderSummaryRow(str, "Free", FormatBytes(stripeHeap.GetFreeBytes()));
+                                    RenderSummaryRow(str, "Locked free", FormatBytes(stripeHeap.GetLockedFreeBytes()));
+                                }
+                            }
+                            DIV_CLASS("text-muted") {
+                                str << "Allocator summary only; these bytes are already attributed to components above.";
+                            }
+                        }
+
+                        if (report.GetHuge().SizeClassesSize()) {
+                            H4_CLASS("text-info") { str << "LogoBlobs / Huge size classes"; }
+                            TABLE_CLASS("table table-condensed table-striped") {
+                                TABLEHEAD() {
+                                    TABLER() {
+                                        TABLEH() { str << "Slot size"; }
+                                        TABLEH() { str << "Slots/chunk"; }
+                                        TABLEH() { str << "Chunks"; }
+                                        TABLEH() { str << "Live slots"; }
+                                        TABLEH() { str << "GC-dead slots"; }
+                                        TABLEH() { str << "Merge-redundant slots"; }
+                                        TABLEH() { str << "Unclassified slots"; }
+                                        TABLEH() { str << "Accounted"; }
+                                    }
+                                }
+                                TABLEBODY() {
+                                    for (const auto& sizeClass : report.GetHuge().GetSizeClasses()) {
+                                        TABLER() {
+                                            TABLED() { str << FormatBytes(sizeClass.GetSlotSizeBytes()); }
+                                            TABLED() { str << sizeClass.GetSlotsPerChunk(); }
+                                            TABLED() { str << sizeClass.GetChunkCount(); }
+                                            TABLED() { str << sizeClass.GetLiveSlotCount(); }
+                                            TABLED() { str << sizeClass.GetGcDeadSlotCount(); }
+                                            TABLED() { str << sizeClass.GetMergeRedundantSlotCount(); }
+                                            TABLED() { str << sizeClass.GetUnclassifiedSlotCount(); }
+                                            TABLED() { str << FormatBytes(GetAccountedBytes(sizeClass.GetBreakdown())); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        void SendRequest(const TActorContext& ctx) {
+            auto request = std::make_unique<TEvGetVDiskSpaceReportRequest>();
+            request->Record.SetForceRecalculation(ForceRecalculation);
+            ctx.Send(SkeletonFrontID, request.release());
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            SendRequest(ctx);
+            ctx.Schedule(TDuration::Minutes(1), new TEvents::TEvWakeup(Timeout));
+            Become(&TThis::StateFunc);
+        }
+
+        void Handle(TEvGetVDiskSpaceReportResponse::TPtr &ev, const TActorContext &ctx) {
+            const auto& response = ev->Get()->Record;
+            if (OutputFormat == EOutputFormat::RawProto) {
+                TStringStream str;
+                str << NMonitoring::HTTPOKTEXT << response.DebugString();
+                Finish(ctx, new NMon::TEvHttpInfoRes(
+                    str.Str(), Ev->Get()->SubRequestId, NMon::TEvHttpInfoRes::Custom));
+            } else if (ForceRecalculation
+                    && response.GetStatus() == NKikimrProto::EReplyStatus_Name(NKikimrProto::NOTREADY)
+                    && !response.HasReport()) {
+                ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(Retry));
+            } else {
+                TStringStream str;
+                RenderVisualization(response, str);
+                Finish(ctx, new NMon::TEvHttpInfoRes(str.Str(), Ev->Get()->SubRequestId));
+            }
+        }
+
+        void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+            switch (ev->Get()->Tag) {
+                case Retry:
+                    SendRequest(ctx);
+                    break;
+                case Timeout:
+                    Finish(ctx, new NMon::TEvHttpInfoRes(
+                        "<strong>VDisk space report cache is not ready after one minute</strong>"));
+                    break;
+                default:
+                    Y_ABORT("Unexpected VDisk space report wakeup tag");
+            }
+        }
+
+        void Finish(const TActorContext &ctx, IEventBase *ev) {
+            ctx.Send(NotifyId, new TEvents::TEvGone);
+            ctx.Send(Ev->Sender, ev);
+            Die(ctx);
+        }
+
+        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Y_UNUSED(ev);
+            Die(ctx);
+        }
+
+        STRICT_STFUNC(StateFunc,
+            HFunc(TEvGetVDiskSpaceReportResponse, Handle)
+            HFunc(TEvents::TEvWakeup, HandleWakeup)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_MON_SF_LBSTAT;
+        }
+
+        TSkeletonFrontMonSpaceReportActor(
+                const TActorId &notifyId,
+                const TActorId &skeletonFrontID,
+                NMon::TEvHttpInfo::TPtr &ev,
+                EOutputFormat outputFormat,
+                bool forceRecalculation)
+            : TActorBootstrapped<TSkeletonFrontMonSpaceReportActor>()
+            , NotifyId(notifyId)
+            , SkeletonFrontID(skeletonFrontID)
+            , Ev(ev)
+            , OutputFormat(outputFormat)
+            , ForceRecalculation(forceRecalculation)
+        {}
+    };
+
     class TRestartVDiskActor : public TActorBootstrapped<TRestartVDiskActor> {
         const ui32 PDiskId;
         const TVDiskID VDiskId;
@@ -1182,6 +1598,7 @@ namespace NKikimr {
 
         const TString &type = cgi.Get("type");
         const TString &dbname = cgi.Get("dbname");
+        const bool forceSpaceReportRecalculation = cgi.Get("force") == "1";
         if (type == TString()) {
             return new TSkeletonFrontMonMainPageActor(notifyId, skeletonID, ev, frontHtml);
         } else if (type == "query") {
@@ -1205,6 +1622,14 @@ namespace NKikimr {
         } else if (type == "hugestat") {
             return new TSkeletonFrontMonDbStatActor(selfVDiskId, notifyId, cfg, skeletonFrontID,
                     ev, NKikimrBlobStorage::StatHugeAction, dbname);
+        } else if (type == "spacereport") {
+            return new TSkeletonFrontMonSpaceReportActor(
+                notifyId, skeletonFrontID, ev, TSkeletonFrontMonSpaceReportActor::EOutputFormat::RawProto,
+                forceSpaceReportRecalculation);
+        } else if (type == "spacereportvisual") {
+            return new TSkeletonFrontMonSpaceReportActor(
+                notifyId, skeletonFrontID, ev, TSkeletonFrontMonSpaceReportActor::EOutputFormat::Visualization,
+                forceSpaceReportRecalculation);
         } else if (type == "dbmainpage") {
             return CreateMonDbMainPageActor(selfVDiskId, notifyId, skeletonFrontID, skeletonID, ev);
         } else if (type == "restart") {

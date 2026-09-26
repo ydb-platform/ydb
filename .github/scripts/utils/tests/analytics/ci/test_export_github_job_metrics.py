@@ -18,6 +18,7 @@ from github_actions.export_github_job_metrics import (
     already_exported,
     attach_pull_requests,
     completed_since,
+    open_runs_to_save,
     pull_refs_from_commit_pulls,
     pull_requests_have_target,
     selected_workflows,
@@ -86,6 +87,26 @@ class CompletedSinceTest(unittest.TestCase):
         last = datetime.now(timezone.utc) - timedelta(minutes=10)
         since = completed_since(2, last)
         self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
+
+
+class OpenRunsToSaveTest(unittest.TestCase):
+    def test_drops_finished_when_the_list_succeeded(self):
+        self.assertEqual(
+            open_runs_to_save([(1, 1)], [(2, 1)], [(9, 1)], False, set()),
+            [(1, 1), (2, 1)],
+        )
+
+    def test_list_failure_keeps_previous_open_runs(self):
+        self.assertEqual(
+            open_runs_to_save([(1, 1)], [], [(1, 1), (4, 1)], True, set()),
+            [(1, 1), (4, 1)],
+        )
+
+    def test_list_failure_skips_runs_already_in_the_table(self):
+        self.assertEqual(
+            open_runs_to_save([], [], [(4, 1), (5, 1)], True, {(5, 1)}),
+            [(4, 1)],
+        )
 
 
 class AlreadyExportedTest(unittest.TestCase):

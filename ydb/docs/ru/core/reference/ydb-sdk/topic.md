@@ -3653,6 +3653,20 @@
 
 ### Поддержка автомасштабирования топиков {#autoscaling}
 
+{% note warning %}
+
+Параметры `min_active_partitions` и `max_active_partitions` сами по себе не
+включают автомасштабирование топика. Если не передать
+`auto_partitioning_settings`, останется стратегия `DISABLED`, а число активных
+партиций будет фиксированным. В YDB 26.2 метод `describe_topic()` в этом случае
+возвращает эффективное значение `max_active_partitions`, равное
+`min_active_partitions`.
+
+Чтобы настроить разные минимальную и максимальную границы, дополнительно
+задайте стратегию `TopicAutoPartitioningStrategy.SCALE_UP`, как в примере ниже.
+
+{% endnote %}
+
 {% list tabs group=lang %}
 
 - C++

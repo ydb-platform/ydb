@@ -42,7 +42,43 @@ bool TOperationsManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactio
 
 bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     AFL_VERIFY(Self->StoragesManager);
-    return Self->StoragesManager->LoadIdempotency(txc.DB);
+    TColumnShard::TCutHistoryScan scan;
+    if (AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->FeatureFlags.GetEnableColumnshardCutHistory()) {
+        for (ui32 channel = FirstDataChannel; channel < Self->Info()->Channels.size(); ++channel) {
+            const auto& history = Self->Info()->Channels[channel].History;
+            for (size_t i = 0; i + 1 < history.size(); ++i) {
+                scan.Intervals.push_back({ channel, history[i].FromGeneration, history[i + 1].FromGeneration, history[i].GroupID });
+            }
+        }
+    }
+    const auto countReference = [&](const NOlap::TUnifiedBlobId& blob) {
+        const auto& id = blob.GetLogoBlobId();
+        if (id.TabletID() == Self->TabletID()) {
+            if (auto* interval = TColumnShard::FindCutHistoryInterval(scan.Intervals, id)) {
+                ++interval->BlobReferences;
+            }
+        }
+    };
+    const auto countReferences = [&](const std::vector<NOlap::TUnifiedBlobId>& keeps, const NOlap::TTabletsByBlob& deletes) {
+        for (const auto& blob : keeps) {
+            countReference(blob);
+        }
+        for (const auto& [blob, _] : deletes) {
+            countReference(blob);
+        }
+    };
+    std::optional<TFunctionRef<void(const std::vector<NOlap::TUnifiedBlobId>&, const NOlap::TTabletsByBlob&)>> onListsLoaded;
+    if (!scan.Intervals.empty()) {
+        onListsLoaded.emplace(countReferences);
+    }
+    if (!Self->StoragesManager->LoadIdempotency(txc.DB, onListsLoaded)) {
+        return false;
+    }
+    Self->CutHistoryScan.reset();
+    if (!scan.Intervals.empty()) {
+        Self->CutHistoryScan = std::move(scan);
+    }
+    return true;
 }
 
 bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

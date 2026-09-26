@@ -14,6 +14,8 @@
 
 namespace NKikimr::NColumnShard {
 
+inline constexpr ui32 FirstDataChannel = 2;
+
 using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 struct TLimits {

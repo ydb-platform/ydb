@@ -6,7 +6,9 @@
 
 #include <util/generic/string.h>
 
+#include <set>
 #include <tuple>
+#include <utility>
 
 namespace NKikimrColumnShardProto {
 class TBlobRange;
@@ -15,6 +17,8 @@ class TUnifiedBlobId;
 }   // namespace NKikimrColumnShardProto
 
 namespace NKikimr::NOlap {
+
+using TPendingGCBlobGenerations = std::set<std::pair<ui32, ui32>>;
 
 class IBlobGroupSelector {
 protected:

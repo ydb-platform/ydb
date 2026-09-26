@@ -3021,6 +3021,16 @@ message TColumnShardConfig {
     optional string ScanDefaultPool = 75;
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
+
+    message TCutHistoryConfig {
+        optional uint32 PreparationBatchSize = 1 [default = 1024];
+        optional uint32 ScanBatchSize = 2 [default = 32];
+        optional uint64 ScanMemoryLimitBytes = 3 [default = 8388608];
+        optional uint32 ContinuationDelayMs = 4 [default = 1];
+        optional uint32 ContinuationJitterMs = 5 [default = 1];
+    }
+
+    optional TCutHistoryConfig CutHistory = 77;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

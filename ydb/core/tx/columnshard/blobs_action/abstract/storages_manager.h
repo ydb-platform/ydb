@@ -3,6 +3,8 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
+#include <util/generic/function_ref.h>
+
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
@@ -46,7 +48,9 @@ public:
         return DoGetSharedBlobsManager();
     }
 
-    bool LoadIdempotency(NTable::TDatabase& database);
+    // A later storage load can fail after the synchronous lists callback has run.
+    bool LoadIdempotency(NTable::TDatabase& database,
+        std::optional<TFunctionRef<void(const std::vector<TUnifiedBlobId>&, const TTabletsByBlob&)>> onListsLoaded = {});
     bool HasBlobsToDelete() const;
     void Stop();
 

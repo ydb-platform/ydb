@@ -90,6 +90,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
+        StartCutHistoryScan(ctx);
         SignalTabletActive(ctx);
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
@@ -321,6 +322,10 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
+    if (CutHistoryScan && CutHistoryScan->RetryDelivery && !CutHistoryScan->SavePending) {
+        CutHistoryScan->RetryDelivery = false;
+        TryCutHistory(ctx);
+    }
     if (ev->Get()->Manual) {
         YDB_LOG_DEBUG("",
             {"event", "TEvPrivate::TEvPeriodicWakeup::MANUAL"},

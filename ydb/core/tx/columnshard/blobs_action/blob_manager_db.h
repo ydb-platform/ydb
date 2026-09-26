@@ -8,6 +8,10 @@
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/util/gen_step.h>
 
+#include <util/generic/function_ref.h>
+
+#include <optional>
+
 namespace NKikimr::NTable {
 class TDatabase;
 }
@@ -51,8 +55,10 @@ public:
 
 class TBlobManagerDb: public IBlobManagerDb {
 public:
-    explicit TBlobManagerDb(NTable::TDatabase& db)
+    explicit TBlobManagerDb(
+        NTable::TDatabase& db, std::optional<TFunctionRef<void(const std::vector<TUnifiedBlobId>&, const TTabletsByBlob&)>> onListsLoaded = {})
         : Database(db)
+        , OnListsLoaded(onListsLoaded)
     {
     }
 
@@ -92,6 +98,7 @@ public:
 
 private:
     NTable::TDatabase& Database;
+    const std::optional<TFunctionRef<void(const std::vector<TUnifiedBlobId>&, const TTabletsByBlob&)>> OnListsLoaded;
 };
 
 }   // namespace NKikimr::NOlap

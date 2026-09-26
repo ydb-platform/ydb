@@ -34,6 +34,16 @@ public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
         const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs);
 
+    TPendingGCBlobGenerations GetPendingGCBlobGenerations() const {
+        return Manager->GetPendingGCBlobGenerations();
+    }
+
+    bool CanCutHistory(const TPendingGCBlobGenerations& generations, const ui32 channel, const ui32 from, const ui32 to) const {
+        // Cleanup during the scan can move uncounted blobs from pending lists into in-flight GC.
+        return !GetStopped() && !HasGCInFlight() && !HasPendingGCBlobsInRange(generations, channel, from, to) &&
+               !GetSharedBlobs()->HasBlobsInRange(channel, from, to);
+    }
+
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
         return Manager->HasToDelete(blobId, tabletId);
     }

@@ -94,10 +94,35 @@ struct TEvPrivate {
 
         EvRetryConfigSubscription,
 
+        EvContinueCutHistory,
+        EvCutHistoryPortionsBatch,
+        EvCutHistoryPortionsReady,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvContinueCutHistory: NActors::TEventLocal<TEvContinueCutHistory, EvContinueCutHistory> {};
+
+    struct TEvCutHistoryPortionsBatch: NActors::TEventLocal<TEvCutHistoryPortionsBatch, EvCutHistoryPortionsBatch> {
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+        bool Finished;
+
+        TEvCutHistoryPortionsBatch(std::vector<std::pair<TInternalPathId, ui64>>&& portions, const bool finished)
+            : Portions(std::move(portions))
+            , Finished(finished)
+        {
+        }
+    };
+
+    struct TEvCutHistoryPortionsReady: NActors::TEventLocal<TEvCutHistoryPortionsReady, EvCutHistoryPortionsReady> {
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+
+        explicit TEvCutHistoryPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
+            : Portions(std::move(portions))
+        {
+        }
+    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:

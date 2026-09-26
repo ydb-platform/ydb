@@ -7,7 +7,9 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 
 #include <limits>
 
@@ -519,9 +521,11 @@ public:
 private:
     NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
+    TString CutHistoryReport;
     TString RenderCompactionPage();
     TString RenderMainPage();
     TString RenderPortionsPage();
+    TString RenderCutHistoryPage();
 };
 
 inline TString TEscapeHtml(const TString& in) {
@@ -657,7 +661,41 @@ TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
     return html.Str();
 }
 
+bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, TString& report) {
+    report.clear();
+    using T = Schema::CutHistoryRequests;
+    NIceDb::TNiceDb db(txc.DB);
+    auto row = db.Table<T>().Range().Select();
+    if (!row.IsReady()) {
+        return false;
+    }
+    while (!row.EndOfSet()) {
+        NKikimrTxColumnShard::TCutHistoryRequest request;
+        if (row.HaveValue<T::RequestProto>()) {
+            Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
+        } else {
+            request.SetTabletID(row.GetValue<T::TabletID>());
+            request.SetChannel(row.GetValue<T::Channel>());
+            request.SetFromGeneration(row.GetValue<T::FromGeneration>());
+            request.SetGroupID(row.GetValue<T::GroupID>());
+            request.SetTimestampUs(row.GetValue<T::TimestampUs>());
+            ActorIdToProto(row.GetValue<T::Recipient>(), request.MutableRecipient());
+            request.SetToGeneration(row.GetValue<T::ToGeneration>());
+            request.SetSendingGeneration(row.GetValue<T::SendingGeneration>());
+        }
+        report += request.DebugString();
+        report += "\n";
+        if (!row.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
+    if (HttpInfoEvent->Get()->Cgi().Get("page") == "cuthistory") {
+        return FillCutHistoryMonitoringReport(txc, CutHistoryReport);
+    }
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
 
@@ -771,6 +809,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
+    html << "<h3><a href=\"app?page=cuthistory&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> CutHistory </a></h3>";
     html << RenderLwTraceStartScript();
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
                           "Traces for all scans on shard")
@@ -796,6 +835,23 @@ TString TTxMonitoring::RenderMainPage() {
 
     TPrintErrorTable(html, readErrors, "read");
     TPrintErrorTable(html, writeErrors, "write");
+
+    return html.Str();
+}
+
+TString TTxMonitoring::RenderCutHistoryPage() {
+    TStringStream html;
+    const auto& cgi = HttpInfoEvent->Get()->Cgi();
+    html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
+    HTML(html) {
+        H3_CLASS("") {
+            html << "Persisted CutHistory request intents (latest " << TColumnShard::CutHistoryRequestLimit
+                 << "; Hive confirmation is not tracked)";
+        }
+        PRE() {
+            html << TEscapeHtml(CutHistoryReport);
+        }
+    }
 
     return html.Str();
 }
@@ -1333,6 +1389,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         htmlResult = RenderCompactionPage();
     } else if (cgi.Has("page") && cgi.Get("page") == "portions") {
         htmlResult = RenderPortionsPage();
+    } else if (cgi.Has("page") && cgi.Get("page") == "cuthistory") {
+        htmlResult = RenderCutHistoryPage();
     } else {
         htmlResult = RenderMainPage();
     }

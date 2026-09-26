@@ -10,6 +10,7 @@
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
+#include "common/blob.h"
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
@@ -597,6 +598,47 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    struct TCutHistoryInterval {
+        ui32 Channel = 0;
+        ui32 From = 0;
+        ui32 To = 0;
+        ui32 Group = 0;
+        ui64 BlobReferences = 0;
+        bool Attempted = false;
+    };
+
+    struct TCutHistoryScan {
+        std::vector<TCutHistoryInterval> Intervals;
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+        size_t Position = 0;
+        size_t Pending = 0;
+        TActorId PreparationActor;
+        ui64 BootLastPortion = 0;
+        std::pair<ui64, ui64> PreparationCursor{ 0, 0 };
+        std::optional<std::pair<ui64, ui64>> PreparationMaxKey;
+        bool PreparationPending = false;
+        bool SavePending = false;
+        bool RetryDelivery = false;
+        TInstant Started;
+        std::optional<TInstant> Finished;
+    };
+
+    std::optional<TCutHistoryScan> CutHistoryScan;
+    static constexpr ui64 CutHistoryRequestLimit = 64;
+
+    class TTxPrepareCutHistory;
+    class TTxSaveCutHistoryRequests;
+    class TCutHistoryResultProcessor;
+    void ScheduleCutHistoryContinuation(const TActorContext& ctx);
+    static TCutHistoryInterval* FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id);
+    bool CanCutHistoryInterval(const TCutHistoryInterval& interval, const NOlap::TPendingGCBlobGenerations& pendingGenerations) const;
+    void StartCutHistoryScan(const TActorContext& ctx);
+    void AbortCutHistoryScan();
+    void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result);
+    void TryCutHistory(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinueCutHistory::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCutHistoryPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);

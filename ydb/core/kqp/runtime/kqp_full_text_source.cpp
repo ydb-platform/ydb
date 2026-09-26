@@ -2523,14 +2523,15 @@ private:
     // Parse the search query string and tokenize it using the analyzer
     // configured on the fulltext index (same analyzer used at index build time).
     // Each resulting token becomes a TWordReadState entry in Words[].
-    // Returns false if no tokens were extracted (reports BAD_REQUEST error).
+    // Returns false if no tokens were extracted. JSON sources finish with an empty
+    // result; full-text sources report a BAD_REQUEST error.
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
+        const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
+            || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
 
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson ||
-            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+        if (isJsonIndex) {
             // For JSON index, tokens are pre-compiled at query compile time
-            YQL_ENSURE(Settings->GetQuerySettings().TokensSize() > 0, "Expected non-empty tokens");
             YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
 
             size_t wordIndex = 0;
@@ -2569,7 +2570,11 @@ private:
         }
 
         if (Words.empty()) {
-            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            if (isJsonIndex) {
+                NotifyCA();
+            } else {
+                RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            }
             return false;
         }
 
@@ -3739,4 +3744,3 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
 }
 
 }
-

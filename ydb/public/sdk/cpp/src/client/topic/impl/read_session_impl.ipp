@@ -189,8 +189,13 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
         NotReady.pop_front();
     };
 
-    while (!NotReady.empty() && NotReady.front().IsReady()) {
+    while (!NotReady.empty() && (NotReady.front().IsReady() || NotReady.front().IsAbandoned())) {
         auto& front = NotReady.front();
+
+        if (front.IsAbandoned()) {
+            NotReady.pop_front();
+            continue;
+        }
 
         if (front.IsDataEvent()) {
             if (queue.HasDataEventCallback()) {
@@ -239,9 +244,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     for (auto& event : NotReady) {
         const bool isDataEvent = event.IsDataEvent();
 
-        if (event.IsReady() ||
-            (isDataEvent && !event.GetDataEvent().SetAbandoned()) // Try to cancel inflight decompression tasks if any (returns true if message was decompressed and become ready)
-        ) {
+        if (!isDataEvent || !event.GetDataEvent().SetAbandoned()) {
             if (!hasNonReadyEvents) {
                 // Continue ready events prefix
                 ready.push_back(std::move(event));
@@ -280,7 +283,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActio
         }
 
         auto& dataEvent = event.GetDataEvent();
-        if (event.IsReady() || !dataEvent.SetAbandoned()) {
+        if (!dataEvent.SetAbandoned()) {
             accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize(), dataEvent.GetMessageCount());
         } else {
             infos.push_back(dataEvent.GetParent());
@@ -2677,15 +2680,14 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::PushDataEvent(TIntrusivePtr<
                                                                   size_t batch,
                                                                   size_t message,
                                                                   TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                                                                  std::atomic<bool>& ready,
-                                                                  std::atomic<bool>& abandoned)
+                                                                  std::atomic<EDecompressionTaskState>& state)
 {
 
     std::lock_guard<std::mutex> guard(TParent::Mutex);
     if (this->Closed) {
         return false;
     }
-    partitionStream->InsertDataEvent(batch, message, parent, ready, abandoned);
+    partitionStream->InsertDataEvent(batch, message, parent, state);
     return true;
 }
 
@@ -2722,7 +2724,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
 
         auto& front = queue.front();
 
-        return front.IsDataEvent() && front.IsReady();
+        return front.IsDataEvent() && front.IsReady() && !front.IsAbandoned();
     };
 
     Y_ABORT_UNLESS(readyDataInTheHead());
@@ -3203,8 +3205,7 @@ bool TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      CurrentDecompressingMessage.first,
                                                      CurrentDecompressingMessage.second,
                                                      TDataDecompressionInfo::shared_from_this(),
-                                                     ReadyThresholds.back().Ready,
-                                                     ReadyThresholds.back().Abandoned);
+                                                     ReadyThresholds.back().State);
             if (!pushRes) {
                 deferred.DeferDestroyDecompressionInfos({TDataDecompressionInfo::shared_from_this()});
                 session->AbortImpl(&deferred);
@@ -3641,15 +3642,16 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     parent->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed);
 
     parent->SourceDataNotProcessed -= dataProcessed;
-    Ready->Ready = true;
-
-    if (auto session = parent->CbContext->LockShared()) {
-        session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
-    }
-
-    if (bool expected = false; !Ready->Abandoned.compare_exchange_strong(expected, true)) {
-        // Message is dropped due to partition stream cancellation, we should release decompressed memory
+    auto expected = EDecompressionTaskState::InProcess;
+    if (Ready->State.compare_exchange_strong(expected, EDecompressionTaskState::Ready)) {
+        if (auto session = parent->CbContext->LockShared()) {
+            session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
+        }
+    } else {
+        Y_ABORT_UNLESS(expected == EDecompressionTaskState::Cleanup);
+        // Cleanup claimed the whole task before it became ready.
         parent->OnUserRetrievedEvent(DecompressedSize, messagesProcessed);
+        Ready->State.store(EDecompressionTaskState::Abandoned);
     }
 
     if (auto session = parent->CbContext->LockShared()) {

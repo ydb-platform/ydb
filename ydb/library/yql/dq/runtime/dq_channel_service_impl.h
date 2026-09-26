@@ -714,6 +714,8 @@ public:
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters();
+    // empties the WaitQueue of an aborted channel, whose chunks are never sent
+    void DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& descriptor);
     // releases what a message leaving the Queue held, under Mutex, and returns what was actually released
     ui64 ReleaseInflight(const TOutputItem& item);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);

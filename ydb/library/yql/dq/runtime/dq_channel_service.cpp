@@ -1120,6 +1120,13 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
         std::lock_guard lock(descriptor->WaitQueueMutex);
+        if (descriptor->Aborted.load()) {
+            // never to be sent, see DrainAbortedWaiter
+            if (quoted) {
+                descriptor->FreeQuota(bytes);
+            }
+            return;
+        }
         if (!descriptor->WaitQueue.empty()) {
 
             if (!descriptor->PrepareWaitQuota(quoted, bytes)) {
@@ -1168,6 +1175,15 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     bool result = false;
 
     std::lock_guard lock(descriptor->WaitQueueMutex);
+
+    // A chunk of an aborted channel is never sent, and nothing would take it off the WaitQueue: the channel
+    // left WaitersQueue for good in SendFromWaiters, or will do so there, see DrainAbortedWaiter
+    if (descriptor->Aborted.load()) {
+        if (quoted) {
+            descriptor->FreeQuota(bytes);
+        }
+        return;
+    }
 
     if (!descriptor->PrepareWaitQuota(quoted, bytes)) {
         descriptor->AbortChannelByMemoryLimit(bytes);
@@ -1747,15 +1763,35 @@ now may need to send very last msg from terminated descriptor
             *OutputBufferWaiterBytes -= bytes;
             (*OutputBufferWaiterMessages)--;
         } else {
-            auto waitQueueBytes = waiter->WaitQueueBytes.load();
-            auto waitQueueSize = waiter->WaitQueueSize.load();
-            WaiterBytes -= waitQueueBytes;
-            WaiterMessages -= waitQueueSize;
-            *OutputBufferWaiterBytes -= waitQueueBytes;
-            *OutputBufferWaiterMessages -= waitQueueSize;
+            DrainAbortedWaiter(waiter);
         }
     }
 
+}
+
+void TNodeState::DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& descriptor) {
+    // CheckGenMajor has failed, so the channel is aborted: nothing enters the WaitQueue once the lock below is
+    // released, see PushDataChunk, and the chunks are destroyed after it
+    std::queue<TDataChunk> drained;
+    ui64 bytes = 0;
+    ui64 size = 0;
+    ui64 quotedBytes = 0;
+    {
+        std::lock_guard lock(descriptor->WaitQueueMutex);
+        drained.swap(descriptor->WaitQueue);
+        bytes = descriptor->WaitQueueBytes.exchange(0);
+        size = descriptor->WaitQueueSize.exchange(0);
+        quotedBytes = bytes - std::min(bytes, descriptor->UnquotedWaitBytes);
+        descriptor->UnquotedWaitBytes = 0;
+    }
+    // a quoted chunk means the QuotaManager is assigned, see TOutputDescriptor::PrepareWaitQuota
+    if (quotedBytes) {
+        descriptor->FreeQuota(quotedBytes);
+    }
+    WaiterBytes -= bytes;
+    WaiterMessages -= size;
+    *OutputBufferWaiterBytes -= bytes;
+    *OutputBufferWaiterMessages -= size;
 }
 
 ui64 TNodeState::ReleaseInflight(const TOutputItem& item) {

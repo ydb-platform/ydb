@@ -715,6 +715,10 @@ struct TSessionTest : public TLoadTest {
         return bytes;
     }
 
+    static i64 GetCounter(const std::shared_ptr<TDqChannelService>& service, const TString& name) {
+        return service->Counters->GetCounter(name, false)->Val();
+    }
+
     static std::shared_ptr<TOutputDescriptor> FindOutputDescriptor(const std::shared_ptr<TNodeState>& state, ui64 channelId) {
         std::lock_guard lock(state->Mutex);
         for (const auto& [info, descriptor] : state->OutputDescriptors) {
@@ -1188,10 +1192,6 @@ struct TPeerActivityTest : public TSessionTest {
 // erased and accounted for where it was aborted, came off the shared gauge twice and drove it below zero.
 // Staged through a peer session which is replaced while this node keeps its session and its consumer.
 struct TBufferCountTest : public TSessionTest {
-
-    static i64 GetCounter(const std::shared_ptr<TDqChannelService>& service, const TString& name) {
-        return service->Counters->GetCounter(name, false)->Val();
-    }
 
     void Run() override {
         Prepare();
@@ -1751,6 +1751,80 @@ struct TAckProgressTest : public TSessionTest {
     }
 };
 
+// SendFromWaiters took an aborted waiter off the waiter counters but left its WaitQueue in place, so every
+// chunk which entered it later went onto the counters for good: W/Msg grew with nothing waiting at all.
+struct TWaiterCountersTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(1024);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
+
+        std::shared_ptr<TNodeState> sender;
+        UNIT_ASSERT_C(WaitFor([&]() { return (sender = FindNodeState(Service0, receiverNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "sender node session not found");
+        WaitSettled(sender);
+
+        // nothing is confirmed, so all but the 1st kilobyte waits for the window
+        receiver->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 100, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, false);
+
+        std::shared_ptr<TOutputDescriptor> descriptor;
+        UNIT_ASSERT_C(WaitFor([&]() {
+            descriptor = FindOutputDescriptor(sender, 1);
+            return descriptor && descriptor->WaitQueueSize.load() > 10;
+        }, TDuration::Seconds(10)), "the messages do not wait for the window");
+
+        descriptor->AbortChannel("test");
+        try {
+            auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control0, TDuration::Seconds(10));
+            Actors.erase(msg->Sender);
+            UNIT_ASSERT_C(msg->Get()->Error, "the producer of the aborted channel finished without an error");
+        } catch (NActors::TEmptyEventQueueException&) {
+            UNIT_ASSERT_C(false, "the producer of the aborted channel did not finish");
+        }
+
+        // the acks let SendFromWaiters come to the aborted waiter
+        receiver->ResumeChannelData();
+        UNIT_ASSERT_C(WaitFor([&]() { return sender->WaitersQueueSize.load() == 0 && GetQueueSize(sender) == 0; },
+            TDuration::Seconds(10)), "the waiters did not drain");
+
+        // a chunk pushed into the aborted channel afterwards, as a spilled one reloaded by the storage can be
+        sender->PushDataChunk(TDataChunk(NYql::TChunkedBuffer(TString(10, 'a')), 1, false), descriptor);
+
+        auto details = TStringBuilder() << "WaiterMessages=" << sender->WaiterMessages.load()
+            << ", WaiterBytes=" << sender->WaiterBytes.load()
+            << ", OutputBuffer/WaiterMessages=" << GetCounter(Service0, "OutputBuffer/WaiterMessages")
+            << ", OutputBuffer/WaiterBytes=" << GetCounter(Service0, "OutputBuffer/WaiterBytes")
+            << ", WaitQueueSize=" << descriptor->WaitQueueSize.load();
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->WaiterMessages.load(), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->WaiterBytes.load(), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service0, "OutputBuffer/WaiterMessages"), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service0, "OutputBuffer/WaiterBytes"), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(descriptor->WaitQueueSize.load(), 0, details);
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 // Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
 // pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
 // where a push could overtake a waiting message. Every consumer checks the order of what it gets.
@@ -1973,6 +2047,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(AckProgressFieldsIgnored) {
         TAckProgressTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(WaiterCountersOnAbort) {
+        TWaiterCountersTest test;
 
         test.Local = false;
 

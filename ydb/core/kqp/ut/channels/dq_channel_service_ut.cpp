@@ -679,8 +679,7 @@ struct TSessionTest : public TLoadTest {
     }
 
     static ui64 GetConfirmedSeqNo(const std::shared_ptr<TNodeState>& state) {
-        std::lock_guard lock(state->Mutex);
-        return state->ConfirmedSeqNo;
+        return state->ConfirmedSeqNo.load();
     }
 
     static ui64 GetInputCount(const std::shared_ptr<TNodeState>& state) {

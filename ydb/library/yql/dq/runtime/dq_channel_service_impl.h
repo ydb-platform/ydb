@@ -717,7 +717,6 @@ public:
     // releases what a message leaving the Queue held, under Mutex, and returns what was actually released
     ui64 ReleaseInflight(const TOutputItem& item);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
-    virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
@@ -754,7 +753,8 @@ public:
     NActors::TActorId OutputNodeActorId;
     std::atomic<ui64> OutputNodeGenMajor = 0;
     std::atomic<ui64> OutputNodeGenMinor = 0;
-    ui64 ConfirmedSeqNo = 0;
+    // written by the session thread only, atomic for the mon page
+    std::atomic<ui64> ConfirmedSeqNo = 0;
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;
@@ -916,7 +916,6 @@ public:
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
     // extras
     void NotifyCleanup();
-    TString GetDebugInfo();
 
     NActors::TActorSystem* ActorSystem;
     NActors::TActorId ServiceActorId;

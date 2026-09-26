@@ -2,8 +2,10 @@
 """Intervals inside one ya_make_try, from evlog node-finished events.
 
 Same nodes `ya analyze-make timeline --evlog` draws.
-ya_build is Compile/Link before the first Run. ya_rebuild is Compile/Link
-after tests have started. ya_tests is Run. FromDistCache is not a build.
+Local compile and link are Compile/Link nodes and Run nodes whose path is an
+object or archive (.o, .a, .obj, .so). ya_build is that work before the first
+test. ya_rebuild is the same work after tests have started. ya_tests is every
+other Run. Cache fetch and cache put are not build.
 """
 
 from __future__ import annotations
@@ -40,12 +42,23 @@ def _span(value: Dict[str, Any]) -> Optional[Tuple[float, float]]:
     return start, end
 
 
+_BUILD_SUFFIXES = (".o", ".a", ".obj", ".so", ".dylib")
+
+
+def _build_path(name: str) -> bool:
+    path = name
+    if "$(BUILD_ROOT)" in path:
+        path = path.split("$(BUILD_ROOT)", 1)[1]
+    path = path.rstrip(")").lower()
+    return path.endswith(_BUILD_SUFFIXES)
+
+
 def _kind(name: str) -> Optional[str]:
-    if name.startswith("Run("):
-        return "test"
     for prefix in BUILD_KINDS:
         if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
             return "build"
+    if name.startswith("Run("):
+        return "build" if _build_path(name) else "test"
     return None
 
 

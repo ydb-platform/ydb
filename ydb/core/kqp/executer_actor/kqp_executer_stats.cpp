@@ -1843,6 +1843,7 @@ void TProgressStat::Update() {
     Total = Cur;
     Cur = TEntry();
 }
+
 TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode,
         bool collectAffectedRows)
     : StatsMode(statsMode)

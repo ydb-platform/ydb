@@ -48,9 +48,7 @@ public:
         return DoOnExecuteTxAfterRemoving(dbBlobs, blobsWroteSuccessfully);
     }
 
-    void OnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) {
-        return DoOnCompleteTxAfterRemoving(blobsWroteSuccessfully);
-    }
+    void OnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully);
 };
 
 }   // namespace NKikimr::NOlap

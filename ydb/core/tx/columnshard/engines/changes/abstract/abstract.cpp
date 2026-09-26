@@ -1,5 +1,6 @@
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -99,6 +100,14 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
+    if (self.HasIndex() && BlobsAction.GetConsumerId() == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
+        // Compaction writes its result with the newest schema, so the opt-in must be read from the last schema,
+        // not from the (possibly older) schema of the source portions. This makes ALTER TABLE ... CACHE_BLOBS_AFTER_WRITE
+        // take effect for the very next compaction of pre-existing data.
+        const bool schemaEnabled = self.GetIndexVerified().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetCacheBlobsAfterWrite();
+        BlobsAction.SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(schemaEnabled, NBlobOperations::EConsumer::GENERAL_COMPACTION,
+            (ui64)self.Settings.CacheDataAfterIndexing != 0, (ui64)self.Settings.CacheDataAfterCompaction != 0));
+    }
     DoStart(self);
     SetStage(NChanges::EStage::Started);
     //    if (!NeedConstruction()) {

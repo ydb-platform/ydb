@@ -26,6 +26,7 @@ private:
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
     YDB_FLAG_ACCESSOR(Bulk, false);
+    YDB_ACCESSOR(bool, CacheAfterWrite, false);
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
 
 protected:
@@ -52,6 +53,7 @@ public:
     void Merge(const std::shared_ptr<IBlobsWritingAction>& action) {
         AFL_VERIFY(action);
         AFL_VERIFY(!WritingStarted);
+        CacheAfterWrite = CacheAfterWrite || action->CacheAfterWrite;
         for (auto&& i : action->BlobsForWrite) {
             AddDataForWrite(i.first, i.second);
         }

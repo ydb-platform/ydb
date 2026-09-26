@@ -5,13 +5,17 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/cache/cache.h>
+#include <util/generic/set.h>
+#include <util/generic/vector.h>
 #include <util/string/vector.h>
 
+#include <optional>
 #include <tuple>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BLOB_CACHE
@@ -89,12 +93,14 @@ private:
         }
     };
 
-    static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
-    static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
-    static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
-    static constexpr ui64 DEFAULT_MAX_CACHE_DATA_SIZE = 1000ull << 20;
+    struct TCacheEntry {
+        TString Data;
+        TInstant StickyUntil;
+    };
 
-    TLRUCache<TBlobRange, TString> Cache;
+    TLRUCache<TBlobRange, TCacheEntry> Cache;
+    TLRUCache<TBlobRange, char> Evictable;
+    TSet<std::pair<TInstant, TBlobRange>> StickyExpiry;
     /// List of cached ranges by blob id.
     /// It is used to remove all blob ranges from cache when
     /// it gets a notification that a blob has been deleted.
@@ -103,7 +109,11 @@ private:
     TControlWrapper MaxCacheDataSize;
     const bool UseMaxCacheDataSizeFromConfig;
     TControlWrapper MaxInFlightDataSize;
+    ui64 WriteProtectDurationMs;
+    ui64 MaxRequestBytes;
+    TDuration ReadDeadlineDuration;
     i64 CacheDataSize;   // Current size of all blobs in cache
+    i64 StickyDataSize;
     ui64 ReadCookie;
     THashMap<ui64, std::vector<TBlobRange>> CookieToRange;   // All in-flight requests
     THashMap<TBlobRange, TReadInfo> OutstandingReads;   // All in-flight and enqueued reads
@@ -136,6 +146,12 @@ private:
     const TCounterPtr ReadRequests;
     const TCounterPtr ReadsInQueue;
     const TCounterPtr MaxSizeBytes;
+    const TCounterPtr StickyBytes;
+    const TCounterPtr StickyBlobs;
+    const TCounterPtr StickyHits;
+    const TCounterPtr StickyHitsBytes;
+    const TCounterPtr StickyEvictions;
+    const TCounterPtr StickyEvictedBytes;
 
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
 
@@ -145,13 +161,18 @@ public:
     }
 
 public:
-    explicit TBlobCache(const std::optional<ui64>& maxSize, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
+    explicit TBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : TActorBootstrapped<TBlobCache>()
         , Cache(SIZE_MAX)
-        , MaxCacheDataSize(maxSize.value_or(DEFAULT_MAX_CACHE_DATA_SIZE), 0, 1ull << 40)
-        , UseMaxCacheDataSizeFromConfig(maxSize.has_value())
-        , MaxInFlightDataSize(Min<i64>(MaxCacheDataSize, MAX_IN_FLIGHT_BYTES), 0, 10ull << 30)
+        , Evictable(SIZE_MAX)
+        , MaxCacheDataSize(settings.MaxCacheDataSize, 0, 1ull << 40)
+        , UseMaxCacheDataSizeFromConfig(settings.MaxCacheDataSizeFromConfig)
+        , MaxInFlightDataSize(settings.MaxInFlightBytes, 0, 10ull << 30)
+        , WriteProtectDurationMs(settings.WriteProtectDurationMs)
+        , MaxRequestBytes(settings.MaxRequestBytes)
+        , ReadDeadlineDuration(TDuration::MilliSeconds(settings.ReadDeadlineMs))
         , CacheDataSize(0)
+        , StickyDataSize(0)
         , ReadCookie(1)
         , InFlightDataSize(0)
         , SizeBytes(counters->GetCounter("SizeBytes"))
@@ -175,6 +196,12 @@ public:
         , ReadRequests(counters->GetCounter("ReadRequests", true))
         , ReadsInQueue(counters->GetCounter("ReadsInQueue"))
         , MaxSizeBytes(counters->GetCounter("MaxSizeBytes"))
+        , StickyBytes(counters->GetCounter("StickyBytes"))
+        , StickyBlobs(counters->GetCounter("StickyBlobs"))
+        , StickyHits(counters->GetCounter("StickyHits", true))
+        , StickyHitsBytes(counters->GetCounter("StickyHitsBytes", true))
+        , StickyEvictions(counters->GetCounter("StickyEvictions", true))
+        , StickyEvictedBytes(counters->GetCounter("StickyEvictedBytes", true))
     {
     }
 
@@ -245,13 +272,7 @@ private:
         YDB_LOG_DEBUG("",
             {"ask", blobRange});
 
-        // Is in cache?
-        auto it = readItem.PromoteInCache() ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
-        if (it != Cache.End()) {
-            Y_ABORT_UNLESS(it.Value().size() == blobRange.Size, "Cached %s, size %" PRISZT, blobRange.ToString().c_str(), it.Value().size());
-            Hits->Inc();
-            HitsBytes->Add(blobRange.Size);
-            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), {}, ctx, true);
+        if (SendCached(sender, blobRange, readItem.PromoteInCache(), ctx)) {
             return true;
         }
 
@@ -277,6 +298,51 @@ private:
             // The requested range was already scheduled for read.
             return true;
         }
+    }
+
+    bool SendCached(const TActorId& sender, const TBlobRange& blobRange, const bool promote, const TActorContext& ctx) {
+        auto exactIt = promote ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
+        if (exactIt != Cache.End()) {
+            SendCachedHit(sender, blobRange, exactIt.Value(), blobRange, promote, ctx);
+            return true;
+        }
+
+        const auto covering = FindCoveringRange(blobRange);
+        if (!covering) {
+            return false;
+        }
+        auto coveringIt = promote ? Cache.Find(*covering) : Cache.FindWithoutPromote(*covering);
+        if (coveringIt == Cache.End()) {
+            return false;
+        }
+        SendCachedHit(sender, blobRange, coveringIt.Value(), *covering, promote, ctx);
+        return true;
+    }
+
+    void SendCachedHit(const TActorId& sender, const TBlobRange& requested, const TCacheEntry& entry, const TBlobRange& covering,
+        const bool promote, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(entry.Data.size() == covering.Size, "Cached %s, size %" PRISZT, covering.ToString().c_str(), entry.Data.size());
+        const TString data = entry.Data.substr(requested.Offset - covering.Offset, requested.Size);
+        Hits->Inc();
+        HitsBytes->Add(requested.Size);
+        if (entry.StickyUntil) {
+            StickyHits->Inc();
+            StickyHitsBytes->Add(requested.Size);
+        } else if (promote) {
+            Evictable.Find(covering);
+        }
+        SendResult(sender, requested, NKikimrProto::OK, data, {}, ctx, true);
+    }
+
+    std::optional<TBlobRange> FindCoveringRange(const TBlobRange& blobRange) const {
+        const auto [begin, end] = CachedRanges.equal_range(blobRange);
+        for (auto it = begin; it != end; ++it) {
+            if (it->Offset <= blobRange.Offset &&
+                static_cast<ui64>(it->Offset) + it->Size >= static_cast<ui64>(blobRange.Offset) + blobRange.Size) {
+                return *it;
+            }
+        }
+        return std::nullopt;
     }
 
     void Handle(TEvBlobCache::TEvReadBlobRangeBatch::TPtr& ev, const TActorContext& ctx) {
@@ -313,7 +379,7 @@ private:
 
         AddBytes->Add(blobRange.Size);
 
-        InsertIntoCache(blobRange, data);
+        InsertIntoCache(blobRange, data, ev->Get()->Sticky);
 
         Evict(ctx);
     }
@@ -330,21 +396,11 @@ private:
             return;
         }
 
-        // Remove all ranges of this blob that are present in cache
-        for (auto bi = begin; bi != end; ++bi) {
-            auto rangeIt = Cache.FindWithoutPromote(*bi);
-            if (rangeIt == Cache.End()) {
-                continue;
-            }
-
-            Cache.Erase(rangeIt);
-            CacheDataSize -= bi->Size;
-            SizeBytes->Sub(bi->Size);
-            SizeBlobs->Dec();
-            ForgetBytes->Add(bi->Size);
+        TVector<TBlobRange> ranges(begin, end);
+        for (const auto& range : ranges) {
+            ForgetBytes->Add(range.Size);
+            EraseCachedRange(range);
         }
-
-        CachedRanges.erase(begin, end);
 
         UpdateConsumption();
     }
@@ -396,12 +452,16 @@ private:
         ReadRequests->Inc();
     }
 
-    static TInstant ReadDeadline(TReadItem::EReadVariant variant) {
+    static TInstant ReadDeadlineForVariant(TReadItem::EReadVariant variant, const TDuration readDeadline) {
         if (variant == TReadItem::EReadVariant::DEFAULT) {
-            return TAppData::TimeProvider->Now() + DEFAULT_READ_DEADLINE;
+            return TAppData::TimeProvider->Now() + readDeadline;
         }
         // We want to wait for data anyway in this case. This behaviour is similar to datashard
         return TInstant::Max();   // EReadVariant::DEFAULT_NO_DEADLINE || EReadVariant::FAST
+    }
+
+    TInstant ReadDeadline(TReadItem::EReadVariant variant) const {
+        return ReadDeadlineForVariant(variant, ReadDeadlineDuration);
     }
 
     void MakeReadRequests(const TActorContext& ctx) {
@@ -441,7 +501,7 @@ private:
             std::vector<ui64> dsReads;
 
             for (auto& blobRange : rangesGroup) {
-                if (requestSize && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
+                if (requestSize && (requestSize + blobRange.Size > MaxRequestBytes)) {
                     dsReads.push_back(cookie);
                     cookie = ++ReadCookie;
                     requestSize = 0;
@@ -523,14 +583,23 @@ private:
         SizeBlobsInFlight->Dec();
         InFlightDataSize -= blobRange.Size;
 
-        Y_ABORT_UNLESS(Cache.Find(blobRange) == Cache.End(), "Range %s must not be already in cache", blobRange.ToString().c_str());
+        // The same range can already be in the cache when the DS reply arrives. Serve those bytes
+        // and do not insert the DS payload over the existing entry.
+        auto cached = Cache.FindWithoutPromote(blobRange);
+        if (cached != Cache.End()) {
+            for (const auto& to : readIt->second.Waiting) {
+                SendCachedHit(to, blobRange, cached.Value(), blobRange, false, ctx);
+            }
+            OutstandingReads.erase(readIt);
+            return;
+        }
 
         if (status == NKikimrProto::EReplyStatus::OK) {
             Y_ABORT_UNLESS(blobRange.Size == data.size(), "Read %s, size %" PRISZT, blobRange.ToString().c_str(), data.size());
             ReadBytes->Add(blobRange.Size);
 
             if (readIt->second.Cache) {
-                InsertIntoCache(blobRange, data);
+                InsertIntoCache(blobRange, data, false);
             }
         } else {
             LOG_S_WARN("Read failed for range: " << blobRange << " status: " << NKikimrProto::EReplyStatus_Name(status));
@@ -595,40 +664,144 @@ private:
         DestroyPipe(tabletId, ctx);
     }
 
-    void InsertIntoCache(const TBlobRange& blobRange, TString data) {
+    void InsertIntoCache(const TBlobRange& blobRange, TString data, const bool sticky) {
         // Shrink the buffer if it has to much extra capacity
         if (data.capacity() > data.size() * 1.1) {
             data = TString(data.begin(), data.end());
         }
         YDB_LOG_DEBUG("",
-            {"insertCache", blobRange});
-        if (Cache.Insert(blobRange, data)) {
-            CachedRanges.insert(blobRange);
+            {"insertCache", blobRange},
+            {"sticky", sticky});
 
+        const TInstant now = TAppData::TimeProvider->Now();
+        const TDuration protectFor = TDuration::MilliSeconds(WriteProtectDurationMs);
+        const TInstant stickyUntil = (sticky && protectFor) ? (now + protectFor) : TInstant::Zero();
+
+        // A sticky (re)insert refreshes StickyUntil and therefore moves the blob to the newest end of
+        // StickyExpiry. Emergency eviction drops the earliest StickyUntil, so a later read does not
+        // keep an older write. An unprotected insert over an existing entry is a no-op.
+        auto existing = stickyUntil ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
+        if (existing != Cache.End()) {
+            if (stickyUntil) {
+                PromoteToSticky(blobRange, *existing, stickyUntil);
+            }
+            return;
+        }
+
+        TCacheEntry entry;
+        entry.Data = std::move(data);
+        entry.StickyUntil = stickyUntil;
+        if (Cache.Insert(blobRange, entry)) {
+            CachedRanges.insert(blobRange);
             CacheDataSize += blobRange.Size;
             SizeBytes->Add(blobRange.Size);
             SizeBlobs->Inc();
+            if (stickyUntil) {
+                StickyExpiry.emplace(stickyUntil, blobRange);
+                StickyDataSize += blobRange.Size;
+                StickyBytes->Set(StickyDataSize);
+                StickyBlobs->Inc();
+            } else {
+                Evictable.Insert(blobRange, 0);
+            }
         }
 
         UpdateConsumption();
     }
 
+    void PromoteToSticky(const TBlobRange& blobRange, TCacheEntry& entry, const TInstant stickyUntil) {
+        if (entry.StickyUntil) {
+            StickyExpiry.erase({ entry.StickyUntil, blobRange });
+        } else {
+            auto eit = Evictable.FindWithoutPromote(blobRange);
+            if (eit != Evictable.End()) {
+                Evictable.Erase(eit);
+            }
+            StickyDataSize += blobRange.Size;
+            StickyBytes->Set(StickyDataSize);
+            StickyBlobs->Inc();
+        }
+        entry.StickyUntil = stickyUntil;
+        StickyExpiry.emplace(stickyUntil, blobRange);
+    }
+
+    void EraseCachedRange(const TBlobRange& blobRange) {
+        auto it = Cache.FindWithoutPromote(blobRange);
+        if (it == Cache.End()) {
+            CachedRanges.erase(blobRange);
+            return;
+        }
+
+        if (it.Value().StickyUntil) {
+            StickyExpiry.erase({ it.Value().StickyUntil, blobRange });
+            StickyDataSize -= blobRange.Size;
+            StickyBytes->Set(StickyDataSize);
+            StickyBlobs->Dec();
+        } else {
+            auto eit = Evictable.FindWithoutPromote(blobRange);
+            if (eit != Evictable.End()) {
+                Evictable.Erase(eit);
+            }
+        }
+
+        CacheDataSize -= blobRange.Size;
+        SizeBytes->Sub(blobRange.Size);
+        SizeBlobs->Dec();
+        Cache.Erase(it);
+        const auto [begin, end] = CachedRanges.equal_range(blobRange);
+        for (auto cachedIt = begin; cachedIt != end; ++cachedIt) {
+            if (*cachedIt == blobRange) {
+                CachedRanges.erase(cachedIt);
+                break;
+            }
+        }
+    }
+
+    void GraduateExpired() {
+        const TInstant now = TAppData::TimeProvider->Now();
+        while (!StickyExpiry.empty() && StickyExpiry.begin()->first <= now) {
+            const auto [until, range] = *StickyExpiry.begin();
+            StickyExpiry.erase(StickyExpiry.begin());
+            auto it = Cache.FindWithoutPromote(range);
+            if (it == Cache.End() || it.Value().StickyUntil != until) {
+                continue;
+            }
+            it->StickyUntil = TInstant::Zero();
+            Evictable.Insert(range, 0);
+            StickyDataSize -= range.Size;
+            StickyBytes->Set(StickyDataSize);
+            StickyBlobs->Dec();
+        }
+    }
+
     void Evict(const TActorContext&) {
+        GraduateExpired();
         while (CacheDataSize + InFlightDataSize > MaxCacheDataSize) {
-            auto it = Cache.FindOldest();
-            if (it == Cache.End()) {
+            TBlobRange victim;
+            bool stickyVictim = false;
+            auto eit = Evictable.FindOldest();
+            if (eit != Evictable.End()) {
+                victim = eit.Key();
+                Evictable.Erase(eit);
+            } else if (!StickyExpiry.empty()) {
+                // Only sticky blobs are left. Drop the earliest insert (StickyUntil), not the least
+                // recently read one: a promoting read must not save an older write.
+                victim = StickyExpiry.begin()->second;
+                stickyVictim = true;
+            } else {
                 break;
             }
 
-            LOG_S_DEBUG("Evict: " << it.Key() << " CacheDataSize: " << CacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize
-                                  << " MaxCacheDataSize: " << (i64)MaxCacheDataSize);
+            LOG_S_DEBUG("Evict: " << victim << " CacheDataSize: " << CacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize
+                                  << " MaxCacheDataSize: " << (i64)MaxCacheDataSize << " sticky: " << stickyVictim);
 
             Evictions->Inc();
-            EvictedBytes->Add(it.Key().Size);
-
-            CacheDataSize -= it.Key().Size;
-            CachedRanges.erase(it.Key());
-            Cache.Erase(it);
+            EvictedBytes->Add(victim.Size);
+            if (stickyVictim) {
+                StickyEvictions->Inc();
+                StickyEvictedBytes->Add(victim.Size);
+            }
+            EraseCachedRange(victim);
 
             SizeBytes->Set(CacheDataSize);
             SizeBlobs->Set(Cache.Size());
@@ -640,16 +813,19 @@ private:
 
 }   // namespace
 
-NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    return new TBlobCache(maxBytes, counters);
+TBlobCacheSettings TBlobCacheSettings::FromProto(const NKikimrConfig::TBlobCacheConfig& cfg) {
+    TBlobCacheSettings settings;
+    settings.MaxCacheDataSize = cfg.GetMaxSizeBytes();
+    settings.MaxInFlightBytes = cfg.GetMaxInFlightBytes();
+    settings.MaxRequestBytes = cfg.GetMaxRequestBytes();
+    settings.ReadDeadlineMs = cfg.GetReadDeadlineMs();
+    settings.WriteProtectDurationMs = cfg.GetWriteProtectDurationMs();
+    settings.MaxCacheDataSizeFromConfig = cfg.HasMaxSizeBytes();
+    return settings;
 }
 
-void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
-    TlsActivationContext->Send(new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
-}
-
-void ForgetBlob(const TUnifiedBlobId& blobId) {
-    TlsActivationContext->Send(new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+NActors::IActor* CreateBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+    return new TBlobCache(settings, counters);
 }
 
 }   // namespace NKikimr::NBlobCache

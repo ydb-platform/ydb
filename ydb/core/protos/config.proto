@@ -2868,7 +2868,11 @@ message THealthCheckConfig {
 }
 
 message TBlobCacheConfig {
-    optional uint64 MaxSizeBytes = 1 [default = 1073741824];
+    optional uint64 MaxSizeBytes = 1 [default = 1048576000]; // 1000 MiB
+    optional uint64 MaxInFlightBytes = 2 [default = 262144000];
+    optional uint64 MaxRequestBytes = 3 [default = 8388608];
+    optional uint64 ReadDeadlineMs = 4 [default = 30000];
+    optional uint64 WriteProtectDurationMs = 5 [default = 3600000];
 }
 
 message TColumnShardConfig {

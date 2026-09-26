@@ -2184,6 +2184,13 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeValue(options.GetDeduplicationEnabled(), paramsStr);
         del = ", ";
     }
+    if (options.HasCacheBlobsAfterWrite()) {
+        paramsStr << del;
+        EscapeName("CACHE_BLOBS_AFTER_WRITE", paramsStr);
+        paramsStr << "=";
+        EscapeValue(options.GetCacheBlobsAfterWrite(), paramsStr);
+        del = ", ";
+    }
     if (options.HasCompactionPlannerConstructor()) {
         const auto& compactionPlannerConstructor = options.GetCompactionPlannerConstructor();
         if (compactionPlannerConstructor.HasClassName() && !compactionPlannerConstructor.GetClassName().empty()) {

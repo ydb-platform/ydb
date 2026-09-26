@@ -71,6 +71,7 @@ namespace NActors {
             LevelResp,
             Ignored,
             Buffer,
+            FlushSinks,
             End
         };
 
@@ -166,6 +167,13 @@ namespace NActors {
             TString Line;
             const bool Json;
             const TMaybe<NActors::NStructuredLog::TStructuredMessage> StructuredMessage;
+        };
+
+        class TEvLogFlushSinks
+            : public TEventLocal<TEvLogFlushSinks, int(EEv::FlushSinks)>
+        {
+        public:
+            TEvLogFlushSinks() = default;
         };
 
     }

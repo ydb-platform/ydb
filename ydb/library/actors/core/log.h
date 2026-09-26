@@ -24,6 +24,7 @@
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/meta_writer.h>
 #include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/actors/struct_log/log_sink.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
@@ -222,6 +223,7 @@ namespace NActors {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TFlushLogBuffer, FlushLogBufferMessageEvent);
                 HFunc(NLog::TEvLog, HandleLogEvent);
+                HFunc(NLog::TEvLogFlushSinks, HandleLogFlushSinks);
                 HFunc(TLogComponentLevelRequest, HandleLogComponentLevelRequest);
                 HFunc(NMon::TEvHttpInfo, HandleMonInfo);
             }
@@ -251,10 +253,12 @@ namespace NActors {
         NActors::NStructuredLog::TJsonWriter StructuredJsonWriter;
         NActors::NStructuredLog::TMetaWriter StructuredMetaWriter;
         NActors::NStructuredLog::TTextWriter StructuredTextWriter;
+        bool FlushScheduled{false};
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);
         void HandleLogEvent(NLog::TEvLog::TPtr& ev, const TActorContext& ctx);
+        void HandleLogFlushSinks(NLog::TEvLogFlushSinks::TPtr& ev, const TActorContext& ctx);
         void HandleLogEventDrop(const NLog::TEvLog::TPtr& ev);
         void HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const TActorContext& ctx);
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);

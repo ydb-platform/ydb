@@ -19,6 +19,7 @@ namespace NKikimr::NDataShard {
 // Proto3 optional fields have no schema-level defaults. Keep the documented
 // server-side default in one place so omitted SQL settings do not behave as 0.
 ui64 GetHnswMinRows(const Ydb::Table::VectorIndexSettings& settings);
+ui32 GetHnswRebuildThresholdPercent(const Ydb::Table::VectorIndexSettings& settings);
 
 // Returns whether an index built with `cached` may serve a request with
 // `requested`. This compares normalized values, so an omitted HNSW parameter

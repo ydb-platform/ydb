@@ -6296,8 +6296,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
-        // Isolate the reader's pinned graph and journal from rebuild buffers.
-        serverSettings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         TTestHelper helper(serverSettings);
         helper.CreateCustomTable("table-vector-memory", {
             {"parent", "Uint32", true, false},
@@ -6334,6 +6332,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         settings.set_vector_dimension(2);
         settings.set_hnsw_min_rows(1);
+        // Isolate the reader's pinned graph and journal from rebuild buffers.
+        settings.set_hnsw_rebuild_threshold_percent(1000);
         ui64 readId = 0;
         auto read = [&] {
             auto request = helper.GetBaseReadRequest("table-vector-memory", ++readId, NKikimrDataEvents::FORMAT_CELLVEC);
@@ -6390,7 +6390,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.SetNeedStatsCollectors(true);
-        serverSettings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(1000);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
@@ -6421,6 +6420,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
             settings->set_vector_dimension(2);
             settings->set_hnsw_min_rows(1);
+            settings->set_hnsw_rebuild_threshold_percent(1000);
             return request;
         };
 
@@ -6487,7 +6487,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         settings.AppConfig->MutableDataShardConfig()->SetKeepSnapshotTimeout(1000);
         settings.AppConfig->MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
-        settings.AppConfig->MutableDataShardConfig()->SetHnswRebuildThresholdPercent(Rebuild ? 50 : 1000);
         TTestHelper helper(settings);
         helper.CreateCustomTable("hnsw-mvcc", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
@@ -6507,6 +6506,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         indexSettings.set_vector_dimension(2);
         indexSettings.set_hnsw_min_rows(1);
+        indexSettings.set_hnsw_rebuild_threshold_percent(Rebuild ? 50 : 1000);
         ui64 readId = 0;
         auto read = [&](TRowVersion version) {
             auto request = helper.GetBaseReadRequest("hnsw-mvcc", ++readId,

@@ -38,13 +38,15 @@ struct TSerializableAccessControlEntry
     // Use only for deserialization.
     TSerializableAccessControlEntry();
 
-    // Used only for persistence in operation controller. Does not work with Columns and Vital fields.
-    void Persist(const TStreamPersistenceContext& context);
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
 
     bool operator==(const TSerializableAccessControlEntry& other) const = default;
 
     static constexpr TStringBuf RowAccessPredicateKey = "row_access_predicate";
     static constexpr TStringBuf InapplicableRowAccessPredicateModeKey = "inapplicable_row_access_predicate_mode";
+
+    PHOENIX_DECLARE_TYPE(TSerializableAccessControlEntry, 0x6fad4b97);
 };
 
 void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer* consumer);
@@ -61,7 +63,10 @@ struct TSerializableAccessControlList
 {
     std::vector<TSerializableAccessControlEntry> Entries;
 
-    void Persist(const TStreamPersistenceContext& context);
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
+
+    PHOENIX_DECLARE_TYPE(TSerializableAccessControlList, 0x7abc5ca8);
 };
 
 bool operator==(const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs);

@@ -2,6 +2,9 @@
 
 #include "public.h"
 
+#include <yt/yt/core/phoenix/context.h>
+#include <yt/yt/core/phoenix/type_decl.h>
+
 #include <yt/yt/core/yson/forwarding_consumer.h>
 #include <yt/yt/core/yson/consumer.h>
 #include <yt/yt/core/yson/building_consumer.h>
@@ -38,11 +41,14 @@ public:
     DEFINE_BYVAL_RO_PROPERTY(i64, Max);
     DEFINE_BYVAL_RO_PROPERTY(std::optional<i64>, Last);
 
-    void Persist(const TStreamPersistenceContext& context);
-
     bool operator==(const TSummary& other) const;
 
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
+
     friend class TStatisticsBuildingConsumer;
+
+    PHOENIX_DECLARE_TYPE(TSummary, 0xc51a0bfd);
 };
 
 void Serialize(const TSummary& summary, NYson::IYsonConsumer* consumer);
@@ -88,7 +94,8 @@ public:
     //! The requirements for prefixPath are the same as in GetRangeByPrefix.
     void RemoveRangeByPrefix(const NStatisticPath::TStatisticPath& prefixPath);
 
-    void Persist(const TStreamPersistenceContext& context);
+    using TSaveContext = NPhoenix::TSaveContext;
+    using TLoadContext = NPhoenix::TLoadContext;
 
 private:
     template <class TCallback>
@@ -97,6 +104,8 @@ private:
     TSummary& GetSummary(const NStatisticPath::TStatisticPath& path);
 
     friend class TStatisticsBuildingConsumer;
+
+    PHOENIX_DECLARE_TYPE(TStatistics, 0xd62b1c0e);
 };
 
 i64 GetNumericValue(const TStatistics& statistics, const NStatisticPath::TStatisticPath& path);

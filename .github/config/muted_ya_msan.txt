@@ -1,4 +1,5 @@
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.RestartSessionIfQueryStopped
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
@@ -6,6 +7,7 @@ ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCs
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
 ydb/core/kqp/ut/service KqpWarmup.WarmupLoadsOtherUsersQueriesWithRestrictedAdmins-LegacyMetadata
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
@@ -35,6 +37,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.RepeatedDisconnectChurn
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ValidatingLoadVariedPayloads
 ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
+ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
@@ -53,6 +56,7 @@ ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
+ydb/tests/stress/system_tablet_backup/tests test_workload.py.TestSystemTabletBackup.test_workload_with_corrupted_backup
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[old_sdk]

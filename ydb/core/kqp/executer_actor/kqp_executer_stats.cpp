@@ -1656,7 +1656,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                     ExportAggStats(t.EraseRows, *table.MutableEraseRows());
                     ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
                     table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
-                    table.SetAffectedRows(ExportAggStats(t.AffectedRows));
+                    if (TasksGraph->GetMeta().CollectAffectedRows) {
+                        table.SetAffectedRows(ExportAggStats(t.AffectedRows));
+                    }
                 }
                 for (auto& [id, i] : stageStat.Ingress) {
                     ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);
@@ -1842,8 +1844,11 @@ void TProgressStat::Update() {
     Cur = TEntry();
 }
 
-TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode)
-    : StatsMode(statsMode) {}
+TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode,
+        bool collectAffectedRows)
+    : StatsMode(statsMode)
+    , CollectAffectedRows(collectAffectedRows)
+{}
 
 void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats) {
     for (const auto& tableStat : stats.GetTables()) {
@@ -1854,6 +1859,7 @@ void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionSt
         tableStats.WriteBytes += tableStat.GetWriteBytes();
         tableStats.EraseRows += tableStat.GetEraseRows();
         tableStats.EraseBytes += tableStat.GetEraseBytes();
+        tableStats.AffectedRows += tableStat.GetAffectedRows();
     }
 
     CpuTimeUs += stats.GetCpuTimeUs();
@@ -1889,6 +1895,9 @@ void TBatchOperationExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecution
         tableAggr.SetWriteBytes(tableStats.WriteBytes);
         tableAggr.SetEraseRows(tableStats.EraseRows);
         tableAggr.SetEraseBytes(tableStats.EraseBytes);
+        if (CollectAffectedRows) {
+            tableAggr.SetAffectedRows(tableStats.AffectedRows);
+        }
 
         // TODO: it is not correct for indexImplTables
         tableAggr.SetAffectedPartitions(AffectedPartitions.size());

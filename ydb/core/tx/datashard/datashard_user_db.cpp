@@ -347,6 +347,9 @@ void TDataShardUserDb::EraseRow(
 
     if (CollectAffectedRows && rowExists) {
         Counters.NAffectedRows++;
+        // The extra existence check is a real read; account it
+        // symmetrically to UpdateRow (which counts its read when the row exists).
+        IncreaseSelectCounters(key);
     }
 }
 

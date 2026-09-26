@@ -677,7 +677,10 @@ public:
     }
 
     bool GetCollectAffectedRows() const {
-        return RequestEv->GetCollectAffectedRows();
+        // Ignore the flag when stats are not collected at all: shards would
+        // pay the extra precharge/RowExists overhead for a discarded result.
+        return RequestEv->GetCollectAffectedRows()
+            && GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     }
 
     bool ReportStats() const {

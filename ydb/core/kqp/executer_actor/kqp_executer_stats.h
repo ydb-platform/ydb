@@ -561,11 +561,12 @@ struct TBatchOperationTableStats {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    ui64 AffectedRows = 0;
 };
 
 struct TBatchOperationExecutionStats {
 public:
-    explicit TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+    TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, bool collectAffectedRows);
 
     void TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats);
 
@@ -573,6 +574,7 @@ public:
 
 public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+    const bool CollectAffectedRows;
 
     // Local stats
     TInstant StartTs = TInstant::Max();

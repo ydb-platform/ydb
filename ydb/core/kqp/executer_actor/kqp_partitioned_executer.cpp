@@ -42,6 +42,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.PerShardKeysSizeLimitBytes = from.PerShardKeysSizeLimitBytes;
     request.StatsMode = from.StatsMode;
     request.ProgressStatsPeriod = from.ProgressStatsPeriod;
+    request.CollectAffectedRows = from.CollectAffectedRows;
     request.Snapshot = from.Snapshot;
     request.ResourceManager_ = from.ResourceManager_;
     request.CaFactory_ = from.CaFactory_;
@@ -89,7 +90,7 @@ public:
 
     explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Request(std::move(settings.Request))
-        , Stats(Request.StatsMode)
+        , Stats(Request.StatsMode, Request.CollectAffectedRows)
         , SessionActorId(std::move(settings.SessionActorId))
         , FuncRegistry(std::move(settings.FuncRegistry))
         , TimeProvider(std::move(settings.TimeProvider))

@@ -38,6 +38,7 @@ namespace NKikimr::NBlobDepot {
 
     private:
         class TTxUpdateBlock;
+        class TTxQueryBlocks;
         class TTxDeleteTabletData;
         class TBlockProcessorActor;
 

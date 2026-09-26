@@ -208,7 +208,7 @@ private:
                     ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, TString(NativeUnsupported));
                     return;
                 }
-                FillModuleInfo(row, *Result_.mutable_module());
+                FillModuleInfo(row, *Result_.mutable_module_info());
                 Result_.set_manifest_json(row.Manifest);
                 Uid_ = row.Uid;
                 ArtifactKind_ = NQuery::ArtifactKindFor(row.Type);

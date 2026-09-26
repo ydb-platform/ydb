@@ -1,6 +1,7 @@
 
 #include "generate.h"
 #include "ydb_service_experimental.h"
+#include "ydb_service_udf.h"
 #include "ydb_sql.h"
 #include "ydb_topic_deferred_publish.h"
 
@@ -43,6 +44,7 @@ TCommandExperimental::TCommandExperimental()
     AddCommand(std::make_unique<TCommandSqlOperation>());
     AddCommand(std::make_unique<TCommandDeleteSession>());
     AddCommand(std::make_unique<TCommandExperimentalTopic>());
+    AddCommand(std::make_unique<TCommandUdf>());
 }
 
 TCommandStreamQuery::TCommandStreamQuery()

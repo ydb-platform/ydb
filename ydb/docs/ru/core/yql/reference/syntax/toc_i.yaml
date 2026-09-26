@@ -2,6 +2,7 @@ items:
 - { name: Обзор,                        href: index.md }
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
+- { name: Коррелированные подзапросы, EXISTS и NOT EXISTS, href: correlated-subqueries.md }
 - { name: ACTION,                       href: action.md }
 - { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md }
 - { name: ALTER DATABASE,                   include: { mode: link, path: alter_database/toc_p.yaml },                                                                                }

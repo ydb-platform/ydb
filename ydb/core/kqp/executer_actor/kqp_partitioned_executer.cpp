@@ -216,6 +216,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleCurrentStats);
                 hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleExecute);
@@ -228,6 +229,45 @@ public:
         } catch (...) {
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "Got an unknown error in ExecuteState")}));
+        }
+    }
+
+    void PublishCurrentStats() {
+        if (UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
+        const auto now = TMonotonic::Now();
+        if (LastCurrentStatsPublish + UserRequestContext->CurrentQueryStatsInterval > now) {
+            return;
+        }
+        if (const auto current = CurrentQueryStats.Get()) {
+            LastCurrentStatsPublish = now;
+            Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({*current, ++CurrentStatsSequenceNo}));
+        }
+    }
+
+    void UpdateCurrentStats(TActorId executer, const TCurrentExecStatsReport& report) {
+        auto& source = ChildCurrentStats[executer];
+        if (!CurrentQueryStats.Update(source, report)) {
+            return;
+        }
+        PublishCurrentStats();
+    }
+
+    void HandleCurrentStats(TEvKqpExecuter::TEvCurrentExecutionStats::TPtr& ev) {
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero()
+            && ExecuterToPartition.contains(ev->Sender)) {
+            UpdateCurrentStats(ev->Sender, ev->Get()->Report);
+        }
+    }
+
+    void FillCurrentStats() {
+        if (UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
+        if (auto current = CurrentQueryStats.Get()) {
+            current->ComputeMemoryBytes = 0;
+            ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{*current, ++CurrentStatsSequenceNo};
         }
     }
 
@@ -249,6 +289,9 @@ public:
             return TryFinishExecution();
         }
 
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero() && ev->Get()->CurrentExecutionStats) {
+            UpdateCurrentStats(ev->Sender, *ev->Get()->CurrentExecutionStats);
+        }
         auto [_, partInfo] = *it;
 
         YDB_LOG_TRACE("Got tx response",
@@ -377,6 +420,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleAbort);
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleCurrentStats);
                 hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
@@ -413,6 +457,9 @@ public:
             return TryFinishExecution();
         }
 
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero() && ev->Get()->CurrentExecutionStats) {
+            UpdateCurrentStats(ev->Sender, *ev->Get()->CurrentExecutionStats);
+        }
         auto [_, partInfo] = *it;
 
         YDB_LOG_TRACE("Got tx response",
@@ -731,6 +778,13 @@ private:
     }
 
     void ForgetExecuterAndBuffer(const TBatchPartitionInfo::TPtr& partInfo) {
+        if (UserRequestContext->CurrentQueryStatsInterval != TDuration::Zero()) {
+            if (auto it = ChildCurrentStats.find(partInfo->ExecuterId); it != ChildCurrentStats.end()) {
+                CurrentQueryStats.Finish(it->second);
+                ChildCurrentStats.erase(it);
+                PublishCurrentStats();
+            }
+        }
         YQL_ENSURE(ExecuterToPartition.erase(partInfo->ExecuterId) == 1);
         YQL_ENSURE(BufferToPartition.erase(partInfo->BufferId) == 1);
     }
@@ -983,6 +1037,7 @@ private:
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
 
+        FillCurrentStats();
         Send(SessionActorId, ResponseEv.release());
         PassAway();
     }
@@ -991,6 +1046,7 @@ private:
         auto& response = *ResponseEv->Record.MutableResponse();
         response.SetStatus(ReturnStatus);
 
+        FillCurrentStats();
         Send(SessionActorId, ResponseEv.release());
         PassAway();
     }
@@ -1002,6 +1058,10 @@ private:
 
     TBatchOperationExecutionStats Stats;
     std::optional<TBatchExecutionTrace> TraceStats;
+    TCurrentQueryStats CurrentQueryStats;
+    THashMap<TActorId, TCurrentQueryStats::TSourceState> ChildCurrentStats;
+    ui64 CurrentStatsSequenceNo = 0;
+    TMonotonic LastCurrentStatsPublish;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 

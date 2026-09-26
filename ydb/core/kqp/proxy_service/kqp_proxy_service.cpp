@@ -16,6 +16,8 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -842,7 +844,10 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId);
+            LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+            if (FeatureFlags.GetEnableKqpRuntimeStats()) {
+                ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
+            }
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
@@ -1066,7 +1071,8 @@ public:
         }
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
-        if (info && !info->AttachedRpcId) {
+        if (info && !info->AttachedRpcId
+            && (info->State != TKqpSessionInfo::EXECUTING || info->QueryRequestId == requestId)) {
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
@@ -1076,8 +1082,8 @@ public:
         }
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
-        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
-            LocalSessions->DetachQueryText(info);
+        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
+            LocalSessions->EndQuery(info);
         }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
@@ -1485,6 +1491,18 @@ public:
         }
     }
 
+    void Handle(TEvKqp::TEvCurrentQueryStats::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        auto* info = LocalSessions->FindPtr(msg.SessionId);
+        if (!info || info->WorkerId != ev->Sender || info->State != TKqpSessionInfo::EXECUTING
+            || info->QueryRequestId != msg.RequestId || info->CurrentQueryStatsSequenceNo >= msg.SequenceNo) {
+            return;
+        }
+        auto* mutableInfo = const_cast<TKqpSessionInfo*>(info);
+        mutableInfo->CurrentQueryStats = msg.Stats;
+        mutableInfo->CurrentQueryStatsSequenceNo = msg.SequenceNo;
+    }
+
     void SendWhiteboardStats() {
         TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateTotalSessionsUpdateRequest(LocalSessions->size()));
@@ -1505,6 +1523,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
+            hFunc(TEvKqp::TEvCurrentQueryStats, Handle);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);

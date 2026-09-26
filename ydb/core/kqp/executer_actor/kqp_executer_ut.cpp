@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
@@ -86,13 +87,16 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
     }
 
-    Y_UNIT_TEST(ResultChannelFlowControlPauseResume) {
+    Y_UNIT_TEST_TWIN(ResultChannelFlowControlPauseResume, ClientStats) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpRuntimeStats(true);
 
         TKikimrRunner kikimr(settings);
         const ui32 totalRows = 2000;
         kikimr.RunCall([&] { CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
 
+        auto client = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
@@ -101,9 +105,16 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         bool resuming = false;
         ui64 rowsWhilePaused = 0;
         ui64 rowsAfterResume = 0;
-
+        auto streamSender = runtime.AllocateEdgeActor();
+        ui64 queryStatsReports = 0;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType) {
+            if (ev->GetTypeRewrite() == TEvKqp::TEvCurrentQueryStats::EventType) {
+                const auto& msg = *ev->Get<TEvKqp::TEvCurrentQueryStats>();
+                if (msg.SessionId == session.GetId().c_str()) {
+                    ++queryStatsReports;
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType && ev->Recipient == streamSender) {
                 auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
                 auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
@@ -124,11 +135,20 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        auto streamSender = runtime.AllocateEdgeActor();
-        NDataShard::NKqpHelpers::SendRequest(runtime, streamSender,
-            NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false));
+        auto request = NDataShard::NKqpHelpers::MakeStreamRequest(
+            streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false);
+        request->Record.MutableRequest()->SetSessionId(session.GetId().c_str());
+        request->Record.MutableRequest()->SetDatabase("/Root");
+        request->Record.MutableRequest()->SetKeepSession(true);
+        if (ClientStats) {
+            request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+            request->SetProgressStatsPeriod(TDuration::MilliSeconds(1));
+        }
+        NDataShard::NKqpHelpers::SendRequest(runtime, streamSender, std::move(request));
 
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        runtime.SimulateSleep(TDuration::Seconds(35));
+        UNIT_ASSERT_GT(queryStatsReports, 0);
+        UNIT_ASSERT_LE(queryStatsReports, 2);
         UNIT_ASSERT(!pausedChannels.empty());
         UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
             "not all rows should be delivered while every result channel is paused");
@@ -299,6 +319,222 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                                    result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                     "Datashard program size limit exceeded");
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpCurrentExecutionStats) {
+
+using namespace NYql::NDqProto;
+
+    Y_UNIT_TEST(CurrentQueryStatsPublisherReportsRateAndStaleness) {
+        TCurrentQueryStatsPublisher publisher(TMonotonic::Seconds(10), TDuration::Seconds(30));
+        TCurrentExecStatsReport report;
+        report.Stats.ReadIngressBytes = 600;
+        report.SequenceNo = 1;
+
+        UNIT_ASSERT(publisher.Update(report));
+        auto first = publisher.Publish(TMonotonic::Seconds(30));
+        UNIT_ASSERT(first);
+        UNIT_ASSERT(first->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*first->Stats.ReadIngressBytesRate, 30);
+        UNIT_ASSERT(first->ScheduleNextPublish);
+
+        auto stale = publisher.Publish(TMonotonic::Seconds(60));
+        UNIT_ASSERT(stale);
+        UNIT_ASSERT(!stale->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT(!stale->ScheduleNextPublish);
+
+        report.SequenceNo = 2;
+        UNIT_ASSERT(publisher.Update(report));
+        auto zero = publisher.Publish(TMonotonic::Seconds(90));
+        UNIT_ASSERT(zero);
+        UNIT_ASSERT(zero->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*zero->Stats.ReadIngressBytesRate, 0);
+    }
+
+TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBytes, ui64 sourceBytes) {
+    TDqComputeActorStats report;
+    report.SetMemoryUsage(memory);
+    auto& task = *report.AddTasks();
+    task.SetTaskId(taskId);
+    task.SetCpuTimeUs(cpu);
+    task.SetIngressBytes(sourceBytes);
+    auto& table = *task.AddTables();
+    table.SetTablePath("/Root/Table");
+    table.SetReadBytes(tableBytes);
+    return report;
+}
+
+    void Init(TQueryExecutionStats& stats) {
+    stats.TaskCount = 2;
+    stats.TaskCount4 = 4;
+    stats.ComputeCpuTimeUs.Resize(4);
+    stats.StartTs = TInstant::Seconds(10);
+    }
+
+    Y_UNIT_TEST(RuntimeStatsAreDisabledByDefault) {
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        Init(stats);
+        stats.UpdateTaskStats(1, 1, MakeReport(1, 100, 4096, 1000, 700), nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+
+        const auto snapshot = stats.GetCurrentQueryResources();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 100);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ObservedPeakComputeMemoryBytes, 0);
+    }
+
+    Y_UNIT_TEST(CollectWithoutFullProfile) {
+        for (auto mode : {Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
+                          Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC}) {
+            TQueryExecutionStats stats(mode, nullptr, nullptr, 0, true);
+            Init(stats);
+            auto first = MakeReport(1, 100, 4096, 1000, 700);
+            auto second = MakeReport(2, 200, 8192, 2000, 1400);
+            stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+            stats.UpdateTaskStats(2, 2, second, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+            stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+            stats.StorageCpuTimeUs = 50;
+            auto snapshot = stats.GetCurrentQueryResources();
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 350);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 12288);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2100);
+            UNIT_ASSERT(stats.StageStats.empty());
+
+            first.SetMemoryUsage(0);
+            first.MutableTasks(0)->SetCpuTimeUs(150);
+            stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+            snapshot = stats.GetCurrentQueryResources();
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 8192);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 400);
+
+            stats.UpdateTaskStats(2, 2, second, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
+            snapshot = stats.GetCurrentQueryResources();
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2100);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 400);
+        }
+    }
+
+    Y_UNIT_TEST(UpdateTotalsFromPartialReports) {
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        Init(stats);
+        auto first = MakeReport(1, 100, 4096, 1000, 700);
+        auto* extra = first.MutableTasks(0)->AddTables();
+        extra->SetTablePath("/Root/Other");
+        extra->SetReadBytes(500);
+        auto second = MakeReport(2, 200, 8192, 2000, 1400);
+        stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        stats.UpdateTaskStats(2, 2, second, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+
+        first.MutableTasks(0)->MutableTables()->RemoveLast();
+        first.MutableTasks(0)->MutableTables(0)->SetReadBytes(1500);
+        first.MutableTasks(0)->SetIngressBytes(900);
+        first.SetMemoryUsage(2048);
+        stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        auto snapshot = stats.GetCurrentQueryResources();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 10240);
+
+        first.MutableTasks(0)->MutableTables(0)->SetReadBytes(0);
+        first.MutableTasks(0)->SetIngressBytes(0);
+        first.SetMemoryUsage(0);
+        stats.UpdateTaskStats(1, 1, first, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        snapshot = stats.GetCurrentQueryResources();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 8192);
+
+        auto storage = MakeReport(0, 0, 0, 300, 0);
+        stats.UpdateTaskStats(1, 0, storage, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
+        stats.UpdateTaskStats(1, 0, storage, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
+        stats.UpdateTaskStats(2, 2, TDqComputeActorStats{}, nullptr, COMPUTE_STATE_FAILURE, TDuration::Max());
+        snapshot = stats.GetCurrentQueryResources();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
+    }
+
+    Y_UNIT_TEST(FinalReportIncludesPeakWithoutProgressDelivery) {
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        Init(stats);
+        auto report = MakeReport(1, 100, 4096, 1000, 700);
+        stats.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        const auto progress = stats.TakeCurrentStats();
+        stats.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
+        const auto final = stats.TakeCurrentStats(true);
+        UNIT_ASSERT_GT(final.SequenceNo, progress.SequenceNo);
+        TCurrentQueryStats query;
+        TCurrentQueryStats::TSourceState source;
+        query.Update(source, final);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 4096);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 100);
+    }
+
+    Y_UNIT_TEST(AggregatePhysicalExecutions) {
+        TCurrentQueryStats query;
+        UNIT_ASSERT(!query.Get());
+        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        Init(first);
+        Init(second);
+        auto report = MakeReport(1, 100, 4096, 1000, 700);
+        first.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        TCurrentQueryStats::TSourceState firstSource, secondSource, thirdSource;
+        query.Update(firstSource, first.TakeCurrentStats());
+        query.Update(firstSource, first.TakeCurrentStats());
+        second.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        query.Update(secondSource, second.TakeCurrentStats());
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ReadIngressBytes, 1400);
+        query.Update(firstSource, first.TakeCurrentStats(true));
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
+        query.Update(secondSource, second.TakeCurrentStats(true));
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
+        TQueryExecutionStats third(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        Init(third);
+        third.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        query.Update(thirdSource, third.TakeCurrentStats());
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 300);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
+    }
+
+    Y_UNIT_TEST(FinishedSourceAcceptsNewExecutionSequence) {
+        TCurrentQueryStats query;
+        TCurrentQueryStats::TSourceState source;
+
+        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        Init(first);
+        auto report = MakeReport(1, 100, 4096, 1000, 700);
+        first.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        UNIT_ASSERT(query.Update(source, first.TakeCurrentStats()));
+        UNIT_ASSERT(query.Finish(source));
+
+        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
+        Init(second);
+        second.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        const auto next = second.TakeCurrentStats();
+        UNIT_ASSERT_VALUES_EQUAL(next.SequenceNo, 1);
+        UNIT_ASSERT(query.Update(source, next));
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
+    }
+
+    Y_UNIT_TEST(FailureWithoutTaskStatsReleasesMemory) {
+        TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC, nullptr, nullptr, 0, true);
+        Init(stats);
+        auto report = MakeReport(1, 100, 4096, 1000, 700);
+        stats.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        stats.UpdateTaskStats(1, 1, TDqComputeActorStats{}, nullptr, COMPUTE_STATE_FAILURE, TDuration::Max());
+        const auto snapshot = stats.GetCurrentQueryResources();
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 100);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 700);
     }
 }
 

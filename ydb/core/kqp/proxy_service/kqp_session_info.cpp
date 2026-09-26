@@ -120,6 +120,25 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
             proto->SetWmClassifiedBy(std::move(classifiedBy));
         }
     }
+    if (State == ESessionState::EXECUTING && !isInWmQueue) {
+        if (fieldsMap.NeedField(VSessions::DurationUs::ColumnId)) {
+            const auto now = TInstant::Now();
+            const auto startAt = wmExited ? WmState->GetExitTime() : QueryStartAt;
+            proto->SetDurationUs(now >= startAt ? (now - startAt).MicroSeconds() : 0);
+        }
+        if (const auto& current = CurrentQueryStats) {
+            if (fieldsMap.NeedField(VSessions::CpuTimeUs::ColumnId)) {
+                proto->SetCpuTimeUs(current->CpuTimeUs);
+            }
+            if (fieldsMap.NeedField(VSessions::ComputeMemoryBytes::ColumnId)) {
+                proto->SetComputeMemoryBytes(current->ComputeMemoryBytes);
+            }
+            if (fieldsMap.NeedField(VSessions::ReadIngressBytesRate::ColumnId) && current->ReadIngressBytesRate) {
+                proto->SetReadIngressBytesRate(*current->ReadIngressBytesRate);
+            }
+        }
+    }
+
 }
 
 }  // namespace NKikimr::NKqp

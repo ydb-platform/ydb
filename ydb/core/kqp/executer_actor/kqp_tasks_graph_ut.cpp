@@ -425,7 +425,7 @@ private:
             .UserToken = userToken,
             .Deadline = TInstant::Max(),
             .StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
-            .WithProgressStats = false,
+            .StatsReportingSettings = {},
             .RlPath = rlPath,
             .ExecuterSpan = executerSpan,
             .ResourcesSnapshot = snapshot,

@@ -1066,7 +1066,7 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
 }
 
 ui64 TQueryExecutionStats::EstimateCollectMem() {
-    ui64 result = 0;
+    ui64 result = CollectCurrentQueryStats ? CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats) : 0;
     for (auto& [_, stageStat] : StageStats) {
         result += stageStat.EstimateMem();
     }
@@ -1235,15 +1235,27 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
 void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
-    if (taskId) {
+    if (CollectCurrentQueryStats && taskId) {
         // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
         // FillStats then sends empty Tasks. Do not ENSURE — that would mask
         // the real failure issues from COMPUTE_STATE_FAILURE.
+        AFL_ENSURE(taskId <= TaskCount);
+        CurrentTaskStats.resize(TaskCount);
+        auto& current = CurrentTaskStats[taskId - 1];
+        CurrentMemoryBytes -= current.MemoryBytes;
+        current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
+            ? stats.GetMemoryUsage() : 0;
+        CurrentMemoryBytes += current.MemoryBytes;
+        ObservedPeakComputeMemoryBytes = std::max(ObservedPeakComputeMemoryBytes, CurrentMemoryBytes);
+        // Failure before task-runner setup produces a report without Tasks.
         if (stats.GetTasks().empty()) {
             return;
         }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+        CurrentReadIngressBytes -= current.ReadIngressBytes;
+        current.ReadIngressBytes = std::max(current.ReadIngressBytes, stats.GetTasks(0).GetIngressBytes());
+        CurrentReadIngressBytes += current.ReadIngressBytes;
     }
 
     for (auto& taskStats : stats.GetTasks()) {
@@ -1551,6 +1563,23 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     ExportAggAsyncStats(data.Pop, *stats.MutablePop());
     ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
+}
+
+TCurrentQueryResources TQueryExecutionStats::GetCurrentQueryResources() const {
+    TCurrentQueryResources result;
+    result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    result.ComputeMemoryBytes = CurrentMemoryBytes;
+    result.ReadIngressBytes = CurrentReadIngressBytes;
+    result.ObservedPeakComputeMemoryBytes = ObservedPeakComputeMemoryBytes;
+    return result;
+}
+
+TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
+    auto current = GetCurrentQueryResources();
+    if (finished) {
+        current.ComputeMemoryBytes = 0;
+    }
+    return {current, ++CurrentStatsSequenceNo};
 }
 
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {

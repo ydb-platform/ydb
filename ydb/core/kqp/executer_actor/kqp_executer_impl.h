@@ -133,6 +133,7 @@ public:
         bool useKqpTasksGraphV2 = false)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
+        , StatsReportingSettings(MakeStatsReportingSettings(*userRequestContext, Request.ProgressStatsPeriod))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
@@ -179,7 +180,8 @@ public:
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs(),
+            StatsReportingSettings.CollectCurrentQueryStats);
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -955,6 +957,13 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
+                const auto now = TMonotonic::Now();
+                if (LastCurrentQueryStatsReport + GetUserRequestContext()->CurrentQueryStatsInterval <= now) {
+                    LastCurrentQueryStatsReport = now;
+                    this->Send(Target, new TEvKqpExecuter::TEvCurrentExecutionStats(Stats->TakeCurrentStats()));
+                }
+            }
             ProcessStreamingQueryCounters();
         }
 
@@ -1635,7 +1644,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
+            .StatsReportingSettings = StatsReportingSettings,
             .RlPath = Request.RlPath,
             .ExecuterSpan = tasksSpan,
             .Trace = TraceStats ? &*TraceStats : nullptr,
@@ -1943,6 +1952,9 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
+                ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
+            }
 
             {
                 ui64 cycleCount = GetCycleCountFast();
@@ -2187,6 +2199,7 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
@@ -2199,6 +2212,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
+    TMonotonic LastCurrentQueryStatsReport;
     TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;

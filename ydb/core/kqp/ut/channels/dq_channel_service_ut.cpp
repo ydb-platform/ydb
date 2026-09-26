@@ -15,6 +15,7 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
 #include <util/datetime/base.h>
+#include <util/generic/scope.h>
 #include <util/stream/str.h>
 #include <util/string/join.h>
 #include <util/system/unaligned_mem.h>
@@ -23,6 +24,7 @@
 #include <future>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <vector>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_CHANNELS
@@ -79,10 +81,12 @@ struct TMutexFreeCheck {
 
     void Check() {
         if (Violations.load()) {
-            return; // the 1st one tells enough, and each of them costs a wait
+            return; // the 1st one tells enough, and each of them waits the whole budget out
         }
         auto locked = std::async(std::launch::async, [this]() { std::lock_guard lock(Mutex); });
-        if (locked.wait_for(std::chrono::milliseconds(200)) != std::future_status::ready) {
+        // generous: a check which passes returns as soon as the mutex is taken, the budget only covers a slow
+        // start of the thread or a short hold of the mutex elsewhere
+        if (locked.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
             Violations++;
         }
         Checks++;
@@ -119,8 +123,11 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     }
 
     void FreeQuota(ui64 memorySize) override {
-        if (auto* check = FreeCheck.load(); check && memorySize) {
-            check->Check();
+        if (memorySize) {
+            std::shared_lock lock(FreeCheckMutex);
+            if (FreeCheck) {
+                FreeCheck->Check();
+            }
         }
         if (Quota.fetch_sub(memorySize) < static_cast<i64>(memorySize)) {
             Underflows++;
@@ -152,8 +159,15 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     std::atomic<ui64> Allocated = 0;
     std::atomic<ui64> Freed = 0;
     std::atomic<ui64> Underflows = 0;
-    // checked on every free, when set
-    std::atomic<TMutexFreeCheck*> FreeCheck = nullptr;
+
+    // checked on every free, when set; replaced only once no free is checking with the previous one
+    void SetFreeCheck(TMutexFreeCheck* check) {
+        std::unique_lock lock(FreeCheckMutex);
+        FreeCheck = check;
+    }
+
+    std::shared_mutex FreeCheckMutex;
+    TMutexFreeCheck* FreeCheck = nullptr;
 };
 
 struct TWorkerSettings {
@@ -344,7 +358,7 @@ public:
             MessageIndex++;
         }
         if (MessageIndex <= Settings.MessageCount && Buffer->Pop(data)) {
-            if (MessageIndex < Settings.MessageCount && !CheckOrder(data)) {
+            if (!CheckOrder(data)) {
                 return;
             }
             MessageIndex++;
@@ -362,7 +376,7 @@ public:
         }
     }
 
-    // a data message must carry the index of the next one, the finish comes after all of them
+    // a data message must carry the index of the next one, and the finish must come after all of them
     bool CheckOrder(const TDataChunk& data) {
         if (!Settings.CheckOrder) {
             return true;
@@ -374,12 +388,14 @@ public:
             data.Buffer.CopyTo(output, sizeof(ui32));
             index = ReadUnaligned<ui32>(head.data());
         }
-        if (index == static_cast<ui32>(MessageIndex)) {
+        auto finishExpected = MessageIndex >= Settings.MessageCount;
+        if (finishExpected ? !index && data.Finished : index == static_cast<ui32>(MessageIndex)) {
             return true;
         }
         LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST ORDER SelfId=" << SelfId()
-            << ", ChannelId=" << ChannelId << ", expected message " << MessageIndex << ", got "
-            << (index ? ToString(*index) : TString("the finish")));
+            << ", ChannelId=" << ChannelId
+            << ", expected " << (finishExpected ? TString("the finish") : TString(TStringBuilder() << "message " << MessageIndex))
+            << ", got " << (index ? TString(TStringBuilder() << "message " << *index) : TString(data.Finished ? "the finish" : "an empty message")));
         Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, true));
         PassAway();
         return false;
@@ -1712,7 +1728,10 @@ struct TWaiterOvertakeTest : public TSessionTest {
 
         // the finish is pushed while the waiting message has no SeqNo yet; it must queue up behind it
         Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
-        Sleep(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_C(WaitFor([&]() { return descriptor->FinishPushed.load(); }, TDuration::Seconds(5)),
+            "the finish was not pushed while the waiting message was held");
+        // FinishPushed is set right before the push reaches the session, some slack for the rest of the way
+        Sleep(TDuration::MilliSeconds(50));
         sender->HoldWaiterDequeue.store(false);
 
         WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
@@ -1772,8 +1791,13 @@ struct TAckProgressTest : public TSessionTest {
         Runtime->Send(new NActors::IEventHandle(sender->NodeActorId, receiver->NodeActorId, ack.Release(), 0, frontSeqNo), NodeIndex0);
 
         // lock free: the session Mutex is held for good if the ack deadlocked
-        UNIT_ASSERT_C(WaitFor([&]() { return sender->InflightBytes.load() < inflightBytes; }, TDuration::Seconds(5)),
-            "the forged ack was not processed, the session is stuck");
+        auto processed = WaitFor([&]() { return sender->InflightBytes.load() < inflightBytes; }, TDuration::Seconds(5));
+        if (!processed) {
+            // stopping the actor system would wait for the stuck session thread forever: it is left behind for
+            // the failure to be reported
+            Y_UNUSED(Runner.release());
+        }
+        UNIT_ASSERT_C(processed, "the forged ack was not processed, the session is stuck");
 
         auto descriptor = FindOutputDescriptor(sender, 2);
         UNIT_ASSERT_C(descriptor, "the output descriptor of the channel not found");
@@ -1930,6 +1954,9 @@ struct TWaiterOrderTest : public TSessionTest {
         std::vector<ui64> order;
         auto last = GetQueueChannels(sender);
         for (ui64 i = 0; i < waiterCount; ++i) {
+            // the queue of the sender only says the message was sent, and a replay of nothing is lost
+            UNIT_ASSERT_C(WaitFor([&]() { return receiver->PendingDataCount.load() >= 1; }, TDuration::Seconds(10)),
+                TStringBuilder() << "the message which holds the window did not reach the receiver after " << order.size() << " waiter(s)");
             receiver->ProcessPending(1);
             std::vector<ui64> queue;
             UNIT_ASSERT_C(WaitFor([&]() {
@@ -1980,7 +2007,12 @@ struct TFreeQuotaTest : public TSessionTest {
         WaitSettled(sender);
 
         TMutexFreeCheck check(sender->Mutex);
-        OutputQuotaManager->FreeCheck.store(&check);
+        OutputQuotaManager->SetFreeCheck(&check);
+        // the quota manager outlives the check, and a failed assertion must not leave it behind
+        Y_DEFER {
+            OutputQuotaManager->SetFreeCheck(nullptr);
+            check.Wait();
+        };
 
         ProducerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 1000 };
         ConsumerSettings = ProducerSettings;
@@ -1988,7 +2020,7 @@ struct TFreeQuotaTest : public TSessionTest {
         WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
         WaitSettled(sender);
 
-        OutputQuotaManager->FreeCheck.store(nullptr);
+        OutputQuotaManager->SetFreeCheck(nullptr);
         check.Wait();
 
         UNIT_ASSERT_VALUES_EQUAL_C(check.Violations.load(), 0, "the quota of a chunk was freed under the session Mutex");

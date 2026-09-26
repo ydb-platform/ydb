@@ -2785,6 +2785,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         }
                     }
                     for (auto& sharedBuffer : buffers) {
+                        ui32 srcStageId;
+                        ui32 dstStageId;
                         EDqFillLevel fillLevel;
                         std::shared_ptr<TDqFillAggregator> aggregator;
                         size_t queueSize;
@@ -2793,6 +2795,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         ui64 tailBlobId;
                         {
                             std::lock_guard lock(sharedBuffer->Mutex);
+                            srcStageId = sharedBuffer->Info.SrcStageId;
+                            dstStageId = sharedBuffer->Info.DstStageId;
                             fillLevel = sharedBuffer->FillLevel;
                             aggregator = sharedBuffer->Aggregator;
                             queueSize = sharedBuffer->Queue.size();
@@ -2813,8 +2817,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                         str << sharedBuffer->Info.InputActorId;
                                     }
                                 }
-                                TABLED() {str << sharedBuffer->Info.SrcStageId;}
-                                TABLED() {str << sharedBuffer->Info.DstStageId;}
+                                TABLED() {str << srcStageId;}
+                                TABLED() {str << dstStageId;}
                                 TABLED() {
                                     str << FillLevelToString(fillLevel);
                                     if (aggregator) {

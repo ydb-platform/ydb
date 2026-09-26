@@ -150,7 +150,10 @@ public:
     const TTaggedSummaries* FindTaggedSummaries(const NStatisticPath::TStatisticPath& path) const;
     const TSummaryMap& GetData() const;
 
-    void Persist(const TStreamPersistenceContext& context);
+    template <class C>
+    void Save(C& context) const;
+    template <class C>
+    void Load(C& context);
 
 private:
     TSummaryMap Data_;

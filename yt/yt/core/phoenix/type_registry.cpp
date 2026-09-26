@@ -71,7 +71,7 @@ public:
 
     const TUniverseDescriptor& GetUniverseDescriptor() override
     {
-        if (!Sealed_.exchange(true)) {
+        if (!Sealed_.load(std::memory_order::relaxed) && !Sealed_.exchange(true)) {
             YT_TLOG_INFO("Type registry is sealed");
         }
         return UniverseDescriptor_;

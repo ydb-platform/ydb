@@ -5,7 +5,8 @@ Same nodes `ya analyze-make timeline --evlog` draws.
 Local compile and link are Compile/Link nodes and Run nodes whose path is an
 object or archive (.o, .a, .obj, .so). ya_build is that work before the first
 test. ya_rebuild is the same work after tests have started. ya_tests is every
-other Run. Cache fetch and cache put are not build.
+other Run, with those build intervals cut out. Cache fetch and cache put are
+not build.
 """
 
 from __future__ import annotations
@@ -80,6 +81,30 @@ def _merge(spans: Sequence[Tuple[float, float]], gap: float) -> List[Tuple[float
     return merged
 
 
+def _subtract(
+    spans: Sequence[Tuple[float, float]],
+    cuts: Sequence[Tuple[float, float]],
+) -> List[Tuple[float, float]]:
+    remaining: List[Tuple[float, float]] = []
+    for start, end in spans:
+        pieces = [(start, end)]
+        for cut_start, cut_end in cuts:
+            nxt: List[Tuple[float, float]] = []
+            for piece_start, piece_end in pieces:
+                if cut_end <= piece_start or cut_start >= piece_end:
+                    nxt.append((piece_start, piece_end))
+                    continue
+                if cut_start > piece_start:
+                    nxt.append((piece_start, cut_start))
+                if cut_end < piece_end:
+                    nxt.append((cut_end, piece_end))
+            pieces = nxt
+        for piece_start, piece_end in pieces:
+            if piece_end - piece_start >= MIN_SEC:
+                remaining.append((piece_start, piece_end))
+    return remaining
+
+
 def phases_from_events(events: Iterable[Dict[str, Any]], *, gap: float = GAP_SEC) -> List[Phase]:
     builds: List[Tuple[float, float]] = []
     tests: List[Tuple[float, float]] = []
@@ -108,10 +133,13 @@ def phases_from_events(events: Iterable[Dict[str, Any]], *, gap: float = GAP_SEC
         else:
             early.append((start, first_test))
             late.append((first_test, end))
+    build_spans = _merge(early, gap)
+    rebuild_spans = _merge(late, gap)
+    test_spans = _subtract(_merge(tests, gap), build_spans + rebuild_spans)
     found: List[Phase] = []
-    found.extend(("ya_build", start, end) for start, end in _merge(early, gap))
-    found.extend(("ya_rebuild", start, end) for start, end in _merge(late, gap))
-    found.extend(("ya_tests", start, end) for start, end in _merge(tests, gap))
+    found.extend(("ya_build", start, end) for start, end in build_spans)
+    found.extend(("ya_rebuild", start, end) for start, end in rebuild_spans)
+    found.extend(("ya_tests", start, end) for start, end in test_spans)
     found.sort(key=lambda item: item[1])
     return found
 

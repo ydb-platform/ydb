@@ -7,10 +7,15 @@ on:
       commit_sha:
         type: string
         default: ""
-        
+      workflow:
+        description: "GitHub job metrics: all or a comma-separated workflow file list"
+        type: string
+        default: "all"
+
 defaults:
   run:
     shell: bash
+
 jobs:
   main:
     name: Checkout and setup
@@ -126,3 +131,23 @@ jobs:
     - name: Upload mute latency data
       continue-on-error: true
       run: python3 .github/scripts/analytics/mute_latency_from_failure.py
+
+  github_job_metrics:
+    name: GitHub job metrics
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ inputs.commit_sha }}
+    - name: Setup
+      uses: ./.github/actions/setup_collect_analytics
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+    - name: Export GitHub job metrics
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CI_METRICS_WORKFLOW: ${{ github.event_name == 'workflow_dispatch' && inputs.workflow || 'all' }}
+      continue-on-error: true
+      run: python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2

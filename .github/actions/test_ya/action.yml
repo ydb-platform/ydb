@@ -112,9 +112,25 @@ runs:
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
 
-    - name: Clean ya cache
+    - name: Resolve analytics job name
       shell: bash
-      run: rm -rf ~/.ya
+      env:
+        WORKFLOW_NAME: ${{ github.workflow }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py || true)
+        job_id="${resolved%%$'\t'*}"
+        job_title="${resolved#*$'\t'}"
+        if [ -z "$job_id" ] || [ "$job_id" = "$resolved" ]; then
+          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for runner ${RUNNER_NAME}; metrics will be dropped" >&2
+        else
+          echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
+        fi
+        echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
     - name: Init
       id: init
@@ -139,22 +155,38 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+        if [ -z "${CI_METRICS_FILE:-}" ]; then
+          echo "CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
+          CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl
+        fi
+        mkdir -p "$(dirname "$CI_METRICS_FILE")"
+        touch "$CI_METRICS_FILE"
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name init --source ya_phase || true
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name init --conclusion success || true
 
-    - name: Resolve analytics job name
+    - name: Clean ya cache
+      id: clean_ya_cache
       shell: bash
-      env:
-        WORKFLOW_NAME: ${{ github.workflow }}
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        EVENT_NAME: ${{ github.event_name }}
       run: |
-        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
-        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name clean_ya_cache --source ya_phase || true
+        set +e
+        rm -rf ~/.ya
+        rc=$?
+        set -e
+        if [ "$rc" -eq 0 ]; then
+          python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name clean_ya_cache --conclusion success || true
+        else
+          python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name clean_ya_cache --conclusion failure --error "rm ~/.ya rc=${rc}" || true
+          exit "$rc"
+        fi
 
     - name: Setup cache
+      id: setup_cache
       shell: bash
       run: |
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name setup_cache --source ya_phase || true
         export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
@@ -162,19 +194,66 @@ runs:
         export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
         echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
         echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name setup_cache --conclusion success || true
 
     - name: ya build and test
       id: build
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ github.token }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-        PR_NUMBER: ${{ inputs.pull_number }}
+        PR_NUMBER: ${{ github.event.number || inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
-        
+        CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
+        record_ci_start() {
+          local name="$1"
+          local ya_attempt="${2:-}"
+          local source="${3:-ya_phase}"
+          local extra_args=()
+          if [ -n "$ya_attempt" ]; then
+            extra_args+=(--label "ya_attempt=${ya_attempt}")
+          fi
+          if [ -n "${CI_BUILD_TARGET:-}" ]; then
+            extra_args+=(--label "build_target=${CI_BUILD_TARGET}")
+          fi
+          if [ -n "${CI_CACHE_MODE:-}" ]; then
+            extra_args+=(--label "cache_mode=${CI_CACHE_MODE}")
+          fi
+          if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
+            extra_args+=(--runner)
+          fi
+          python3 "$CI_METRICS_PY" start --name "$name" --source "$source" "${extra_args[@]}" || true
+        }
+        record_ci_end() {
+          local name="$1"
+          local conclusion="${2:-success}"
+          local error="${3:-}"
+          local extra_args=(--conclusion "$conclusion")
+          if [ -n "$error" ]; then
+            extra_args+=(--error "$error")
+          fi
+          if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
+            extra_args+=(--usage)
+          fi
+          python3 "$CI_METRICS_PY" end --name "$name" "${extra_args[@]}" || true
+        }
+        record_ci_enrich() {
+          local name="$1"
+          shift
+          python3 "$CI_METRICS_PY" enrich --name "$name" "$@" || true
+        }
+        record_ci_flush() {
+          python3 "$CI_METRICS_PY" flush || true
+        }
+        record_ci_send_cancelled() {
+          python3 "$CI_METRICS_PY" send --conclusion cancelled || true
+        }
+        trap 'record_ci_send_cancelled' TERM INT
+
         if [ "$COLLECT_COREDUMPS" = "true" ]; then
           sudo mkdir -p /coredumps
           sudo chmod 1777 /coredumps
@@ -306,10 +385,17 @@ runs:
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
+          record_ci_start graph_compare
           set +e
           ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
+          if [ $RC -ne 0 ]; then
+            record_ci_end graph_compare failure "graph_compare rc=${RC}"
+          else
+            record_ci_end graph_compare success
+          fi
+          record_ci_flush
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.py returned $RC, build failed"
@@ -319,7 +405,9 @@ runs:
             exit $RC
           fi
 
+          record_ci_start checkout_head
           git checkout $ORIGINAL_HEAD
+          record_ci_end checkout_head success
           YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
@@ -336,6 +424,7 @@ runs:
             $YA_MAKE_TARGET
         fi
 
+        record_ci_start prepare_ya_make 1
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
@@ -349,6 +438,18 @@ runs:
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
         fi
+
+        if [ -z "${CI_CACHE_MODE:-}" ]; then
+          if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+            CI_CACHE_MODE=dist_cache
+          else
+            CI_CACHE_MODE=none
+          fi
+        fi
+        echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
+        python3 "$CI_METRICS_PY" track runner_info --kind info --source ya_phase --runner \
+          --label "cache_mode=${CI_CACHE_MODE}" || true
+        record_ci_flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
@@ -367,6 +468,7 @@ runs:
         do
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
+            record_ci_start prepare_ya_make "$RETRY"
           else
             IS_RETRY=0
           fi
@@ -435,6 +537,12 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          record_ci_end prepare_ya_make success
+          if [ -n "${CI_BUILD_SPAN:-}" ]; then
+            record_ci_start "$CI_BUILD_SPAN" "$RETRY" "${CI_BUILD_SPAN_SOURCE:-ya_phase}"
+          else
+            record_ci_start "ya_make_try_${RETRY}" "$RETRY"
+          fi
 
           set +e
           # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
@@ -448,6 +556,19 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          YA_MAKE_NAME="${CI_BUILD_SPAN:-ya_make_try_${RETRY}}"
+          if [ $RC -eq 0 ]; then
+            record_ci_end "$YA_MAKE_NAME" success
+          else
+            record_ci_end "$YA_MAKE_NAME" failure "ya make rc=${RC}"
+          fi
+          record_ci_start postprocess_try "$RETRY"
+          if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
+            python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
+              --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+              --parent "$YA_MAKE_NAME" \
+              --ya-attempt "$RETRY" || true
+          fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
@@ -479,6 +600,7 @@ runs:
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
+          record_ci_end postprocess_try success
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -491,6 +613,11 @@ runs:
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
             echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" \
+              --label "error=ya make rc=${RC}" \
+              --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
+              --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
+            record_ci_flush
             break
           fi
 
@@ -498,6 +625,7 @@ runs:
           gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
           # postprocess build results report (add links, logs, mute tests etc)
+          record_ci_start transform_build_results "$RETRY"
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
@@ -507,11 +635,21 @@ runs:
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || true
+          record_ci_end transform_build_results success
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
+          record_ci_start fail_checker "$RETRY"
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+          record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --report "$CURRENT_REPORT"
+          if [ $TESTS_RESULT = 0 ]; then
+            record_ci_end fail_checker success
+            record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --label "tests_status=passed"
+          else
+            record_ci_end fail_checker failure "failed_tests=${FAILED_TESTS_COUNT}"
+            record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
+          fi
 
           IS_LAST_RETRY=0
 
@@ -535,6 +673,7 @@ runs:
             # Set the correct commit SHA - use original head for accurate version tracking
             export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
             
+            record_ci_start generate_summary "$RETRY"
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \
@@ -551,9 +690,17 @@ runs:
               --workflow_run_id "${{ github.run_id }}" \
               --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
+            record_ci_end generate_summary success
           fi
 
+          record_ci_start s3_sync_try "$RETRY"
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          record_ci_end s3_sync_try success
+          record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" \
+            --label "report_url=${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
+            --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
+            --label "artifacts_url=${CURRENT_PUBLIC_DIR_URL}/"
+          record_ci_flush
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -584,7 +731,10 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
+          record_ci_start upload_tests_results "$RETRY"
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          record_ci_end upload_tests_results success
+          record_ci_flush
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -668,6 +818,19 @@ runs:
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
+
+    - name: Upload CI metrics
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        conclusion=success
+        if [ "${{ steps.clean_ya_cache.outcome }}" = "failure" ] || [ "${{ steps.init.outcome }}" = "failure" ] || [ "${{ steps.setup_cache.outcome }}" = "failure" ] || [ "${{ steps.build.outcome }}" = "failure" ]; then
+          conclusion=failure
+        fi
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send --conclusion "$conclusion" || true
 
     - name: show free space
       if: always()

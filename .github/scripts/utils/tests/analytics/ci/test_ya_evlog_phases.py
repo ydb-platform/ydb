@@ -62,6 +62,22 @@ class EvlogPhasesTest(unittest.TestCase):
             ],
         )
 
+    def test_tests_break_where_rebuild_overlaps(self):
+        events = [
+            _node("Run(test_one)", 0, 80),
+            _node("Run(hash$(BUILD_ROOT)/ydb/core/hive/tx.cpp.o)", 0, 4),
+            _node("Compile(b.cpp)", 29, 30),
+        ]
+        self.assertEqual(
+            phases_from_events(events, gap=15),
+            [
+                ("ya_rebuild", 0, 4),
+                ("ya_tests", 4, 29),
+                ("ya_rebuild", 29, 30),
+                ("ya_tests", 30, 80),
+            ],
+        )
+
     def test_cache_hit_has_tests_only(self):
         events = [
             _node("FromDistCache(hash)", 1, 2),

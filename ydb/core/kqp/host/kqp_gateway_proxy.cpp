@@ -774,6 +774,9 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
             tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
             if (tier.StorageName) {
                 tierProto->MutableEvictToExternalStorage()->SetStorage(*tier.StorageName);
+                if (tier.ObjectKeyPrefix) {
+                    tierProto->MutableEvictToExternalStorage()->SetObjectKeyPrefix(*tier.ObjectKeyPrefix);
+                }
             } else {
                 tierProto->MutableDelete();
             }

@@ -1067,7 +1067,8 @@ bool TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readR
     return false;
 }
 
-void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage) {
+void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage,
+    std::optional<TString> objectKeyPrefix) {
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     Stream << "INTERVAL(";
     const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(expireAfterSeconds * 1000000));
@@ -1077,6 +1078,10 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
     if (storage) {
         Stream << "TO EXTERNAL DATA SOURCE ";
         EscapeName(*storage, Stream);
+        if (objectKeyPrefix) {
+            Stream << '.';
+            EscapeName(*objectKeyPrefix, Stream);
+        }
     } else {
         Stream << "DELETE";
     }
@@ -1166,9 +1171,12 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
                     case Ydb::Table::TtlTier::kDelete:
                         Format(expireAfterSeconds);
                         break;
-                    case Ydb::Table::TtlTier::kEvictToExternalStorage:
-                        Format(expireAfterSeconds, tier.evict_to_external_storage().storage());
+                    case Ydb::Table::TtlTier::kEvictToExternalStorage: {
+                        const auto& settings = tier.evict_to_external_storage();
+                        Format(expireAfterSeconds, settings.storage(),
+                            settings.has_object_key_prefix() ? std::make_optional(TString(settings.object_key_prefix())) : std::nullopt);
                         break;
+                    }
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Tier action is undefined");
                 }
@@ -1791,9 +1799,12 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
                     Format(tier.GetApplyAfterSeconds());
                     break;
-                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
-                    Format(tier.GetApplyAfterSeconds(), tier.GetEvictToExternalStorage().GetStorage());
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage: {
+                    const auto& settings = tier.GetEvictToExternalStorage();
+                    Format(tier.GetApplyAfterSeconds(), settings.GetStorage(),
+                        settings.HasObjectKeyPrefix() ? std::make_optional(settings.GetObjectKeyPrefix()) : std::nullopt);
                     break;
+                }
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                     ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Undefined tier action");
             }

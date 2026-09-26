@@ -416,4 +416,5 @@ message TFeatureFlags {
     // safe, but may leave some garbage of already deleted tablets until it is turned on again.
     optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
     optional bool EnableKqpRuntimeStats = 342 [default = false];
+    optional bool EnableTieringObjectKeyTree = 343 [default = false];
 }

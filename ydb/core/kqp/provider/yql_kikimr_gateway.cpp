@@ -127,6 +127,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                 auto tierNode = listNode.Item(i);
 
                 std::optional<TString> storageName;
+                std::optional<TString> objectKeyPrefix;
                 TDuration evictionDelay;
                 YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
                 for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
@@ -134,6 +135,9 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                     if (tierFieldName == "storageName") {
                         YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
                         storageName = tierField.Value().Cast<TCoAtom>().StringValue();
+                    } else if (tierFieldName == "objectKeyPrefix") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
+                        objectKeyPrefix = tierField.Value().Cast<TCoAtom>().StringValue();
                     } else if (tierFieldName == "evictionDelay") {
                         YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
                         auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
@@ -148,7 +152,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                     }
                 }
 
-                settings.Tiers.emplace_back(evictionDelay, storageName);
+                settings.Tiers.emplace_back(evictionDelay, storageName, objectKeyPrefix);
             }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
@@ -336,6 +340,9 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
         }
         if (tier.StorageName) {
             outTier->mutable_evict_to_external_storage()->set_storage(*tier.StorageName);
+            if (tier.ObjectKeyPrefix) {
+                outTier->mutable_evict_to_external_storage()->set_object_key_prefix(*tier.ObjectKeyPrefix);
+            }
         } else {
             outTier->mutable_delete_();
         }

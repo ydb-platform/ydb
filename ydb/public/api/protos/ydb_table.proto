@@ -833,6 +833,7 @@ message ColumnMeta {
 message EvictionToExternalStorageSettings {
     // Path to external data source
     string storage = 1;
+    optional string object_key_prefix = 2;
 }
 
 message DateTypeColumnModeSettings {

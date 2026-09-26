@@ -230,6 +230,7 @@ message TPQConfig {
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
+    optional uint64 WriteSessionsInitRps = 63 [default = 1000];
 }
 
 message TChannelProfile {

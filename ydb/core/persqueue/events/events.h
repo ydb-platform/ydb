@@ -14,6 +14,7 @@ enum class EServices {
     CLOUD_EVENTS = 6,
     SCHEMA = 7,
     RESET_OFFSET = 8,
+    WRITE_SESSIONS_QUOTER = 9,
     END
 };
 

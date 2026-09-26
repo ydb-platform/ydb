@@ -18,6 +18,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    library/cpp/time_provider
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/library/kafka
@@ -37,6 +38,7 @@ SRCS(
     mirrorer_ut.cpp
     topic_timestamp_ut.cpp
     topic_ut.cpp
+    write_sessions_quoter_ut.cpp
 )
 
 END()

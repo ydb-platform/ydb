@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -116,6 +117,8 @@ private:
 
             HFunc(NPQ::TEvPartitionChooser::TEvChooseResult, Handle);
             HFunc(NPQ::TEvPartitionChooser::TEvChooseError, Handle);
+            HFunc(TEvWriteSessionsQuoter::TEvQuotaAcquired, Handle);
+            HFunc(TEvWriteSessionsQuoter::TEvQuotaDeclined, Handle);
 
         default:
             break;
@@ -174,7 +177,11 @@ private:
 
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 
+    void Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr& ev, const TActorContext& ctx);
+
 private:
+    void CreatePartitionChooser(const TActorContext& ctx);
     bool CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
     NWilson::TSpan GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const;
@@ -197,6 +204,7 @@ private:
         ES_CREATED = 1,
         ES_WAIT_SCHEME = 2,
         ES_WAIT_PARTITION = 3,
+        ES_WAIT_WRITE_SESSION_QUOTA = 4,
         ES_WAIT_WRITER_INIT = 7,
         ES_INITED = 8,
         ES_DYING = 9

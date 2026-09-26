@@ -2203,6 +2203,22 @@ void TPartitionTxTestHelper::WaitTxPredicateReplyImpl(ui64 userActId, bool statu
 #endif
 }
 
+Y_UNIT_TEST_F(NewPartitionStartsWithoutWriteSessionsQuoter, TPartitionFixture)
+{
+    CreatePartition();
+    auto initialized = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1));
+    UNIT_ASSERT_C(initialized, "Partition initialization must not wait for the write sessions quoter");
+    CreateSession("client", "session-id");
+}
+
+Y_UNIT_TEST_F(RestoredPartitionStartsWithoutWriteSessionsQuoter, TPartitionFixture)
+{
+    CreatePartition({.Begin=0, .End=10});
+    auto initialized = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvInitComplete>(Ctx->Edge, TDuration::Seconds(1));
+    UNIT_ASSERT_C(initialized, "Restored partition initialization must not wait for the write sessions quoter");
+    CreateSession("client", "session-id");
+}
+
 Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 {
     // In the test, we check that the reference count for `UserInfo` decreases in case of errors. To do this,

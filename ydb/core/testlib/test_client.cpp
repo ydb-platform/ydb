@@ -130,6 +130,7 @@
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
+#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -1583,6 +1584,11 @@ namespace Tests {
             IActor* pqReadCacheService = NPQ::CreatePQDReadCacheService(Runtime->GetDynamicCounters());
             TActorId readCacheId = Runtime->Register(pqReadCacheService, nodeIdx, userPoolId);
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
+        }
+        {
+            IActor* writeSessionsQuoter = NPQ::CreateWriteSessionsQuoter();
+            TActorId writeSessionsQuoterId = Runtime->Register(writeSessionsQuoter, nodeIdx, userPoolId);
+            Runtime->RegisterService(NPQ::MakeWriteSessionsQuoterId(), writeSessionsQuoterId, nodeIdx);
         }
         {
             IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();

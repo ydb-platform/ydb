@@ -734,7 +734,11 @@ public:
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
-    void SendFromWaiters();
+    // Sends from the WaitQueues of the waiting channels while the window lasts, starting with the waiter given
+    // (as HandleAck picks one under its lock) or with the one it picks itself
+    void SendFromWaiters(std::shared_ptr<TOutputDescriptor> waiter = {});
+    // under Mutex: the next waiter to send from if the window is open, the waiter is taken off WaitersQueue
+    std::shared_ptr<TOutputDescriptor> PopWaiterLocked();
     // empties the WaitQueue of an aborted channel, whose chunks are never sent
     void DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& descriptor);
     // releases what a message leaving the Queue held, under Mutex, and returns what was actually released

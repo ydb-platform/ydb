@@ -1659,59 +1659,40 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     HandleChannelData(ev);
 }
 
+std::shared_ptr<TOutputDescriptor> TNodeState::PopWaiterLocked() {
+    // Re-checked for every waiter message: PushDataChunk adds from the producer threads, and a snapshot would drain
+    // waiters well past the window. Checked before the bytes are added, so exceeded by at most one message.
+    if (Reconciliation.load() > 0 || InflightBytes.load() >= Limits.RemoteSessionInflightBytes
+        || Queue.size() >= MaxInflightMessages || WaitersQueue.empty()) {
+        return {};
+    }
+    auto waiter = WaitersQueue.top();
+    WaitersQueue.pop();
+    WaitersQueueSize--;
+    (*OutputBufferWaiterCount)--;
+    return waiter;
+}
+
 // The HandleAck pop sites release the bytes under Mutex before any early return, so InflightBytes matches
 // the Queue here.
-void TNodeState::SendFromWaiters() {
+void TNodeState::SendFromWaiters(std::shared_ptr<TOutputDescriptor> waiter) {
 
-    if (Reconciliation.load() > 0) {
-        return;
+    if (!waiter) {
+        // Lock free: a waiter which registers after this load either finds the Queue empty and sends
+        // TEvSendWaiters, or is picked up after the ack of a queued message, see PushDataChunk
+        if (Reconciliation.load() > 0 || WaitersQueueSize.load() == 0) {
+            return;
+        }
+        std::lock_guard lock(Mutex);
+        waiter = PopWaiterLocked();
     }
-    // Re-read every iteration: PushDataChunk adds from the producer threads, and a snapshot would drain
-    // waiters well past the window. Checked before the bytes are added, so exceeded by at most one message.
-    while (InflightBytes.load() < Limits.RemoteSessionInflightBytes) {
-        std::shared_ptr<TOutputDescriptor> waiter;
 
-        {
-            std::lock_guard lock(Mutex);
-            if (Queue.size() >= MaxInflightMessages) {
-                break;
-            }
-
-            while (!WaitersQueue.empty()) {
-
-                (*OutputBufferWaiterCount)--;
-/*
-now may need to send very last msg from terminated descriptor
-                if (WaitersQueue.top()->IsTerminatedOrAborted()) {
-
-                    auto waitQueueBytes = WaitersQueue.top()->WaitQueueBytes.load();
-                    auto waitQueueSize = WaitersQueue.top()->WaitQueueSize.load();
-                    WaiterBytes -= waitQueueBytes;
-                    WaiterMessages -= waitQueueSize;
-                    *OutputBufferWaiterBytes -= waitQueueBytes;
-                    *OutputBufferWaiterMessages -= waitQueueSize;
-
-                    WaitersQueue.pop();
-                    WaitersQueueSize--;
-                    continue;
-                }
-*/
-                waiter = WaitersQueue.top();
-                WaitersQueue.pop();
-                WaitersQueueSize--;
-                break;
-            }
-        }
-
-        if (!waiter) {
-            break;
-        }
+    while (waiter) {
+        std::shared_ptr<TOutputDescriptor> next;
 
         // TODO: Handle delayed (spilled) data
 
         if (waiter->CheckGenMajor(GenMajor, "Inconsistent Waiter Gen")) {
-            std::shared_ptr<TOutputItem> item;
-
             ui64 bytes = 0;
 
             {
@@ -1733,7 +1714,9 @@ now may need to send very last msg from terminated descriptor
                 }
 
                 waiter->AddPopChunk(data.Bytes, data.Rows);
-                item = std::make_shared<TOutputItem>(std::move(data), waiter, quoted);
+                // built off Mutex, the WaitQueueMutex held keeps the rest of the channel behind this chunk meanwhile
+                auto ev = BuildDataEvent(data, *waiter);
+                auto item = std::make_shared<TOutputItem>(std::move(data), waiter, quoted);
                 waiter->WaitQueue.pop();
                 waiter->WaitQueueBytes -= bytes;
                 OnWaiterDequeued();
@@ -1754,26 +1737,30 @@ now may need to send very last msg from terminated descriptor
                     LastQueueProgress.store(TInstant::Now());
                 }
                 Queue.push_back(item);
-                SendMessage(*item);
-                SendCount++;
-                (*SessionMessagesSent)++;
+                SendDataEvent(std::move(ev), *item);
                 InflightBytes += bytes;
-                *OutputBufferInflightBytes += bytes;
-                (*OutputBufferInflightMessages)++;
                 // Only now, when the chunk has its SeqNo: until then a push of the channel must not skip the
                 // WaitQueue, see TNodeState::PushDataChunk, or it would overtake this chunk
                 waiter->WaitQueueSize--;
+                next = PopWaiterLocked();
             }
 
+            SendCount++;
+            (*SessionMessagesSent)++;
+            *OutputBufferInflightBytes += bytes;
+            (*OutputBufferInflightMessages)++;
             WaiterBytes -= bytes;
             WaiterMessages--;
             *OutputBufferWaiterBytes -= bytes;
             (*OutputBufferWaiterMessages)--;
         } else {
             DrainAbortedWaiter(waiter);
+            std::lock_guard lock(Mutex);
+            next = PopWaiterLocked();
         }
-    }
 
+        waiter = std::move(next);
+    }
 }
 
 void TNodeState::DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& descriptor) {
@@ -1842,6 +1829,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
     ui64 deltaBytes = 0;
+    std::shared_ptr<TOutputDescriptor> waiter;
 
     {
         // before the lock: the items popped below are destroyed after it is released, and before the waiters
@@ -1947,9 +1935,14 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 }
             }
         }
+
+        // with the window as the pops above left it: none picked means none could be sent now
+        waiter = PopWaiterLocked();
     }
 
-    SendFromWaiters();
+    if (waiter) {
+        SendFromWaiters(std::move(waiter));
+    }
 }
 
 void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {

@@ -15,8 +15,17 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
 #include <util/datetime/base.h>
+#include <util/generic/scope.h>
+#include <util/stream/str.h>
+#include <util/string/join.h>
+#include <util/system/unaligned_mem.h>
 
 #include <atomic>
+#include <future>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
+#include <vector>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_CHANNELS
 
@@ -40,6 +49,7 @@ struct TEvTestPrivate {
     enum EEv {
         EvStart = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvFinished,
+        EvStep,
         EvEnd
     };
 
@@ -55,6 +65,48 @@ struct TEvTestPrivate {
         ERole Role;
         bool Error;
     };
+
+    // the test lets a worker take its next step, see TWorkerSettings::FinishOnStep
+    struct TEvStep : public NActors::TEventLocal<TEvStep, EvStep> {
+    };
+};
+
+// Tells whether a mutex is free at the moment: another thread tries to take it, as the calling thread may be
+// the one which holds it, and a std::mutex may not be asked that by its owner
+struct TMutexFreeCheck {
+
+    explicit TMutexFreeCheck(std::mutex& mutex)
+        : Mutex(mutex)
+    {}
+
+    void Check() {
+        if (Violations.load()) {
+            return; // the 1st one tells enough, and each of them waits the whole budget out
+        }
+        auto locked = std::async(std::launch::async, [this]() { std::lock_guard lock(Mutex); });
+        // generous: a check which passes returns as soon as the mutex is taken, the budget only covers a slow
+        // start of the thread or a short hold of the mutex elsewhere
+        if (locked.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+            Violations++;
+        }
+        Checks++;
+        std::lock_guard lock(FuturesMutex);
+        Futures.push_back(std::move(locked));
+    }
+
+    // the mutex may go only once every attempt to take it is over
+    void Wait() {
+        std::lock_guard lock(FuturesMutex);
+        for (auto& future : Futures) {
+            future.wait();
+        }
+    }
+
+    std::mutex& Mutex;
+    std::atomic<ui64> Checks = 0;
+    std::atomic<ui64> Violations = 0;
+    std::mutex FuturesMutex;
+    std::vector<std::future<void>> Futures;
 };
 
 // Tracks quota strictly - it is an error to free more bytes than were allocated (like the real
@@ -71,6 +123,12 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     }
 
     void FreeQuota(ui64 memorySize) override {
+        if (memorySize) {
+            std::shared_lock lock(FreeCheckMutex);
+            if (FreeCheck) {
+                FreeCheck->Check();
+            }
+        }
         if (Quota.fetch_sub(memorySize) < static_cast<i64>(memorySize)) {
             Underflows++;
         }
@@ -101,6 +159,15 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     std::atomic<ui64> Allocated = 0;
     std::atomic<ui64> Freed = 0;
     std::atomic<ui64> Underflows = 0;
+
+    // checked on every free, when set; replaced only once no free is checking with the previous one
+    void SetFreeCheck(TMutexFreeCheck* check) {
+        std::unique_lock lock(FreeCheckMutex);
+        FreeCheck = check;
+    }
+
+    std::shared_mutex FreeCheckMutex;
+    TMutexFreeCheck* FreeCheck = nullptr;
 };
 
 struct TWorkerSettings {
@@ -111,6 +178,11 @@ struct TWorkerSettings {
     bool EarlyFinish = false;
     int PauseMessageIndex = -1;
     int PauseDelayMs = 0;
+    // the producer writes the index of each message into its 1st bytes and the consumer fails on any
+    // message out of order, missing or cut short by the finish; needs MinMessageSize >= 4
+    bool CheckOrder = false;
+    // the producer sends the finish only once the test has sent it TEvStep
+    bool FinishOnStep = false;
 };
 
 struct TFailureSettings {
@@ -137,6 +209,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
             hFunc(TEvTestPrivate::TEvStart, HandleStart);
+            hFunc(TEvTestPrivate::TEvStep, HandleStep);
             hFunc(TEvDqCompute::TEvResumeExecution, HandleResume);
             hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbort);
         }
@@ -149,6 +222,11 @@ public:
     }
 
     virtual void HandleResume(TEvDqCompute::TEvResumeExecution::TPtr&) {
+        Run();
+    }
+
+    virtual void HandleStep(TEvTestPrivate::TEvStep::TPtr&) {
+        Stepped = true;
         Run();
     }
 
@@ -185,6 +263,7 @@ public:
     IMemoryQuotaManager::TPtr QuotaManager;
     int MessageIndex = 0;
     bool Started = false;
+    bool Stepped = false;
 };
 
 class TProducerActor : public TWorkerActor<TProducerActor> {
@@ -221,10 +300,15 @@ public:
                 }
             }
             auto bytes = Settings.MinMessageSize + RandomNumber<ui64>(Settings.MaxMessageSize - Settings.MinMessageSize);
-            Buffer->Push(TDataChunk(NYql::TChunkedBuffer(TString(bytes, 'a')), 1, false));
+            TString payload(bytes, 'a');
+            if (Settings.CheckOrder) {
+                Y_ENSURE(bytes >= sizeof(ui32));
+                WriteUnaligned<ui32>(payload.begin(), MessageIndex);
+            }
+            Buffer->Push(TDataChunk(NYql::TChunkedBuffer(std::move(payload)), 1, false));
             MessageIndex++;
         }
-        if (MessageIndex == Settings.MessageCount) {
+        if (MessageIndex == Settings.MessageCount && (!Settings.FinishOnStep || Stepped)) {
             Buffer->SendFinish();
         }
     }
@@ -263,6 +347,9 @@ public:
             if (!Buffer->Pop(data)) {
                 break;
             }
+            if (!CheckOrder(data)) {
+                return;
+            }
             MessageIndex++;
         }
         if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
@@ -271,13 +358,47 @@ public:
             MessageIndex++;
         }
         if (MessageIndex <= Settings.MessageCount && Buffer->Pop(data)) {
+            if (!CheckOrder(data)) {
+                return;
+            }
             MessageIndex++;
         }
         if (Buffer->IsFinished()) {
             LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
-            Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, false));
+            // the finish itself is popped as one more message
+            auto error = Settings.CheckOrder && MessageIndex != Settings.MessageCount + 1;
+            if (error) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST ORDER SelfId=" << SelfId()
+                    << ", ChannelId=" << ChannelId << ", finished after " << MessageIndex << " message(s) of " << Settings.MessageCount);
+            }
+            Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, error));
             PassAway();
         }
+    }
+
+    // a data message must carry the index of the next one, and the finish must come after all of them
+    bool CheckOrder(const TDataChunk& data) {
+        if (!Settings.CheckOrder) {
+            return true;
+        }
+        std::optional<ui32> index;
+        if (data.Buffer.Size() >= sizeof(ui32)) {
+            TString head;
+            TStringOutput output(head);
+            data.Buffer.CopyTo(output, sizeof(ui32));
+            index = ReadUnaligned<ui32>(head.data());
+        }
+        auto finishExpected = MessageIndex >= Settings.MessageCount;
+        if (finishExpected ? !index && data.Finished : index == static_cast<ui32>(MessageIndex)) {
+            return true;
+        }
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST ORDER SelfId=" << SelfId()
+            << ", ChannelId=" << ChannelId
+            << ", expected " << (finishExpected ? TString("the finish") : TString(TStringBuilder() << "message " << MessageIndex))
+            << ", got " << (index ? TString(TStringBuilder() << "message " << *index) : TString(data.Finished ? "the finish" : "an empty message")));
+        Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Consumer, true));
+        PassAway();
+        return false;
     }
 
     TInstant ResumeTime;
@@ -619,8 +740,7 @@ struct TSessionTest : public TLoadTest {
     }
 
     static ui64 GetConfirmedSeqNo(const std::shared_ptr<TNodeState>& state) {
-        std::lock_guard lock(state->Mutex);
-        return state->ConfirmedSeqNo;
+        return state->ConfirmedSeqNo.load();
     }
 
     static ui64 GetInputCount(const std::shared_ptr<TNodeState>& state) {
@@ -654,6 +774,20 @@ struct TSessionTest : public TLoadTest {
             bytes += descriptor->PopStats.Bytes.load();
         }
         return bytes;
+    }
+
+    static i64 GetCounter(const std::shared_ptr<TDqChannelService>& service, const TString& name) {
+        return service->Counters->GetCounter(name, false)->Val();
+    }
+
+    static std::shared_ptr<TOutputDescriptor> FindOutputDescriptor(const std::shared_ptr<TNodeState>& state, ui64 channelId) {
+        std::lock_guard lock(state->Mutex);
+        for (const auto& [info, descriptor] : state->OutputDescriptors) {
+            if (info.ChannelId == channelId) {
+                return descriptor;
+            }
+        }
+        return {};
     }
 
     static std::vector<ui64> GetQueueSeqNos(const std::shared_ptr<TNodeState>& state) {
@@ -1120,10 +1254,6 @@ struct TPeerActivityTest : public TSessionTest {
 // Staged through a peer session which is replaced while this node keeps its session and its consumer.
 struct TBufferCountTest : public TSessionTest {
 
-    static i64 GetCounter(const std::shared_ptr<TDqChannelService>& service, const TString& name) {
-        return service->Counters->GetCounter(name, false)->Val();
-    }
-
     void Run() override {
         Prepare();
         Init();
@@ -1555,6 +1685,378 @@ struct TStaleBounceTest : public TSessionTest {
     bool Genuine = false;
 };
 
+// SendFromWaiters published that the last waiting message of a channel was gone from its WaitQueue before
+// the message had its SeqNo, so a push of the channel in between skipped the WaitQueue and overtook it. With
+// the finish overtaking, the receiver dropped the message as late and the channel finished short of it.
+// Staged by parking the session right there and pushing the finish meanwhile.
+struct TWaiterOvertakeTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        // a single message fills the window, so the 2nd one has to wait for the ack of the 1st
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(100);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        auto sender = Service0->CreateDebugNodeState(receiverNodeId);
+        sender->StartSession();
+        WaitSettled(sender);
+
+        // the ack of the 1st message is held back until the 2nd one waits for the window
+        sender->PauseChannelAck();
+
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 2, .MinMessageSize = 150, .MaxMessageSize = 151,
+            .CheckOrder = true, .FinishOnStep = true };
+        ConsumerSettings = ProducerSettings;
+        auto channel = StartChannel(1, true);
+
+        std::shared_ptr<TOutputDescriptor> descriptor;
+        UNIT_ASSERT_C(WaitFor([&]() {
+            descriptor = FindOutputDescriptor(sender, 1);
+            return descriptor && descriptor->WaitQueueSize.load() == 1 && GetQueueSize(sender) == 1;
+        }, TDuration::Seconds(10)), "the 2nd message does not wait for the window");
+
+        sender->HoldWaiterDequeue.store(true);
+        sender->ResumeChannelAck();
+        UNIT_ASSERT_C(WaitFor([&]() { return sender->WaiterDequeueHeld.load(); }, TDuration::Seconds(5)),
+            "the waiting message was not taken off its WaitQueue");
+
+        // the finish is pushed while the waiting message has no SeqNo yet; it must queue up behind it
+        Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return descriptor->FinishPushed.load(); }, TDuration::Seconds(5)),
+            "the finish was not pushed while the waiting message was held");
+        // FinishPushed is set right before the push reaches the session, some slack for the rest of the way
+        Sleep(TDuration::MilliSeconds(50));
+        sender->HoldWaiterDequeue.store(false);
+
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// An ack carrying EarlyFinished made HandleAck run TOutputDescriptor::HandleUpdate under the session Mutex,
+// which pushed the finish through TNodeState::PushDataChunk and so took the Mutex again on the same thread.
+// No receiver sets these fields, the test forges such an ack: it must be taken as a plain confirmation.
+struct TAckProgressTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        WaitSettled(sender);
+
+        // the producer holds its finish back, as the early finish of the peer must be what finishes the
+        // channel for the deadlock to happen
+        receiver->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 3, .MinMessageSize = 10, .MaxMessageSize = 20,
+            .FinishOnStep = true };
+        ConsumerSettings = ProducerSettings;
+        auto channel = StartChannel(2, false);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) == 3 && receiver->PendingDataCount.load() >= 3; },
+            TDuration::Seconds(10)), "the messages did not reach the receiver");
+
+        auto frontSeqNo = GetFrontSeqNo(sender);
+        auto inflightBytes = sender->InflightBytes.load();
+        auto ack = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+        ack->Record.SetGenMajor(GetGenMajor(sender));
+        ack->Record.SetGenMinor(GetGenMinor(sender));
+        ack->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
+        ack->Record.SetSeqNo(frontSeqNo);
+        ack->Record.SetEarlyFinished(true);
+        ack->Record.SetPopBytes(1);
+        Runtime->Send(new NActors::IEventHandle(sender->NodeActorId, receiver->NodeActorId, ack.Release(), 0, frontSeqNo), NodeIndex0);
+
+        // lock free: the session Mutex is held for good if the ack deadlocked
+        auto processed = WaitFor([&]() { return sender->InflightBytes.load() < inflightBytes; }, TDuration::Seconds(5));
+        if (!processed) {
+            // stopping the actor system would wait for the stuck session thread forever: it is left behind for
+            // the failure to be reported
+            Y_UNUSED(Runner.release());
+        }
+        UNIT_ASSERT_C(processed, "the forged ack was not processed, the session is stuck");
+
+        auto descriptor = FindOutputDescriptor(sender, 2);
+        UNIT_ASSERT_C(descriptor, "the output descriptor of the channel not found");
+        UNIT_ASSERT_C(!descriptor->EarlyFinished.load(), "the early finish of an ack was applied");
+        UNIT_ASSERT_VALUES_EQUAL_C(descriptor->RemotePopBytes.load(), 0, "the pop bytes of an ack were applied");
+
+        receiver->ResumeChannelData();
+        StartConsumer(channel);
+        Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+        WaitSettled(sender);
+        UNIT_ASSERT_VALUES_EQUAL(sender->InflightBytes.load(), 0);
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// SendFromWaiters took an aborted waiter off the waiter counters but left its WaitQueue in place, so every
+// chunk which entered it later went onto the counters for good: W/Msg grew with nothing waiting at all.
+struct TWaiterCountersTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(1024);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
+
+        std::shared_ptr<TNodeState> sender;
+        UNIT_ASSERT_C(WaitFor([&]() { return (sender = FindNodeState(Service0, receiverNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "sender node session not found");
+        WaitSettled(sender);
+
+        // nothing is confirmed, so all but the 1st kilobyte waits for the window
+        receiver->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 100, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, false);
+
+        std::shared_ptr<TOutputDescriptor> descriptor;
+        UNIT_ASSERT_C(WaitFor([&]() {
+            descriptor = FindOutputDescriptor(sender, 1);
+            return descriptor && descriptor->WaitQueueSize.load() > 10;
+        }, TDuration::Seconds(10)), "the messages do not wait for the window");
+
+        descriptor->AbortChannel("test");
+        try {
+            auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control0, TDuration::Seconds(10));
+            Actors.erase(msg->Sender);
+            UNIT_ASSERT_C(msg->Get()->Error, "the producer of the aborted channel finished without an error");
+        } catch (NActors::TEmptyEventQueueException&) {
+            UNIT_ASSERT_C(false, "the producer of the aborted channel did not finish");
+        }
+
+        // the acks let SendFromWaiters come to the aborted waiter
+        receiver->ResumeChannelData();
+        UNIT_ASSERT_C(WaitFor([&]() { return sender->WaitersQueueSize.load() == 0 && GetQueueSize(sender) == 0; },
+            TDuration::Seconds(10)), "the waiters did not drain");
+
+        // a chunk pushed into the aborted channel afterwards, as a spilled one reloaded by the storage can be
+        sender->PushDataChunk(TDataChunk(NYql::TChunkedBuffer(TString(10, 'a')), 1, false), descriptor);
+
+        auto details = TStringBuilder() << "WaiterMessages=" << sender->WaiterMessages.load()
+            << ", WaiterBytes=" << sender->WaiterBytes.load()
+            << ", OutputBuffer/WaiterMessages=" << GetCounter(Service0, "OutputBuffer/WaiterMessages")
+            << ", OutputBuffer/WaiterBytes=" << GetCounter(Service0, "OutputBuffer/WaiterBytes")
+            << ", WaitQueueSize=" << descriptor->WaitQueueSize.load();
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->WaiterMessages.load(), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->WaiterBytes.load(), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service0, "OutputBuffer/WaiterMessages"), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service0, "OutputBuffer/WaiterBytes"), 0, details);
+        UNIT_ASSERT_VALUES_EQUAL_C(descriptor->WaitQueueSize.load(), 0, details);
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// WaitersQueue served the channel whose waiting message was the newest first, so under a full window an old
+// channel waited for as long as newer ones kept coming. Channels which start to wait one after another must
+// get the window in the same order.
+struct TWaiterOrderTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        // a single message fills the window, so every ack lets exactly one waiter go
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(100);
+    }
+
+    static std::vector<ui64> GetQueueChannels(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        std::vector<ui64> result;
+        for (const auto& item : state->Queue) {
+            result.push_back(item->Descriptor->Info.ChannelId);
+        }
+        return result;
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
+
+        std::shared_ptr<TNodeState> sender;
+        UNIT_ASSERT_C(WaitFor([&]() { return (sender = FindNodeState(Service0, receiverNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "sender node session not found");
+        WaitSettled(sender);
+
+        // nothing is confirmed until the test replays it, and nobody finishes before the test lets them
+        receiver->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 1, .MinMessageSize = 150, .MaxMessageSize = 151,
+            .FinishOnStep = true };
+        ConsumerSettings = ProducerSettings;
+
+        // the 1st channel takes the window, the others start to wait for it one after another
+        const ui64 waiterCount = 5;
+        std::vector<std::pair<NActors::TActorId, NActors::TActorId>> channels;
+        for (ui64 channelId = 1; channelId <= waiterCount + 1; ++channelId) {
+            channels.push_back(StartChannel(channelId, false));
+            UNIT_ASSERT_C(WaitFor([&]() {
+                if (channelId == 1) {
+                    return GetQueueSize(sender) == 1;
+                }
+                auto descriptor = FindOutputDescriptor(sender, channelId);
+                return descriptor && descriptor->WaitQueueSize.load() == 1;
+            }, TDuration::Seconds(10)), TStringBuilder() << "channel " << channelId << " did not start to wait");
+        }
+
+        // every replayed message is confirmed, and the window it frees goes to the next waiter
+        std::vector<ui64> order;
+        auto last = GetQueueChannels(sender);
+        for (ui64 i = 0; i < waiterCount; ++i) {
+            // the queue of the sender only says the message was sent, and a replay of nothing is lost
+            UNIT_ASSERT_C(WaitFor([&]() { return receiver->PendingDataCount.load() >= 1; }, TDuration::Seconds(10)),
+                TStringBuilder() << "the message which holds the window did not reach the receiver after " << order.size() << " waiter(s)");
+            receiver->ProcessPending(1);
+            std::vector<ui64> queue;
+            UNIT_ASSERT_C(WaitFor([&]() {
+                queue = GetQueueChannels(sender);
+                return queue.size() == 1 && queue != last;
+            }, TDuration::Seconds(10)), TStringBuilder() << "no waiter got the window after " << order.size() << " of them");
+            order.push_back(queue.front());
+            last = queue;
+        }
+
+        receiver->ResumeChannelData();
+        for (const auto& channel : channels) {
+            StartConsumer(channel);
+            Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
+        }
+        for (ui64 i = 0; i < channels.size(); ++i) {
+            WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", order), "2,3,4,5,6");
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// ~TOutputItem frees the quota of a chunk, which TChannelQuotaManager may do under the locks of the resource
+// manager, and the payload with it. HandleAck used to destroy the items it popped under the session Mutex, which
+// every compute actor pushing to the peer waits on. The quota manager checks the Mutex on every free.
+struct TFreeQuotaTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        WaitSettled(sender);
+
+        TMutexFreeCheck check(sender->Mutex);
+        OutputQuotaManager->SetFreeCheck(&check);
+        // the quota manager outlives the check, and a failed assertion must not leave it behind
+        Y_DEFER {
+            OutputQuotaManager->SetFreeCheck(nullptr);
+            check.Wait();
+        };
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 1000 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(2, true);
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+        WaitSettled(sender);
+
+        OutputQuotaManager->SetFreeCheck(nullptr);
+        check.Wait();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(check.Violations.load(), 0, "the quota of a chunk was freed under the session Mutex");
+        UNIT_ASSERT_C(check.Checks.load() > 0, "no quota was freed while checked");
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// The resends of the reconciliations and the waiters interleave with the messages built off the session lock:
+// every consumer checks the order of what it gets
+struct TOrderedReconTest : public TReconTest {
+
+    void Prepare() override {
+        TReconTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetRemoteSessionInflightBytes(4096);
+    }
+};
+
+// Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
+// pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
+// where a push could overtake a waiting message. Every consumer checks the order of what it gets.
+struct TOrderTest : public TLoadTest {
+
+    void Prepare() override {
+        TLoadTest::Prepare();
+        auto* config = settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig();
+        config->SetRemoteSessionInflightBytes(4096);
+        config->SetRemoteChannelInflightBytes(2048);
+        config->SetRemoteChannelColdInflightBytes(1024);
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1738,6 +2240,68 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TLivenessProbeTest test;
 
         test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(WaiterNotOvertakenByFastPath) {
+        TWaiterOvertakeTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(OrderUnderWaiterPressure) {
+        TOrderTest test;
+
+        test.Count = 20;
+        test.Local = false;
+        test.ProducerSettings = TWorkerSettings{ .MessageCount = 200, .MinMessageSize = 4, .MaxMessageSize = 1000, .CheckOrder = true };
+        test.ConsumerSettings = test.ProducerSettings;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(AckProgressFieldsIgnored) {
+        TAckProgressTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(WaiterCountersOnAbort) {
+        TWaiterCountersTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(WaitersServedOldestFirst) {
+        TWaiterOrderTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(FreeQuotaOutsideSessionLock) {
+        TFreeQuotaTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(OrderedUnderReconciliation2n) {
+        TOrderedReconTest test;
+
+        test.Count = 10;
+        test.Local = false;
+        test.ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 4, .MaxMessageSize = 1000, .CheckOrder = true };
+        test.ConsumerSettings = test.ProducerSettings;
 
         test.Run();
     }

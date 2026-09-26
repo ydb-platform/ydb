@@ -219,8 +219,13 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
 bool TLocalBuffer::IsFinished() {
     auto result = Finished.load();
     if (!result) {
-        NeedToNotifyInput.store(true);
-        NeedToNotifyOutput.store(true);
+        // loaded first: this is called for every row pushed, and the flags are set most of the time
+        if (!NeedToNotifyInput.load()) {
+            NeedToNotifyInput.store(true);
+        }
+        if (!NeedToNotifyOutput.load()) {
+            NeedToNotifyOutput.store(true);
+        }
     }
     return result;
 }
@@ -604,24 +609,16 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
     }
 }
 
-bool TOutputDescriptor::CheckGenMajor(ui64 genMajor, const TString& errorMessage) {
-    auto prevGenMajor = GenMajor.exchange(genMajor);
-    if (Aborted.load()) {
-        return false;
-    } else if (prevGenMajor && prevGenMajor != genMajor) {
-        TStringBuilder builder;
-        builder << "OD.G=" << prevGenMajor << " vs G=" << genMajor << ' ' << errorMessage;
-        TString message = builder;
-        LOG_W(message);
-        AbortChannel(message);
-        return false;
-    }
-    return true;
+void TOutputDescriptor::AbortOnGenMajor(ui64 prevGenMajor, ui64 genMajor, TStringBuf message) {
+    TString text = TStringBuilder() << "OD.G=" << prevGenMajor << " vs G=" << genMajor << ' ' << message;
+    LOG_W(text);
+    AbortChannel(text);
 }
 
 bool TOutputDescriptor::IsFinished() {
     auto result = Finished.load();
-    if (!result) {
+    // loaded first: this is called for every row pushed, and the flag is set most of the time
+    if (!result && !NeedToNotifyOutput.load()) {
         NeedToNotifyOutput.store(true);
     }
     return result;
@@ -907,7 +904,7 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
 
 bool TInputDescriptor::IsFinished() {
     auto result = Finished.load();
-    if (!result) {
+    if (!result && !NeedToNotifyInput.load()) {
         NeedToNotifyInput.store(true);
     }
     return result;
@@ -1259,10 +1256,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
         *ev->Record.MutableWatermark() = item->Data.Watermark.GetRef();
     }
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags();
 #if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
@@ -1281,7 +1275,6 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
 #if !defined(NDEBUG)
     }
 #endif
-    item->State.store(TOutputItem::EState::Sent);
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
@@ -1354,10 +1347,7 @@ void TNodeState::FailOutputs(const TString& reason) {
 }
 
 void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags();
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, cookie));
 }
@@ -1583,10 +1573,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
     evAck->Record.SetStatus(record.GetSeqNo() <= confirmedSeqNo ? NYql::NDqProto::TEvChannelAckV2::OK : NYql::NDqProto::TEvChannelAckV2::RESEND);
     evAck->Record.SetSeqNo(confirmedSeqNo);
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags();
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
 
@@ -1638,10 +1625,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::RESEND);
             evAck->Record.SetSeqNo(confirmedSeqNo + 1);
 
-            ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-            if (!Subscribed.exchange(true)) {
-                flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-            }
+            ui32 flags = SendFlags();
 
             ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
         }
@@ -1815,7 +1799,8 @@ ui64 TNodeState::ReleaseInflight(const TOutputItem& item) {
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
-    LastPeerActivity.store(TInstant::Now());
+    auto now = TInstant::Now();
+    LastPeerActivity.store(now);
 #if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
         std::lock_guard lock(Mutex);
@@ -1868,7 +1853,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             }
             deltaBytes += ReleaseInflight(*item);
             Queue.pop_front();
-            LastQueueProgress.store(TInstant::Now());
+            LastQueueProgress.store(now);
         }
 
         if (Queue.empty()) {
@@ -1907,21 +1892,23 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
                 deltaBytes += ReleaseInflight(*item);
                 Queue.pop_front();
-                LastQueueProgress.store(TInstant::Now());
+                LastQueueProgress.store(now);
             }
         }
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
             ReconSent.store(TInstant::Zero());
-            LastQueueProgress.store(TInstant::Now());
+            LastQueueProgress.store(now);
             LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << ", Released=" << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
                     SendMessage(item);
                     ResendCount++;
                     (*SessionMessagesResent)++;
-                    item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
+                    item->Descriptor->CheckGenMajor(GenMajor, [&]() {
+                        return TString(TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
+                    });
                 }
             }
         }
@@ -1983,7 +1970,9 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         << ", T:A=" << descriptor->Terminated.load() << ':' << descriptor->Aborted.load()
         << ", G=" << descriptor->GenMajor.load() << ", update.G=" << GenMajor << ", Log=" << GetReconciliationLog()
     );
-    if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, TStringBuilder() << LogPrefix << "Inconsistent GenMajor in HandleUpdate " << TInstant::Now())) {
+    if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, [&]() {
+            return TString(TStringBuilder() << LogPrefix << "Inconsistent GenMajor in HandleUpdate " << TInstant::Now());
+        })) {
         descriptor->HandleUpdate(earlyFinished, popBytes, finishing, memoryPressure, this, descriptor);
     }
 }
@@ -2030,10 +2019,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags();
 
     LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
         << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -2334,7 +2320,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
                 }
             }
 
-            if (item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Reconciliation, Log=" << reconciliationLog)) {
+            if (item->Descriptor->CheckGenMajor(GenMajor, [&]() { return TString(TStringBuilder() << "Abort by Reconciliation, Log=" << reconciliationLog); })) {
                 item->SeqNo = ++SeqNo;
                 RebuiltQueue.push_back(std::move(item));
             } else {
@@ -2359,10 +2345,7 @@ void TNodeState::SendDiscovery() {
     evDiscovery->Record.SetGenMinor(GenMinor);
     evDiscovery->Record.SetSeqNo(SeqNo);
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags();
 
     // the cookie 0 is what the reply echoes, and how HandleAck tells it from a gap RESEND
     ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags, 0));

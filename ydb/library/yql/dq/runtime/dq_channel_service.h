@@ -43,7 +43,7 @@ public:
 
     TDataChunk(TChunkedBuffer&& buffer, ui64 rows, NDqProto::EDataTransportVersion transportVersion,
         NKikimr::NMiniKQL::EValuePackerVersion packerVersion, bool finished)
-        : Buffer(buffer)
+        : Buffer(std::move(buffer))
         , Rows(rows)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
@@ -53,7 +53,7 @@ public:
     }
 
     TDataChunk(TChunkedBuffer&& buffer, ui64 rows, bool finished)
-        : Buffer(buffer)
+        : Buffer(std::move(buffer))
         , Rows(rows)
         , Finished(finished) {
         Bytes = Buffer.Size() + 1;

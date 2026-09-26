@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <atomic>
+#include <type_traits>
 
 // Flow control design principles
 //
@@ -264,6 +265,7 @@ public:
     std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
 
+    // set by the side which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> NeedToNotifyInput = false;
 
@@ -303,7 +305,25 @@ public:
     void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
     void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
-    bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
+    // Adopts genMajor and tells whether the channel may go on at it: false if it is aborted, or is aborted right
+    // here for a generation change. The message is needed only then, so it is a literal or a callable building it
+    template <typename TMessage>
+    bool CheckGenMajor(ui64 genMajor, TMessage&& message) {
+        auto prevGenMajor = GenMajor.exchange(genMajor);
+        if (Aborted.load()) {
+            return false;
+        }
+        if (prevGenMajor && prevGenMajor != genMajor) {
+            if constexpr (std::is_invocable_v<TMessage>) {
+                AbortOnGenMajor(prevGenMajor, genMajor, message());
+            } else {
+                AbortOnGenMajor(prevGenMajor, genMajor, TStringBuf(message));
+            }
+            return false;
+        }
+        return true;
+    }
+    void AbortOnGenMajor(ui64 prevGenMajor, ui64 genMajor, TStringBuf message);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFinished();
     bool IsEarlyFinished();
@@ -397,6 +417,7 @@ public:
     std::atomic<ui64> SpilledBytes = 0;
     std::atomic<ui64> SeqNo = 0;
 
+    // set by the output which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> Terminated = false;
@@ -449,20 +470,13 @@ struct TOutputDescriptorCompare {
 class TOutputItem {
 public:
 
-    enum EState {
-        Init,
-        Wait,
-        Sent
-    };
-
     TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor, bool quoted)
-        : Data(std::move(data)), Descriptor(descriptor), State(EState::Init), IsQuoted(quoted) {
+        : Data(std::move(data)), Descriptor(std::move(descriptor)), IsQuoted(quoted) {
     }
     ~TOutputItem();
 
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
-    std::atomic<EState> State;
     const bool IsQuoted; // whether Data.Bytes is tracked by Descriptor's QuotaManager
     ui64 SeqNo = 0;
     bool Leading = false;
@@ -555,6 +569,7 @@ public:
     std::atomic<ui64> InflightBytes = 0;
     std::atomic<ui64> SeqNo = 0;
 
+    // set by the input which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyInput = false;
     std::atomic<bool> FinishPushed = false;
     std::atomic<bool> Finished = false;
@@ -740,6 +755,15 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
+    // FlagTrackDelivery, plus FlagSubscribeOnSession for the 1st event since the session was (re)connected
+    ui32 SendFlags() {
+        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+        // a load first: a locked exchange on every event would bounce the line between the sending threads
+        if (!Subscribed.load() && !Subscribed.exchange(true)) {
+            flags |= NActors::IEventHandle::FlagSubscribeOnSession;
+        }
+        return flags;
+    }
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;

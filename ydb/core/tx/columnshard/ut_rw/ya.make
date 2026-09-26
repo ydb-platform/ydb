@@ -33,6 +33,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SRCS(
     ut_columnshard_read_write.cpp
+    ut_not_proposed_transactions.cpp
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
     ut_backup.cpp

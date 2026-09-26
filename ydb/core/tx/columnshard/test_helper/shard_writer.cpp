@@ -37,6 +37,23 @@ TPlanStep TShardWriter::StartCommit(const ui64 txId) {
     return TPlanStep{ event.GetMinStep() };
 }
 
+NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::StartCommitWithLock(const ui64 txId, const NKikimrDataEvents::TLock& lock) {
+    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+    auto& locks = *evCommit->Record.MutableLocks();
+    locks.SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+    locks.AddSendingShards(TabletId);
+    locks.AddReceivingShards(TabletId);
+    locks.SetArbiterColumnShard(TabletId);
+    *locks.AddLocks() = lock;
+    ForwardToTablet(Runtime, TabletId, Sender, evCommit.release());
+
+    TAutoPtr<NActors::IEventHandle> handle;
+    auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+    AFL_VERIFY(event);
+    AFL_VERIFY(event->Record.GetTxId() == txId);
+    return event->Record.GetStatus();
+}
+
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
     auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evCommit->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
@@ -51,7 +68,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
     return event->Record.GetStatus();
 }
 
-NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
+NKikimrDataEvents::TEvWriteResult TShardWriter::WriteWithResult(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
     //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
@@ -72,7 +89,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
     AFL_VERIFY(event->Record.GetOrigin() == TabletId);
     AFL_VERIFY(event->Record.GetTxId() == LockId);
 
-    return event->Record.GetStatus();
+    return event->Record;
 }
 
 }   // namespace NKikimr::NTxUT

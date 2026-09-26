@@ -350,6 +350,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const;
     void ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie);
     void TransactionToAbort(const ui64 lockId);
+    void AbortNotProposedTransactions();
     void MaybeAbortTransaction(const ui64 lockId);
     void CancelTransaction(const ui64 txId);
 

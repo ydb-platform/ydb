@@ -83,6 +83,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         return;
     }
     ProgressTxController->OnTabletInit();
+    AbortNotProposedTransactions();
     {
         const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
             "self_id", SelfId())("process", "SwitchToWork");

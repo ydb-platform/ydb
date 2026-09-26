@@ -1,4 +1,5 @@
 #include "yql_pq_provider_impl.h"
+#include "yql_pq_pushdown.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
@@ -29,23 +30,14 @@ using namespace NNodes;
 
 namespace {
 
-struct TPushdownSettings: public NPushdown::TSettings {
+struct TPushdownSettings: public NPq::TCommonPushdownSettings {
     TPushdownSettings()
-        : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
     {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(
-            // Operator features
-            EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
-            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-            EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
-            EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals | EFlag::PredicateAsExpression |
-            EFlag::StructOperators |
-
             // Split features
             EFlag::SplitOrOperator
         );
-        EnableFunction("Re2.Grep");  // For REGEXP pushdown
     }
 };
 

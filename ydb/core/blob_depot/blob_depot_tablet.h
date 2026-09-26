@@ -46,6 +46,7 @@ namespace NKikimr::NBlobDepot {
             };
         };
 
+    public:
         struct TEvMoveDataContinue
             : TEventLocal<TEvMoveDataContinue, TEvPrivate::EvMoveDataContinue>
         {};
@@ -53,15 +54,24 @@ namespace NKikimr::NBlobDepot {
         struct TEvMoveDataBlobCopied
             : TEventLocal<TEvMoveDataBlobCopied, TEvPrivate::EvMoveDataBlobCopied>
         {
-            NKikimrProto::EReplyStatus Status;
+            enum class EResult {
+                OK,
+                NODATA,
+                YELLOW_STOP,
+            };
+            EResult Result;
             NKikimrBlobDepot::TBlobLocator NewLocator;
-            TString ErrorReason;
+            TVector<ui32> YellowMoveChannels;
+            TVector<ui32> YellowStopChannels;
 
-            TEvMoveDataBlobCopied(NKikimrProto::EReplyStatus status,
-                    NKikimrBlobDepot::TBlobLocator newLocator, TString errorReason = {})
-                : Status(status)
+            TEvMoveDataBlobCopied(EResult result,
+                    NKikimrBlobDepot::TBlobLocator newLocator,
+                    TVector<ui32>&& yellowMoveChannels,
+                    TVector<ui32>&& yellowStopChannels)
+                : Result(result)
                 , NewLocator(std::move(newLocator))
-                , ErrorReason(std::move(errorReason))
+                , YellowMoveChannels(std::move(yellowMoveChannels))
+                , YellowStopChannels(std::move(yellowStopChannels))
             {}
         };
 
@@ -338,6 +348,7 @@ namespace NKikimr::NBlobDepot {
 
         TMoveDataState MoveData;
         TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
+        TActorId CopyBlobActorId;
 
         void Handle(TEvTablet::TEvMoveData::TPtr ev);
         void Handle(TEvMoveDataBlobCopied::TPtr ev);
@@ -348,7 +359,9 @@ namespace NKikimr::NBlobDepot {
         void StartMoveDataBlobCopy();
         void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void RestartMoveDataScan();
+        void ProcessMoveDataQueue();
         void FinishMoveData(const TActorContext& ctx);
+        void CancelMoveData();
 
         class TTxMoveDataScan;
         class TTxMoveDataUpdateIndex;

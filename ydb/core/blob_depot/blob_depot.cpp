@@ -177,7 +177,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId}) {
+        for (const TActorId& actorId : {GroupAssimilatorId, CopyBlobActorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }

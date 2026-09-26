@@ -373,6 +373,13 @@ namespace NKikimr::NBlobDepot {
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
 
+        YDB_LOG_DEBUG("ReplaceLocatorForMoveData",
+            {"marker", "BDT11"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"valueChainIndex", valueChainIndex},
+            {"expectedValueVersion", expectedValueVersion});
+
         const TValue *value = FindKey(key);
         if (!value) {
             return EMoveDataReplaceResult::KeyMissing;

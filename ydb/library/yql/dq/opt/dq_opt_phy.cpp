@@ -367,6 +367,10 @@ TExprNode::TPtr BuildNarrowSort(
         .Build();
 }
 
+// WideSort spills; a narrow Sort after shuffle becomes SqueezeToList and does not.
+// Keys are column indexes. A key that is not a column of the row is computed into a
+// temporary member and dropped after the sort. Fall back to Sort when the row is too
+// wide for a wide flow or a key cannot be mapped to a column.
 TExprNode::TPtr BuildWideSortForStructFlow(
     TPositionHandle pos,
     const TExprNode::TPtr& input,
@@ -376,11 +380,13 @@ TExprNode::TPtr BuildWideSortForStructFlow(
     TExprContext& ctx)
 {
     constexpr ui32 wideLimit = 101;
-    if (structType.GetSize() == 0 || structType.GetSize() > wideLimit) {
+    if (structType.GetSize() == 0 || structType.GetSize() > wideLimit
+        || !sortKeySelector->IsLambda() || sortKeySelector->Head().ChildrenSize() != 1
+        || (sortDirections->IsList() && sortDirections->ChildrenSize() == 0))
+    {
         return {};
     }
 
-    const TExprNode& selectorArg = sortKeySelector->Head().Head();
     TExprNode::TListType keyExprs;
     if (sortKeySelector->Tail().IsList()) {
         keyExprs = sortKeySelector->Tail().ChildrenList();
@@ -391,105 +397,116 @@ TExprNode::TPtr BuildWideSortForStructFlow(
         return {};
     }
 
+    const TExprNode& selectorArg = sortKeySelector->Head().Head();
     TVector<TString> columns;
     columns.reserve(structType.GetSize() + keyExprs.size());
-    for (const auto& item : structType.GetItems()) {
+    THashMap<TString, ui32> columnIndex;
+    columnIndex.reserve(structType.GetSize() + keyExprs.size());
+    for (const auto* item : structType.GetItems()) {
+        columnIndex.emplace(item->GetName(), columns.size());
         columns.emplace_back(item->GetName());
     }
 
-    TVector<TString> keyColumns;
-    keyColumns.reserve(keyExprs.size());
-    TVector<TString> extraColumns;
-    TExprNode::TPtr mapped = input;
-    if (!mapped->GetTypeAnn() || mapped->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
-        mapped = ctx.NewCallable(pos, "ToFlow", {mapped});
-    }
-
+    THashSet<ui32> usedIndexes;
+    TExprNode::TListType wideKeys;
+    wideKeys.reserve(keyExprs.size());
+    TVector<TString> extraNames;
     TExprNode::TPtr rowArg;
     TExprNode::TPtr addBody;
-    for (const auto& keyExpr : keyExprs) {
-        if (keyExpr->IsCallable("Member") && &keyExpr->Head() == &selectorArg && keyExpr->Child(1)->IsAtom()) {
-            keyColumns.emplace_back(keyExpr->Child(1)->Content());
-            continue;
+    for (ui32 i = 0; i < keyExprs.size(); ++i) {
+        const auto& keyExpr = keyExprs[i];
+        const auto direction = sortDirections->IsList()
+            ? sortDirections->ChildPtr(Min<ui32>(i, sortDirections->ChildrenSize() - 1))
+            : sortDirections;
+
+        ui32 index = 0;
+        if (keyExpr->IsCallable("Member") && &keyExpr->Head() == &selectorArg && keyExpr->Tail().IsAtom()) {
+            const auto it = columnIndex.find(TString(keyExpr->Tail().Content()));
+            if (it == columnIndex.end()) {
+                return {};
+            }
+            // WideSort rejects a repeated column index. The same column already
+            // decides the order, so a second key on it does not change the sort.
+            if (!usedIndexes.insert(it->second).second) {
+                continue;
+            }
+            index = it->second;
+        } else {
+            if (columns.size() >= wideLimit) {
+                return {};
+            }
+            TString extraName = TStringBuilder() << "_yql_wide_sort_key_" << extraNames.size();
+            if (columnIndex.find(extraName) != columnIndex.end()) {
+                return {};
+            }
+            if (!rowArg) {
+                rowArg = ctx.NewArgument(pos, "row");
+                addBody = rowArg;
+            }
+            index = columns.size();
+            usedIndexes.insert(index);
+            columnIndex.emplace(extraName, index);
+            columns.push_back(extraName);
+            extraNames.push_back(extraName);
+            addBody = ctx.Builder(pos)
+                .Callable("AddMember")
+                    .Add(0, std::move(addBody))
+                    .Atom(1, extraName)
+                    .Add(2, ctx.ReplaceNode(TExprNode::TPtr(keyExpr), selectorArg, rowArg))
+                .Seal()
+                .Build();
         }
 
-        if (!rowArg) {
-            rowArg = ctx.NewArgument(pos, "row");
-            addBody = rowArg;
-        }
-        TString extraName = TStringBuilder() << "_yql_wide_sort_key_" << extraColumns.size();
-        extraColumns.push_back(extraName);
-        keyColumns.push_back(extraName);
-        columns.push_back(extraName);
-        addBody = ctx.Builder(pos)
-            .Callable("AddMember")
-                .Add(0, std::move(addBody))
-                .Atom(1, extraName)
-                .Add(2, ctx.ReplaceNode(TExprNode::TPtr(keyExpr), selectorArg, rowArg))
+        wideKeys.push_back(ctx.Builder(pos)
+            .List()
+                .Atom(0, ToString(index))
+                .Add(1, direction)
             .Seal()
-            .Build();
+            .Build());
     }
-
-    if (columns.size() > wideLimit) {
+    if (wideKeys.empty()) {
         return {};
     }
 
+    auto flow = input;
+    if (!flow->GetTypeAnn() || flow->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        flow = ctx.NewCallable(pos, "ToFlow", {std::move(flow)});
+    }
     if (rowArg) {
-        mapped = ctx.Builder(pos)
+        flow = ctx.Builder(pos)
             .Callable("OrderedMap")
-                .Add(0, std::move(mapped))
+                .Add(0, std::move(flow))
                 .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {std::move(rowArg)}), std::move(addBody)))
             .Seal()
             .Build();
     }
 
-    THashMap<TString, ui32> columnIndex;
-    columnIndex.reserve(columns.size());
-    for (ui32 i = 0; i < columns.size(); ++i) {
-        columnIndex.emplace(columns[i], i);
-    }
-
-    TExprNode::TListType wideKeys;
-    wideKeys.reserve(keyColumns.size());
-    for (ui32 i = 0; i < keyColumns.size(); ++i) {
-        const auto it = columnIndex.find(keyColumns[i]);
-        if (it == columnIndex.end()) {
-            return {};
-        }
-        const auto dir = sortDirections->IsList()
-            ? sortDirections->ChildPtr(Min<ui32>(i, sortDirections->ChildrenSize() - 1))
-            : sortDirections;
-        wideKeys.push_back(ctx.Builder(pos)
-            .List()
-                .Atom(0, ToString(it->second))
-                .Add(1, dir)
-            .Seal()
-            .Build());
-    }
-
     auto sorted = MakeNarrowMap(pos, columns, ctx.Builder(pos)
         .Callable("WideSort")
-            .Add(0, MakeExpandMap(pos, columns, mapped, ctx))
+            .Add(0, MakeExpandMap(pos, columns, std::move(flow), ctx))
             .List(1).Add(std::move(wideKeys)).Seal()
         .Seal()
         .Build(), ctx);
+    if (extraNames.empty()) {
+        return sorted;
+    }
 
-    for (const auto& extraName : extraColumns) {
-        sorted = ctx.Builder(pos)
-            .Callable("OrderedMap")
-                .Add(0, std::move(sorted))
-                .Lambda(1)
-                    .Param("row")
-                    .Callable("RemoveMember")
-                        .Arg(0, "row")
-                        .Atom(1, extraName)
-                    .Seal()
-                .Seal()
+    auto row = ctx.NewArgument(pos, "row");
+    auto body = row;
+    for (const auto& extraName : extraNames) {
+        body = ctx.Builder(pos)
+            .Callable("RemoveMember")
+                .Add(0, std::move(body))
+                .Atom(1, extraName)
             .Seal()
             .Build();
     }
-
-    return sorted;
+    return ctx.Builder(pos)
+        .Callable("OrderedMap")
+            .Add(0, std::move(sorted))
+            .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body)))
+        .Seal()
+        .Build();
 }
 
 template <typename TPartition>

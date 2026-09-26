@@ -2220,65 +2220,73 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     const bool sortDescending = request.GetSortDescending();
     const bool onlyProblems = request.GetOnlyProblems();
 
-    auto countUnavailable = [&](const NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult& state, bool persistentBuffer) {
-        ui32 count = 0;
-        for (const auto& group : state.GetGroups()) {
-            const auto& ids = persistentBuffer ? group.GetPersistentBufferDDiskId() : group.GetDDiskId();
-            for (const auto& id : ids) {
-                // An unallocated DDisk slot is represented by an empty TDDiskId
-                // (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp), not a real
-                // disk; skip it so it isn't counted as an unavailable disk.
-                if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
-                    continue;
-                }
-                if (!IsDDiskAvailable(id)) {
-                    ++count;
-                }
+    struct TItem {
+        ui64 TabletId;
+        const TCmsDDiskInfo* Info;
+        ui32 GroupsCount = 0;
+        ui32 UnavailableDDisk = 0;
+        ui32 UnavailablePersistentBuffer = 0;
+        ui32 Degrade = 0;
+    };
+    // ID/time sorting needs snapshot counts only for the returned page.
+    const bool needsCountsBeforePaging = onlyProblems || request.GetGroupByDegrade()
+        || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE
+        || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT;
+    auto fillCounts = [&](TItem& item) {
+        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+        if (state.ParseFromString(item.Info->State)) {
+            item.GroupsCount = state.GroupsSize();
+            for (const auto& group : state.GetGroups()) {
+                auto countUnavailable = [&](const auto& ids) {
+                    ui32 count = 0;
+                    for (const auto& id : ids) {
+                        // Empty ids represent unallocated slots, not failed disks.
+                        if ((id.GetNodeId() || id.GetPDiskId()) && !IsDDiskAvailable(id)) {
+                            ++count;
+                        }
+                    }
+                    return count;
+                };
+                const ui32 ddisks = countUnavailable(group.GetDDiskId());
+                const ui32 buffers = countUnavailable(group.GetPersistentBufferDDiskId());
+                item.UnavailableDDisk += ddisks;
+                item.UnavailablePersistentBuffer += buffers;
+                item.Degrade = Max(item.Degrade, Max(ddisks, buffers));
             }
         }
-        return count;
     };
-
-    TVector<const std::pair<const ui64, TCmsDDiskInfo>*> items;
+    TVector<TItem> items;
     items.reserve(State->DDiskInfo.size());
-    for (const auto& kv : State->DDiskInfo) {
-        if (!filter.empty() && !ToString(kv.first).Contains(filter)) {
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        if (!filter.empty() && !ToString(tabletId).Contains(filter)) {
             continue;
         }
-        if (onlyProblems) {
-            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-            if (!state.ParseFromString(kv.second.State) ||
-                (countUnavailable(state, false) == 0 && countUnavailable(state, true) == 0))
-            {
-                continue;
-            }
+        TItem item{tabletId, &info};
+        if (needsCountsBeforePaging) {
+            fillCounts(item);
         }
-        items.push_back(&kv);
+        if (!onlyProblems || item.Degrade) {
+            items.push_back(item);
+        }
     }
 
-    using TItemPtr = const std::pair<const ui64, TCmsDDiskInfo>*;
-    // Precompute the sort key for each item exactly once: computing it inside
-    // the comparator would call ParseFromString() O(N log N) times for
-    // DDISK_TABLET_SORT_BY_GROUPS_COUNT, which is expensive for large
-    // clusters. Use ui64 (rather than i64) for the primary key component so
-    // that tablet ids with the high bit set (e.g. produced by MakeTabletID())
-    // don't wrap to negative values and sort incorrectly.
+    // Keep unsigned keys so tablet ids with the high bit set retain their natural ordering.
     TVector<std::pair<ui64, ui64>> keys;
     keys.reserve(items.size());
-    for (const auto* item : items) {
+    for (const auto& item : items) {
         switch (sortBy) {
             case NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT:
-                keys.emplace_back(static_cast<ui64>(item->second.LastChangedAt.MicroSeconds()), item->first);
+                keys.emplace_back(item.Info->LastChangedAt.MicroSeconds(), item.TabletId);
                 break;
-            case NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT: {
-                NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-                Y_PROTOBUF_SUPPRESS_NODISCARD state.ParseFromString(item->second.State);
-                keys.emplace_back(static_cast<ui64>(state.GroupsSize()), item->first);
+            case NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE:
+                keys.emplace_back(item.Degrade, item.TabletId);
                 break;
-            }
+            case NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT:
+                keys.emplace_back(item.GroupsCount, item.TabletId);
+                break;
             case NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID:
             default:
-                keys.emplace_back(item->first, item->first);
+                keys.emplace_back(item.TabletId, item.TabletId);
                 break;
         }
     }
@@ -2286,15 +2294,11 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     std::iota(order.begin(), order.end(), 0);
     // Sort by the requested key with tablet id as a deterministic tiebreaker.
     std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+        if (request.GetGroupByDegrade() && items[a].Degrade != items[b].Degrade) {
+            return items[a].Degrade > items[b].Degrade;
+        }
         return sortDescending ? keys[b] < keys[a] : keys[a] < keys[b];
     });
-    TVector<TItemPtr> sortedItems;
-    sortedItems.reserve(items.size());
-    for (ui32 i : order) {
-        sortedItems.push_back(items[i]);
-    }
-    items = std::move(sortedItems);
-
     auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     response->Record.SetTotalCount(items.size());
@@ -2305,18 +2309,18 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     // the ui32 range (e.g. both close to Max<ui32>()).
     const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
     for (ui32 i = offset; i < end; ++i) {
-        const auto* kv = items[i];
-        auto* tablet = response->Record.AddTablets();
-        tablet->SetTabletId(kv->first);
-        tablet->SetRevision(kv->second.Revision);
-        tablet->SetLastChangedAt(kv->second.LastChangedAt.MicroSeconds());
-
-        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-        if (state.ParseFromString(kv->second.State)) {
-            tablet->SetGroupsCount(state.GroupsSize());
-            tablet->SetUnavailableDDiskCount(countUnavailable(state, false));
-            tablet->SetUnavailablePersistentBufferCount(countUnavailable(state, true));
+        auto& item = items[order[i]];
+        if (!needsCountsBeforePaging) {
+            fillCounts(item);
         }
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(item.TabletId);
+        tablet->SetRevision(item.Info->Revision);
+        tablet->SetLastChangedAt(item.Info->LastChangedAt.MicroSeconds());
+        tablet->SetGroupsCount(item.GroupsCount);
+        tablet->SetUnavailableDDiskCount(item.UnavailableDDisk);
+        tablet->SetUnavailablePersistentBufferCount(item.UnavailablePersistentBuffer);
+        tablet->SetDegrade(item.Degrade);
     }
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);

@@ -388,6 +388,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
             vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
+            vdiskConfig->SpaceReportPeriodSeconds = SpaceReportPeriodSeconds;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

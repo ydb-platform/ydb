@@ -819,12 +819,18 @@ message TCompositeConveyorConfig {
         optional double Weight = 2;
     }
 
+    message THeavyLimit {
+        optional uint64 CpuLimitUs = 1;
+        optional uint32 ThreadLimit = 2;
+    }
+
     message TWorkersPool {
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
+        repeated THeavyLimit HeavyLimits = 6;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -2046,6 +2052,13 @@ message TImmediateControlsConfig {
             Description: "Enable checksum calculation and validation on VDisk write path",
             MinValue: 0,
             MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
             DefaultValue: 0,
         }];
     }

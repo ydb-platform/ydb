@@ -7,11 +7,11 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
+    ydb/core/base
     ydb/core/fq/libs/checkpointing/events
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
-    ydb/core/base
-    ydb/core/mind
+    ydb/core/mind    
     ydb/core/protos
     ydb/core/util
     ydb/library/aclib
@@ -34,4 +34,5 @@ END()
 
 RECURSE(
     lookup_actor
+    pq_checkpoint_provider_integration
 )

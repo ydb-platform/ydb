@@ -1568,41 +1568,27 @@ void TTablet::SendBarriersForCutHistory() {
     }
 
     constexpr ui32 channelId = 0;
-    const auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-    if (historyToCut.empty()) {
-        return;
-    }
-
     const ui64 tabletId = TabletID();
     const ui32 gen = StateStorageInfo.KnownGeneration;
-    const auto& channelHistory = Info->Channels[channelId].History;
 
-    std::unordered_set<ui32> seenGroups;
-    auto allHistoryIt = channelHistory.begin();
-    bool sentHardGc = false;
-    for (const auto* historyEntry : historyToCut) {
-        while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
-            seenGroups.insert(allHistoryIt->GroupID);
-            ++allHistoryIt;
-        }
-        if (!seenGroups.contains(historyEntry->GroupID)) {
-            const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
-            ++GcInFly;
-            SendToBSProxy(SelfId(), historyEntry->GroupID,
-                new TEvBlobStorage::TEvCollectGarbage(
-                    tabletId, gen, ++GcCounter, channelId,
-                    true,
-                    nextFromGeneration - 1, Max<ui32>(),
-                    nullptr, nullptr, TInstant::Max(),
-                    false, TWriteSource::GcLogChannel, true
-                )
-            );
-            sentHardGc = true;
-        }
-        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
-        ++allHistoryIt;
+    auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
+
+    for (const auto& [groupId, collectGeneration] : hardBarriers) {
+        ++GcInFly;
+        SendToBSProxy(SelfId(), groupId,
+            new TEvBlobStorage::TEvCollectGarbage(
+                tabletId, gen, ++GcCounter, channelId,
+                true,
+                collectGeneration, Max<ui32>(),
+                nullptr, nullptr, TInstant::Max(),
+                false, TWriteSource::GcLogChannel, true
+            )
+        );
     }
-    if (CutHistoryStatus == ECutHistoryStatus::SentBarrier && !sentHardGc) {
+
+    if (!hardBarriers.empty()) {
+        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
+    } else {
         SendCutTabletHistory();
     }
 }

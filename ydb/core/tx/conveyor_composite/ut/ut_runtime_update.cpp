@@ -11,8 +11,10 @@
 #include <ydb/library/actors/core/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/ylimits.h>
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <numeric>
 #include <set>
@@ -91,6 +93,55 @@ public:
 
     TString GetTaskClassIdentifier() const override {
         return "RUNTIME_UPDATE_MATRIX";
+    }
+};
+
+class TIndexedTask: public NConveyor::ITask {
+private:
+    TAtomicCounter& Counter;
+    TAtomicCounter* Accounted = nullptr;
+    std::array<TAtomicCounter, 16>* PerWorker = nullptr;
+    const TDuration ExecutionDuration;
+    ui64 AssignedWorker = Max<ui64>();
+    bool Executed = false;
+
+    void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        UNIT_ASSERT_C(!Executed, "a task was executed more than once");
+        Executed = true;
+        const auto start = TMonotonic::Now();
+        while (TMonotonic::Now() - start < ExecutionDuration) {
+        }
+        if (PerWorker) {
+            UNIT_ASSERT_C(AssignedWorker < PerWorker->size(), "worker index is out of range");
+            (*PerWorker)[AssignedWorker].Inc();
+        }
+        Counter.Inc();
+    }
+
+public:
+    TIndexedTask(TAtomicCounter& counter, const TDuration executionDuration, TAtomicCounter* accounted = nullptr,
+        std::array<TAtomicCounter, 16>* perWorker = nullptr)
+        : Counter(counter)
+        , Accounted(accounted)
+        , PerWorker(perWorker)
+        , ExecutionDuration(executionDuration) {
+    }
+
+    TString GetTaskClassIdentifier() const override {
+        return "RUNTIME_HEAVY_LIMITS";
+    }
+
+    void OnAssignedToWorker(const ui64 workerIdx) override {
+        AssignedWorker = workerIdx;
+    }
+
+    std::function<void()> MakeAccountedCallback() const override {
+        if (!Accounted) {
+            return {};
+        }
+        return [c = Accounted]() {
+            c->Inc();
+        };
     }
 };
 
@@ -1558,6 +1609,83 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(queuedPool, 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+    }
+
+    Y_UNIT_TEST(HeavyLimitsRuntimeAddAndClear) {
+        auto makeConfig = [](const bool withLimits) {
+            auto config = BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}}, {16}, 1);
+            if (withLimits) {
+                auto* limit = config.MutableWorkerPools(0)->AddHeavyLimits();
+                limit->SetCpuLimitUs(50000);
+                limit->SetThreadLimit(8);
+            }
+            return config;
+        };
+
+        TRuntimeFixture fixture(makeConfig(false));
+        auto scheduleObserver = fixture.Runtime.AddObserver<TEvInternal::TEvNewTask>([&](auto& ev) {
+            fixture.Runtime.EnableScheduleForActor(ev->Recipient, true);
+        });
+
+        const ui64 processId = 1;
+        fixture.RegisterProcess(ESpecialTaskCategory::Scan, "s", processId);
+
+        auto submitIndexed = [&](TAtomicCounter& done, TAtomicCounter* accounted,
+            std::array<TAtomicCounter, 16>* perWorker, const ui32 count, const TDuration d) {
+            for (ui32 i = 0; i < count; ++i) {
+                fixture.Runtime.Send(fixture.Distributor, fixture.Sink,
+                    new TEvExecution::TEvNewTask(
+                        std::make_shared<TIndexedTask>(done, d, accounted, perWorker),
+                        ESpecialTaskCategory::Scan, processId));
+            }
+        };
+
+        auto countUnrestricted = [](const std::array<TAtomicCounter, 16>& perWorker) {
+            ui32 n = 0;
+            for (ui32 i = 8; i < perWorker.size(); ++i) {
+                n += perWorker[i].Val();
+            }
+            return n;
+        };
+
+        TAtomicCounter warmupDone;
+        TAtomicCounter warmupAccounted;
+        submitIndexed(warmupDone, &warmupAccounted, nullptr, 4, TDuration::MilliSeconds(20));
+        fixture.WaitFor([&] { return warmupAccounted.Val() == 4; });
+
+        {
+            TAtomicCounter recordedDone;
+            std::array<TAtomicCounter, 16> perWorker;
+            submitIndexed(recordedDone, nullptr, &perWorker, 32, TDuration::MilliSeconds(2));
+            fixture.WaitFor([&] { return recordedDone.Val() == 32; });
+            UNIT_ASSERT_C(countUnrestricted(perWorker) > 0, "warm process must use workers >= 8 before heavy_limits");
+        }
+
+        fixture.Update(makeConfig(true));
+
+        {
+            TAtomicCounter recordedDone;
+            std::array<TAtomicCounter, 16> perWorker;
+            submitIndexed(recordedDone, nullptr, &perWorker, 32, TDuration::MilliSeconds(2));
+            fixture.WaitFor([&] { return recordedDone.Val() == 32; });
+            ui32 restricted = 0;
+            for (ui32 i = 0; i < 8; ++i) {
+                restricted += perWorker[i].Val();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(restricted, 32);
+            UNIT_ASSERT_VALUES_EQUAL(countUnrestricted(perWorker), 0);
+        }
+
+        fixture.Update(makeConfig(false));
+
+        {
+            TAtomicCounter recordedDone;
+            std::array<TAtomicCounter, 16> perWorker;
+            submitIndexed(recordedDone, nullptr, &perWorker, 32, TDuration::MilliSeconds(2));
+            fixture.WaitFor([&] { return recordedDone.Val() == 32; });
+            UNIT_ASSERT_C(countUnrestricted(perWorker) > 0, "clearing heavy_limits must re-enable workers >= 8");
+        }
+        Y_UNUSED(scheduleObserver);
     }
 
 }

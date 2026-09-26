@@ -12,17 +12,19 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     library/cpp/streams/zstd
-    ydb/library/actors/core
-    ydb/core/fq/libs/config/protos
-    ydb/core/fq/libs/control_plane_storage
-    ydb/core/fq/libs/ydb
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/fq/libs/checkpoint_storage/proto
+    ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/checkpointing_common
+    ydb/core/fq/libs/config/protos
+    ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/shared_resources
+    ydb/core/fq/libs/ydb
+    ydb/library/actors/core
     ydb/library/security
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
+    ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table

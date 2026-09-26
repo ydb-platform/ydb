@@ -65,8 +65,6 @@ bool TSchedulableTask::TryIncreaseUsage() {
         }
     }
 
-    Query->UpdatePeakDemand();
-
     return true;
 }
 
@@ -113,8 +111,6 @@ void TSchedulableTask::IncreaseThrottle() {
     if (Iterator) {
         (*Iterator)->second = true;
     }
-
-    Query->UpdatePeakDemand();
 
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->CpuThrottle;

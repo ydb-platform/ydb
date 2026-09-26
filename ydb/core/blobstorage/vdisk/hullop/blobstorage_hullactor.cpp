@@ -270,6 +270,15 @@ namespace NKikimr {
             const double rateThreshold = Config->HullCompLevelRateThreshold;
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
+            params.AppendBlockSize = RTCtx->PDiskCtx->Dsk->AppendBlockSize;
+            // Same placement as THullCompaction::UseStripeSst: Blocks and Barriers go into
+            // the stripe heap, LogoBlobs stay in exclusive chunks.
+            if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
+                if (Config->HeapAllocatorMaxSstInBytes > 0 &&
+                        AppData()->FeatureFlags.GetEnableVDiskHeapAllocator()) {
+                    params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
+                }
+            }
             {
                 const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
                 const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);
@@ -517,7 +526,7 @@ namespace NKikimr {
                         RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                     } else {
                         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: requesting compaction token", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                        TryStartCompaction(ctx, CompactionTask->MaxRatio);
+                        TryStartCompaction(ctx, CompactionTask->Priority);
                         CompactionTask->Clear();
                         ScheduleCompactionWakeup(ctx);
                         UpdateStorageRatio(RTCtx->LevelIndex->CurSlice);
@@ -548,7 +557,7 @@ namespace NKikimr {
             }
         }
 
-        void TryStartCompaction(const TActorContext &ctx, double maxRatio) {
+        void TryStartCompaction(const TActorContext &ctx, TCompactionPriority priority) {
             Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Idle ||
                        CompactionTokenState == ECompactionTokenState::Requested,
                 HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
@@ -559,9 +568,9 @@ namespace NKikimr {
 
             CompactionTokenState = ECompactionTokenState::Requested;
             ctx.Send(MakeBlobStorageCompBrokerID(), new TEvCompactionTokenRequest(
-                Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, maxRatio),
+                Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, priority),
                 IEventHandle::FlagTrackDelivery);
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f", PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with priority %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), priority.ToString().data()));
 
         }
 

@@ -32,21 +32,19 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
     CpuLimit = Min<ui64>(GetCpuLimit(), totalLimit);
 
     if (IsPool()) {
-        Tasks = 0;
         CpuMaxDemand = 0;
         PreciseCpuActualDemand = 0;
         CpuBurstUsage = 0;
         CpuBurstThrottle = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
             child->UpdateBottomUp(totalLimit, period);
-            Tasks += child->Tasks;
             CpuMaxDemand += child->CpuMaxDemand;
             PreciseCpuActualDemand += child->PreciseCpuActualDemand;
             CpuBurstUsage += child->CpuBurstUsage;
             CpuBurstThrottle += child->CpuBurstThrottle;
         });
 
-        if (Tasks > 0) {
+        if (CpuMaxDemand > 0) {
             PreciseCpuActualDemand = Max<ui64>(PreciseCpuActualDemand, MicroCoresPerCore);
         }
     }
@@ -142,13 +140,22 @@ void TTreeElement::DistributeFairShare() {
     std::vector<TTreeElement*> children(ChildrenSize());
     std::vector<ui64> unsatisfiedDemand(ChildrenSize());
 
+    // 1st pass: split FairShare by CpuActualDemand - the contested CPU goes to those who really want it.
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
+        Y_ASSERT(child->CpuMaxDemand >= child->CpuActualDemand);
         children.at(i) = child;
         child->FairShare = 0;
-        unsatisfiedDemand.at(i) = child->CpuMaxDemand;
+        unsatisfiedDemand.at(i) = child->CpuActualDemand;
     });
 
-    FillDemand(children, unsatisfiedDemand, FairShare);
+    const auto leftFairShare = FillDemand(children, unsatisfiedDemand, FairShare);
+
+    // 2nd pass: give leftFairShare as a headroom up to CpuMaxDemand - to grow before the next snapshot.
+    for (size_t i = 0; i < children.size(); ++i) {
+        unsatisfiedDemand.at(i) = children.at(i)->CpuMaxDemand - children.at(i)->FairShare;
+    }
+
+    FillDemand(children, unsatisfiedDemand, leftFairShare);
 }
 
 void TTreeElement::UpdateTopDown() {
@@ -202,7 +209,7 @@ void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
     PreciseCpuActualDemand = Max(RawCpuActualDemand, PrevRawCpuActualDemand);
 
     // Every task is able to use at most one CPU - and the departed tasks don't want anything anymore.
-    PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, Tasks * MicroCoresPerCore);
+    PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuMaxDemand * MicroCoresPerCore);
 
     TTreeElement::UpdateBottomUp(totalLimit, period);
 }

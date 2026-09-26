@@ -237,7 +237,7 @@ The table below lists additional attributes specific to the `Monitoring service`
 || `method`       | HTTP request method. For example `POST`, `GET`.</br>_Required._ ||
 || `url`          | Request path without query parameters.</br>_Required._ ||
 || `params`       | Raw query parameters.</br>_Optional._ ||
-|| `body`         | Request body (truncated to 2 MB with the `TRUNCATED_BY_YDB` suffix).</br>_Optional._ ||
+|| `body`         | Request body (truncated to 2 MiB with the `TRUNCATED_BY_YDB` suffix).</br>_Optional._ ||
 |#
 
 ### Heartbeat {#heartbeat}

@@ -246,7 +246,7 @@
 * Добавлены новые опции для команд нагрузочного тестирования:
   * Добавлена опция `--scale` в [команды](./reference/ydb-cli/workload-tpch.md) `{{ ydb-cli }} workload tpch init` и `{{ ydb-cli }} workload tpcds init` для установки процента размера данных и нагрузки относительно максимальной нагрузки.
   * Добавлена опция `--retries` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` для указания максимального количества повторов каждого запроса.
-  * Добавлена опция `--partition-size` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` для установки максимального размера партиции в мегабайтах для строчных таблиц.
+  * Добавлена опция `--partition-size` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` для установки максимального размера партиции в мебибайтах для строчных таблиц.
   * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
 * Улучшена функциональность резервного копирования и восстановления:
   * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
@@ -367,7 +367,7 @@
 ### Исправления ошибок
 
 * Исправлена ошибка в схеме таблиц, созданных командой `{{ ydb-cli }} workload tpch`, из-за которой таблица `partsupp` содержала неверный список ключевых столбцов.
-* Исправлена ошибка, из-за которой команда `{{ ydb-cli }} tools restore` завершалась с ошибкой `Too much data`, если было установлено максимальное значение параметра `--upload-batchbytes` (16MB).
+* Исправлена ошибка, из-за которой команда `{{ ydb-cli }} tools restore` завершалась с ошибкой `Too much data`, если было установлено максимальное значение параметра `--upload-batchbytes` (16 МБ).
 
 ## Версия 2.16.0 {#2-16-0}
 

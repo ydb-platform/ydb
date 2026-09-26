@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} distributed storage is a subsystem of {{ ydb-short-name }} that ensures reliable data storage.
 
-The blob interface stores *blobs* (binary fragments ranging from 1 byte to 10 megabytes in size) with a unique identifier. The subsystem also supplies the DDisk and PersistentBuffer primitives used by direct block storage. These paths share device management and placement infrastructure, but expose different data and replication contracts.
+The blob interface stores *blobs* (binary fragments ranging from 1 byte to 10 MiB in size) with a unique identifier. The subsystem also supplies the DDisk and PersistentBuffer primitives used by direct block storage. These paths share device management and placement infrastructure, but expose different data and replication contracts.
 
 ## Components and Boundaries
 

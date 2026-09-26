@@ -24,7 +24,7 @@ Installing a [connector](../../../../../concepts/query_execution/federated_query
 
 The optimal value for the `ydb_database_groups` setting in the `vars` section depends on the available disks. Assuming only one database in the cluster, use the following logic:
 
-- For production deployments, use disks with capacity over 800 GB and high IOPS, then choose the value for this setting based on cluster topology:
+- For production deployments, use disks with capacity over 800 GiB and high IOPS, then choose the value for this setting based on cluster topology:
   - For `block-4-2`, set `ydb_database_groups` to 95% of the total number of disks, rounded down.
   - For `mirror-3-dc`, set `ydb_database_groups` to 84% of the total number of disks, rounded down.
 - For testing {{ ydb-short-name }} on small disks, set `ydb_database_groups` to 1 regardless of cluster topology.

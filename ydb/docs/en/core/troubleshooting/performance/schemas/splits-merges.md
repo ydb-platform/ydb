@@ -10,7 +10,7 @@ Each [row-oriented table](../../../concepts/datamodel/table.md#row-oriented-tabl
 
 When {{ ydb-short-name }} splits a partition, it replaces the original partition with two new partitions covering the same range of primary keys. Now, two data shards process the range of primary keys that was previously handled by a single data shard, thereby adding more computing resources for the table.
 
-By default, {{ ydb-short-name }} splits a table partition when it reaches 2 GB in size. However, it's recommended to also enable partitioning by load, allowing {{ ydb-short-name }} to split overloaded partitions even if they are smaller than 2 GB.
+By default, {{ ydb-short-name }} splits a table partition when it reaches 2 GiB in size. However, it's recommended to also enable partitioning by load, allowing {{ ydb-short-name }} to split overloaded partitions even if they are smaller than 2 GiB.
 
 A [scheme shard](../../../concepts/glossary.md#scheme-shard) takes approximately 15 seconds to assess whether a data shard requires splitting. By default, the CPU usage threshold for splitting a data shard is set at 50%.
 

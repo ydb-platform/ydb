@@ -12,12 +12,12 @@ Limits of automatic partitioning (database and table caps, split/merge queue) ar
 
 Practical guidelines:
 
-* **`AUTO_PARTITIONING_PARTITION_SIZE_MB`** is documented with a typical useful range from **tens of MB up to 2000 MB**; pick a value based on workload and acceptable split/merge churn.
+* **`AUTO_PARTITIONING_PARTITION_SIZE_MB`** is documented with a typical useful range from **tens of MiB up to 2000 MiB**; pick a value based on workload and acceptable split/merge churn.
 * A threshold that is **too high** with skewed key access yields heavy partitions and a hotter single data shard; a threshold that is **too low** causes frequent splits and merges.
 
-Regardless of the user-visible threshold, internal logic also uses a **~2000 MB** guideline for some split decisions — see [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table).
+Regardless of the user-visible threshold, internal logic also uses a **2048 MiB** guideline for some split decisions — see [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table).
 
-When changing the threshold on a **large existing table**, avoid an abrupt jump (for example, from 2000 MB to 100 MB in one step). Although the number of concurrent split operations is limited, an abrupt change creates a **long queue** of split tasks. Operations from this queue progress with limited concurrency, which can delay table stabilization. Reduce the threshold gradually and monitor the table state; see also [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md). For limits on the number of concurrent operations, see [Automatic sharding limits](#auto-sharding-limits).
+When changing the threshold on a **large existing table**, avoid an abrupt jump (for example, from 2000 MiB to 100 MiB in one step). Although the number of concurrent split operations is limited, an abrupt change creates a **long queue** of split tasks. Operations from this queue progress with limited concurrency, which can delay table stabilization. Reduce the threshold gradually and monitor the table state; see also [{#T}](../../../../troubleshooting/performance/schemas/splits-merges.md). For limits on the number of concurrent operations, see [Automatic sharding limits](#auto-sharding-limits).
 
 ## Load-based {#auto-by-load}
 

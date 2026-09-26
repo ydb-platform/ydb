@@ -6,7 +6,7 @@
 
 **Источник**: [Kaggle - Animal Crossing New Horizons Catalog](https://www.kaggle.com/datasets/jessicali9530/animal-crossing-new-horizons-nookplaza-dataset/)
 
-**Размер**: 51 KB
+**Размер**: 51 кБ
 
 ## Пример загрузки
 

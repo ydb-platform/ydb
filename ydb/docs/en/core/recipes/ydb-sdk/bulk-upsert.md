@@ -2,6 +2,8 @@
 
 {{ ydb-short-name }} supports bulk upsert of a large number of rows without atomicity guarantees. Data writes are split into several independent transactions, each affecting a single partition, and executed in parallel. As a result, this approach is more efficient than `YQL`. On success, the `BulkUpsert` method guarantees insertion of all data passed in the request.
 
+For row-oriented tables, if the connection to a partition is lost and the outcome of its write request is unknown, `BulkUpsert` returns `UNDETERMINED` without retrying that request internally. Some or all rows may already have been written. Other errors, including `TIMEOUT`, can also occur after other partitions have committed their rows; an error does not imply that the entire batch was rolled back.
+
 {% note warning %}
 
 When using `BulkUpsert` to insert data into [columnar tables](../../concepts/datamodel/table.md#column-oriented-tables), you must provide values for **all** columns, including `NULL` values.

@@ -55,6 +55,12 @@ public:
     TString GetCodeString() const {
         return Ydb::StatusIds::StatusCode_Name(Code);
     }
+
+    TUploadStatus WithCode(Ydb::StatusIds::StatusCode code) const {
+        auto result = *this;
+        result.Code = code;
+        return result;
+    }
 };
 
 class TUploadCounters: public NColumnShard::TCommonCountersOwner {

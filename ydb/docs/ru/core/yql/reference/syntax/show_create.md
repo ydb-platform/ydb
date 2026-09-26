@@ -25,15 +25,15 @@ SHOW CREATE [TABLE|VIEW] <name>;
 - **PathType** — тип объекта: `Table` или `View`.
 - **CreateQuery** — полный набор DDL-выражений, необходимых для создания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
-        - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
+        - [ALTER TABLE ... ALTER INDEX](alter_table/indexes.md#alter-index): для задания настроек партицирования вторичных индексов.
         {% if feature_changefeed and backend_name == "YDB" %}
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         {% endif %}
         {% if feature_serial %}
-        - `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
+        - [ALTER SEQUENCE](alter-sequence.md): для восстановления состояния sequence у колонок [серийного типа](../types/serial.md).
         {% endif %}
     {% if feature_view %}
-    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma.md#table-path-prefix).
     {% endif %}
 
 ## Примеры
@@ -127,4 +127,3 @@ FROM
     test_table
 ;
 ```
-

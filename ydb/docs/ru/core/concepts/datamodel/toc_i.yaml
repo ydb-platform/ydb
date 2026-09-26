@@ -11,3 +11,6 @@ items:
 - name: Служебные объекты
   items:
   - { name: Коллекции резервных копий,             href: backup-collection.md }
+  - name: Sequence
+    href: sequence.md
+    when: feature_serial

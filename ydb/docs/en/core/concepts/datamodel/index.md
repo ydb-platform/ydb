@@ -5,9 +5,18 @@
 * [Directories](dir.md)
 * [Tables](table.md)
 
-{% if feature_view %}
-* [Views](view.md)
+{% if feature_serial %}
+
+* [Sequences](sequence.md)
+
 {% endif %}
+
+{% if feature_view %}
+
+* [Views](view.md)
+
+{% endif %}
+
 * [Topics](topic.md)
 * [Coordination nodes](coordination-node.md)
 * [Secrets](secrets.md)

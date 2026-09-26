@@ -45,7 +45,7 @@ The utility reads MySQL metadata from `information_schema` and generates {{ ydb-
 | MySQL schema element | mysql2ydb decision |
 | --- | --- |
 | Table and column names | As in MySQL (`users`, `orders`, …); must be valid {{ ydb-short-name }} identifiers |
-| `AUTO_INCREMENT` | `BigSerial` + `ALTER SEQUENCE … START WITH` from `TABLES.AUTO_INCREMENT` |
+| `AUTO_INCREMENT` | `BigSerial` + [ALTER SEQUENCE … START WITH … RESTART](../../yql/reference/syntax/alter-sequence.md) from `TABLES.AUTO_INCREMENT` |
 | Secondary `KEY` / `UNIQUE KEY` | `INDEX … GLOBAL ASYNC` / `GLOBAL UNIQUE SYNC` in `CREATE TABLE` |
 | Table without `PRIMARY KEY` | Not supported when automatically creating the schema — see [Tables without a primary key](#tables-without-pk) |
 | Partitioning | Only `AUTO_PARTITIONING_BY_LOAD` |

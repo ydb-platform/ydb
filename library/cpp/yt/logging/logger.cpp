@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
+#include <library/cpp/yt/string/raw_formatter.h>
+
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
@@ -19,19 +21,38 @@ namespace NYT::NLogging {
 
 namespace NDetail {
 
-void OnCriticalLogEvent(
-    const TLogger& logger,
-    const TLogEvent& event)
+void AbortOnCriticalLogEvent(const TLogEvent& event)
 {
-    if (event.Level == ELogLevel::Fatal ||
-        event.Level == ELogLevel::Alert && logger.GetAbortOnAlert())
-    {
-        fprintf(stderr, "*** Aborting on critical log event\n");
-        auto message = FormatTaggedPayload(std::get<TTaggedLogEventPayload>(event.Payload));
-        fwrite(message.data(), 1, message.size(), stderr);
-        fprintf(stderr, "\n");
-        YT_ABORT();
+    TRawFormatter<1024> renderedEvent;
+    FormatTaggedPayload(&renderedEvent, std::get<TTaggedLogEventPayload>(event.Payload));
+
+    // Writes the message to stderr; the crash handler shuts the log manager down.
+    ::NYT::NDetail::AssertTrapImpl(
+        event.Level == ELogLevel::Fatal ? "YT_LOG_FATAL" : "YT_LOG_ALERT",
+        renderedEvent.GetBuffer(),
+        /*description*/ {},
+        /*file*/ event.SourceFile,
+        /*line*/ event.SourceLine,
+        /*function*/ {});
+}
+
+void LogFatalEventAndAbort(
+    const TLoggingContext& loggingContext,
+    const TLogger& logger,
+    ::TSourceLocation sourceLocation,
+    TTaggedLogEventPayload payload)
+{
+    auto event = CreateLogEvent(loggingContext, logger, ELogLevel::Fatal);
+    event.Payload = std::move(payload);
+    event.SourceFile = sourceLocation.File;
+    event.SourceLine = sourceLocation.Line;
+
+    // A logger with no log manager cannot take the event; the abort still reports it.
+    if (logger) {
+        logger.Write(TLogEvent(event));
     }
+
+    AbortOnCriticalLogEvent(event);
 }
 
 } // namespace NDetail

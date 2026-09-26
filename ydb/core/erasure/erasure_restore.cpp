@@ -509,6 +509,14 @@ namespace NKikimr {
                 commonSize = part.size();
             }
         }
+        // An empty blob without CRC has no part bytes to restore.
+        if (!partSize) {
+            Y_ABORT_UNLESS(!commonSize && !offset);
+            if (whole) {
+                whole->clear();
+            }
+            return;
+        }
         Y_ABORT_UNLESS(commonSize);
         Y_ABORT_UNLESS(isFragment ? commonSize <= partSize - offset : commonSize == partSize);
 

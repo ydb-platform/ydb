@@ -170,7 +170,7 @@ struct TPartFragment {
 struct TDataPartSet {
     ui64 FullDataSize = 0;
     ui32 PartsMask = 0;
-    TStackVec<TPartFragment, 8> Parts;
+    TStackVec<TPartFragment, 10> Parts;
     TPartFragment FullDataFragment;
     ui64 MemoryConsumed = 0;
     bool IsFragment = false;
@@ -259,6 +259,8 @@ struct TErasureType {
         Erasure3Plus3Block = 12,
 
         ErasureMirror3of4 = 18,
+
+        Erasure8Plus2Block = 19,
     };
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);

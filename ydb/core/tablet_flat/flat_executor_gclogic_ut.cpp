@@ -54,6 +54,51 @@ private:
     const NActors::TActorId Done;
 };
 
+// Drives one OnCollectGarbageResult call with a synthetic result event.
+class TCollectGarbageResultDriver : public NActors::TActorBootstrapped<TCollectGarbageResultDriver> {
+public:
+    TCollectGarbageResultDriver(TExecutorGCLogic* logic, NKikimrProto::EReplyStatus status,
+                                ui64 tabletId, ui32 channel, NActors::TActorId done,
+                                TDuration* retryDelay)
+        : Logic(logic), Status(status), TabletId(tabletId), Channel(channel), Done(done), RetryDelay(retryDelay) {}
+
+    void Bootstrap(const NActors::TActorContext& ctx) {
+        TActorId noLauncher;
+        TAutoPtr<IEventHandle> ieh(new IEventHandle(ctx.SelfID, ctx.SelfID,
+            new TEvBlobStorage::TEvCollectGarbageResult(Status, TabletId, 1, 1, Channel)));
+        auto ptr = IEventHandle::Downcast<TEvBlobStorage::TEvCollectGarbageResult>(std::move(ieh));
+        *RetryDelay = Logic->OnCollectGarbageResult(ptr, ctx, noLauncher);
+        ctx.Send(Done, new NActors::TEvents::TEvWakeup());
+        Die(ctx);
+    }
+
+private:
+    TExecutorGCLogic* const Logic;
+    NKikimrProto::EReplyStatus Status;
+    ui64 TabletId;
+    ui32 Channel;
+    const NActors::TActorId Done;
+    TDuration* RetryDelay;
+};
+
+// Drives one RetryGcRequests call for a given channel.
+class TRetryGcRequestDriver : public NActors::TActorBootstrapped<TRetryGcRequestDriver> {
+public:
+    TRetryGcRequestDriver(TExecutorGCLogic* logic, ui32 channel, NActors::TActorId done)
+        : Logic(logic), Channel(channel), Done(done) {}
+
+    void Bootstrap(const NActors::TActorContext& ctx) {
+        Logic->RetryGcRequests(Channel, ctx);
+        ctx.Send(Done, new NActors::TEvents::TEvWakeup());
+        Die(ctx);
+    }
+
+private:
+    TExecutorGCLogic* const Logic;
+    ui32 Channel;
+    const NActors::TActorId Done;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
@@ -612,6 +657,96 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         // The guard's second observable: monitoring reports both below-sentinel marks
         // (the gen-5 keep and the gen-6 delete) as dropped.
         UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
+    }
+
+    // Regression: vacuum progress must not cancel another channel's pending backoff retry.
+    Y_UNIT_TEST(BackoffPreservedOnSuccessOfOtherChannel) {
+        const ui64 tabletId = 51;
+        const ui32 group0 = 301;
+        const ui32 group1 = 401;
+
+        TTestBasicRuntime runtime(1);
+        TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        runtime.Initialize(app->Unwrap());
+
+        const auto edge0 = runtime.AllocateEdgeActor();
+        const auto edge1 = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(group0), edge0);
+        runtime.RegisterService(MakeBlobStorageProxyID(group1), edge1);
+
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(tabletId, TTabletTypes::Dummy);
+        info->Channels.resize(2);
+        info->Channels[0].Channel = 0;
+        info->Channels[0].History.emplace_back(1u, group0);
+        info->Channels[1].Channel = 1;
+        info->Channels[1].History.emplace_back(1u, group1);
+
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 5));
+        gcLogic.FollowersSyncComplete(true);
+
+        {
+            TGCBlobDelta delta;
+            delta.Created.push_back(TLogoBlobID(tabletId, 1, 1, 0, 42, 0));
+            delta.Created.push_back(TLogoBlobID(tabletId, 1, 1, 1, 42, 0));
+            TGCLogEntry entry(TGCTime(1, 1), delta);
+            gcLogic.ApplyLogEntry(entry);
+        }
+
+        THashMap<ui32, ui32> collectsByChannel;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                ++collectsByChannel[ev->Get<TEvBlobStorage::TEvCollectGarbage>()->Channel];
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Initial send: both channels dispatch, and the later checks compare against this baseline rather than a fixed count.
+        {
+            const auto done = runtime.AllocateEdgeActor();
+            runtime.Register(new TCollectGarbageDriver(&gcLogic, done));
+            runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+        }
+        const ui32 base0 = collectsByChannel.Value(0u, 0u);
+        const ui32 base1 = collectsByChannel.Value(1u, 0u);
+        UNIT_ASSERT_C(base0 > 0, "channel 0 must dispatch its initial collect request");
+        UNIT_ASSERT_C(base1 > 0, "channel 1 must dispatch its initial collect request");
+
+        // Channel 0 succeeds; no retry must be scheduled.
+        {
+            TDuration retryDelay;
+            const auto done = runtime.AllocateEdgeActor();
+            runtime.Register(new TCollectGarbageResultDriver(&gcLogic, NKikimrProto::OK, tabletId, 0, done, &retryDelay));
+            runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+            UNIT_ASSERT_C(!retryDelay, "ch0 OK must not schedule a retry");
+        }
+
+        // Channel 1 fails; a backoff retry must be scheduled.
+        TDuration ch1RetryDelay;
+        {
+            const auto done = runtime.AllocateEdgeActor();
+            runtime.Register(new TCollectGarbageResultDriver(&gcLogic, NKikimrProto::ERROR, tabletId, 1, done, &ch1RetryDelay));
+            runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+            UNIT_ASSERT_C(ch1RetryDelay, "ch1 error must schedule a backoff retry");
+        }
+
+        // Simulate vacuum progress: a global SendCollectGarbage triggered by ch0 success.
+        {
+            const auto done = runtime.AllocateEdgeActor();
+            runtime.Register(new TCollectGarbageDriver(&gcLogic, done));
+            runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsByChannel.Value(1u, 0u), base1,
+            "ch1 backoff must survive a global SendCollectGarbage triggered by ch0 success");
+
+        // Fire the retry via the retry driver; ch1 must now send its deferred request.
+        {
+            const auto done = runtime.AllocateEdgeActor();
+            runtime.Register(new TRetryGcRequestDriver(&gcLogic, 1, done));
+            runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+        }
+        UNIT_ASSERT_C(collectsByChannel.Value(1u, 0u) > base1,
+            "ch1 must send its deferred request when the retry driver fires");
     }
 }
 

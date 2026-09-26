@@ -328,6 +328,7 @@ class TExecutor
             EvLeaseExtend,
             EvActivateLowExecution,
             EvRetryGcRequest,
+            EvVacuumProgress,
 
             EvEnd
         };
@@ -342,6 +343,7 @@ class TExecutor
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
+        struct TEvVacuumProgress : public TEventLocal<TEvVacuumProgress, EvVacuumProgress> {};
 
         struct TEvRetryGcRequest : public TEventLocal<TEvRetryGcRequest, EvRetryGcRequest> {
             const ui32 Channel;
@@ -488,6 +490,7 @@ class TExecutor
 
     bool LogBatchFlushScheduled = false;
     bool NeedLogSnapshot = false;
+    bool VacuumProgressScheduled = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
@@ -531,6 +534,8 @@ class TExecutor
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
     void SendReassignYellowChannels(const TVector<ui32> &yellowChannels);
     void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
+    void ScheduleVacuumProgress();
+    void DriveVacuumProgress();
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
     void UtilizeSubset(const NTable::TSubset&, TLogCommit *commit);

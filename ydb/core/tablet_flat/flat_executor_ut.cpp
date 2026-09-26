@@ -3522,6 +3522,53 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
     }
 
+    Y_UNIT_TEST(VacuumWaitsForFollowerGc) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac));
+        env.FireDummyFollower(1);
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        ui32 leaderStep = 0;
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(1, leaderStep)});
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(2, leaderStep)});
+
+        TActorId leaderActor;
+        env.SendSync(new NFake::TEvCall{[&](auto*, const auto& ctx) {
+            leaderActor = ctx.SelfID;
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        ui32 appliedOnLeader = 0;
+        auto applied = env->AddObserver<TEvTablet::TEvFollowerGcApplied>([&](auto& ev) {
+            // This notification releases the leader's barrier, not a follower's.
+            UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, leaderActor);
+            ++appliedOnLeader;
+        });
+        TBlockEvents<TEvTablet::TEvFGcAck> delayedFollowerGc(env.Env);
+        env.SendSync(new NFake::TEvCall{[](auto* executor, const auto& ctx) {
+            executor->StartVacuum(234ull);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        env->WaitFor("follower GC acknowledgement", [&] { return !delayedFollowerGc.empty(); });
+        UNIT_ASSERT_C(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(1)),
+            "Vacuum must wait for the follower to release its old parts");
+
+        delayedFollowerGc.Stop().Unblock();
+        auto completed = env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10));
+        UNIT_ASSERT_C(completed, "Vacuum must resume after follower GC acknowledgement");
+        UNIT_ASSERT_VALUES_EQUAL(completed->Get()->VacuumGeneration, 234);
+        UNIT_ASSERT(appliedOnLeader > 0);
+
+        TString data;
+        env.SendFollowerSync(new NFake::TEvExecute{new TTxCheckRows(data)});
+        UNIT_ASSERT_VALUES_EQUAL(data,
+            "Key 1 = Upsert value = Set key1value\n"
+            "Key 2 = Upsert value = Set key2value\n");
+    }
+
     struct TFollowerEarlyRebootObserver {
         using EEventAction = TTestActorRuntimeBase::EEventAction;
 
@@ -8293,6 +8340,183 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{1}));
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
+
+    void CheckRestartAfterMoveDataCutsReassignedHistory(bool delayDataGc = false, bool delaySnapshotConfirmation = false) {
+        struct TReassignedStarter : NFake::TStarter {
+            bool RemoveOldHistory = false;
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
+                // The first boot is generation 2, so the reassign takes effect on the next one.
+                info->Channels[2].History.emplace_back(3, 3);
+                if (RemoveOldHistory) {
+                    info->Channels[2].History.erase(info->Channels[2].History.begin());
+                }
+                return info;
+            }
+        };
+
+        struct TTxCheckPreservedRows : ITransaction {
+            explicit TTxCheckPreservedRows(ui32 expectedRows) : ExpectedRows(expectedRows) {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                UNIT_ASSERT(txc.DB.GetScheme().GetTableInfo(TRowsModel::TableId));
+                const TVector<NTable::TTag> tags{TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId};
+                auto iter = txc.DB.IterateRange(TRowsModel::TableId, {}, tags);
+                ui32 rows = 0;
+                for (;;) {
+                    const auto ready = iter->Next(NTable::ENext::Data);
+                    if (ready == NTable::EReady::Page) {
+                        return false;
+                    }
+                    if (ready == NTable::EReady::Gone) {
+                        break;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(0).AsValue<i64>(), ++rows);
+                    UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsBuf(), TStringBuf("value"));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(rows, ExpectedRows);
+                return true;
+            }
+
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+
+            const ui32 ExpectedRows;
+        };
+
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        TRowsModel data;
+        std::set<ui32> cutChannels;
+        std::set<TLogoBlobID> dataDeletions;
+        bool moving = false;
+        ui32 moveSnapshots = 0;
+        ui32 secondSnapshotStep = 0;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (moving && ev->GetTypeRewrite() == TEvTablet::EvCommit) {
+                const auto* commit = ev->Get<TEvTablet::TEvCommit>();
+                for (const auto& blob : commit->GcLeft) {
+                    if (blob.Channel() == 2 && blob.Generation() < commit->Generation) {
+                        dataDeletions.insert(blob);
+                    }
+                }
+                if (commit->IsSnapshot) {
+                    ++moveSnapshots;
+                    if (moveSnapshots == 2) {
+                        secondSnapshotStep = commit->Step;
+                    }
+                    Cerr << "MoveData snapshot " << moveSnapshots << " at " << commit->Step << Endl;
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                const auto& record = ev->Get<TEvTablet::TEvCutTabletHistory>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetFromGeneration(), 0);
+                cutChannels.insert(record.GetChannel());
+                ev.Reset();
+            }
+        });
+        auto fire = [&](NFake::TStarter* starter) {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            }, 0, starter);
+            env.WaitForWakeUp();
+        };
+
+        fire(nullptr);
+        env.SendSync(data.MakeScheme(new TCompactionPolicy()));
+        // Keep schema on channel 1 and reassign only the data family on channel 2.
+        env.SendSync(new NFake::TEvExecute{new TTxChangeRoom()});
+        env.SendSync(data.MakeRows(1000));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        // The tablet and its NFake::TOwner each acknowledge shutdown.
+        env.WaitForGone();
+
+        // Hive reassigns the channels and asks for MoveData as soon as the tablet is back.
+        TReassignedStarter starter;
+        fire(&starter);
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> delayedGc(env.Env, [&](const auto& ev) {
+            const auto* gc = ev->Get();
+            if (delayDataGc && gc->DoNotKeep) {
+                for (const auto& blob : *gc->DoNotKeep) {
+                    if (dataDeletions.contains(blob)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        TBlockEvents<TEvTablet::TEvSnapshotConfirmed> delayedConfirmations(env.Env, [&](const auto&) {
+            return moving && delaySnapshotConfirmation;
+        });
+        moving = true;
+        env.SendAsync(new TEvTablet::TEvMoveData());
+        if (delayDataGc) {
+            env->WaitFor("GC of reassigned data blobs", [&] { return !delayedGc.empty(); });
+            // Let independent log commits finish while this storage group is slow.
+            UNIT_ASSERT_C(!env.GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>(TDuration::Seconds(1)),
+                "MoveData must wait for data GC");
+            Cerr << "Releasing data GC after " << moveSnapshots << " snapshots" << Endl;
+            delayedGc.Stop().Unblock();
+        }
+        if (delaySnapshotConfirmation) {
+            env->WaitFor("confirmation of the second vacuum snapshot", [&] {
+                for (const auto& confirmation : delayedConfirmations) {
+                    if (secondSnapshotStep && confirmation->Get()->Step == secondSnapshotStep) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            UNIT_ASSERT_C(!env.GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>(TDuration::Seconds(1)),
+                "MoveData must wait until the GC boundary advances");
+            Cerr << "Releasing snapshot confirmation after " << moveSnapshots << " snapshots" << Endl;
+            delayedConfirmations.Stop().Unblock();
+        }
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = env->GrabEdgeEventRethrow<TEvTablet::TEvMoveDataResponse>(handle);
+        UNIT_ASSERT(response->Record.GetStatus() == NKikimrTabletBase::TEvMoveDataResponse::Success);
+        UNIT_ASSERT_VALUES_EQUAL(moveSnapshots, 3);
+        moving = false;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        // The tablet and its NFake::TOwner each acknowledge shutdown.
+        env.WaitForGone();
+
+        cutChannels.clear();
+        fire(&starter);
+        env->SimulateSleep(TDuration::Minutes(1));
+        TStringBuilder cut;
+        for (ui32 channel : cutChannels) {
+            cut << channel << " ";
+        }
+        UNIT_ASSERT_C(cutChannels == (std::set<ui32>{2}), "channels cut: " << cut);
+        env.SendSync(new NFake::TEvExecute{new TTxCheckPreservedRows(1000)});
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        // Apply the requested removal in the next tablet boot's storage info.
+        starter.RemoveOldHistory = true;
+        fire(&starter);
+        env.SendSync(new NFake::TEvExecute{new TTxCheckPreservedRows(1000)});
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        // The tablet and its NFake::TOwner each acknowledge shutdown.
+        env.WaitForGone();
+    }
+
+    Y_UNIT_TEST(RestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory();
+    }
+
+    Y_UNIT_TEST(DelayedDataGcRestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory(true);
+    }
+
+    Y_UNIT_TEST(DelayedSnapshotConfirmationRestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory(false, true);
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_Gc) {

@@ -2536,6 +2536,15 @@ public:
         return result;
     }
 
+    void AddProgressBytesCounter(const TString& counterName, ui64 total, ui64& reported) {
+        if (total <= reported) {
+            return;
+        }
+
+        Stat->AddCounter(counterName, static_cast<i64>(total - reported));
+        reported = total;
+    }
+
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (RuntimeSettings.CollectNone()) {
             return;
@@ -2558,6 +2567,33 @@ public:
 
         if (Stat) { // for task_runner_actor
             Y_ABORT_UNLESS(!dst->HasExtra());
+
+            ui64 ingressBytes = 0;
+            for (const auto& [inputIndex, sourceInfo] : SourcesMap) {
+                if (sourceInfo.AsyncInput) {
+                    ingressBytes += sourceInfo.AsyncInput->GetIngressStats().Bytes;
+                }
+            }
+
+            ui64 egressBytes = 0;
+            for (const auto& [outputIndex, sinkInfo] : SinksMap) {
+                if (sinkInfo.AsyncOutput) {
+                    egressBytes += sinkInfo.AsyncOutput->GetEgressStats().Bytes;
+                }
+            }
+
+            if (IngressBytesCounterName.empty()) {
+                const std::map<TString, TString> labels = {
+                    {"Task", ToString(Task.GetId())},
+                    {"Stage", ToString(Task.GetStageId())}
+                };
+                IngressBytesCounterName = NYql::TCounters::GetCounterName("TaskRunner", labels, "IngressBytes");
+                EgressBytesCounterName = NYql::TCounters::GetCounterName("TaskRunner", labels, "EgressBytes");
+            }
+
+            AddProgressBytesCounter(IngressBytesCounterName, ingressBytes, ReportedIngressBytes);
+            AddProgressBytesCounter(EgressBytesCounterName, egressBytes, ReportedEgressBytes);
+
             NDqProto::TExtraStats extraStats;
             for (const auto& [name, entry]: Stat->Get()) {
                 NDqProto::TDqStatsAggr metric;
@@ -2895,6 +2931,10 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
+    TString IngressBytesCounterName;
+    TString EgressBytesCounterName;
+    ui64 ReportedIngressBytes = 0;
+    ui64 ReportedEgressBytes = 0;
     TDuration CpuTimeSpent;
 };
 

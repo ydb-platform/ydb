@@ -8,6 +8,7 @@ SRCS(
     yql_dq_datasource_type_ann.cpp
     yql_dq_datasource_type_ann.h
     yql_dq_gateway.h
+    yql_dq_stage_stats.cpp
     yql_dq_provider.cpp
     yql_dq_provider.h
     yql_dq_datasink.cpp

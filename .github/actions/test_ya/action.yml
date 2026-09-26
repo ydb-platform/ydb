@@ -139,8 +139,14 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+        if [ -z "${CI_METRICS_FILE:-}" ]; then
+          echo "CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
+          CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl
+        fi
+        mkdir -p "$(dirname "$CI_METRICS_FILE")"
+        touch "$CI_METRICS_FILE"
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
 
     - name: Resolve analytics job name
       shell: bash
@@ -151,6 +157,17 @@ runs:
       run: |
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
+        job_json=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+          -H "Authorization: Bearer ${{ github.token }}" \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "$jobs_url" || true)
+        job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .id' | head -1 || true)
+        job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .name' | head -1 || true)
+        echo "GITHUB_NUMERIC_JOB_ID=${job_id:-0}" >> "$GITHUB_ENV"
+        echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
     - name: Setup cache
       shell: bash
@@ -167,438 +184,30 @@ runs:
       id: build
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ github.token }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-        PR_NUMBER: ${{ inputs.pull_number }}
+        PR_NUMBER: ${{ github.event.number || inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
-      run: |
-        set -ex
-        
-        if [ "$COLLECT_COREDUMPS" = "true" ]; then
-          sudo mkdir -p /coredumps
-          sudo chmod 1777 /coredumps
-          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
-          ulimit -c unlimited
-        else
-          ulimit -c 0
-        fi
-
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-        # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
-        ORIGINAL_HEAD=$(git rev-parse HEAD)
-        echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
-
-        readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
-        readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
-
-        export TEST_ICRDMA=1
-
-        params=(
-          -T
-          ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
-          --stat
-          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
-          -DUSE_EAT_MY_DATA
-          --add-peerdirs-tests all
-          --cleanup-child-processes
-        )
-
-        TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
-        IS_TEST_RESULT_IGNORED=0
-
-        case "$BUILD_PRESET" in
-          debug)
-            params+=(--build "debug")
-            ;;
-          relwithdebinfo)
-            params+=(--build "relwithdebinfo")
-            ;;
-          release)
-            params+=(--build "release")
-            ;;
-          release-asan)
-            params+=(
-              --build "release" --sanitize="address"
-            )
-            ;;
-          release-tsan)
-            params+=(
-              --build "release" --sanitize="thread"
-            )
-            if [ -z $TEST_RETRY_COUNT ]; then
-              TEST_RETRY_COUNT=1
-            fi
-            IS_TEST_RESULT_IGNORED=1
-            ;;
-          release-msan)
-            params+=(
-              --build "release" --sanitize="memory"
-            )
-            if [ -z $TEST_RETRY_COUNT ]; then
-              TEST_RETRY_COUNT=1
-            fi
-            IS_TEST_RESULT_IGNORED=1
-            ;;
-          *)
-            echo "Invalid preset: $BUILD_PRESET"
-            exit 1
-            ;;
-        esac
-
-        echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
-
-        if [ -z $TEST_RETRY_COUNT ]; then
-          # default is 3 for ordinary build and 1 for sanitizer builds
-          TEST_RETRY_COUNT=3
-        fi
-
-        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
-          params+=(${{ inputs.additional_ya_make_args }})
-        fi
-
-        params+=(
-          --stat -DCONSISTENT_DEBUG --no-dir-outputs
-          --test-failure-code 0 --build-all
-          --cache-size 2TB --force-build-depends
-        )
-
-        echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
-        echo "GITHUB_REF_NAME = ${GITHUB_REF_NAME}"
-        echo "GITHUB_BASE_REF = ${GITHUB_BASE_REF}"
-        echo "GITHUB_EVENT_NAME = ${GITHUB_EVENT_NAME}"
-
-        if [ -z "${{ inputs.custom_branch_name }}" ]; then
-          # For pull requests, use the target branch (base_ref) - this ensures that:
-          # - Test history is shown for the target branch (e.g., stable-25-3)
-          # - Test results are uploaded for the target branch
-          # For other events (push, workflow_dispatch), use ref_name (the branch that triggered the workflow)
-          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
-            BRANCH_NAME="${GITHUB_BASE_REF}"
-          else
-            BRANCH_NAME="${GITHUB_REF_NAME}"
-          fi
-        else
-          BRANCH_NAME="${{ inputs.custom_branch_name }}"
-        fi
-
-        if [[ "${{inputs.add_vcs_info}}" == "true" ]]; then
-          params+=(
-            -DGIT_BRANCH=$BRANCH_NAME
-            -DGIT_COMMIT_SHA=$ORIGINAL_HEAD
-          )
-        fi
-
-        echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-        echo "BRANCH_NAME is set to $BRANCH_NAME"
-
-        echo "::debug::get version"
-        ./ya --version
-
-        if [ true = ${{ inputs.run_tests }} ]; then
-            params+=(-A)
-        fi
-        YA_MAKE_COMMAND="./ya make ${params[@]}"
-        GRAPH_PATH=$(realpath graph.json)
-        CONTEXT_PATH=$(realpath context.json)
-        if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
-
-          set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
-          RC=${PIPESTATUS[0]}
-          set -e
-
-          if [ $RC -ne 0 ]; then
-            echo "graph_compare.py returned $RC, build failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
-            exit $RC
-          fi
-
-          git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET="ydb"
-        else
-          YA_MAKE_TARGET=""
-          for TARGET in ${{ inputs.build_target }}; do
-             if [ -e $TARGET ]; then
-                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
-             fi
-          done
-          if [ true = ${{ inputs.run_tests }} ]; then
-            YA_MAKE_COMMAND+=" --retest"
-          fi
-          $YA_MAKE_COMMAND -k --cache-tests \
-            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-            $YA_MAKE_TARGET
-        fi
-
-        export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
-        echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
-
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
-        fi
-
-        if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
-          params+=(--retest)
-        fi
-
-        YA_MAKE_OUT_DIR=$TMP_DIR/out
-
-        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
-        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
-        echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
-
-        BUILD_FAILED=0
-
-        for RETRY in $(seq 1 $TEST_RETRY_COUNT)
-        do
-          if [ $RETRY != 1 ]; then
-            IS_RETRY=1
-          else
-            IS_RETRY=0
-          fi
-
-          CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
-          # Can be used in tests in which you want to publish the results in s3 for each retry separately
-          export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
-          export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
-          mkdir $CURRENT_PUBLIC_DIR
-          export TEST_META_INFO=$CURRENT_PUBLIC_DIR/tests_meta
-          mkdir $TEST_META_INFO
-
-          CURRENT_MESSAGE="ya make is running..."
-          PREV_REPORT="$CURRENT_REPORT"
-          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
-
-          if [ $IS_RETRY = 0 ]; then
-            CURRENT_MESSAGE="$CURRENT_MESSAGE"
-            RERUN_FAILED_OPT=""
-          else
-            CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            if [ -z "$GRAPH_PATH" ]; then
-              MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
-              python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
-              RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
-            else
-              RERUN_FAILED_OPT=""
-            fi
-          fi
-
-          echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-          monitor_memory() {
-              set +x
-              rm -f ram_usage.txt
-              while true; do
-                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
-                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
-                  echo "$(date +%s) $used_kb" >> ram_usage.txt
-                  sleep 3
-              done
-          }
-
-          monitor_memory &
-          MONITOR_PID=$!
-          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
-            GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
-          else
-            GRAPH_OPTS=""
-          fi
-
-          TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-          # Allocate 95% of total memory to ya make cgroup.
-          YA_MAKE_MEM_MAX_KB=$(( TOTAL_MEM_KB * 95 / 100 ))
-          YA_MAKE_MEM_MAX="${YA_MAKE_MEM_MAX_KB}K"
-          YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
-
-          echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
-
-          YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
-            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
-            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
-          )
-
-          # Timestamp for filtering dmesg to this try only.
-          DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
-
-          set +e
-          # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
-          # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
-          (sudo -n -E systemd-run --scope \
-             --unit="${YA_MAKE_SCOPE_NAME}" \
-             -p MemoryMax="${YA_MAKE_MEM_MAX}" \
-             -p MemorySwapMax=0 \
-             -- sudo -n -E -u "$(id -un)" -- \
-             "${YA_MAKE_CMD[@]}"
-           echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
-          set -e
-          RC=`cat exit_code`
-
-          # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
-          OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
-          OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
-          sudo dmesg -T --since="$DMESG_SINCE" 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
-          if [ -s "$OOM_DMESG_LOG" ]; then
-            echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
-          fi
-
-          kill $MONITOR_PID
-
-          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
-
-          GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
-          .github/scripts/report_ram_analyzer.py \
-            --report-file "$CURRENT_REPORT" \
-            --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
-            --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
-            --ram-usage-file ram_usage.txt \
-            --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
-            --chat-id '${{ inputs.telegram_alert_chat }}' \
-            --memory-threshold 97 || true
-
-          # convert to chromium trace
-          # seems analyze-make don't have simple "output" parameter, so change cwd
-          ya_dir=$(pwd)
-          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
-
-          # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
-          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
-
-          if [ $RC -ne 0 ]; then
-            echo "ya make returned $RC, build failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            BUILD_FAILED=1
-            # sed is to remove richness (tags like '[[rst]]')
-            (( \
-              cat $CURRENT_REPORT \
-              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
-              | sed 's/\[\[[^]]*]\]//g' \
-            ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
-            break
-          fi
-
-          # archive build results report (orig)
-          gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
-
-          # postprocess build results report (add links, logs, mute tests etc)
-          .github/scripts/tests/transform_build_results.py \
-            --build-results-report "$CURRENT_REPORT" \
-            --test_dir="$TEST_META_INFO" \
-            -m "$MUTED_YA_FILE" \
-            --ya_out "$YA_MAKE_OUT_DIR" \
-            --public_dir "$PUBLIC_DIR" \
-            --public_dir_url "$PUBLIC_DIR_URL" \
-            --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || true
-          cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
-
-          TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
-          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-
-          IS_LAST_RETRY=0
-
-          if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
-            IS_LAST_RETRY=1
-          fi
-
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then
-            IS_LAST_RETRY=1
-            TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
-          fi
-
-          if [ "${{ inputs.run_tests }}" = "true" ]; then
-            # Set PR number only if it exists (for pull request events)
-            PR_ARG=""
-            if [ -n "${{ github.event.number }}" ]; then
-              PR_ARG="--pr_number ${{ github.event.number }}"
-            fi
-            
-            # Set the correct commit SHA - use original head for accurate version tracking
-            export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
-            
-            GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
-              --summary_links "$SUMMARY_LINKS" \
-              --public_dir "$PUBLIC_DIR" \
-              --public_dir_url "$PUBLIC_DIR_URL" \
-              --build_preset "$BUILD_PRESET" \
-              --branch "$BRANCH_NAME" \
-              --status_report_file statusrep.txt \
-              --is_retry $IS_RETRY \
-              --is_last_retry $IS_LAST_RETRY \
-              --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
-              --comment_color_file summary_color.txt \
-              --comment_text_file summary_text.txt \
-              $PR_ARG \
-              --workflow_run_id "${{ github.run_id }}" \
-              --oom_dmesg_log "$OOM_DMESG_LOG" \
-              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
-          fi
-
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
-
-          if [ "${{ inputs.run_tests }}" = "true" ]; then
-            cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
-          fi
-
-          # upload tests results to YDB
-          # Create run name based on event type and retry number
-          case "$GITHUB_EVENT_NAME" in
-            workflow_dispatch)
-              run_name="${{ github.run_id }}_manual"
-              ;;
-            pull_request | pull_request_target)
-              pr_number="${{ github.event.number }}"
-              if [ -n "$pr_number" ]; then
-                run_name="${{ github.run_id }}_PR_${pr_number}"
-              else
-                run_name="${{ github.run_id }}_PR"
-              fi
-              ;;
-            schedule)
-              run_name="${{ github.run_id }}_schedule"
-              ;;
-            push)
-              run_name="${{ github.run_id }}_POST"
-              ;;
-            *)
-              run_name="${{ github.run_id }}"
-              ;;
-          esac
-          run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
-
-          if [ $IS_LAST_RETRY = 1 ]; then
-            break
-          fi
-          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
-              GRAPH_PATH=""
-              CONTEXT_PATH=""
-          fi
-        done;
-
-        if [ $BUILD_FAILED = 0 ]; then
-          echo "status=true" >> $GITHUB_OUTPUT
-          echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
-        fi
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        BUILD_TARGET: ${{ inputs.build_target }}
+        TEST_SIZE: ${{ inputs.test_size }}
+        TEST_TYPE: ${{ inputs.test_type }}
+        TEST_THREADS: ${{ inputs.test_threads }}
+        LINK_THREADS: ${{ inputs.link_threads }}
+        TEST_RETRY_COUNT_INPUT: ${{ inputs.test_retry_count }}
+        ADDITIONAL_YA_MAKE_ARGS: ${{ inputs.additional_ya_make_args }}
+        INCREMENT: ${{ inputs.increment }}
+        RUN_TESTS: ${{ inputs.run_tests }}
+        ADD_VCS_INFO: ${{ inputs.add_vcs_info }}
+        CUSTOM_BRANCH_NAME: ${{ inputs.custom_branch_name }}
+        BAZEL_REMOTE_URI: ${{ inputs.bazel_remote_uri }}
+        BAZEL_REMOTE_USERNAME: ${{ inputs.bazel_remote_username }}
+        PUT_BUILD_RESULTS_TO_CACHE: ${{ inputs.put_build_results_to_cache }}
+        TELEGRAM_ALERT_LOGINS: ${{ inputs.telegram_alert_logins }}
+        TELEGRAM_ALERT_CHAT: ${{ inputs.telegram_alert_chat }}
+      run: bash .github/actions/test_ya/ya_build_and_test.sh
 
     - name: resolve-status-sha
       shell: bash
@@ -668,6 +277,14 @@ runs:
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
+
+    - name: Upload CI metrics
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: python3 .github/scripts/utils/analytics/ci_metrics.py send
 
     - name: show free space
       if: always()

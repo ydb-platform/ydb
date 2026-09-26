@@ -1681,6 +1681,77 @@ struct TWaiterOvertakeTest : public TSessionTest {
     }
 };
 
+// An ack carrying EarlyFinished made HandleAck run TOutputDescriptor::HandleUpdate under the session Mutex,
+// which pushed the finish through TNodeState::PushDataChunk and so took the Mutex again on the same thread.
+// No receiver sets these fields, the test forges such an ack: it must be taken as a plain confirmation.
+struct TAckProgressTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        WaitSettled(sender);
+
+        // the producer holds its finish back, as the early finish of the peer must be what finishes the
+        // channel for the deadlock to happen
+        receiver->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .StartDelayMs = 0, .MessageCount = 3, .MinMessageSize = 10, .MaxMessageSize = 20,
+            .FinishOnStep = true };
+        ConsumerSettings = ProducerSettings;
+        auto channel = StartChannel(2, false);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) == 3 && receiver->PendingDataCount.load() >= 3; },
+            TDuration::Seconds(10)), "the messages did not reach the receiver");
+
+        auto frontSeqNo = GetFrontSeqNo(sender);
+        auto inflightBytes = sender->InflightBytes.load();
+        auto ack = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+        ack->Record.SetGenMajor(GetGenMajor(sender));
+        ack->Record.SetGenMinor(GetGenMinor(sender));
+        ack->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
+        ack->Record.SetSeqNo(frontSeqNo);
+        ack->Record.SetEarlyFinished(true);
+        ack->Record.SetPopBytes(1);
+        Runtime->Send(new NActors::IEventHandle(sender->NodeActorId, receiver->NodeActorId, ack.Release(), 0, frontSeqNo), NodeIndex0);
+
+        // lock free: the session Mutex is held for good if the ack deadlocked
+        UNIT_ASSERT_C(WaitFor([&]() { return sender->InflightBytes.load() < inflightBytes; }, TDuration::Seconds(5)),
+            "the forged ack was not processed, the session is stuck");
+
+        auto descriptor = FindOutputDescriptor(sender, 2);
+        UNIT_ASSERT_C(descriptor, "the output descriptor of the channel not found");
+        UNIT_ASSERT_C(!descriptor->EarlyFinished.load(), "the early finish of an ack was applied");
+        UNIT_ASSERT_VALUES_EQUAL_C(descriptor->RemotePopBytes.load(), 0, "the pop bytes of an ack were applied");
+
+        receiver->ResumeChannelData();
+        StartConsumer(channel);
+        Runtime->Send(channel.first, Control0, new TEvTestPrivate::TEvStep(), NodeIndex0, true);
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+        WaitSettled(sender);
+        UNIT_ASSERT_VALUES_EQUAL(sender->InflightBytes.load(), 0);
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 // Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
 // pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
 // where a push could overtake a waiting message. Every consumer checks the order of what it gets.
@@ -1897,6 +1968,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
         test.Local = false;
         test.ProducerSettings = TWorkerSettings{ .MessageCount = 200, .MinMessageSize = 4, .MaxMessageSize = 1000, .CheckOrder = true };
         test.ConsumerSettings = test.ProducerSettings;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(AckProgressFieldsIgnored) {
+        TAckProgressTest test;
+
+        test.Local = false;
 
         test.Run();
     }

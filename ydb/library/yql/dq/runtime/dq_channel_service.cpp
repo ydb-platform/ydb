@@ -1458,9 +1458,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     NActors::ActorIdToProto(info.InputActorId, evAck->Record.MutableDstActorId());
     evAck->Record.SetChannelId(info.ChannelId);
 
-    // evAck->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
-    // evAck->Record.SetPopBytes(descriptor->GetPopBytes());
-
+    // no EarlyFinished and PopBytes here, see HandleAck: progress goes with TEvChannelUpdateV2
     SendAck(evAck, ev->Cookie);
 }
 
@@ -1774,8 +1772,6 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 #endif
 
     auto& record = ev->Get()->Record;
-
-    TChannelInfo info(record.GetChannelId(), NActors::ActorIdFromProto(record.GetSrcActorId()), NActors::ActorIdFromProto(record.GetDstActorId()));
     ui64 deltaBytes = 0;
 
     {
@@ -1847,23 +1843,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                     LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
                 }
 
-                // if (!item->Descriptor->IsTerminatedOrAborted())
-                {
-                    if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
-                        if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-                            if (!item->Descriptor->EarlyFinished) {
-                                item->Descriptor->AbortChannel("(Peer) " + record.GetMessage());
-                            }
-                        } else {
-                            auto earlyFinished = record.GetEarlyFinished();
-                            auto popBytes = record.GetPopBytes();
-                            if (earlyFinished || popBytes) {
-                                // TEvChannelAckV2 carries no memory pressure, keep the last known value
-                                item->Descriptor->HandleUpdate(earlyFinished, popBytes, false,
-                                    item->Descriptor->PeerMemoryPressure.load(), this, item->Descriptor);
-                            }
-                        }
-                    }
+                // The progress of a channel comes with TEvChannelUpdateV2 only, EarlyFinished and PopBytes of the
+                // ack are ignored: TOutputDescriptor::HandleUpdate may not run here, under Mutex, as it pushes
+                // through TNodeState::PushDataChunk, which takes Mutex again
+                if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack") && status == NYql::NDqProto::TEvChannelAckV2::ERROR
+                    && !item->Descriptor->EarlyFinished) {
+                    item->Descriptor->AbortChannel("(Peer) " + record.GetMessage());
                 }
 
                 deltaBytes += ReleaseInflight(*item);
@@ -2387,10 +2372,9 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     NActors::ActorIdToProto(info.InputActorId, evAck->Record.MutableDstActorId());
     evAck->Record.SetChannelId(info.ChannelId);
 
-    // evAck->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
-    evAck->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
-
     SendAck(evAck, ev->Cookie);
+    // an ack carries no progress, see HandleAck
+    UpdateProgress(descriptor);
 }
 
 void TDebugNodeState::OnWaiterDequeued() {

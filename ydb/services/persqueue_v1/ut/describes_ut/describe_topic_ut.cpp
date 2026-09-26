@@ -11,8 +11,8 @@ namespace NKikimr::NPersQueueTests {
 
 using namespace NIcNodeCache;
 
-const static TString topicName = "rt3.dc1--topic-x";
-const static TString topicPath = "/Root/PQ/" + topicName;
+const static TString topicName = "topic-x";
+const static TString topicPath = "/Root/" + topicName;
 
 class TDescribeTestServer {
 public: 
@@ -27,7 +27,8 @@ public:
         Server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::PQ_METACACHE }, NActors::NLog::PRI_INFO);
         Server.EnableLogs({ NKikimrServices::PERSQUEUE_CLUSTER_TRACKER }, NActors::NLog::PRI_INFO);
 
-        Server.AnnoyingClient->CreateTopicNoLegacy(topicName, partsCount);
+        Server.AnnoyingClient->CreateTopicNoLegacy(
+            topicPath, partsCount, true, true, std::nullopt, {"user"}, TString("lb"));
         Channel = grpc::CreateChannel(
                 "localhost:" + ToString(Server.GrpcPort), grpc::InsecureChannelCredentials()
         );
@@ -43,7 +44,7 @@ public:
         Ydb::Topic::DescribePartitionRequest request;
         Ydb::Topic::DescribePartitionResponse response;
         Ydb::Topic::DescribePartitionResult result;
-        request.set_path(JoinPath({"/Root/PQ/", UseBadTopic ? "bad-topic" : topicName}));
+        request.set_path(JoinPath({"/Root/", UseBadTopic ? "bad-topic" : topicName}));
         request.set_partition_id(partId);
         if (askLocation)
             request.set_include_location(true);
@@ -91,7 +92,7 @@ public:
         Ydb::Topic::DescribeTopicRequest request;
         Ydb::Topic::DescribeTopicResponse response;
         Ydb::Topic::DescribeTopicResult result;
-        request.set_path(JoinPath({"/Root/PQ/", UseBadTopic ? "bad-topic" : topicName}));
+        request.set_path(JoinPath({"/Root/", UseBadTopic ? "bad-topic" : topicName}));
         if (askStats)
             request.set_include_stats(true);
         if (askLocation)
@@ -127,7 +128,7 @@ public:
         Ydb::Topic::DescribeConsumerRequest request;
         Ydb::Topic::DescribeConsumerResponse response;
         Ydb::Topic::DescribeConsumerResult result;
-        request.set_path(JoinPath({"/Root/PQ/", UseBadTopic ? "bad-topic" : topicName}));
+        request.set_path(JoinPath({"/Root/", UseBadTopic ? "bad-topic" : topicName}));
         if (askStats)
             request.set_include_stats(true);
         if (askLocation)
@@ -156,7 +157,7 @@ public:
     }
     void AddConsumer(const TString& consumer) {
         Ydb::Topic::AlterTopicRequest request;
-        request.set_path(TStringBuilder() << "/Root/PQ/" << topicName);
+        request.set_path(TStringBuilder() << "/Root/" << topicName);
 
         auto addConsumer = request.add_add_consumers();
         addConsumer->set_name(consumer);
@@ -171,7 +172,7 @@ public:
         grpc::ClientContext rcontext;
         Ydb::Topic::DescribeConsumerRequest request;
         Ydb::Topic::DescribeConsumerResponse response;
-        request.set_path(JoinPath({"/Root/PQ/", topicName}));
+        request.set_path(JoinPath({"/Root/", topicName}));
         request.set_consumer(consumerName);
         Stub->DescribeConsumer(&rcontext, request, &response);
         return response.operation().status();
@@ -195,7 +196,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
 
         TString currentTopicName = topicName;
         auto getDescribe = [&]() {
-            const TString path = TString("/Root/PQ/") + currentTopicName;
+            const TString path = TString("/Root/") + currentTopicName;
             runtime->Register(NPQ::NDescriber::CreateDescriberActor(edge, TString(), {path}, {}));
             runtime->DispatchEvents();
             auto ev = runtime->GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>();

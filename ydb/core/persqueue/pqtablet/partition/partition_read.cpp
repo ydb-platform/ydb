@@ -888,7 +888,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             0);
         LOG_E(
             "I was right, there could be rewinds and deletions at once! Topic partition readOffset readPartNo startOffset",
-            {"clientSideName", TopicConverter->GetClientsideName()},
+            {"topicPath", TopicPath()},
                     {"offset",
             read->Offset},
                     {"partNo", read->PartNo},
@@ -907,7 +907,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
         LOG_E(
             "Reading from too big offset - topic partition client EndOffset offset",
-            {"clientSideName", TopicConverter->GetClientsideName()},
+            {"topicPath", TopicPath()},
                     {"clientId",
             read->ClientId},
                     {"endOffset", GetEndOffset()},
@@ -975,7 +975,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     LOG_D(
         "Read cookie Topic partition user offset partno count size endOffset max time lag ms effective offset",
         {"cookie", cookie},
-        {"clientSideName", TopicConverter->GetClientsideName()},
+        {"topicPath", TopicPath()},
             {"user",
         user},
             {"offset",
@@ -994,7 +994,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
             if (IsActive()) {
                 LOG_D(
                     "Too big read timeout Topic partition user offset count size endOffset max time lag ms effective offset",
-                    {"clientSideName", TopicConverter->GetClientsideName()},
+                    {"topicPath", TopicPath()},
                                     {"clientId",
                     read->ClientId},
                                     {"offset", read->Offset},
@@ -1038,7 +1038,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     userInfo.ReadScheduled = true;
     LOG_D(
         "Topic partition user readTimeStamp for offset initiated queuesize startOffset ReadingTimestamp rrg",
-        {"clientSideName", TopicConverter->GetClientsideName()},
+        {"topicPath", TopicPath()},
             {"user",
         user},
             {"userInfoOffset",
@@ -1091,7 +1091,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 
     LOG_D(
         "Topic partition user send read request for offset initiated queuesize startOffset ReadingTimestamp rrg",
-        {"clientSideName", TopicConverter->GetClientsideName()},
+        {"topicPath", TopicPath()},
             {"user",
         user},
             {"userInfoOffset",
@@ -1126,7 +1126,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     if (ev->Get()->IsInternal) {
         LOG_D(
             "Topic partition Got internal ProxyResponse",
-            {"clientSideName", TopicConverter->GetClientsideName()});
+            {"topicPath", TopicPath()});
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
@@ -1139,7 +1139,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         LOG_I(
             "Topic partition user readTimeStamp for other generation or no client info at all",
-            {"clientSideName", TopicConverter->GetClientsideName()},
+            {"topicPath", TopicPath()},
                     {"readingForUser",
             ReadingForUser}
         );
@@ -1150,7 +1150,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
 
     LOG_D(
         "Topic partition user readTimeStamp done, result queuesize startOffset",
-        {"clientSideName", TopicConverter->GetClientsideName()},
+        {"topicPath", TopicPath()},
             {"readingForUser",
         ReadingForUser},
             {"userInfoWriteTimestampMilliSeconds",

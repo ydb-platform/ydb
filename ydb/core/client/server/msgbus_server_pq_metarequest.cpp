@@ -94,8 +94,16 @@ TPersQueueGetPartitionOffsetsProcessor::TPersQueueGetPartitionOffsetsProcessor(
 THolder<IActor> TPersQueueGetPartitionOffsetsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
+    TString partsKey = name;
+    if (auto it = RequestNameByClientside.find(name); it != RequestNameByClientside.end()) {
+        partsKey = it->second;
+    }
+    std::shared_ptr<THashSet<ui64>> parts;
+    if (auto it = PartitionsToRequest.find(partsKey); it != PartitionsToRequest.end()) {
+        parts = it->second;
+    }
     return MakeHolder<TPersQueueGetPartitionOffsetsTopicWorker>(
-            SelfId(), topicEntry, name, PartitionsToRequest[name], RequestProto
+            SelfId(), topicEntry, name, parts, RequestProto
     );
 }
 
@@ -207,8 +215,16 @@ TPersQueueGetPartitionStatusProcessor::TPersQueueGetPartitionStatusProcessor(con
 THolder<IActor> TPersQueueGetPartitionStatusProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
+    TString partsKey = name;
+    if (auto it = RequestNameByClientside.find(name); it != RequestNameByClientside.end()) {
+        partsKey = it->second;
+    }
+    std::shared_ptr<THashSet<ui64>> parts;
+    if (auto it = PartitionsToRequest.find(partsKey); it != PartitionsToRequest.end()) {
+        parts = it->second;
+    }
     return MakeHolder<TPersQueueGetPartitionStatusTopicWorker>(
-            SelfId(), topicEntry, name, PartitionsToRequest[name], RequestProto
+            SelfId(), topicEntry, name, parts, RequestProto
     );
 }
 
@@ -327,9 +343,17 @@ THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
     Y_ABORT_UNLESS(NodesInfo.get() != nullptr);
+    TString partsKey = name;
+    if (auto it = RequestNameByClientside.find(name); it != RequestNameByClientside.end()) {
+        partsKey = it->second;
+    }
+    std::shared_ptr<THashSet<ui64>> parts;
+    if (auto it = PartitionsToRequest.find(partsKey); it != PartitionsToRequest.end()) {
+        parts = it->second;
+    }
     return MakeHolder<TPersQueueGetPartitionLocationsTopicWorker>(
             SelfId(), topicEntry, name,
-            PartitionsToRequest[name], RequestProto, NodesInfo
+            parts, RequestProto, NodesInfo
     );
 }
 

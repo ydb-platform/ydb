@@ -1406,14 +1406,15 @@ Y_UNIT_TEST(FederationTopicNameFormats) {
         auto request = MakeCreateTopicRequest("fedshort--topic");
         auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
             runtime, request, CreateCreateTopicActor, request.path());
-        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "expected legacy-style name");
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "rt3.");
     }
 
-    CreateTopic(runtime, "rt3.dc1--fedleaf--topic");
-    AssertDescribeAliases(
-        runtime,
-        {"/Root/rt3.dc1--fedleaf--topic"},
-        "/Root/rt3.dc1--fedleaf--topic");
+    {
+        auto request = MakeCreateTopicRequest("rt3.dc1--fedleaf--topic");
+        auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, request.path());
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "rt3.");
+    }
 
     runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbCommunal");
     MkDir(*setup, "/Root", "LbCommunal");
@@ -1428,7 +1429,6 @@ Y_UNIT_TEST(FederationTopicNameFormats) {
     AssertDescribeAliases(
         runtime,
         {
-            "rt3.dc1--account--fedtopic",
             "account--fedtopic",
             "account/fedtopic",
             "/Root/LbCommunal/account/fedtopic",

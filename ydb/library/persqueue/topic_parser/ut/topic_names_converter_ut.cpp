@@ -19,10 +19,7 @@ public:
 
     void BasicLegacyModeChecks() {
         UNIT_ASSERT(DiscoveryConverter->IsValid());
-        UNIT_ASSERT_VALUES_EQUAL(
-                DiscoveryConverter->GetPrimaryPath(),
-                TString(TStringBuilder() << "/Root/PQ/" << DiscoveryConverter->FullLegacyName)
-        );
+        UNIT_ASSERT(!DiscoveryConverter->GetPrimaryPath().Contains("rt3."));
         UNIT_ASSERT(!DiscoveryConverter->FullLegacyName.empty());
         UNIT_ASSERT(!DiscoveryConverter->ShortLegacyName.empty());
         //UNIT_ASSERT_VALUES_EQUAL(DiscoveryConverter->GetInternalName(), DiscoveryConverter->GetPrimaryPath());
@@ -72,13 +69,11 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
 
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("rt3.dc1--account--topic", "", "");
-        UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetShortLegacyName(), "account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetFullLegacyName(), "rt3.dc1--account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetDc(), "dc1");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account--topic");
+        UNIT_ASSERT(!wrapper.DiscoveryConverter->IsValid());
+        UNIT_ASSERT(wrapper.DiscoveryConverter->GetReason().Contains("rt3."));
 
         wrapper.SetConverter("account--topic", "", "");
+        UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetFullLegacyName(), "rt3.dc1--account--topic");
 
         wrapper.SetConverter("account--topic", "dc2", "");
@@ -89,38 +84,37 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
     Y_UNIT_TEST(FullLegacyPath) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("/Root/PQ/rt3.dc1--account--topic", "", "/Root");
-        //UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetInternalName(), "/Root/PQ/rt3.dc1--account--topic");
+        UNIT_ASSERT(!wrapper.DiscoveryConverter->IsValid());
     }
 
     Y_UNIT_TEST(MinimalName) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("rt3.dc1--topic", "", "");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetShortLegacyName(), "topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.GetFullLegacyName(), "rt3.dc1--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--topic");
+        UNIT_ASSERT(!wrapper.DiscoveryConverter->IsValid());
 
         wrapper.SetConverter("topic", "", "");
+        UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetFullLegacyName(), "rt3.dc1--topic");
 
         wrapper.SetConverter("topic", "dc2", "");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetFullLegacyName(), "rt3.dc2--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc2--topic");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/topic-mirrored-from-dc2");
     }
 
     Y_UNIT_TEST(FullLegacyNamesWithRootDatabase) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("rt3.dc1--account--topic", "", "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account--topic");
+        UNIT_ASSERT(!wrapper.DiscoveryConverter->IsValid());
     }
 
     Y_UNIT_TEST(WithLogbrokerPath) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("account/topic", "", "");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account--topic");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/account/topic");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetAccount(), "account");
 
         wrapper.SetConverter("account/topic", "dc2", "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc2--account--topic");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/account/topic-mirrored-from-dc2");
     }
 
     Y_UNIT_TEST(AccountDatabase) {
@@ -239,16 +233,8 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         pqConfig.SetYdbDatabasePath("");
         wrapper.SetConverter(pqConfig);
 
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetCluster(), "dc1");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcId(), "rt3.dc1--account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcIdHash(), "account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "topic");
-
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc1--account--topic");
+        UNIT_ASSERT(!wrapper.TopicConverter->IsValid());
+        UNIT_ASSERT(wrapper.TopicConverter->GetReason().Contains("rt3."));
     }
 
     Y_UNIT_TEST(LegacyStyleDoubleName) {
@@ -262,15 +248,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         pqConfig.SetYdbDatabasePath("");
         wrapper.SetConverter(pqConfig);
 
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/account/account");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetCluster(), "dc1");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcId(), "rt3.dc1--account@account--account");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcIdHash(), "account@account--account");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account@account--account");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "account/account");
-
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account@account--account");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc1--account@account--account");
+        UNIT_ASSERT(!wrapper.TopicConverter->IsValid());
     }
 
 
@@ -290,7 +268,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
             wrapper.SetConverter(pqConfig);
 
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/account-database/path/topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/lb/account-database/path/topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account@path--topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");
@@ -309,7 +287,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
 
             UNIT_ASSERT_C(wrapper.TopicConverter->IsValid(), wrapper.TopicConverter->GetReason());
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/Root/PQ/rt3.dc2--account@path--topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic-mirrored-from-dc2");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc2--account@path--topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");
@@ -321,23 +299,16 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
     }
     Y_UNIT_TEST(NoTopicName) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", "dc1");
-        {
-            NKikimrPQ::TPQTabletConfig pqConfig;
-            pqConfig.SetTopic("topic");
-            pqConfig.SetTopicPath("/Root/PQ/rt3.dc1--account@path--topic");
-            pqConfig.SetFederationAccount("account");
-            pqConfig.SetDC("dc1");
-            pqConfig.SetLocalDC(true);
+        NKikimrPQ::TPQTabletConfig pqConfig;
+        pqConfig.SetTopic("topic");
+        pqConfig.SetTopicPath("/Root/PQ/rt3.dc1--account@path--topic");
+        pqConfig.SetFederationAccount("account");
+        pqConfig.SetDC("dc1");
+        pqConfig.SetLocalDC(true);
 
-            wrapper.SetConverter(pqConfig);
+        wrapper.SetConverter(pqConfig);
 
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account@path--topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc1--account@path--topic");
-
-        }
+        UNIT_ASSERT(!wrapper.TopicConverter->IsValid());
     }
 
     Y_UNIT_TEST(FirstClass) {
@@ -364,24 +335,13 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
 }
 
 Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
-    Y_UNIT_TEST(CorrectLegacyTopics) {
+    Y_UNIT_TEST(RejectRt3SchemeNames) {
         auto converter = TTopicNameConverter::ForFederation("/Root/PQ", "", "rt3.sas--account--topic", "/Root/PQ", "", true);
-        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetAccount(), "account");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetCluster(), "sas");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetLegacyProducer(), "account");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetLegacyLogtype(), "topic");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/Root/PQ/rt3.sas--account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetInternalName(), "rt3.sas--account--topic");
+        UNIT_ASSERT(!converter->IsValid());
+        UNIT_ASSERT(converter->GetReason().Contains("rt3."));
 
         converter = TTopicNameConverter::ForFederation("/Root/PQ", "", "rt3.sas--account@dir--topic", "/Root/PQ", "/Root", false);
-        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetAccount(), "account");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetCluster(), "sas");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetLegacyProducer(), "account@dir");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetLegacyLogtype(), "topic");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/Root/PQ/rt3.sas--account@dir--topic");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetInternalName(), "rt3.sas--account@dir--topic");
+        UNIT_ASSERT(!converter->IsValid());
     }
 
     Y_UNIT_TEST(BadLegacyTopics) {

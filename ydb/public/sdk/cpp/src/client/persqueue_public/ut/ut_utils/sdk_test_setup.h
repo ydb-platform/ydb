@@ -106,7 +106,7 @@ public:
 
     TString GetTestTopicPath() const
     {
-        return Server.ServerSettings.PQConfig.GetRoot() + "/" + ::NPersQueue::BuildFullTopicName(GetTestTopic(), LocalDC);
+        return "/Root/" + GetTestTopic();
     }
 
     ui16 GetGrpcPort() const {
@@ -243,7 +243,8 @@ public:
     }
 
     void CreateTopic(const TString& topic, const TString& cluster, size_t partitionsCount = 1) {
-        Server.AnnoyingClient->CreateTopic(BuildFullTopicName(topic, cluster), partitionsCount);
+        Server.AnnoyingClient->CreateTopicNoLegacy(
+            "/Root/" + topic, partitionsCount, true, true, cluster, {"user"}, "lb");
     }
 };
 }

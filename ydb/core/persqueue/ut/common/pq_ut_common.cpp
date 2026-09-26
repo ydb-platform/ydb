@@ -92,7 +92,10 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
         tabletConfig.SetFederationAccount(parameters.account);
     } else {
         tabletConfig.SetTopicName("rt3.dc1--asdfgs--topic");
-        tabletConfig.SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
+        tabletConfig.SetTopicPath("/Root/asdfgs/topic");
+        tabletConfig.SetFederationAccount("asdfgs");
+        tabletConfig.SetDC("dc1");
+        tabletConfig.SetYdbDatabasePath("/Root");
     }
     tabletConfig.SetTopic("topic");
     tabletConfig.SetVersion(version);

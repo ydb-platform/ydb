@@ -2,6 +2,7 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
@@ -27,6 +28,9 @@ void TClientCommandRoot::FillConfig(TConfig& config) {
 
 void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
     config.CredentialsGetter = [](const TClientCommand::TConfig& config) {
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
+        }
         if (config.SecurityToken) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }

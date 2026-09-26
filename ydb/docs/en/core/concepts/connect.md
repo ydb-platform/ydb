@@ -45,7 +45,8 @@ Examples:
 
 ```text
 grpc://localhost:7135?database=/local
-grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr
+grpcs://ydb.serverless.yandexcloud.net:2135
+?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr
 ```
 
 Using a connection string is an alternative to specifying the endpoint and database path separately and can be used in tools that support this method.

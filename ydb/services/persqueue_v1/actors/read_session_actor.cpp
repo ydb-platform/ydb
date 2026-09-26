@@ -886,14 +886,22 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     }
 
     for (const auto& topic : init.topics_read_settings()) {
-        auto it = TopicsList.ClientTopics.find(getTopicPath(topic));
+        const TString path = getTopicPath(topic);
+        auto it = TopicsList.ClientTopics.find(path);
         if (it == TopicsList.ClientTopics.end()) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
-                TStringBuilder() << "unknown topic " << getTopicPath(topic), ctx);
+                TStringBuilder() << "unknown topic " << path, ctx);
         }
 
         for (const auto& converter : it->second) {
             const auto internalName = converter->GetOriginalPath();
+            if constexpr (Protocol != EProtocol::PQv1) {
+                auto [alias, inserted] = AliasedTopicPaths.emplace(internalName,
+                    topic.path() == path ? TString() : TString(topic.path()));
+                if (!inserted && alias->second != topic.path()) {
+                    alias->second.clear(); // Ambiguous request: keep the existing response path.
+                }
+            }
             if constexpr (Protocol == EProtocol::PQv1) {
                 for (const i64 pg : topic.partition_group_ids()) {
                     if (pg <= 0) {
@@ -1084,6 +1092,19 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, 
         }
         for (const auto& [name, t] : ev->Get()->TopicAndTablets) { // TODO: return something from Init and Auth Actor (Full Path - ?)
             auto internalName = t.TopicNameConverter->GetInternalName();
+            if constexpr (Protocol != EProtocol::PQv1) {
+                auto it = AliasedTopicPaths.find(name);
+                if (it != AliasedTopicPaths.end() && name != internalName) {
+                    auto value = std::move(it->second);
+                    AliasedTopicPaths.erase(it);
+                    auto [alias, inserted] = AliasedTopicPaths.emplace(internalName, TString());
+                    if (inserted) {
+                        alias->second = std::move(value);
+                    } else if (alias->second != value) {
+                        alias->second.clear();
+                    }
+                }
+            }
             {
                 auto it = TopicGroups.find(name);
                 if (it != TopicGroups.end()) {
@@ -1400,7 +1421,10 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
             result.mutable_assigned()->set_end_offset(ev->Get()->EndOffset);
         } else {
             auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetDatabase());
-            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot()) {
+            auto alias = AliasedTopicPaths.find(topicName);
+            if (alias != AliasedTopicPaths.end() && !alias->second.empty() && it->second.Topic->GetClientsideName().StartsWith("/")) {
+                result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(alias->second);
+            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot()) {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
             } else {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());

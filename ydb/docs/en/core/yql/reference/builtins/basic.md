@@ -493,6 +493,36 @@ SELECT
    Variant(false, "bar", $var_type) as Variant2Value;
 ```
 
+### Variant over a tuple
+
+A variant over a tuple lists its alternative types directly. For example,
+`Variant<Int32, String>` has two alternatives with indexes `0` and `1`.
+In contrast, `Variant<Tuple<Int32, String>>` has one alternative whose value
+is a tuple, so only index `0` exists.
+
+The index passed to `Variant()` is written as a string. [Way](#way) returns
+the active index as `Uint32`. Dot notation accesses an alternative by its
+compile-time index and returns `Optional<T>`: the value for the active
+alternative, or `NULL` otherwise:
+
+```yql
+$tuple = (7, "seven");
+$variant_type = Variant<Int32, String>;
+$variant = Variant($tuple.1, "1", $variant_type);
+
+SELECT
+    $tuple.0 AS tuple_number,              -- 7
+    $tuple.1 AS tuple_text,                -- "seven"
+    $variant.1 AS variant_text,            -- "seven"
+    Way($variant) AS active_alternative;   -- 1 (Uint32)
+```
+
+`Variant()` uses a string for the tuple index because the same argument also
+accepts a field name for a variant over a structure. This does not change the
+return type of `Way()`.
+
+If a query must handle any possible active alternative, use [Visit](#visit).
+
 ## AsVariant {#asvariant}
 
 `AsVariant()` creates a value of a [variant over a structure](../types/containers.md) including one field. This value can be implicitly converted to any variant over a structure that has a matching data type for this field name and might include more fields with other names.

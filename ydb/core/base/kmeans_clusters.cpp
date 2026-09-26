@@ -1185,6 +1185,9 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
     } else if (nameLower == "hnsw_search_candidates") {
         settings.mutable_settings()->set_hnsw_search_candidates(
             ParseUInt32(nameLower, value, 1, MaxHnswSearchCandidates, error));
+    } else if (nameLower == "hnsw_rebuild_threshold_percent") {
+        settings.mutable_settings()->set_hnsw_rebuild_threshold_percent(
+            ParseUInt32(nameLower, value, 0, Max<ui32>(), error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

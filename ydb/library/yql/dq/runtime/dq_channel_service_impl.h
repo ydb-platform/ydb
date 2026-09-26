@@ -752,6 +752,17 @@ public:
     TString LogPrefix;
     mutable std::mutex Mutex;
     mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
+    // What leaves the Queue under Mutex waits here to be destroyed once it is released: ~TOutputItem frees the
+    // quota, which may take the locks of the resource manager, and usually the payload. Session thread only
+    std::vector<std::shared_ptr<TOutputItem>> ReleasedItems;
+    void FreeReleasedItems();
+    // Declared before the lock_guard of Mutex, it frees what the section released after the unlock, on any path
+    struct TReleaseGuard {
+        TNodeState& State;
+        ~TReleaseGuard() {
+            State.FreeReleasedItems();
+        }
+    };
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;

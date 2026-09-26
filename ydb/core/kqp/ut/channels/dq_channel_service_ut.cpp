@@ -20,7 +20,10 @@
 #include <util/system/unaligned_mem.h>
 
 #include <atomic>
+#include <future>
+#include <mutex>
 #include <optional>
+#include <vector>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_CHANNELS
 
@@ -66,6 +69,42 @@ struct TEvTestPrivate {
     };
 };
 
+// Tells whether a mutex is free at the moment: another thread tries to take it, as the calling thread may be
+// the one which holds it, and a std::mutex may not be asked that by its owner
+struct TMutexFreeCheck {
+
+    explicit TMutexFreeCheck(std::mutex& mutex)
+        : Mutex(mutex)
+    {}
+
+    void Check() {
+        if (Violations.load()) {
+            return; // the 1st one tells enough, and each of them costs a wait
+        }
+        auto locked = std::async(std::launch::async, [this]() { std::lock_guard lock(Mutex); });
+        if (locked.wait_for(std::chrono::milliseconds(200)) != std::future_status::ready) {
+            Violations++;
+        }
+        Checks++;
+        std::lock_guard lock(FuturesMutex);
+        Futures.push_back(std::move(locked));
+    }
+
+    // the mutex may go only once every attempt to take it is over
+    void Wait() {
+        std::lock_guard lock(FuturesMutex);
+        for (auto& future : Futures) {
+            future.wait();
+        }
+    }
+
+    std::mutex& Mutex;
+    std::atomic<ui64> Checks = 0;
+    std::atomic<ui64> Violations = 0;
+    std::mutex FuturesMutex;
+    std::vector<std::future<void>> Futures;
+};
+
 // Tracks quota strictly - it is an error to free more bytes than were allocated (like the real
 // TChannelQuotaManager does with VERIFY) and to leave anything allocated at the end of the test.
 struct TTestQuotaManager : public IMemoryQuotaManager {
@@ -80,6 +119,9 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     }
 
     void FreeQuota(ui64 memorySize) override {
+        if (auto* check = FreeCheck.load(); check && memorySize) {
+            check->Check();
+        }
         if (Quota.fetch_sub(memorySize) < static_cast<i64>(memorySize)) {
             Underflows++;
         }
@@ -110,6 +152,8 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     std::atomic<ui64> Allocated = 0;
     std::atomic<ui64> Freed = 0;
     std::atomic<ui64> Underflows = 0;
+    // checked on every free, when set
+    std::atomic<TMutexFreeCheck*> FreeCheck = nullptr;
 };
 
 struct TWorkerSettings {
@@ -1915,6 +1959,48 @@ struct TWaiterOrderTest : public TSessionTest {
     }
 };
 
+// ~TOutputItem frees the quota of a chunk, which TChannelQuotaManager may do under the locks of the resource
+// manager, and the payload with it. HandleAck used to destroy the items it popped under the session Mutex, which
+// every compute actor pushing to the peer waits on. The quota manager checks the Mutex on every free.
+struct TFreeQuotaTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        WaitSettled(sender);
+
+        TMutexFreeCheck check(sender->Mutex);
+        OutputQuotaManager->FreeCheck.store(&check);
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 1000 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(2, true);
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(sender); });
+        WaitSettled(sender);
+
+        OutputQuotaManager->FreeCheck.store(nullptr);
+        check.Wait();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(check.Violations.load(), 0, "the quota of a chunk was freed under the session Mutex");
+        UNIT_ASSERT_C(check.Checks.load() > 0, "no quota was freed while checked");
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 // Many channels behind a session window a few messages wide, and channel windows so narrow that a producer
 // pushes a message or two at a time: the WaitQueue of every channel keeps emptying and filling, which is
 // where a push could overtake a waiting message. Every consumer checks the order of what it gets.
@@ -2153,6 +2239,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(WaitersServedOldestFirst) {
         TWaiterOrderTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(FreeQuotaOutsideSessionLock) {
+        TFreeQuotaTest test;
 
         test.Local = false;
 

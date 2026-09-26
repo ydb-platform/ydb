@@ -1494,6 +1494,7 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
     switch (ev->Get()->SourceType) {
         case TEvDqCompute::TEvChannelDataV2::EventType: {
+            TReleaseGuard release{*this};
             std::lock_guard lock(Mutex);
             if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
                 if (Reconciliation.load() == 0) { // ignore errors in recovery
@@ -1780,6 +1781,14 @@ void TNodeState::DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& de
     *OutputBufferWaiterMessages -= size;
 }
 
+void TNodeState::FreeReleasedItems() {
+    ReleasedItems.clear();
+    // a whole window may leave at once, e.g. with the ack of a reconciliation, the capacity is not kept for it
+    if (ReleasedItems.capacity() > 256) {
+        ReleasedItems.shrink_to_fit();
+    }
+}
+
 ui64 TNodeState::ReleaseInflight(const TOutputItem& item) {
     // Unsigned: releasing more than it holds would wrap it and the session would stop sending for good.
     // The sensor loses the same amount, or it goes negative where the counter is clamped.
@@ -1803,6 +1812,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     LastPeerActivity.store(now);
 #if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
+        TReleaseGuard release{*this};
         std::lock_guard lock(Mutex);
         FailureReconciliation.store(failCount - 1);
         StartReconciliation(true, 'J');
@@ -1814,6 +1824,9 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     ui64 deltaBytes = 0;
 
     {
+        // before the lock: the items popped below are destroyed after it is released, and before the waiters
+        // are sent to, so that their quota is back by then
+        TReleaseGuard release{*this};
         std::lock_guard lock(Mutex);
 
         auto genMajor = record.GetGenMajor();
@@ -1852,6 +1865,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor " << item->Descriptor->GenMajor.load() << " vs " << GenMajor);
             }
             deltaBytes += ReleaseInflight(*item);
+            ReleasedItems.push_back(std::move(item));
             Queue.pop_front();
             LastQueueProgress.store(now);
         }
@@ -1891,6 +1905,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 }
 
                 deltaBytes += ReleaseInflight(*item);
+                ReleasedItems.push_back(std::move(item));
                 Queue.pop_front();
                 LastQueueProgress.store(now);
             }
@@ -2233,6 +2248,7 @@ void TNodeState::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
 void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
     auto& msg = *ev->Get();
     if (msg.GenMajor == Reconciliation.load() /* GenMajor */ && msg.GenMinor == GenMinor  && msg.Count == ReconciliationCount) {
+        TReleaseGuard release{*this};
         std::lock_guard lock(Mutex);
         DoReconciliation('T');
     }
@@ -2325,6 +2341,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
                 RebuiltQueue.push_back(std::move(item));
             } else {
                 ReleaseInflight(*item);
+                ReleasedItems.push_back(std::move(item));
             }
 
             Queue.pop_front();

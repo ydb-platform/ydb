@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/svnversion
     library/cpp/json
     library/cpp/json/writer
     library/cpp/monlib/service/pages

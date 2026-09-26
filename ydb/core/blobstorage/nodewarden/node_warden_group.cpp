@@ -10,6 +10,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
+
 namespace NKikimr::NStorage {
 
     TIntrusivePtr<TBlobStorageGroupInfo> TNodeWarden::NeedGroupInfo(ui32 groupId) {
@@ -166,23 +167,24 @@ namespace NKikimr::NStorage {
             const bool firstInvalidEncryptionMode = !ep.HasEncryptionMode() && !incomingEncryptionModeIsKnown;
             const bool encryptionModeChanged = ep.HasEncryptionMode() && ep.GetEncryptionMode() != incomingEncryptionMode;
             if (firstInvalidEncryptionMode || encryptionModeChanged) {
-                STLOG(PRI_ERROR, BS_NODE, NW113, "ApplyGroupInfo EncryptionMode diagnostics",
-                    (GroupId, groupId),
-                    (GroupGeneration, generation),
-                    (FromController, fromController),
-                    (FromResolver, fromResolver),
-                    (StoredHasEncryptionMode, ep.HasEncryptionMode()),
-                    (StoredEncryptionModeRaw, ep.GetEncryptionMode()),
-                    (IncomingHasEncryptionMode, newGroup->HasEncryptionMode()),
-                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
-                    (StoredLifeCyclePhase, ep.GetLifeCyclePhase()),
-                    (IncomingLifeCyclePhase, newGroup->GetLifeCyclePhase()),
-                    (HadCurrentGroup, hadCurrentGroup),
-                    (PrevCurrentGroupGeneration, prevCurrentGroupGeneration),
-                    (PrevCurrentGroupEncryptionModeRaw, prevCurrentGroupEncryptionMode),
-                    (MaxKnownGeneration, group.MaxKnownGeneration),
-                    (StoredEncryptionParams, ep),
-                    (IncomingGroup, *newGroup));
+                YDB_LOG_ERROR("ApplyGroupInfo EncryptionMode diagnostics",
+                    {"marker", "NW113"},
+                    {"groupId", groupId},
+                    {"groupGeneration", generation},
+                    {"fromController", fromController},
+                    {"fromResolver", fromResolver},
+                    {"storedHasEncryptionMode", ep.HasEncryptionMode()},
+                    {"storedEncryptionModeRaw", ep.GetEncryptionMode()},
+                    {"incomingHasEncryptionMode", newGroup->HasEncryptionMode()},
+                    {"incomingEncryptionModeRaw", incomingEncryptionMode},
+                    {"storedLifeCyclePhase", ep.GetLifeCyclePhase()},
+                    {"incomingLifeCyclePhase", newGroup->GetLifeCyclePhase()},
+                    {"hadCurrentGroup", hadCurrentGroup},
+                    {"prevCurrentGroupGeneration", prevCurrentGroupGeneration},
+                    {"prevCurrentGroupEncryptionModeRaw", prevCurrentGroupEncryptionMode},
+                    {"maxKnownGeneration", group.MaxKnownGeneration},
+                    {"storedEncryptionParams", ep},
+                    {"incomingGroup", *newGroup});
             }
 
             Y_VERIFY_S(!encryptionModeChanged,

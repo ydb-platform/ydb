@@ -9,7 +9,6 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
-#include <ydb/core/util/stlog.h>
 
 #include <unordered_set>
 

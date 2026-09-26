@@ -1,5 +1,6 @@
 #include "keyvalue_state.h"
-#include <ydb/core/util/stlog.h>
+
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NKeyValue {

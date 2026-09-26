@@ -25,7 +25,6 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
-#include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
 
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest

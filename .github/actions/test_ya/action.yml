@@ -112,9 +112,25 @@ runs:
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
 
-    - name: Clean ya cache
+    - name: Resolve analytics job name
       shell: bash
-      run: rm -rf ~/.ya
+      env:
+        WORKFLOW_NAME: ${{ github.workflow }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py || true)
+        job_id="${resolved%%$'\t'*}"
+        job_title="${resolved#*$'\t'}"
+        if [ -z "$job_id" ] || [ "$job_id" = "$resolved" ]; then
+          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for runner ${RUNNER_NAME}; metrics will be dropped" >&2
+        else
+          echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
+        fi
+        echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
     - name: Init
       id: init
@@ -145,32 +161,32 @@ runs:
         fi
         mkdir -p "$(dirname "$CI_METRICS_FILE")"
         touch "$CI_METRICS_FILE"
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name init --source ya_phase || true
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name init --conclusion success || true
 
-    - name: Resolve analytics job name
+    - name: Clean ya cache
+      id: clean_ya_cache
       shell: bash
-      env:
-        WORKFLOW_NAME: ${{ github.workflow }}
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        EVENT_NAME: ${{ github.event_name }}
       run: |
-        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
-        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
-        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
-        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py || true)
-        job_id="${resolved%%$'\t'*}"
-        job_title="${resolved#*$'\t'}"
-        if [ -z "$job_id" ] || [ "$job_id" = "$resolved" ]; then
-          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for runner ${RUNNER_NAME}; metrics will be dropped" >&2
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name clean_ya_cache --source ya_phase || true
+        set +e
+        rm -rf ~/.ya
+        rc=$?
+        set -e
+        if [ "$rc" -eq 0 ]; then
+          python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name clean_ya_cache --conclusion success || true
         else
-          echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
+          python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name clean_ya_cache --conclusion failure --error "rm ~/.ya rc=${rc}" || true
+          exit "$rc"
         fi
-        echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
     - name: Setup cache
+      id: setup_cache
       shell: bash
       run: |
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name setup_cache --source ya_phase || true
         export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
@@ -178,6 +194,7 @@ runs:
         export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
         echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
         echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py end --name setup_cache --conclusion success || true
 
     - name: ya build and test
       id: build
@@ -808,7 +825,12 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
-      run: python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send
+      run: |
+        conclusion=success
+        if [ "${{ steps.clean_ya_cache.outcome }}" = "failure" ] || [ "${{ steps.init.outcome }}" = "failure" ] || [ "${{ steps.setup_cache.outcome }}" = "failure" ] || [ "${{ steps.build.outcome }}" = "failure" ]; then
+          conclusion=failure
+        fi
+        python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send --conclusion "$conclusion" || true
 
     - name: show free space
       if: always()

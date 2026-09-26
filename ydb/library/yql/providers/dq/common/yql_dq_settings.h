@@ -292,7 +292,7 @@ using TDqCliqueValidator = std::function<void(const TString& cliqueValue)>;
 struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TDqConfiguration>;
 
-    TDqConfiguration();
+    explicit TDqConfiguration(bool strictConfigValidation = false);
     TDqConfiguration(const TDqConfiguration&) = delete;
 
     TDqCliqueValidator CliqueValidator;

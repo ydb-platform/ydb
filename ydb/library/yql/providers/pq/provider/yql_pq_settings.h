@@ -44,7 +44,7 @@ struct TPqClusterConfigurationSettings {
 struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TPqConfiguration>;
 
-    TPqConfiguration();
+    explicit TPqConfiguration(bool strictConfigValidation = false);
     TPqConfiguration(const TPqConfiguration&) = delete;
 
     void Init(

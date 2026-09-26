@@ -2,6 +2,7 @@
 #include "yql_generic_settings.h"
 #include "yql_generic_utils.h"
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -9,7 +10,9 @@ namespace NYql {
 
     const TString TGenericSettings::TDefault::DateTimeFormat = "string";
 
-    TGenericConfiguration::TGenericConfiguration() {
+    TGenericConfiguration::TGenericConfiguration(bool strictConfigValidation)
+        : NCommon::TSettingDispatcher(GenericProviderName, TQContext(), strictConfigValidation)
+    {
         REGISTER_SETTING(*this, UsePredicatePushdown);
         REGISTER_SETTING(*this, DateTimeFormat);
     }

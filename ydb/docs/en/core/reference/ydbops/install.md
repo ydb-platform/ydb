@@ -22,7 +22,7 @@ The second approach requires a prepared [Docker](https://en.wikipedia.org/wiki/D
 
 ### Building directly with Go {#go}
 
-#### Prerequsites
+#### Prerequisites
 
 [Install Go](https://go.dev/doc/install). The recommended version is 1.22.
 
@@ -47,7 +47,7 @@ make install INSTALL_DIR=install_folder BUILD_DIR=.
 
 ### Inside a Docker container {#docker}
 
-#### Prerequsites
+#### Prerequisites
 
 - make
 - [Install docker engine](https://docs.docker.com/engine/install/)

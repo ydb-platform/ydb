@@ -733,6 +733,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_TWIN_F(CheckpointPropagationWithUninitializedStatefulOperator, ModernChannels, TStreamingWithSchemaSecretsTestFixture) {
         NodeCount = 2;
         DqChannelsVersion = ModernChannels ? 2 : 1;
+        // Preserve the nine-stage plan used by OverridePlanner below.
+        SetupAppConfig().MutableTableServiceConfig()->SetAllowMultiBroadcasts(true);
 
         const std::shared_ptr<TConnectorClientMock> connectorClient = SetupMockConnectorClient();
 

@@ -222,33 +222,6 @@ namespace NKikimr::NFulltext {
                 return random;
             };
 
-<<<<<<< HEAD
-            for (ui32 iteration = 0; iteration < 100; ++iteration) {
-                TVector<TDeltaItem> items;
-                ui64 docId = nextRandom() & 0xFFFF;
-                const size_t count = 1 + nextRandom() % 500;
-                items.reserve(count);
-                for (size_t i = 0; i < count; ++i) {
-                    const ui32 shift = nextRandom() % 28;
-                    const ui64 delta = 1 + (nextRandom() & ((1ULL << shift) - 1));
-                    if (Max<ui64>() - docId < delta) {
-                        break;
-                    }
-                    docId += delta;
-                    const ui32 freq = 1 + static_cast<ui32>(nextRandom() % 100000);
-                    items.push_back({docId, freq});
-                }
-                AssertDeltaItemsEqual(RoundTrip(items, true), items);
-                AssertDeltaItemsEqual(RoundTrip(items, false), [&] {
-                    TVector<TDeltaItem> result = items;
-                    for (auto& item : result) {
-                        item.Freq = 1;
-                    }
-                    return result;
-                }());
-            }
-        }
-=======
         columnAnalyzers->set_language("armenian,english,greek,russian,tamil,yiddish");
         UNIT_ASSERT_C(ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
@@ -257,7 +230,6 @@ namespace NKikimr::NFulltext {
         columnAnalyzers->set_use_filter_ngram(true);
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time");
->>>>>>> dcd8e466595 (Added more languages)
 
         Y_UNIT_TEST(MultiDeltaReaderGenerationMerge) {
             auto encode = [](std::initializer_list<TDeltaItem> items) {

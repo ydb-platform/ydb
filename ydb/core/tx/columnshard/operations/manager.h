@@ -240,7 +240,6 @@ public:
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
     std::vector<ui64> GetLockIdsOfNotProposedTransactions() const;
-    std::vector<ui64> GetLockIdsOfNotProposedTransactions(const TSchemeShardLocalPathId pathId) const;
 
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);

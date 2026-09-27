@@ -109,22 +109,6 @@ std::vector<ui64> TOperationsManager::GetLockIdsOfNotProposedTransactions() cons
     return result;
 }
 
-std::vector<ui64> TOperationsManager::GetLockIdsOfNotProposedTransactions(const TSchemeShardLocalPathId pathId) const {
-    std::vector<ui64> result;
-    for (const auto& [lockId, lock] : LockFeatures) {
-        if (lock.IsTxIdAssigned()) {
-            continue;
-        }
-        for (const auto& operation : lock.GetWriteOperations()) {
-            if (operation->GetPathId().SchemeShardLocalPathId == pathId) {
-                result.push_back(lockId);
-                break;
-            }
-        }
-    }
-    return result;
-}
-
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
     for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
         if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {

@@ -184,18 +184,6 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         shard.WaitTransactionsAborted();
     }
 
-    Y_UNIT_TEST(AbortedOnTableDrop) {
-        TShardFixture shard;
-        Y_UNUSED(shard.WriteUnderLock());
-        const auto pathId = shard.DropTable();
-        shard.WaitTransactionsAborted();
-
-        shard.PassReadWindow();
-        shard.TryCleanupTables(pathId, 60);
-        UNIT_ASSERT(!shard.IsPendingDrop(pathId));
-        UNIT_ASSERT(!shard.HasTable(pathId));
-    }
-
     Y_UNIT_TEST(DroppedTableKeptWhileTransactionProposed) {
         TShardFixture shard;
         Y_UNUSED(shard.WriteUnderLock());

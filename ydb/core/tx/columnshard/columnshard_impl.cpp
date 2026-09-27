@@ -447,7 +447,6 @@ void TColumnShard::RunDropTable(
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
     TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
-    AbortNotProposedTransactions(schemeShardLocalPathId);
 }
 
 void TColumnShard::RunMoveTable(

@@ -289,7 +289,8 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
             parsed = {}
         if isinstance(parsed, dict):
             labels = parsed
-    labels.setdefault("parent_span_id", f"job-{job_id}")
+    if str(raw.get("span_id") or "") != f"job-{job_id}":
+        labels.setdefault("parent_span_id", f"job-{job_id}")
     row["labels"] = _as_json(labels)
     return row
 

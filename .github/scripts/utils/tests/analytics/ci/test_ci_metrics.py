@@ -259,9 +259,11 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertEqual(job_row["kind"], "duration")
         self.assertEqual(job_row["value"], 60 * 60 * 1000)
         self.assertEqual(json.loads(job_row["labels"])["queued_ms"], 60 * 1000)
-        self.assertEqual(json.loads(job_row["labels"])["parent_span_id"], "job-777")
+        self.assertNotIn("parent_span_id", json.loads(job_row["labels"]))
 
         queue_row = next(row for row in rows if row["name"] == "queue")
+        self.assertIsNone(queue_row["conclusion"])
+        self.assertEqual(json.loads(queue_row["labels"])["parent_span_id"], "job-777")
         self.assertEqual(queue_row["value"], 60 * 1000)
         self.assertEqual(queue_row["event_ts"], datetime(2026, 9, 21, 10, 4, tzinfo=timezone.utc))
 

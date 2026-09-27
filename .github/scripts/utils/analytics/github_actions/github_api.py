@@ -13,6 +13,24 @@ from urllib.request import Request, urlopen
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
 
+def _error_snippet(exc: HTTPError) -> str:
+    try:
+        return exc.read()[:300].decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        return str(exc)
+
+
+def _should_retry(exc: HTTPError, snippet: str) -> bool:
+    if exc.code in RETRYABLE_STATUS:
+        return True
+    if exc.code != 403:
+        return False
+    if "rate limit" in snippet.lower():
+        return True
+    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+    return bool(retry_after)
+
+
 def github_get(
     url: str,
     params: Optional[Dict[str, Any]] = None,
@@ -40,13 +58,13 @@ def github_get(
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             last_error = exc
-            if exc.code in RETRYABLE_STATUS and attempt < retries:
+            snippet = _error_snippet(exc)
+            if _should_retry(exc, snippet) and attempt < retries:
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
                 sleep_for = float(retry_after) if retry_after and str(retry_after).isdigit() else backoff
                 time.sleep(sleep_for)
                 backoff = min(backoff * 2, 30)
                 continue
-            snippet = exc.read()[:300].decode("utf-8", errors="replace")
             raise RuntimeError(f"GitHub API {exc.code} for {url}: {snippet}") from exc
         except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
             last_error = exc

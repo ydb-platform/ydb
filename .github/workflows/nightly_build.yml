@@ -60,6 +60,7 @@ jobs:
         fi
         git fetch --depth=1 origin "$workflow_sha"
         git checkout "$workflow_sha" -- \
+          .github/scripts/analytics/resolve_github_job_id.py \
           .github/scripts/utils/analytics \
           .github/actions/test_ya
     - name: Setup ydb access

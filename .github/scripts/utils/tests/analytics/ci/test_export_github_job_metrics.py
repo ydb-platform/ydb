@@ -88,6 +88,12 @@ class CompletedSinceTest(unittest.TestCase):
         since = completed_since(2, last)
         self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
 
+    def test_failed_watermark_uses_twelve_hours(self):
+        since = completed_since(2, None, watermark_ok=False)
+        delta = datetime.now(timezone.utc) - since
+        self.assertGreater(delta.total_seconds(), 12 * 3600 - 5)
+        self.assertLess(delta.total_seconds(), 12 * 3600 + 5)
+
 
 class OpenRunsToSaveTest(unittest.TestCase):
     def test_drops_finished_when_the_list_succeeded(self):

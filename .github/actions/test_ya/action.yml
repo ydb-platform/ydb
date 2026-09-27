@@ -424,6 +424,14 @@ runs:
             $YA_MAKE_TARGET
         fi
 
+        if [ -z "${CI_CACHE_MODE:-}" ]; then
+          if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+            CI_CACHE_MODE=dist_cache
+          else
+            CI_CACHE_MODE=none
+          fi
+        fi
+        echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         record_ci_start prepare_ya_make 1
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
@@ -439,14 +447,6 @@ runs:
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
         fi
 
-        if [ -z "${CI_CACHE_MODE:-}" ]; then
-          if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-            CI_CACHE_MODE=dist_cache
-          else
-            CI_CACHE_MODE=none
-          fi
-        fi
-        echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         python3 "$CI_METRICS_PY" track runner_info --kind info --source ya_phase --runner \
           --label "cache_mode=${CI_CACHE_MODE}" || true
         record_ci_flush
@@ -826,8 +826,8 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        conclusion=success
-        if [ "${{ steps.clean_ya_cache.outcome }}" = "failure" ] || [ "${{ steps.init.outcome }}" = "failure" ] || [ "${{ steps.setup_cache.outcome }}" = "failure" ] || [ "${{ steps.build.outcome }}" = "failure" ]; then
+        conclusion="${{ job.status }}"
+        if [ -z "$conclusion" ]; then
           conclusion=failure
         fi
         python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send --conclusion "$conclusion" || true

@@ -39,6 +39,25 @@ class PickJobTest(unittest.TestCase):
         ]
         self.assertEqual(pick_job(jobs, "same")["id"], 2)
 
+    def test_prefers_the_job_whose_step_is_running(self):
+        jobs = [
+            {
+                "id": 1,
+                "runner_name": "same",
+                "status": "in_progress",
+                "started_at": "2026-09-25T12:00:00Z",
+                "steps": [{"name": "done", "status": "completed"}],
+            },
+            {
+                "id": 2,
+                "runner_name": "same",
+                "status": "in_progress",
+                "started_at": "2026-09-25T11:00:00Z",
+                "steps": [{"name": "build", "status": "in_progress"}],
+            },
+        ]
+        self.assertEqual(pick_job(jobs, "same")["id"], 2)
+
 
 class PaginationTest(unittest.TestCase):
     def test_lists_two_pages_and_picks_runner(self):

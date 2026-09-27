@@ -70,7 +70,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     branch = run.get("head_branch")
     pr_number = None
     if event_name in ("pull_request", "pull_request_target"):
-        branch = run.get("base_branch") or _first_pr_base(run) or branch
+        branch = _first_pr_base(run) or branch
         pr_number = _first_pr_number(run)
 
     rows: List[Dict[str, Any]] = []
@@ -105,7 +105,6 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
             job_labels: Dict[str, Any] = {}
             if queued_ms is not None:
                 job_labels["queued_ms"] = queued_ms
-            job_labels["parent_span_id"] = parent
             rows.append(
                 normalize_metric(
                     {
@@ -132,7 +131,6 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
                             "source": "github_job",
                             "started_at": job_created,
                             "value": queued_ms,
-                            "conclusion": conclusion,
                             "labels": {"queued_ms": queued_ms, "parent_span_id": parent},
                         },
                         now=now,
@@ -169,21 +167,31 @@ STATE_SOURCE = "export_state"
 STATE_NAME = "open_runs"
 
 
-def completed_since(hours: int, last_export: Optional[datetime] = None) -> datetime:
+def completed_since(
+    hours: int,
+    last_export: Optional[datetime] = None,
+    *,
+    watermark_ok: bool = True,
+) -> datetime:
     """Short GitHub `created` window.
 
     Cold start uses `--hours`. After a successful export the window starts at
-    that timestamp minus 30 minutes. Runs that were already running are tracked
-    separately, so this window does not have to cover the longest job.
+    that timestamp minus 30 minutes. A failed watermark query uses the 12h
+    lookback so completed runs are not dropped. Runs that were already running
+    are tracked separately, so this window does not have to cover the longest job.
     """
+    now = datetime.now(timezone.utc)
+    if not watermark_ok:
+        return now - MAX_LOOKBACK
     if last_export is None:
-        return datetime.now(timezone.utc) - timedelta(hours=hours)
+        return now - timedelta(hours=hours)
     return last_export - OVERLAP
 
 
-def last_export_at(table_path: Optional[str] = None) -> Optional[datetime]:
+def last_export_at(table_path: Optional[str] = None) -> tuple[Optional[datetime], bool]:
+    """Return (timestamp, query_ok). query_ok is false when the read failed."""
     if not has_send_credentials():
-        return None
+        return None, True
     floor = datetime.now(timezone.utc) - MAX_LOOKBACK
     ts = floor.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
@@ -199,16 +207,16 @@ def last_export_at(table_path: Optional[str] = None) -> Optional[datetime]:
                   AND source IN ("github_job", "github_step")
                 """
             )
-    except Exception as exc:  # noqa: BLE001 — cold-start window
+    except Exception as exc:  # noqa: BLE001 — use the 12h lookback
         print(f"Warning: export watermark query failed: {exc}")
-        return None
+        return None, False
     if not rows or not isinstance(rows[0], dict):
-        return None
+        return None, True
     try:
-        return parse_datetime(rows[0].get("last_export"))
+        return parse_datetime(rows[0].get("last_export")), True
     except (OverflowError, OSError, ValueError) as exc:
         print(f"Warning: export watermark is not a timestamp: {exc}")
-        return None
+        return None, False
 
 
 def already_exported(run_id: Any, run_attempt: Any, exported: set) -> bool:
@@ -502,7 +510,7 @@ def load_open_runs(table_path: Optional[str] = None) -> List[tuple]:
     return refs
 
 
-def save_open_runs(refs: List[tuple], table_path: Optional[str] = None) -> None:
+def save_open_runs(refs: List[tuple], table_path: Optional[str] = None) -> bool:
     now = datetime.now(timezone.utc)
     row = {
         "date": now.date(),
@@ -520,7 +528,11 @@ def save_open_runs(refs: List[tuple], table_path: Optional[str] = None) -> None:
         ),
         "exported_at": now,
     }
-    upload_rows([row], table_path=table_path)
+    uploaded = upload_rows([row], table_path=table_path)
+    if uploaded <= 0:
+        print("Warning: open-run list was not saved")
+        return False
+    return True
 
 
 def fetch_run(org: str, repo: str, run_id: int) -> Dict[str, Any]:
@@ -570,7 +582,8 @@ def main(argv=None) -> int:
     try:
         args = parse_args(argv)
         workflows = workflows_to_export(args.org, args.repo, args.workflow)
-        since = completed_since(args.hours, last_export_at(args.table_path))
+        last_export, watermark_ok = last_export_at(args.table_path)
+        since = completed_since(args.hours, last_export, watermark_ok=watermark_ok)
         exported = exported_run_ids(since, table_path=args.table_path)
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
@@ -621,7 +634,8 @@ def main(argv=None) -> int:
                 return 0
         else:
             print("No GitHub job metric rows to upload")
-        save_open_runs(pending, args.table_path)
+        if not save_open_runs(pending, args.table_path) and pending:
+            print("Warning: in-progress runs stay on the previous open-run list")
         return 0
     except Exception as exc:  # noqa: BLE001 — collector must not fail the analytics job
         print(f"Warning: GitHub job metrics export failed: {exc}")

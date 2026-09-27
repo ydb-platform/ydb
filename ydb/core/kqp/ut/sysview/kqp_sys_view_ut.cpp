@@ -14,7 +14,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 namespace NKikimr {
 namespace NKqp {
@@ -1795,7 +1795,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             if (expected == EStatus::UNSUPPORTED) {
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), reason);
                 UNIT_ASSERT(HasIssue(result.GetIssues(),
-                    NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE));
+                    NKikimrIssues::TIssuesIds::ACCESS_DENIED));
                 UNIT_ASSERT(result.GetResultSets().empty());
             }
             driver.Stop(true);

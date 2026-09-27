@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/query_actor/query_actor.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -171,7 +171,9 @@ public:
             Result->Error = issues.ToString();
             for (const auto& topIssue : issues) {
                 NYql::WalkThroughIssues(topIssue, false, [&](const NYql::TIssue& issue, ui16) {
-                    if (issue.GetCode() == NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE) {
+                    if (status == Ydb::StatusIds::UNSUPPORTED
+                        && issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED)
+                    {
                         Result->UnsupportedDatabaseReason = issue.GetMessage();
                     }
                 });

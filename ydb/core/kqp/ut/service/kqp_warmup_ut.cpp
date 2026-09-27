@@ -1376,7 +1376,7 @@ namespace {
                     response->Record.SetNodeId(ev->Cookie);
                     response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
                     NYql::TIssue issue("Compile cache is not available for shared resource (serverless compute) databases");
-                    issue.SetCode(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE, NYql::TSeverityIds::S_ERROR);
+                    issue.SetCode(NKikimrIssues::TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
@@ -1403,8 +1403,8 @@ namespace {
             UNIT_ASSERT_C(fetches > 0 && fetches <= 2, "Fetch requests: " << fetches);
         }
 
-        Y_UNIT_TEST(WarmupUnavailableSysview) {
-            // All peers UNAVAILABLE: warmup fails AND PeerScanWarnings bumps once per failing peer.
+        Y_UNIT_TEST_TWIN(WarmupUnavailableSysview, AccessDenied) {
+            // All peers fail: warmup fails AND PeerScanWarnings bumps once per failing peer.
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -1425,8 +1425,11 @@ namespace {
                     sysviewRequestCount++;
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
                     response->Record.SetNodeId(ev->Cookie);
-                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                    response->Record.SetStatus(AccessDenied ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::UNAVAILABLE);
                     NYql::TIssue issue("Compile cache is not available");
+                    if (AccessDenied) {
+                        issue.SetCode(NKikimrIssues::TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
+                    }
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());

@@ -399,7 +399,7 @@ private:
                 issues.AddIssue(NYql::TIssue("Compile cache database resource type is not known yet"));
             } else {
                 response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
-                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE,
+                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
                     TStringBuilder() << "Compile cache is not available for "
                         << (DatabaseType == EDatabaseType::Shared ? "shared resource (serverless compute)" : "serverless")
                         << " databases"));

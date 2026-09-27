@@ -421,14 +421,13 @@ private:
         if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues peerIssues;
             NYql::IssuesFromMessage(record.GetIssues(), peerIssues);
-            bool unsupportedDatabase = false;
+            bool accessDenied = false;
             for (const auto& topIssue : peerIssues) {
                 NYql::WalkThroughIssues(topIssue, false, [&](const NYql::TIssue& issue, ui16) {
-                    unsupportedDatabase |= issue.GetCode()
-                        == NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE;
+                    accessDenied |= issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED;
                 });
             }
-            if (unsupportedDatabase) {
+            if (record.GetStatus() == Ydb::StatusIds::UNSUPPORTED && accessDenied) {
                 ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, peerIssues);
                 return;
             }
@@ -491,7 +490,7 @@ private:
 
     void ReplyUnsupportedDatabase(TStringBuf databaseType) {
         NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE,
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
             TStringBuilder() << "Compile cache is not available for " << databaseType << " databases"));
         ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, issues);
     }

@@ -8,8 +8,6 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/strbuf.h>
-#include <util/system/types.h>
 
 namespace NKikimr::NKqp {
 

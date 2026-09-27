@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
+#include <ydb/core/external_sources/external_source.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
@@ -839,32 +840,156 @@ enum class EStoreType : ui32 {
     Column = 1
 };
 
-enum class ESourceType : ui32 {
-    Unknown = 0,
-    ExternalTable = 1,
-    ExternalDataSource = 2
-};
 
 struct TKikimrTableMetadata;
 typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
 
-struct TExternalSource {
-    ESourceType SourceType = ESourceType::Unknown;
+// Config holds secret references; SecretValue holds resolved values.
+class TExternalSourceAuth {
+private:
+    struct TValueLess {};
+
+    struct TServiceAccountSecret {
+        TString Signature;
+    };
+    struct TBasicSecret {
+        TString Password;
+    };
+    struct TMdbBasicSecrets {
+        TString Signature;
+        TString Password;
+    };
+    struct TAwsSecrets {
+        TString AccessKeyId;
+        TString SecretAccessKey;
+    };
+    struct TTokenSecret {
+        TString Token;
+    };
+
+    NKikimrSchemeOp::TAuth Config;
+    std::variant<std::monostate, TValueLess, TServiceAccountSecret,
+        TBasicSecret, TMdbBasicSecrets, TAwsSecrets, TTokenSecret> SecretValue;
+
+    template <typename T>
+    const T& GetSecretValue() const {
+        Y_ENSURE(std::holds_alternative<T>(SecretValue),
+            "TExternalSourceAuth: requested secret value is not set or has unexpected type");
+        return std::get<T>(SecretValue);
+    }
+
+public:
+    explicit TExternalSourceAuth(const NKikimrSchemeOp::TAuth& config)
+        : Config(config)
+    {
+    }
+
+    // A second call is an invariant violation, even if validation failed.
+    void InitSecretValues(const std::vector<TString>& secretValues);
+
+    bool IsAws() const { return Config.has_aws(); }
+
+    THashMap<TString, TString> BuildAuthProperties() const;
+
+    TString ComposeStructuredTokenJson() const;
+
+    NKikimr::NExternalSource::TAuth MakeExternalSourceAuth() const;
+};
+
+class TExternalDataSource {
+private:
     TString Type;
-    TString TableLocation;
-    TString TableContent;
+    TString Location;
+    TString Installation;
     TString DataSourcePath;
-    TString DataSourceLocation;
-    TString DataSourceInstallation;
-    TString ServiceAccountIdSignature;
-    TString Password;
-    TString AwsAccessKeyId;
-    TString AwsSecretAccessKey;
-    TString Token;
-    NKikimrSchemeOp::TAuth DataSourceAuth;
+    TExternalSourceAuth Auth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
-    TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
-    ui64 WriteOperations = 0;
+
+    TExternalDataSource(
+        const NKikimrSchemeOp::TExternalDataSourceDescription& description,
+        const TString& dataSourcePath);
+
+public:
+    static TExternalDataSource CreateFromDescription(
+        const NKikimrSchemeOp::TExternalDataSourceDescription& description,
+        const TString& dataSourcePath);
+
+    static TExternalDataSource CreateForLocalTopic(const TString& cluster,
+        const TString& database, const TString& transientToken);
+
+    void InitSecretValues(const std::vector<TString>& secretValues) {
+        Auth.InitSecretValues(secretValues);
+    }
+
+    void ApplyInferredMetadata(const TString& type, const TString& dataSourcePath);
+    void SetYdbTopicType();
+
+    bool IsYdb() const;
+    bool IsYdbTopics() const;
+    bool IsYdbBased() const { return IsYdb() || IsYdbTopics(); }
+
+    const TString& GetType() const { return Type; }
+    const TString& GetLocation() const { return Location; }
+    const TString& GetDataSourcePath() const { return DataSourcePath; }
+    TString ComposeStructuredTokenJson() const {
+        return Auth.ComposeStructuredTokenJson();
+    }
+
+    TString GetDatabaseName() const;
+    bool IsTlsEnabled() const;
+
+    THashMap<TString, TString> BuildConnectorProperties() const;
+    NKikimr::NExternalSource::TMetadata MakeExternalSourceMetadata() const;
+
+};
+
+class TExternalTable {
+private:
+    struct TUnresolved {
+        TString Type;
+        TString DataSourcePath;
+    };
+
+    struct TResolved {
+        TKikimrTableMetadataPtr Metadata;
+    };
+
+    TString Location;
+    TString Content;
+    std::variant<TUnresolved, TResolved> State;
+
+    TExternalTable() = default;
+
+public:
+    static TExternalTable CreateFromDescription(const NKikimrSchemeOp::TExternalTableDescription& description);
+
+    // Allowed only once for an underlying source of the same type.
+    void InitExternalDataSource(const TKikimrTableMetadataPtr& metadata);
+
+    const TString& GetType() const {
+        if (const auto* unresolved = std::get_if<TUnresolved>(&State)) {
+            return unresolved->Type;
+        }
+        return GetUnderlyingDataSource().GetType();
+    }
+
+    const TString& GetLocation() const { return Location; }
+    const TString& GetContent() const { return Content; }
+
+    const TString& GetDataSourcePath() const {
+        if (const auto* unresolved = std::get_if<TUnresolved>(&State)) {
+            return unresolved->DataSourcePath;
+        }
+        return GetUnderlyingDataSource().GetDataSourcePath();
+    }
+
+    const TKikimrTableMetadataPtr& GetUnderlyingDataSourceMetadata() const {
+        Y_ENSURE(std::holds_alternative<TResolved>(State), "TExternalTable: underlying data source is not initialized");
+        return std::get<TResolved>(State).Metadata;
+    }
+
+    const TExternalDataSource& GetUnderlyingDataSource() const;
+
 };
 
 enum EMetaSerializationType : ui64 {
@@ -921,8 +1046,37 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
-    TExternalSource ExternalSource;
+    std::variant<std::monostate, TExternalTable, TExternalDataSource> ExternalSource;
     TViewPersistedData ViewPersistedData;
+
+    bool IsExternalTable() const { return std::holds_alternative<TExternalTable>(ExternalSource); }
+    bool IsExternalDataSource() const { return std::holds_alternative<TExternalDataSource>(ExternalSource); }
+
+    TExternalTable& ExternalTable() {
+        YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external table");
+        return std::get<TExternalTable>(ExternalSource);
+    }
+
+    TExternalDataSource& ExternalDataSource() {
+        YQL_ENSURE(IsExternalDataSource(), "Metadata does not hold an external data source");
+        return std::get<TExternalDataSource>(ExternalSource);
+    }
+
+    const TString& GetExternalSourceType() const {
+        if (const auto* dataSource = std::get_if<TExternalDataSource>(&ExternalSource)) {
+            return dataSource->GetType();
+        }
+        YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external source");
+        return std::get<TExternalTable>(ExternalSource).GetType();
+    }
+
+    const TExternalDataSource& GetResolvedExternalDataSource() const {
+        if (const auto* dataSource = std::get_if<TExternalDataSource>(&ExternalSource)) {
+            return *dataSource;
+        }
+        YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external source");
+        return std::get<TExternalTable>(ExternalSource).GetUnderlyingDataSource();
+    }
 
     TVector<TString> PartitionedByColumns;
 

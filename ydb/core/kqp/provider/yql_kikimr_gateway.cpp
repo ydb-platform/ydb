@@ -1,9 +1,12 @@
 #include "yql_kikimr_gateway.h"
 
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+
 #include <util/string/cast.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -21,6 +24,348 @@ namespace NYql {
 using namespace NThreading;
 using namespace NKikimr::NMiniKQL;
 using namespace NUdf;
+
+void TExternalSourceAuth::InitSecretValues(const std::vector<TString>& secretValues) {
+    Y_ENSURE(std::holds_alternative<std::monostate>(SecretValue),
+        "TExternalSourceAuth: secret values can only be set once");
+    SecretValue = TValueLess{};
+    switch (Config.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kServiceAccount: {
+            if (secretValues.size() != 1) {
+                throw yexception() << "Service account auth contains invalid count of secrets: " << secretValues.size() << " instead of 1";
+            }
+            if (Config.GetServiceAccount().GetId().empty()) {
+                throw yexception() << "Service account auth requires non-empty SERVICE_ACCOUNT_ID";
+            }
+            if (secretValues[0].empty()) {
+                throw yexception() << "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME";
+            }
+            SecretValue = TServiceAccountSecret{secretValues[0]};
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::kIam: {
+            // SERVICE_ACCOUNT_ID and RESOURCE_ID are not user-provided here:
+            // RESOURCE_ID is auto-resolved from the database's cloud_id at CREATE
+            // time, and post-creation INITIAL_TOKEN_SECRET is not resolved into
+            // SecretValues. Emptiness of these fields/secret list is therefore an
+            // internal-contract violation and not an actionable BAD_REQUEST.
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::kNone: {
+            if (secretValues.size() != 0) {
+                throw yexception() << "None auth contains invalid count of secrets: " << secretValues.size() << " instead of 0";
+            }
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::kBasic: {
+            if (secretValues.size() != 1) {
+                throw yexception() << "Basic auth contains invalid count of secrets: " << secretValues.size() << " instead of 1";
+            }
+            if (Config.GetBasic().GetLogin().empty()) {
+                throw yexception() << "Basic auth requires non-empty LOGIN";
+            }
+            SecretValue = TBasicSecret{secretValues[0]};
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::kMdbBasic: {
+            if (secretValues.size() != 2) {
+                throw yexception() << "Mdb basic auth contains invalid count of secrets: " << secretValues.size() << " instead of 2";
+            }
+            if (Config.GetMdbBasic().GetServiceAccountId().empty()) {
+                throw yexception() << "Mdb basic auth requires non-empty SERVICE_ACCOUNT_ID";
+            }
+            if (Config.GetMdbBasic().GetLogin().empty()) {
+                throw yexception() << "Mdb basic auth requires non-empty LOGIN";
+            }
+            if (secretValues[0].empty()) {
+                throw yexception() << "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME";
+            }
+            if (secretValues[1].empty()) {
+                throw yexception() << "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME";
+            }
+            SecretValue = TMdbBasicSecrets{secretValues[0], secretValues[1]};
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::kAws: {
+            if (secretValues.size() != 2) {
+                throw yexception() << "Aws auth contains invalid count of secrets: " << secretValues.size() << " instead of 2";
+            }
+            if (secretValues[0].empty()) {
+                throw yexception() << "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME";
+            }
+            if (secretValues[1].empty()) {
+                throw yexception() << "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME";
+            }
+            SecretValue = TAwsSecrets{secretValues[0], secretValues[1]};
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::kToken: {
+            if (secretValues.size() != 1) {
+                throw yexception() << "Token auth contains invalid count of secrets: " << secretValues.size() << " instead of 1";
+            }
+            if (secretValues[0].empty()) {
+                throw yexception() << "Token auth requires non-empty value for the secret referenced by TOKEN_SECRET_NAME";
+            }
+            SecretValue = TTokenSecret{secretValues[0]};
+            return;
+        }
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET: {
+            throw yexception() << "identity case is not specified in case of update external data source secrets";
+        }
+    }
+    throw yexception() << "unknown auth method";
+}
+
+THashMap<TString, TString> TExternalSourceAuth::BuildAuthProperties() const {
+    THashMap<TString, TString> properties;
+    switch (Config.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
+            properties["authMethod"] = "SERVICE_ACCOUNT";
+            properties["serviceAccountId"] = Config.GetServiceAccount().GetId();
+            properties["serviceAccountIdSignature"] = GetSecretValue<TServiceAccountSecret>().Signature;
+            properties["serviceAccountIdSignatureReference"] = Config.GetServiceAccount().GetSecretName();
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::kNone:
+            properties["authMethod"] = "NONE";
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::kBasic:
+            properties["authMethod"] = "BASIC";
+            properties["login"] = Config.GetBasic().GetLogin();
+            properties["password"] = GetSecretValue<TBasicSecret>().Password;
+            properties["passwordReference"] = Config.GetBasic().GetPasswordSecretName();
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            properties["authMethod"] = "MDB_BASIC";
+            properties["serviceAccountId"] = Config.GetMdbBasic().GetServiceAccountId();
+            properties["serviceAccountIdSignature"] = GetSecretValue<TMdbBasicSecrets>().Signature;
+            properties["serviceAccountIdSignatureReference"] = Config.GetMdbBasic().GetServiceAccountSecretName();
+
+            properties["login"] = Config.GetMdbBasic().GetLogin();
+            properties["password"] = GetSecretValue<TMdbBasicSecrets>().Password;
+            properties["passwordReference"] = Config.GetMdbBasic().GetPasswordSecretName();
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::kAws:
+            properties["authMethod"] = "AWS";
+            properties["awsAccessKeyId"] = GetSecretValue<TAwsSecrets>().AccessKeyId;
+            properties["awsAccessKeyIdReference"] = Config.GetAws().GetAwsAccessKeyIdSecretName();
+            properties["awsSecretAccessKey"] = GetSecretValue<TAwsSecrets>().SecretAccessKey;
+            properties["awsSecretAccessKeyReference"] = Config.GetAws().GetAwsSecretAccessKeySecretName();
+            properties["awsRegion"] = Config.GetAws().GetAwsRegion();
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::kToken:
+            properties["authMethod"] = "TOKEN";
+            properties["token"] = GetSecretValue<TTokenSecret>().Token;
+            properties["tokenReference"] = Config.GetToken().GetTokenSecretName();
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::kIam:
+            properties["authMethod"] = "IAM";
+            properties["iamServiceAccountId"] = Config.GetIam().GetServiceAccountId();
+            properties["iamResourceId"] = Config.GetIam().GetResourceId();
+            return properties;
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            throw yexception() << "Identity case is not specified";
+    }
+}
+
+TString TExternalSourceAuth::ComposeStructuredTokenJson() const {
+    switch (Config.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kNone:
+            return ComposeStructuredTokenJsonForServiceAccount("", "", "");
+
+        case NKikimrSchemeOp::TAuth::kBasic:
+            return ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                Config.GetBasic().GetLogin(),
+                Config.GetBasic().GetPasswordSecretName(),
+                GetSecretValue<TBasicSecret>().Password);
+
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            return ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                Config.GetMdbBasic().GetLogin(),
+                Config.GetMdbBasic().GetPasswordSecretName(),
+                GetSecretValue<TMdbBasicSecrets>().Password);
+
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
+            return ComposeStructuredTokenJsonForServiceAccountWithSecret(
+                Config.GetServiceAccount().GetId(),
+                Config.GetServiceAccount().GetSecretName(),
+                GetSecretValue<TServiceAccountSecret>().Signature);
+
+        case NKikimrSchemeOp::TAuth::kToken:
+            return ComposeStructuredTokenJsonForTokenAuthWithSecret(
+                Config.GetToken().GetTokenSecretName(),
+                GetSecretValue<TTokenSecret>().Token);
+
+        case NKikimrSchemeOp::TAuth::kIam:
+            return ComposeStructuredTokenJsonForIamAuth(
+                Config.GetIam().GetServiceAccountId(),
+                Config.GetIam().GetResourceId());
+
+        case NKikimrSchemeOp::TAuth::kAws:
+            throw yexception() << "Unhandled auth method: Aws";
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            throw yexception() << "Unhandled auth method: unset";
+    }
+    throw yexception() << "Unhandled auth method: unknown";
+}
+
+NKikimr::NExternalSource::TAuth TExternalSourceAuth::MakeExternalSourceAuth() const {
+    switch (Config.identity_case()) {
+    case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+    case NKikimrSchemeOp::TAuth::kNone:
+        return NKikimr::NExternalSource::NAuth::MakeNone();
+    case NKikimrSchemeOp::TAuth::kServiceAccount:
+        return NKikimr::NExternalSource::NAuth::MakeServiceAccount(
+            Config.GetServiceAccount().GetId(), GetSecretValue<TServiceAccountSecret>().Signature);
+    case NKikimrSchemeOp::TAuth::kAws:
+        return NKikimr::NExternalSource::NAuth::MakeAws(GetSecretValue<TAwsSecrets>().AccessKeyId, GetSecretValue<TAwsSecrets>().SecretAccessKey, Config.GetAws().GetAwsRegion());
+    case NKikimrSchemeOp::TAuth::kIam:
+        return NKikimr::NExternalSource::NAuth::MakeIamImpersonate(
+            Config.GetIam().GetServiceAccountId(), Config.GetIam().GetResourceId());
+    case NKikimrSchemeOp::TAuth::kBasic:
+    case NKikimrSchemeOp::TAuth::kMdbBasic:
+    case NKikimrSchemeOp::TAuth::kToken:
+        Y_ABORT("Unimplemented external source auth: %d", Config.identity_case());
+        break;
+    }
+    Y_UNREACHABLE();
+}
+
+TExternalDataSource::TExternalDataSource(
+    const NKikimrSchemeOp::TExternalDataSourceDescription& description,
+    const TString& dataSourcePath)
+    : Type(description.GetSourceType())
+    , Location(description.GetLocation())
+    , Installation(description.GetInstallation())
+    , DataSourcePath(dataSourcePath)
+    , Auth(description.GetAuth())
+    , Properties(description.GetProperties())
+{
+    Y_ENSURE(!Type.empty(), "TExternalDataSource: Type is required");
+    Y_ENSURE(!IsYdbBased() || !Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
+}
+
+TExternalDataSource TExternalDataSource::CreateFromDescription(
+    const NKikimrSchemeOp::TExternalDataSourceDescription& description,
+    const TString& dataSourcePath)
+{
+    return TExternalDataSource(description, dataSourcePath);
+}
+
+TExternalDataSource TExternalDataSource::CreateForLocalTopic(const TString& cluster,
+    const TString& database, const TString& transientToken)
+{
+    NKikimrSchemeOp::TExternalDataSourceDescription description;
+    description.SetSourceType(ToString(EDatabaseType::YdbTopics));
+    description.MutableAuth()->MutableNone();
+    (*description.MutableProperties()->mutable_properties())["database_name"] = database;
+    if (!transientToken.empty()) {
+        (*description.MutableProperties()->mutable_properties())["transient_token"] = transientToken;
+    }
+    return CreateFromDescription(description, cluster);
+}
+
+void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TString& dataSourcePath) {
+    TExternalDataSource updated = *this;
+    updated.Type = type;
+    updated.DataSourcePath = dataSourcePath;
+    Y_ENSURE(!updated.Type.empty(), "TExternalDataSource: Type is required");
+    Y_ENSURE(!updated.IsYdbBased() || !updated.Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
+    *this = std::move(updated);
+}
+
+void TExternalDataSource::SetYdbTopicType() {
+    Y_ENSURE(IsYdb(), "TExternalDataSource: only a Ydb source can resolve to a topic");
+    Type = ToString(EDatabaseType::YdbTopics);
+}
+
+bool TExternalDataSource::IsYdb() const {
+    return Type == ToString(EDatabaseType::Ydb);
+}
+
+bool TExternalDataSource::IsYdbTopics() const {
+    return Type == ToString(EDatabaseType::YdbTopics);
+}
+
+TString TExternalDataSource::GetDatabaseName() const {
+    const auto& properties = Properties.GetProperties();
+    const auto it = properties.find("database_name");
+    return it != properties.end() ? it->second : TString();
+}
+
+bool TExternalDataSource::IsTlsEnabled() const {
+    const auto& properties = Properties.GetProperties();
+    const auto it = properties.find("use_tls");
+    if (it == properties.end()) {
+        return false;
+    }
+    TString value = it->second;
+    value.to_lower();
+    return value == "true";
+}
+
+THashMap<TString, TString> TExternalDataSource::BuildConnectorProperties() const {
+    THashMap<TString, TString> properties;
+    properties["location"] = Location;
+    properties["installation"] = Installation;
+    properties["source_type"] = Type;
+
+    properties.insert(Properties.GetProperties().begin(), Properties.GetProperties().end());
+
+    auto authProperties = Auth.BuildAuthProperties();
+    for (const auto& [key, value] : authProperties) {
+        properties[key] = value;
+    }
+    return properties;
+}
+
+NKikimr::NExternalSource::TMetadata TExternalDataSource::MakeExternalSourceMetadata() const {
+    NKikimr::NExternalSource::TMetadata metadata;
+    metadata.DataSourceLocation = Location;
+    metadata.DataSourcePath = DataSourcePath;
+    metadata.Type = Type;
+    metadata.Auth = Auth.MakeExternalSourceAuth();
+    return metadata;
+}
+
+TExternalTable TExternalTable::CreateFromDescription(const NKikimrSchemeOp::TExternalTableDescription& description)
+{
+    TExternalTable table;
+    table.State = TUnresolved{description.GetSourceType(), description.GetDataSourcePath()};
+    table.Location = description.GetLocation();
+    table.Content = description.GetContent();
+    Y_ENSURE(!table.GetType().empty(), "TExternalTable: Type is required");
+    return table;
+}
+
+void TExternalTable::InitExternalDataSource(const TKikimrTableMetadataPtr& metadata) {
+    Y_ENSURE(std::holds_alternative<TUnresolved>(State), "TExternalTable: already initialized");
+    Y_ENSURE(metadata && metadata->IsExternalDataSource(), "TExternalTable: underlying data source metadata is required");
+    const auto& dataSource = metadata->ExternalDataSource();
+    const auto& unresolved = std::get<TUnresolved>(State);
+    Y_ENSURE(unresolved.Type == dataSource.GetType(),
+        "TExternalTable: type mismatch, expected: " << unresolved.Type
+        << ", but underlying external data source has type: " << dataSource.GetType());
+    State = TResolved{metadata};
+}
+
+const TExternalDataSource& TExternalTable::GetUnderlyingDataSource() const {
+    return GetUnderlyingDataSourceMetadata()->ExternalDataSource();
+}
 
 static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index,
     TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir)

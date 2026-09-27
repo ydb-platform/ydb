@@ -411,11 +411,38 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto response = responseFuture.GetValue();
         response.Issues().PrintTo(Cerr);
         UNIT_ASSERT(response.Success());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Type, "ObjectStorage");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.TableLocation, "/");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourcePath, externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceLocation, "my-bucket");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetType(), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetLocation(), "/");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetDataSourcePath(), externalDataSourceName);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetUnderlyingDataSource().GetLocation(), "my-bucket");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->Columns.size(), 2);
+    }
+
+    Y_UNIT_TEST(TestLoadYdbDataSourceWithoutLocation) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+        TKikimrRunner kikimr{NKqp::TKikimrSettings(appCfg)};
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        const TString path = "/Root/ExternalDataSourceWithoutLocation";
+        TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
+            {"source_type", "Ydb"},
+            {"database_id", "test-database-id"},
+            {"auth_method", "NONE"}
+        });
+        const auto entry = TestCreateObjectCommon(*kikimr.GetTestServer().GetRuntime(), gateway, settings, path);
+        UNIT_ASSERT_VALUES_EQUAL(entry.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+        UNIT_ASSERT(entry.ExternalDataSourceInfo);
+        UNIT_ASSERT(entry.ExternalDataSourceInfo->Description.GetLocation().empty());
+
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, path,
+            IKikimrGateway::TLoadTableMetadataSettings().WithAuthInfo(false));
+        responseFuture.Wait();
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT(response.Metadata->IsExternalDataSource());
+        UNIT_ASSERT(response.Metadata->ExternalDataSource().GetLocation().empty());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalDataSource().BuildConnectorProperties().at("database_id"), "test-database-id");
     }
 
     void CreateSecretObject(const TString& secretId, const TString& secretValue, TSession& session) {
@@ -484,7 +511,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretValue);
+        const auto& dataSource = response.Metadata->ExternalTable().GetUnderlyingDataSource();
+        const auto authProperties = dataSource.BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("serviceAccountIdSignature"), secretValue);
     }
 
     Y_UNIT_TEST_TWIN(TestLoadBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -521,7 +550,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretValue);
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("password"), secretValue);
     }
 
     Y_UNIT_TEST_TWIN(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -563,8 +593,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("password"), secretPasswordValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("serviceAccountIdSignature"), secretSaValue);
     }
 
      Y_UNIT_TEST_TWIN(TestLoadAwsSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -605,9 +636,10 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsAccessKeyId, awsAccessKeyIdSecretValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsSecretAccessKey, awsSecretAccessKeySecretValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceAuth.GetAws().GetAwsRegion(), "ru-central-1");
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("awsAccessKeyId"), awsAccessKeyIdSecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("awsSecretAccessKey"), awsSecretAccessKeySecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("awsRegion"), "ru-central-1");
     }
 
     Y_UNIT_TEST_TWIN(TestLoadDataSourceProperties, UseSchemaSecrets) {
@@ -654,14 +686,14 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("mdb_cluster_id"), "my_id");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("database_name"), "my_db");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("protocol"), "native");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("use_tls"), "true");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("schema"), "public");
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("password"), secretPasswordValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("serviceAccountIdSignature"), secretSaValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("mdb_cluster_id"), "my_id");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("database_name"), "my_db");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("protocol"), "native");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("use_tls"), "true");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("schema"), "public");
     }
 
     Y_UNIT_TEST_TWIN(TestLoadTokenSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -696,8 +728,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Token, secretTokenValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 0);
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("token"), secretTokenValue);
     }
 
     Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {

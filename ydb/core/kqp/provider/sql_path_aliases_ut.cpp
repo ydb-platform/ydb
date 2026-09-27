@@ -14,7 +14,7 @@
 namespace NYql {
 namespace {
 
-TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false) {
+TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false, bool withAliases = true) {
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
     settings.DefaultCluster = "plato";
@@ -38,18 +38,36 @@ TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicClust
     TExprContext ctx;
     TExprNode::TPtr query;
     UNIT_ASSERT_C(CompileExpr(*ast.Root, query, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
-    UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", [](TStringBuf path) {
-        if (path == "/alias") {
-            return TString("/canonical");
-        }
-        return path.StartsWith("/alias/") ? TString("/canonical") + TString(path.SubStr(6)) : TString(path);
-    }), ctx.IssueManager.GetIssues().ToString());
+    const auto original = query.Get();
+    std::function<TString(TStringBuf)> normalizePath;
+    if (withAliases) {
+        normalizePath = [](TStringBuf path) {
+            if (path == "/alias") {
+                return TString("/canonical");
+            }
+            return path.StartsWith("/alias/") ? TString("/canonical") + TString(path.SubStr(6)) : TString(path);
+        };
+    }
+    UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", normalizePath), ctx.IssueManager.GetIssues().ToString());
+    if (!withAliases) {
+        UNIT_ASSERT_VALUES_EQUAL(query.Get(), original);
+    }
     return KqpExprToPrettyString(*query, ctx);
 }
 
 }
 
 Y_UNIT_TEST_SUITE(SqlPathAliases) {
+    Y_UNIT_TEST(EmptyConfigLeavesSqlGraphUnchanged) {
+        for (const TString sql : {
+            "SELECT * FROM `/alias/table`;",
+            "CREATE TABLE `/alias/table` (key Uint64, PRIMARY KEY (key));",
+        }) {
+            const auto unchanged = RewriteSql(sql, {}, false, false);
+            UNIT_ASSERT_STRING_CONTAINS_C(unchanged, "/alias/table", sql << '\n' << unchanged);
+        }
+    }
+
     Y_UNIT_TEST(LiteralPathsFromSql) {
         for (const TString sql : {
             "SELECT * FROM `/alias/table`;",

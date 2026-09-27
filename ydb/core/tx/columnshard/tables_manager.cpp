@@ -1011,12 +1011,11 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
     if (schemaAdapter) {
         return schemaAdapter->BuildMetadataAccessor(tablePath, TUnifiedOptionalPathId::BuildExternal(externalPathId, internalPathId));
     } else if (!internalPathId) {
-        // History is tracked but no generation covers this snapshot (e.g. after GC of a
-        // truncated generation). Empty result, not a malformed request.
+        // History can remain after the live path is dropped because a copy still keeps an older generation.
         if (Generations(externalPathId)) {
-            const auto live = ResolveLivePathId(externalPathId);
-            AFL_VERIFY(live)("ss", externalPathId)("snapshot", readSnapshot.DebugString());
-            return std::make_shared<NOlap::TAbsentTableAccessor>(tablePath, NColumnShard::TUnifiedPathId::BuildValid(*live, externalPathId));
+            if (const auto live = ResolveLivePathId(externalPathId)) {
+                return std::make_shared<NOlap::TAbsentTableAccessor>(tablePath, NColumnShard::TUnifiedPathId::BuildValid(*live, externalPathId));
+            }
         }
         return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
     } else {

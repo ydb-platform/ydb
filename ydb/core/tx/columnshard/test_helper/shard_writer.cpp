@@ -68,8 +68,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
     return event->Record.GetStatus();
 }
 
-NKikimrDataEvents::TEvWriteResult TShardWriter::WriteWithResult(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
+void TShardWriter::SendWrite(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
     //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
@@ -81,7 +80,9 @@ NKikimrDataEvents::TEvWriteResult TShardWriter::WriteWithResult(
         payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
     ForwardToTablet(Runtime, TabletId, Sender, evWrite.release());
+}
 
+NKikimrDataEvents::TEvWriteResult TShardWriter::WaitWriteResult() {
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
     AFL_VERIFY(event);

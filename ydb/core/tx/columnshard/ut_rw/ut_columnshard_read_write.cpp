@@ -3363,6 +3363,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     TStringBuilder sb;
                     sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->GetPortionsToDrop()) {
+                        if (portion->IsAborted()) {
+                            continue;
+                        }
                         sb << " " << portion->GetPortionId();
                         deletedPortions.insert(portion->GetPortionId());
                     }
@@ -3410,25 +3413,33 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         ui64 txId = 1000;
 
+        // a restart between a write and its propose aborts the write; redo it under a new lock, as KQP does
+        const auto writeAndCommit = [&](const TString& data) {
+            while (true) {
+                const ui64 lockId = writeId + 1;
+                std::vector<ui64> writeIds;
+                UNIT_ASSERT(
+                    WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert, lockId));
+                if (const auto proposed = TryProposeCommit(runtime, sender, txId, writeIds, lockId)) {
+                    planStep = *proposed;
+                    PlanCommit(runtime, sender, planStep, txId);
+                    return;
+                }
+                ++writeId;
+            }
+        };
+
         // Overwrite the same data multiple times to produce multiple portions at different timestamps
         ui32 numWrites = 14;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
 
         // Do a small write that is not indexed so that we will get a committed blob in read request
         {
             TString smallData = MakeTestBlob({ 0, 2 }, ydbSchema);
             UNIT_ASSERT(smallData.size() < 100 * 1024);
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, smallData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(smallData);
             ++writeId;
             ++txId;
         }
@@ -3456,11 +3467,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Advance the time in order to trigger GC
         numWrites = 10;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
         {
             auto pingShanpshot = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
@@ -3498,11 +3505,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
         //        UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
         csDefaultControllerGuard->SetOverrideStalenessLivetimePing(TDuration::Zero());
@@ -3512,11 +3515,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);

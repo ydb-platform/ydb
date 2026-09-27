@@ -82,6 +82,8 @@ private:
     bool Aborted = false;
     ui64 TxId = 0;
 
+    void SetTxId(const ui64 txId);
+
 public:
     ui64 GetLockId() const {
         return SharingInfo->GetLockId();
@@ -162,7 +164,7 @@ public:
         return Aborted;
     }
 
-    void SetTxId(const ui64 txId);
+    bool TryProposeTransaction(const ui64 txId);
     bool IsTxIdAssigned() const;
     ui64 GetTxId() const;
 

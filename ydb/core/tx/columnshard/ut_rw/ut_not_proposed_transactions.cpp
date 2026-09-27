@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 namespace NKikimr::NColumnShard {
@@ -36,9 +37,19 @@ public:
         return *Controller->GetTheOnlyShard();
     }
 
+    void SendWriteUnderLock() {
+        Writer.SendWrite(MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 }), { 1 }, TxId);
+    }
+
+    void NotifyTransactionGone() {
+        ForwardToTablet(
+            Runtime, TTestTxConfig::TxTablet0, Sender, new NLongTxService::TEvLongTxService::TEvLockStatus(LockId, Runtime.GetNodeId(),
+                                                           NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND));
+    }
+
     NKikimrDataEvents::TLock WriteUnderLock() {
-        const auto batch = MakeTestBatch<arrow::UInt64Type>({ "key" }, std::vector<ui64>{ 1, 2, 3 });
-        const auto result = Writer.WriteWithResult(batch, { 1 }, TxId);
+        SendWriteUnderLock();
+        const auto result = Writer.WaitWriteResult();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         UNIT_ASSERT_VALUES_EQUAL(result.TxLocksSize(), 1);
         return result.GetTxLocks(0);
@@ -159,6 +170,18 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         UNIT_ASSERT_VALUES_UNEQUAL(lockAfterRestart.GetGeneration(), lockBeforeRestart.GetGeneration());
         UNIT_ASSERT_VALUES_EQUAL(
             shard.Writer.StartCommitWithLock(TxId, lockBeforeRestart), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(CommitDuringAbortIsRefused) {
+        TShardFixture shard;
+        const auto lock = shard.WriteUnderLock();
+        shard.SendWriteUnderLock();
+        shard.NotifyTransactionGone();
+
+        UNIT_ASSERT_VALUES_EQUAL(shard.Writer.StartCommitWithLock(TxId, lock), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+
+        Y_UNUSED(shard.Writer.WaitWriteResult());
+        shard.WaitTransactionsAborted();
     }
 
     Y_UNIT_TEST(AbortedOnTableDrop) {

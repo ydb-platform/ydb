@@ -313,6 +313,20 @@ TPlanStep ProposeCommit(
     });
 }
 
+std::optional<TPlanStep> TryProposeCommit(
+    TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    std::optional<TPlanStep> planStep;
+    const auto result = ProposeCommitCheck(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId, [&](auto& res) {
+        if (res.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+            planStep = TPlanStep(res.GetMinStep());
+        } else {
+            UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        }
+    });
+    Y_UNUSED(result);
+    return planStep;
+}
+
 void ProposeCommitFail(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     const auto result = ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {

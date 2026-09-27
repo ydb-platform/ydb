@@ -11,6 +11,14 @@ void TLockFeatures::SetTxId(const ui64 txId) {
     TxId = txId;
 }
 
+bool TLockFeatures::TryProposeTransaction(const ui64 txId) {
+    if (NeedsAborting()) {
+        return false;
+    }
+    SetTxId(txId);
+    return true;
+}
+
 bool TLockFeatures::IsTxIdAssigned() const {
     return TxId != 0;
 }
@@ -77,7 +85,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             auto& lock = it->second;
 
-            lock.SetTxId(txId);
+            AFL_VERIFY(lock.TryProposeTransaction(txId))("lock_id", lockId)("tx_id", txId);
             // we cannot persist the lock state reliably and cheaply enough,
             // so if the shard restarted/crashed/whatever, we assume the lock is broken
             lock.SetBroken();

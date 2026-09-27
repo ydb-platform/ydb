@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dq_input_channel.h"
+#include "dq_input_ready.h"
 #include "dq_output_channel.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -109,6 +110,11 @@ public:
     virtual void ExportPushStats(TDqAsyncStats& stats) = 0;
     virtual void ExportPopStats(TDqAsyncStats& stats) = 0;
 
+    // an input buffer marks the hook whenever it may have become non-empty or finished, see TDqInputReadySet
+    virtual void SetReadyHook(const TDqInputReadyHook& hook) {
+        Y_UNUSED(hook);
+    }
+
     void SendFinish();
 };
 
@@ -146,6 +152,9 @@ struct TDqChannelLimits {
     TDuration CleanupPeriod = TDuration::MilliSeconds(30000);
     TDuration IdlePingPeriod = TDuration::MilliSeconds(30000);
     TDuration IdleDestroyPeriod = TDuration::MilliSeconds(30000);
+    // a union of inputs visits the channels which have something for it, rather than polling all of them,
+    // see TDqInputReadySet; off, the channels do not opt in and are polled as before
+    bool EnableInputReadiness = true;
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

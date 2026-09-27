@@ -830,7 +830,24 @@ TInputDescriptor::~TInputDescriptor() {
     *InputBufferInflightBytes -= InflightBytes.load();
 }
 
+// The consumer polls its inputs far more often than chunks arrive: an empty queue is told without QueueMutex,
+// whose line the session thread writes on every chunk. The flag is armed before the 2nd look at QueueSize, and
+// PushDataChunk increments QueueSize before it takes the flag, both seq_cst: either the 2nd look sees the chunk,
+// or the push sees the flag and wakes the consumer up
+bool TInputDescriptor::IsEmptyFast() {
+    if (QueueSize.load()) {
+        return false;
+    }
+    if (!NeedToNotifyInput.load()) {
+        NeedToNotifyInput.store(true);
+    }
+    return QueueSize.load() == 0;
+}
+
 bool TInputDescriptor::IsEmpty() {
+    if (IsEmptyFast()) {
+        return true;
+    }
     std::lock_guard lock(QueueMutex);
     auto result = Queue.empty();
     if (result) {
@@ -915,6 +932,11 @@ bool TInputDescriptor::IsEarlyFinished() {
 }
 
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
+    // no RefreshMemoryPressure for an empty queue: pushes and pops refresh it, and a flip while nothing is queued
+    // holds no sender back
+    if (IsEmptyFast()) {
+        return false;
+    }
     std::lock_guard lock(QueueMutex);
     RefreshMemoryPressure();
     if (Queue.empty()) {
@@ -1009,7 +1031,7 @@ bool TInputBuffer::IsEarlyFinished() {
 
 bool TInputBuffer::Pop(TDataChunk& data) {
     auto result = Descriptor->PopDataChunk(data);
-    // PopDataChunk refreshes MemoryPressure, so an empty pop is still a chance to report its flip
+    // a flip of MemoryPressure refreshed by a push is reported by the next pop, empty or not
     if (result || !Descriptor->IsMemoryPressureReported()) {
         NodeState->UpdateProgress(Descriptor);
     }

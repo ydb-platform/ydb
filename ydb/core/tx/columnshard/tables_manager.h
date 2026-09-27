@@ -391,21 +391,22 @@ private:
 public:
     void AddVersionFromProto(
         const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo) {
-        auto& data = Ttl[pathId];
-        if (versionInfo.HasTtlSettings()) {
-            std::optional<NOlap::TTiering> ttlVersion;
-            if (versionInfo.GetTtlSettings().HasEnabled()) {
-                NOlap::TTiering deserializedTtl;
-                AFL_VERIFY(deserializedTtl.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).IsSuccess());
-                ttlVersion.emplace(std::move(deserializedTtl));
-            }
-            if (!data.Versions.empty()) {
-                AFL_VERIFY(snapshot > data.Versions.rbegin()->first)("snapshot", snapshot)("last", data.Versions.rbegin()->first);
-            }
-            auto [it, inserted] = data.Versions.emplace(snapshot, ttlVersion);
-            AFL_VERIFY(inserted || it->second == ttlVersion)("snapshot", snapshot);
-            data.LastSettingsProto = versionInfo.GetTtlSettings();
+        if (!versionInfo.HasTtlSettings()) {
+            return;
         }
+        auto& data = Ttl[pathId];
+        std::optional<NOlap::TTiering> ttlVersion;
+        if (versionInfo.GetTtlSettings().HasEnabled()) {
+            NOlap::TTiering deserializedTtl;
+            AFL_VERIFY(deserializedTtl.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).IsSuccess());
+            ttlVersion.emplace(std::move(deserializedTtl));
+        }
+        if (!data.Versions.empty()) {
+            AFL_VERIFY(snapshot > data.Versions.rbegin()->first)("snapshot", snapshot)("last", data.Versions.rbegin()->first);
+        }
+        auto [it, inserted] = data.Versions.emplace(snapshot, ttlVersion);
+        AFL_VERIFY(inserted || it->second == ttlVersion)("snapshot", snapshot);
+        data.LastSettingsProto = versionInfo.GetTtlSettings();
     }
 
     std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlSettingsProto(const TInternalPathId pathId) const {

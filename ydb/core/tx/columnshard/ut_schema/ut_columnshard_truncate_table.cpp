@@ -601,11 +601,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
 
         // Step 2: Schema-only ALTER (ADD COLUMN) without TTL settings (carry-over).
+        // setTtlSettings=false means the proto has no TtlSettings field → carry-over.
         {
             auto schemaWithNewColumn = testTable.Schema;
             schemaWithNewColumn.push_back(NArrow::NTest::TTestColumn("new_column", NScheme::TTypeInfo(NScheme::NTypeIds::Int32)));
-            const auto alterBody = TTestSchema::AlterTableTxBody(
-                pathId, /*standalone=*/true, /*version=*/2, schemaWithNewColumn, testTable.Pk, TTestSchema::TTableSpecials{});
+            const auto alterBody = TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/2, schemaWithNewColumn, testTable.Pk,
+                TTestSchema::TTableSpecials{}, /*setTtlSettings=*/false);
             auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
             PlanSchemaTx(runtime, sender, { planStep, txId });
         }

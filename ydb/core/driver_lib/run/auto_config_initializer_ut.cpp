@@ -174,7 +174,7 @@ Y_UNIT_TEST(ClearsExecutorPoolReferenceLists) {
     config.AddBlobStorageExecutor(2);
     config.AddInterconnectSessionExecutor(3);
 
-    ApplyAutoConfig(&config, false);
+    ApplyAutoConfig(&config, false, false);
 
     UNIT_ASSERT_VALUES_EQUAL(config.BlobStorageExecutorSize(), 0);
     UNIT_ASSERT_VALUES_EQUAL(config.InterconnectSessionExecutorSize(), 0);

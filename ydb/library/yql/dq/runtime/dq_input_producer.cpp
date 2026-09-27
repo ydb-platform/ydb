@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_input_ready.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -15,6 +16,8 @@
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+
+#include <deque>
 
 namespace NYql::NDq {
 
@@ -64,6 +67,7 @@ public:
                 Y_ENSURE(false, "Unknown IDqInput type");
             }
         }
+        BindReadySet();
     }
 
 private:
@@ -156,9 +160,88 @@ private:
     }
 
 private:
+    // The inputs which opt in to TDqInputReadySet are taken out of Inputs, to be visited when marked
+    void BindReadySet() {
+        if (Inputs.empty()) {
+            return;
+        }
+        auto readySet = std::make_shared<TDqInputReadySet>(Inputs.size());
+        TVector<IDqInput::TPtr> polled;
+        TVector<TPartitionKey> polledKeys;
+        for (size_t i = 0; i < Inputs.size(); ++i) {
+            if (Inputs[i]->BindReadySet(readySet, NotifiedInputs.size())) {
+                NotifiedInputs.push_back(Inputs[i]);
+                NotifiedKeys.push_back(InputKeys[i]);
+            } else {
+                polled.push_back(Inputs[i]);
+                polledKeys.push_back(InputKeys[i]);
+            }
+        }
+        if (NotifiedInputs.empty()) {
+            return;
+        }
+        ReadySet = std::move(readySet);
+        SlotStates.assign(NotifiedInputs.size(), ESlotState::Idle);
+        NotifiedAlive = NotifiedInputs.size();
+        Inputs = std::move(polled);
+        InputKeys = std::move(polledKeys);
+        Alive = Inputs.size();
+    }
+
     NUdf::EFetchStatus FindBuffer() {
         Batch.clear();
 
+        // the two kinds of inputs take turns to go first, so that busy notified inputs do not starve polled ones
+        PolledFirst = !PolledFirst;
+        if (PolledFirst ? (FindPolled() || FindNotified()) : (FindNotified() || FindPolled())) {
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        return Alive + NotifiedAlive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+    }
+
+    // Visits the marked inputs, and those which had data the last time, as they may have more. An input leaves
+    // the Ready queue only once it has been found empty, which asks it to wake the consumer up on its next push.
+    bool FindNotified() {
+        if (!ReadySet) {
+            return false;
+        }
+
+        Taken.clear();
+        ReadySet->Take(Taken);
+        for (auto slot : Taken) {
+            if (SlotStates[slot] == ESlotState::Idle) {
+                SlotStates[slot] = ESlotState::Ready;
+                Ready.push_back(slot);
+            }
+        }
+
+        for (auto count = Ready.size(); count > 0; --count) {
+            auto slot = Ready.front();
+            Ready.pop_front();
+            // cleared before the input is looked at, see TDqInputReadySet
+            ReadySet->Clear(slot);
+            auto& input = NotifiedInputs[slot];
+            if (input->Pop(Batch, Watermark)) {
+                Ready.push_back(slot);
+                InputKey = NotifiedKeys[slot];
+                return true;
+            }
+            if (input->IsFinished()) {
+                if (WatermarksEnabled()) {
+                    WatermarksTracker->UnregisterInput(NotifiedKeys[slot].InputId, NotifiedKeys[slot].IsChannel, /*silent=*/true);
+                }
+                SlotStates[slot] = ESlotState::Finished;
+                --NotifiedAlive;
+            } else {
+                SlotStates[slot] = ESlotState::Idle;
+            }
+        }
+
+        return false;
+    }
+
+    bool FindPolled() {
         auto startIndex = Index++;
         size_t i = 0;
 
@@ -167,7 +250,7 @@ private:
             auto& input = Inputs[currentIndex];
             if (input->Pop(Batch, Watermark)) {
                 InputKey = InputKeys[currentIndex];
-                return NUdf::EFetchStatus::Ok;
+                return true;
             }
             if (input->IsFinished()) {
                 if (WatermarksEnabled()) {
@@ -182,7 +265,7 @@ private:
             }
         }
 
-        return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+        return false;
     }
 
     [[nodiscard]] bool WatermarksEnabled() const {
@@ -206,6 +289,7 @@ private:
     }
 
 private:
+    // polled round robin: the inputs which do not support TDqInputReadySet
     TVector<IDqInput::TPtr> Inputs;
     TVector<TPartitionKey> InputKeys;
 
@@ -221,6 +305,21 @@ private:
 
     NKikimr::NMiniKQL::TWatermark* WatermarkStorage;
     TDqComputeActorWatermarks* WatermarksTracker;
+
+    // visited when marked: the inputs bound to ReadySet, a slot each
+    enum class ESlotState : ui8 {
+        Idle,       // found empty, waits for a mark
+        Ready,      // in Ready
+        Finished,
+    };
+    std::shared_ptr<TDqInputReadySet> ReadySet;
+    TVector<IDqInput::TPtr> NotifiedInputs;
+    TVector<TPartitionKey> NotifiedKeys;
+    std::vector<ESlotState> SlotStates;
+    std::deque<ui32> Ready;
+    std::vector<ui32> Taken;
+    size_t NotifiedAlive = 0;
+    bool PolledFirst = false;
 };
 
 template<bool IsWide>

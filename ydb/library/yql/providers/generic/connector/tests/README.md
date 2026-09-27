@@ -21,5 +21,5 @@ The basic scenario typically should imply the following steps:
 * `join` contains tests checking cross-datasource scenarios.
 * `utils` contains building blocks for tests:
     * `utils/clients` stores code performing network IO;
-    * `utils/scenario` describes the typical scenarios of the data source usage (e. g. creating table, fullfilling it with test data etc.);
+    * `utils/scenario` describes the typical scenarios of the data source usage (e. g. creating table, filling it with test data etc.);
     * `utils/types` describes the external data source's type system.

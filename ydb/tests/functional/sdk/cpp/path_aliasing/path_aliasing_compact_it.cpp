@@ -215,27 +215,46 @@ namespace NYdb::inline Dev::NPathAliasingTests {
             }
         }
 
-        TEST_F(TPathAliasing, NativeViewPathIsRewrittenButSqlTextIsNot) {
+        TEST_F(TPathAliasing, SqlTableAndStoredViewPathsAreRewritten) {
             NTable::TTableClient table(*Alias);
-            auto session = GetSession(table);
-            Check(Await(session.CreateTable(A("table"), TableDescription())));
-            Check(Await(table.BulkUpsert(A("table"), Row(1, "/kfront/literal"))));
-
             NQuery::TQueryClient canonicalQuery(*Canonical);
             Check(Await(canonicalQuery.ExecuteQuery(
-                "CREATE VIEW `" + P("view") + "` WITH (security_invoker = TRUE) AS " + Select(P("table")),
+                "CREATE TABLE `" + A("table") + "` (key Uint64, value Utf8, PRIMARY KEY (key));",
+                NQuery::TTxControl::NoTx())));
+            Check(Await(table.BulkUpsert(A("table"), Row(1, "/kfront/literal"))));
+
+            Check(Await(canonicalQuery.ExecuteQuery(
+                "CREATE VIEW `" + A("view") + "` WITH (security_invoker = TRUE) AS " + Select(A("table")),
                 NQuery::TTxControl::NoTx())));
 
             NView::TViewClient views(*Alias);
             Check(Await(views.DescribeView(A("view"))));
             NQuery::TQueryClient aliasQuery(*Alias);
-            EXPECT_FALSE(Await(aliasQuery.ExecuteQuery(
-                                   Select(A("table")), NQuery::TTxControl::BeginTx().CommitTx()))
-                             .IsSuccess());
-            auto result = Await(aliasQuery.ExecuteQuery(
-                Select(P("view")), NQuery::TTxControl::BeginTx().CommitTx()));
-            Check(result);
-            ExpectRow(result.GetResultSet(0), 1, "/kfront/literal");
+            for (const auto& path : {A("table"), A("view"), P("view"), A("view")}) {
+                auto result = Await(aliasQuery.ExecuteQuery(
+                    Select(path), NQuery::TTxControl::BeginTx().CommitTx()));
+                Check(result);
+                ExpectRow(result.GetResultSet(0), 1, "/kfront/literal");
+            }
+
+            auto prefixed = Await(aliasQuery.ExecuteQuery(
+                "PRAGMA TablePathPrefix = '" + A() + "'; " + Select("table"),
+                NQuery::TTxControl::BeginTx().CommitTx()));
+            Check(prefixed);
+            ExpectRow(prefixed.GetResultSet(0), 1, "/kfront/literal");
+        }
+
+        TEST_F(TPathAliasing, SqlRenameTargetIsRewritten) {
+            NQuery::TQueryClient query(*Canonical);
+            Check(Await(query.ExecuteQuery(
+                "CREATE TABLE `" + A("old") + "` (key Uint64, PRIMARY KEY (key));",
+                NQuery::TTxControl::NoTx())));
+            Check(Await(query.ExecuteQuery(
+                "ALTER TABLE `" + A("old") + "` RENAME TO `" + A("new") + "`;",
+                NQuery::TTxControl::NoTx())));
+
+            NScheme::TSchemeClient scheme(*Canonical);
+            Check(Await(scheme.DescribePath(P("new"))));
         }
 
         TEST_F(TPathAliasing, CoordinationAndRateLimiterOnlyRewriteNodePaths) {

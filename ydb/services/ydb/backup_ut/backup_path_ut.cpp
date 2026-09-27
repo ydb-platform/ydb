@@ -21,6 +21,7 @@ class TPathAliasExplicitExportFixture : public TFsBackupTestFixture {
 public:
     TPathAliasExplicitExportFixture() {
         AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
+        Table0Path = "/export-alias";
         auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
         alias->SetSrc("/export-alias");
         alias->SetDst("/Root/RecursiveFolderProcessing/Table0");

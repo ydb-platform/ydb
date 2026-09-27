@@ -1,4 +1,5 @@
 #include "rewrite_io_utils.h"
+#include "sql_path_aliases.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -25,7 +26,9 @@ TExprNode::TPtr CompileViewQuery(
     TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
     IModuleResolver::TPtr moduleResolver,
-    const TViewPersistedData& viewData
+    const TViewPersistedData& viewData,
+    TStringBuf localCluster,
+    const std::function<TString(TStringBuf)>& normalizePath
 ) {
     auto translationSettings = settingsBuilder.Build(ctx);
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
@@ -54,6 +57,10 @@ TExprNode::TPtr CompileViewQuery(
 
     TExprNode::TPtr queryGraph;
     if (!CompileExpr(*queryAst.Root, queryGraph, ctx, moduleResolver.get(), nullptr)) {
+        return nullptr;
+    }
+
+    if (!RewriteSqlPathAliases(queryGraph, ctx, localCluster, normalizePath)) {
         return nullptr;
     }
 
@@ -134,7 +141,9 @@ TExprNode::TPtr RewriteReadFromView(
     TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
     IModuleResolver::TPtr moduleResolver,
-    const TViewPersistedData& viewData
+    const TViewPersistedData& viewData,
+    TStringBuf localCluster,
+    const std::function<TString(TStringBuf)>& normalizePath
 ) {
     YQL_PROFILE_FUNC(DEBUG);
 
@@ -143,7 +152,7 @@ TExprNode::TPtr RewriteReadFromView(
 
     TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode.Ptr());
     if (!queryGraph) {
-        queryGraph = CompileViewQuery(ctx, settingsBuilder, moduleResolver, viewData);
+        queryGraph = CompileViewQuery(ctx, settingsBuilder, moduleResolver, viewData, localCluster, normalizePath);
         if (!queryGraph) {
             ctx.AddError(TIssue(ctx.GetPosition(readNode.Pos()),
                          "The query stored in the view cannot be compiled."));

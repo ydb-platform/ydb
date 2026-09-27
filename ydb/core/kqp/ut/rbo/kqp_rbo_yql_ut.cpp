@@ -1536,6 +1536,23 @@ FROM (
         UNIT_ASSERT_C(!FindConnectionNode(simplifiedConnectionPlan, "Map"), connectionPlan);
     }
 
+    Y_UNIT_TEST(ExplainMultipleSelect) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            SELECT 1 as x; SELECT 2 as y;
+        )");
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMultipleSelect) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplainAnalyze(session, R"(
+            --SELECT 1 as x; SELECT 2 as y;
+            SELECT * from `/Root/t1`; SELECT * from `/Root/t1`;
+        )");
+    }
+
     Y_UNIT_TEST(Explain) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

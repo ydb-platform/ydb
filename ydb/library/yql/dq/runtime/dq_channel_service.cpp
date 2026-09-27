@@ -2697,6 +2697,13 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
 
     TDataChunk chunk;
     bool popResult = Buffer->Pop(chunk);
+    if (PopsCounter) { // bound, the stub before tells nothing
+        if (popResult) {
+            Pops++;
+        } else {
+            EmptyPops++;
+        }
+    }
     PushStats.PopTime = TInstant::Now();
     PushStats.PopResult = popResult;
 
@@ -2753,6 +2760,8 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     Buffer->Info.InputActorId = inputActorId;
     auto buffer = service->GetInputBuffer(Buffer->Info, ChannelQuotaManager);
     Buffer = buffer;
+    PopsCounter = IsLocalChannel ? service->InputChannelLocalPops : service->InputChannelRemotePops;
+    EmptyPopsCounter = IsLocalChannel ? service->InputChannelLocalEmptyPops : service->InputChannelRemoteEmptyPops;
     Service.reset();
 }
 

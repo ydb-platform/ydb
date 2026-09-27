@@ -966,6 +966,10 @@ public:
         LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters,
             Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10, Limits.LocalChannelColdInflightBytes,
             Limits.EnableSpillingChannelBackpressure);
+        InputChannelLocalPops = counters->GetCounter("InputChannel/LocalPops", true);
+        InputChannelLocalEmptyPops = counters->GetCounter("InputChannel/LocalEmptyPops", true);
+        InputChannelRemotePops = counters->GetCounter("InputChannel/RemotePops", true);
+        InputChannelRemoteEmptyPops = counters->GetCounter("InputChannel/RemoteEmptyPops", true);
     }
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
@@ -1002,6 +1006,12 @@ public:
     mutable std::mutex Mutex;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<bool> CleanupScheduled = false;
+    // The pops of the input channels, which each channel counts and adds here when it goes. A consumer polls every
+    // input of a union until one has data: the empty pops per chunk tell how many it looks at for nothing
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputChannelLocalPops;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputChannelLocalEmptyPops;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputChannelRemotePops;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputChannelRemoteEmptyPops;
 };
 
 class TFastDqOutputChannel : public IDqOutputChannel {
@@ -1160,6 +1170,13 @@ public:
         Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.DatumValidationMode, settings.BufferPageAllocSize, *settings.HolderFactory);
     }
 
+    ~TFastDqInputChannel() {
+        if (PopsCounter) {
+            *PopsCounter += Pops;
+            *EmptyPopsCounter += EmptyPops;
+        }
+    }
+
     mutable TDqInputStats PopStats;
     mutable TDqInputChannelStats PushStats;
 
@@ -1251,6 +1268,12 @@ public:
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
     IDqInputChannelCallbacks* Callback = nullptr;
     bool PausedByCheckpoint = false;
+    // counted here, by the consumer only, and added to the node counters when the channel goes: a shared counter
+    // written on every pop would cost more than the pop itself
+    ui64 Pops = 0;
+    ui64 EmptyPops = 0;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PopsCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmptyPopsCounter;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

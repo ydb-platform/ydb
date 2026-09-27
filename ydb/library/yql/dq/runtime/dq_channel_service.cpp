@@ -2704,7 +2704,11 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
             EmptyPops++;
         }
     }
-    PushStats.PopTime = TInstant::Now();
+    // a consumer polls its inputs mostly to find them empty: the time is taken for a pop with data and for the 1st
+    // empty one after it, so that PopTime tells since when an input has been dry without a clock read per poll
+    if (popResult || PushStats.PopResult) {
+        PushStats.PopTime = TInstant::Now();
+    }
     PushStats.PopResult = popResult;
 
     if (popResult && chunk.Checkpoint) {

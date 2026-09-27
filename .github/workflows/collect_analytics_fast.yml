@@ -7,6 +7,10 @@ on:
       commit_sha:
         type: string
         default: ""
+      workflow:
+        description: "GitHub job metrics: all or a workflow file (pr_check.yml, run_tests.yml, ...)"
+        type: string
+        default: "all"
         
 defaults:
   run:
@@ -27,7 +31,7 @@ jobs:
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
       run: |
-        python3 -m pip install ydb ydb[yc] codeowners pandas
+        python3 -m pip install ydb ydb[yc] codeowners pandas requests
     - name: Collect testowners
       continue-on-error: true
       run: python3 .github/scripts/analytics/upload_testowners.py
@@ -53,6 +57,12 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
       run: python3 .github/scripts/analytics/export_pull_requests_to_ydb.py
+    - name: Export GitHub job metrics
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CI_METRICS_WORKFLOW: ${{ github.event_name == 'workflow_dispatch' && inputs.workflow || 'all' }}
+      continue-on-error: true
+      run: python3 .github/scripts/utils/analytics/export_github_job_metrics.py --hours 2
     - name: Upload GitHub issue mapping table
       continue-on-error: true
       run: python3 .github/scripts/analytics/github_issue_mapping.py

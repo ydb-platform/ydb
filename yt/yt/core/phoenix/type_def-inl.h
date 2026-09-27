@@ -11,8 +11,6 @@
 #include "type_decl.h"
 #include "type_registry.h"
 
-#include <yt/yt/core/concurrency/fls.h>
-
 #include <library/cpp/yt/misc/static_initializer.h>
 
 #include <concepts>
@@ -131,6 +129,12 @@ struct TTraits
 
 template <class TThis>
 using TVersionFilter = bool (*)(typename TTraits<TThis>::TVersion version);
+
+template <class TVersion>
+constexpr TVersion GetPreviousVersion(TVersion version)
+{
+    return static_cast<TVersion>(static_cast<i64>(version) - 1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -346,7 +350,7 @@ public:
         : This_(other.This_)
         , Context_(other.Context_)
         , VersionFilter_(other.VersionFilter_)
-        , BeforeVersion_(other.BeforeVersion_)
+        , MaxVersion_(other.MaxVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -356,7 +360,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TFieldSaveRegistrar(std::move(*this));
     }
 
@@ -379,7 +383,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             TFieldSerializer::Save(Context_, This_->*Member);
         }
     }
@@ -392,7 +396,8 @@ private:
     TContext& Context_;
 
     TVersionFilter<TThis> VersionFilter_ = nullptr;
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
@@ -415,7 +420,7 @@ public:
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
         , VersionFilter_(other.VersionFilter_)
-        , BeforeVersion_(other.BeforeVersion_)
+        , MaxVersion_(other.MaxVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -425,7 +430,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
@@ -442,7 +447,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             SaveHandler_(This_, Context_);
         }
     }
@@ -453,7 +458,8 @@ private:
     const TFieldSaveHandler<TThis, TContext> SaveHandler_;
 
     TVersionFilter<TThis> VersionFilter_ = nullptr;
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
@@ -536,7 +542,7 @@ public:
     TFieldLoadRegistrar(
         TThis* this_,
         TContext& context,
-        TStringBuf name)
+        const char* name)
         : This_(this_)
         , Context_(context)
         , Name_(name)
@@ -548,7 +554,7 @@ public:
         , Context_(other.Context_)
         , Name_(other.Name_)
         , MinVersion_(other.MinVersion_)
-        , BeforeVersion_(other.BeforeVersion_)
+        , MaxVersion_(other.MaxVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -563,7 +569,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TFieldLoadRegistrar(std::move(*this));
     }
 
@@ -587,7 +593,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             TFieldSerializer::Load(Context_, This_->*Member);
         } else if (MissingHandler_) {
@@ -606,10 +612,11 @@ private:
 
     TThis* const This_;
     TContext& Context_;
-    const TStringBuf Name_;
+    const char* const Name_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter<TThis> VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -621,7 +628,7 @@ public:
     TVirtualFieldLoadRegistrar(
         TThis* this_,
         TContext& context,
-        TStringBuf name,
+        const char* name,
         TFieldLoadHandler<TThis, TContext> loadHandler)
         : This_(this_)
         , Context_(context)
@@ -629,13 +636,13 @@ public:
         , LoadHandler_(loadHandler)
     { }
 
-    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other) noexcept
+    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)
         , LoadHandler_(other.LoadHandler_)
         , MinVersion_(other.MinVersion_)
-        , BeforeVersion_(other.BeforeVersion_)
+        , MaxVersion_(other.MaxVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -650,7 +657,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TVirtualFieldLoadRegistrar(std::move(*this));
     }
 
@@ -670,7 +677,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             LoadHandler_(This_, Context_);
         } else if (MissingHandler_) {
@@ -681,11 +688,12 @@ public:
 private:
     TThis* const This_;
     TContext& Context_;
-    const TStringBuf Name_;
+    const char* const Name_;
     const TFieldLoadHandler<TThis, TContext> LoadHandler_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -700,30 +708,30 @@ public:
         , Context_(context)
     { }
 
-    template <TFieldTag::TUnderlying TagValue, auto Member, size_t NameLength>
-    auto Field(const char (&name)[NameLength])
+    template <TFieldTag::TUnderlying TagValue, auto Member>
+    auto Field(const char* name)
     {
         return TFieldLoadRegistrar<Member, TThis, TContext, TDefaultSerializer>(
             This_,
             Context_,
-            TStringBuf(name, NameLength - 1));
+            name);
     }
 
-    template <TFieldTag::TUnderlying TagValue, size_t NameLength>
+    template <TFieldTag::TUnderlying TagValue>
     auto VirtualField(
-        const char (&name)[NameLength],
+        const char* name,
         TFieldLoadHandler<TThis, TContext> loadHandler)
     {
         return TVirtualFieldLoadRegistrar<TThis, TContext>(
             This_,
             Context_,
-            TStringBuf(name, NameLength - 1),
+            name,
             loadHandler);
     }
 
-    template <TFieldTag::TUnderlying TagValue, size_t NameLength>
+    template <TFieldTag::TUnderlying TagValue>
     auto VirtualField(
-        const char (&name)[NameLength],
+        const char* name,
         TFieldLoadHandler<TThis, TContext> loadHandler,
         auto&& /*saveHandler*/)
     {
@@ -761,15 +769,19 @@ template <class TThis, class TContext>
 struct TRuntimeTypeLoadSchedule;
 
 template <class TThis, class TContext>
-const TRuntimeTypeLoadSchedule<TThis, TContext>* FindCachedRuntimeTypeLoadSchedule();
+const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule(TContext& context);
 
-void CompatLoadImpl(auto* this_, auto& context, const auto& schedule);
+Y_NO_INLINE void CompatLoadImpl(auto* this_, auto& context, const auto& schedule);
 
 template <class TThis, class TContext>
 void LoadImpl(TThis* this_, TContext& context)
 {
+    static_assert(
+        std::derived_from<TContext, TLoadContext>,
+        "Phoenix types must be loaded via NPhoenix::TLoadContext or its descendants");
+
     RunRegistrar<TThis>(TLoadBaseTypesRegistrar(this_, context));
-    if (const auto* runtimeSchedule = FindCachedRuntimeTypeLoadSchedule<TThis, TContext>()) {
+    if (const auto* runtimeSchedule = FindRuntimeTypeLoadSchedule<TThis>(context)) [[unlikely]] {
         CompatLoadImpl(this_, context, *runtimeSchedule);
     } else {
         RunRegistrar<TThis>(TLoadFieldsRegistrar<TThis, TContext>(this_, context));
@@ -977,8 +989,6 @@ auto BuildRuntimeFieldDescriptorMap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TLoadEpoch, ui64);
-
 struct TTypeLoadSchedule
 {
     std::vector<TFieldTag> LoadFieldTags;
@@ -990,16 +1000,6 @@ struct TRuntimeTypeLoadScheduleBase
     virtual ~TRuntimeTypeLoadScheduleBase() = default;
 };
 
-struct TUniverseLoadSchedule
-{
-    const TTypeLoadSchedule* FindTypeLoadSchedule(TTypeTag tag);
-    THashMap<TTypeTag, TTypeLoadSchedule> LoadScheduleMap;
-
-    template <class TThis, class TContext>
-    const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule();
-    THashMap<std::tuple<std::type_index, std::type_index>, std::unique_ptr<TRuntimeTypeLoadScheduleBase>> RuntimeLoadScheduleMap;
-};
-
 template <class TThis, class TContext>
 struct TRuntimeTypeLoadSchedule
     : public TRuntimeTypeLoadScheduleBase
@@ -1008,14 +1008,35 @@ struct TRuntimeTypeLoadSchedule
     std::vector<TFieldMissingHandler<TThis, TContext>> MissingFieldHandlers;
 };
 
-struct TUniverseLoadState
+int AllocateRuntimeTypeLoadScheduleIndex();
+
+template <class TThis, class TContext>
+int GetRuntimeTypeLoadScheduleIndex()
 {
-    bool Active = false;
-    TLoadEpoch Epoch = {};
-    std::unique_ptr<TUniverseLoadSchedule> Schedule;
+    static const int Index = AllocateRuntimeTypeLoadScheduleIndex();
+    return Index;
+}
+
+struct TUniverseLoadSchedule
+{
+    struct TRuntimeTypeLoadScheduleSlot
+    {
+        bool Initialized = false;
+        std::unique_ptr<TRuntimeTypeLoadScheduleBase> Schedule;
+    };
+
+    THashMap<TTypeTag, TTypeLoadSchedule> LoadScheduleMap;
+    //! Indexed by #GetRuntimeTypeLoadScheduleIndex.
+    std::vector<TRuntimeTypeLoadScheduleSlot> RuntimeTypeLoadScheduleSlots;
+
+    const TTypeLoadSchedule* FindTypeLoadSchedule(TTypeTag tag);
+
+    template <class TThis, class TContext>
+    const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule();
 };
 
-extern NConcurrency::TFlsSlot<TUniverseLoadState> UniverseLoadState;
+//! Returns null if no type needs compat loading.
+std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniverseSchemaPtr& loadUniverseSchema);
 
 template <class TThis, class TContext>
 std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadSchedule(const TTypeLoadSchedule* schedule)
@@ -1042,50 +1063,37 @@ std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadS
 template <class TThis, class TContext>
 const TRuntimeTypeLoadSchedule<TThis, TContext>* TUniverseLoadSchedule::FindRuntimeTypeLoadSchedule()
 {
-    auto runtimeKey = std::tuple(std::type_index(typeid(TThis)), std::type_index(typeid(TContext)));
-    auto it = RuntimeLoadScheduleMap.find(runtimeKey);
-    if (it != RuntimeLoadScheduleMap.end()) {
-        return static_cast<TRuntimeTypeLoadSchedule<TThis, TContext>*>(it->second.get());
+    auto index = GetRuntimeTypeLoadScheduleIndex<TThis, TContext>();
+    if (index >= std::ssize(RuntimeTypeLoadScheduleSlots)) {
+        RuntimeTypeLoadScheduleSlots.resize(index + 1);
     }
 
-    auto* schedule = FindTypeLoadSchedule(TThis::TypeTag);
-    auto runtimeSchedule = BuildRuntimeTypeLoadSchedule<TThis, TContext>(schedule);
-    auto* runtimeSchedulePtr = runtimeSchedule.get();
-    EmplaceOrCrash(RuntimeLoadScheduleMap, runtimeKey, std::move(runtimeSchedule));
-    return runtimeSchedulePtr;
+    auto& slot = RuntimeTypeLoadScheduleSlots[index];
+    if (!slot.Initialized) {
+        slot.Schedule = BuildRuntimeTypeLoadSchedule<TThis, TContext>(FindTypeLoadSchedule(TThis::TypeTag));
+        slot.Initialized = true;
+    }
+
+    return static_cast<const TRuntimeTypeLoadSchedule<TThis, TContext>*>(slot.Schedule.get());
 }
 
 template <class TThis, class TContext>
-const TRuntimeTypeLoadSchedule<TThis, TContext>* FindCachedRuntimeTypeLoadSchedule()
+const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule(TContext& context)
 {
-    auto& universeLoadState = *UniverseLoadState;
-    if (!universeLoadState.Schedule) {
+    auto* schedule = context.GetLoadSchedule();
+    if (!schedule) [[likely]] {
         return nullptr;
     }
 
-    struct TTypeLoadState
-    {
-        TLoadEpoch Epoch;
-        const TRuntimeTypeLoadSchedule<TThis, TContext>* RuntimeSchedule;
-    };
-
-    static NConcurrency::TFlsSlot<TTypeLoadState> TypeLoadState;
-    auto& typeLoadState = *TypeLoadState;
-
-    if (typeLoadState.Epoch != universeLoadState.Epoch) {
-        typeLoadState.Epoch = universeLoadState.Epoch;
-        typeLoadState.RuntimeSchedule = universeLoadState.Schedule->FindRuntimeTypeLoadSchedule<TThis, TContext>();
-    }
-
-    return typeLoadState.RuntimeSchedule;
+    return schedule->template FindRuntimeTypeLoadSchedule<TThis, TContext>();
 }
 
-void CompatLoadImpl(auto* this_, auto& context, const auto& runtimeSchedule)
+Y_NO_INLINE void CompatLoadImpl(auto* this_, auto& context, const auto& runtimeSchedule)
 {
-    for (auto handler : runtimeSchedule.LoadFieldHandlers) {
+    for (const auto& handler : runtimeSchedule.LoadFieldHandlers) {
         handler(this_, context);
     }
-    for (auto handler : runtimeSchedule.MissingFieldHandlers) {
+    for (const auto& handler : runtimeSchedule.MissingFieldHandlers) {
         handler(this_, context);
     }
 }

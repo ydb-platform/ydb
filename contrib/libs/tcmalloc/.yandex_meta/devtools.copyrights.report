@@ -159,7 +159,7 @@ BELONGS ya.make
         tcmalloc/page_allocator_test.cc [1:1]
         tcmalloc/page_allocator_test_util.h [2:2]
         tcmalloc/pagemap.cc [1:1]
-        tcmalloc/pagemap.h [3:3]
+        tcmalloc/pagemap.h [2:2]
         tcmalloc/pagemap_test.cc [1:1]
         tcmalloc/pages.h [2:2]
         tcmalloc/parameters.cc [1:1]
@@ -348,9 +348,11 @@ BELONGS ya.make
         tcmalloc/sizemap.h [2:2]
         tcmalloc/sizemap_fuzz.cc [1:1]
         tcmalloc/span_fuzz.cc [1:1]
+        tcmalloc/want_disable_dense_trackers_sorted_on_spans_allocated.cc [1:1]
         tcmalloc/want_disable_dynamic_slabs.cc [1:1]
         tcmalloc/want_disable_huge_region_more_often.cc [1:1]
         tcmalloc/want_disable_tcmalloc_big_span.cc [1:1]
+        tcmalloc/want_disable_wider_slabs.cc [1:1]
         tcmalloc/want_legacy_size_classes.cc [1:1]
         tcmalloc/want_legacy_size_classes_test.cc [1:1]
     Belongs difference:
@@ -367,8 +369,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        tcmalloc/huge_region_test.cc [582:584]
-        tcmalloc/huge_region_test.cc [614:616]
+        tcmalloc/huge_region_test.cc [581:583]
+        tcmalloc/huge_region_test.cc [613:615]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d4c3b5c5d59dc3fc89f75c05560b08bd
 BELONGS ya.make
@@ -379,9 +381,9 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        tcmalloc/internal/gwp_asan_state.h [2:2]
         tcmalloc/internal/memory_tag.cc [1:1]
         tcmalloc/internal/memory_tag.h [2:2]
-        tcmalloc/internal/mismatched_delete_state.h [2:2]
         tcmalloc/internal/percpu_early_test.cc [1:1]
         tcmalloc/internal/percpu_test.cc [1:1]
         tcmalloc/internal/profile_builder_no_tcmalloc_test.cc [1:1]

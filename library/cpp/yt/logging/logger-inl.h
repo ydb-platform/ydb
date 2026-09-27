@@ -329,9 +329,17 @@ inline TLogEvent CreateLogEvent(
     return event;
 }
 
-void OnCriticalLogEvent(
+//! Renders #event, reports it and terminates the process.
+[[noreturn]] void AbortOnCriticalLogEvent(const TLogEvent& event);
+//! Logs #payload at |Fatal| level (unless #logger is null) and terminates the process.
+//! Logs #payload at |Fatal| level where possible, then terminates.
+//! Delivery may be skipped -- a logger with no log manager, say -- and skipping it must not
+//! turn a fatal into a return, so the caller terminates rather than the logging infrastructure.
+[[noreturn]] void LogFatalEventAndAbort(
+    const TLoggingContext& loggingContext,
     const TLogger& logger,
-    const TLogEvent& event);
+    ::TSourceLocation sourceLocation,
+    TTaggedLogEventPayload payload);
 
 inline void LogEventImpl(
     const TLoggingContext& loggingContext,
@@ -359,7 +367,11 @@ inline void LogEventImpl(
     };
     if (Y_UNLIKELY(event.Level >= ELogLevel::Alert)) {
         logger.Write(TLogEvent(event));
-        OnCriticalLogEvent(logger, event);
+        if (event.Level == ELogLevel::Fatal ||
+            (event.Level == ELogLevel::Alert && logger.GetAbortOnAlert()))
+        {
+            AbortOnCriticalLogEvent(event);
+        }
     } else {
         logger.Write(std::move(event));
     }
@@ -614,11 +626,9 @@ public:
         : TTaggedLoggingGuard(logger, ELogLevel::Fatal, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
-    //! Emits the event at |Fatal| level; the log manager aborts the process.
     [[noreturn]] void Commit() &
     {
-        Emit(ELogLevel::Fatal, Writer_.Finish());
-        Y_UNREACHABLE();
+        LogFatalEventAndAbort(LoggingContext_, Logger_, SourceLocation_, Writer_.Finish());
     }
 };
 

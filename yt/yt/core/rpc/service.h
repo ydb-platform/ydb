@@ -190,6 +190,9 @@ struct IServiceContext
     //! Returns the stream of asynchronous response attachments.
     virtual NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() = 0;
 
+    //! Returns the statistics of the response attachments stream or null if the stream has not been created.
+    virtual std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() = 0;
+
     //! Returns immutable request header.
     virtual const NProto::TRequestHeader& RequestHeader() const = 0;
 

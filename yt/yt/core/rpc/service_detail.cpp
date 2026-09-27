@@ -687,6 +687,20 @@ public:
         return ResponseAttachmentsStream_;
     }
 
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override
+    {
+        TAttachmentsOutputStreamPtr stream;
+        {
+            auto guard = Guard(StreamsLock_);
+            stream = ResponseAttachmentsStream_;
+        }
+
+        if (!stream) {
+            return std::nullopt;
+        }
+        return stream->GetStatistics();
+    }
+
     void HandleStreamingPayload(const TStreamingPayload& payload)
     {
         if (!RuntimeInfo_->Descriptor.StreamingEnabled) {

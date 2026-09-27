@@ -134,7 +134,7 @@ bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf
             return result;
         }, ctx, settings);
 
-    if (status != IGraphTransformer::TStatus::Ok) {
+    if (status == IGraphTransformer::TStatus::Error) {
         return false;
     }
     query = std::move(output);

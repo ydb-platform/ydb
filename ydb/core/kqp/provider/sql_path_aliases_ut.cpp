@@ -9,15 +9,19 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <google/protobuf/arena.h>
+
 namespace NYql {
 namespace {
 
 TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false) {
+    google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
     settings.DefaultCluster = "plato";
     settings.ClusterMapping = {{"plato", TString(KikimrProviderName)}};
     settings.SyntaxVersion = 1;
     settings.Mode = NSQLTranslation::ESqlMode::QUERY;
+    settings.Arena = &arena;
     settings.PathPrefix = TString(pathPrefix);
     if (dynamicCluster) {
         settings.DynamicClusterProvider = TString(KikimrProviderName);

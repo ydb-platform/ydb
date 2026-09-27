@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yt/core/rpc/service.h>
+#include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/bus/bus.h>
 
@@ -269,6 +270,12 @@ public:
     MOCK_METHOD(
         NConcurrency::IAsyncZeroCopyOutputStreamPtr,
         GetResponseAttachmentsStream,
+        (),
+        (override));
+
+    MOCK_METHOD(
+        std::optional<TAttachmentsOutputStreamStatistics>,
+        GetResponseAttachmentsStreamStatistics,
         (),
         (override));
 

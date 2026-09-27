@@ -51,6 +51,20 @@ void TCrashOnDeserializationErrorGuard::OnError()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+void ThrowPrematureEndOfStream(size_t bytesLoaded, size_t bytesExpected)
+{
+    TCrashOnDeserializationErrorGuard::OnError();
+    THROW_ERROR_EXCEPTION("Premature end-of-stream")
+        .With("bytes_loaded", bytesLoaded)
+        .With("bytes_expected", bytesExpected);
+}
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSaveContextStream::TSaveContextStream(IOutputStream* output)
     : BufferedOutput_(output)
     , Output_(&*BufferedOutput_)

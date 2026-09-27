@@ -90,6 +90,8 @@ DECLARE_REFCOUNTED_CLASS(TCongestionController)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
 
+struct TAttachmentsOutputStreamStatistics;
+
 DECLARE_REFCOUNTED_STRUCT(IPeerPriorityProvider)
 DECLARE_REFCOUNTED_STRUCT(IMapPeerPriorityProvider)
 DECLARE_REFCOUNTED_STRUCT(IViablePeerRegistry)

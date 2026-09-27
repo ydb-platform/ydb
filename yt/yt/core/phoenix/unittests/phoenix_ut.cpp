@@ -3,7 +3,6 @@
 #include <yt/yt/core/ytree/serialize.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
-#include <yt/yt/core/phoenix/load.h>
 #include <yt/yt/core/phoenix/schemas.h>
 #include <yt/yt/core/phoenix/type_registry.h>
 #include <yt/yt/core/phoenix/type_decl.h>
@@ -51,11 +50,14 @@ std::string MakeBuffer(F&& func)
 }
 
 template <class T>
-T Deserialize(const std::string& buffer, int version = 0)
+T Deserialize(const std::string& buffer, int version = 0, const TUniverseSchemaPtr& schema = nullptr)
 {
     T value;
     TMemoryInput input(buffer);
     TLoadContext context(&input);
+    if (schema) {
+        context.SetSchema(schema);
+    }
     context.SetVersion(version);
     context.ConfigureDump(ESerializationDumpMode::Content);
     Load(context, value);
@@ -634,10 +636,9 @@ TEST(TPhoenixTest, CompatFieldSerializer)
             ];
         }
     )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(loadSchema));
 
-    auto s = Deserialize<S>(buffer);
+    auto s = Deserialize<S>(buffer, /*version*/ 0, loadSchema);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.B, 0);
 }
@@ -711,10 +712,9 @@ TEST(TPhoenixTest, AddFieldAfterDeletedField)
         }
     )""")));
 
-    TLoadSessionGuard guard(removeBSchema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(removeBSchema));
 
-    auto s = Deserialize<S>(buffer, RemoveB);
+    auto s = Deserialize<S>(buffer, RemoveB, removeBSchema);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.C, 777);
 }
@@ -775,10 +775,9 @@ TEST(TPhoenixTest, CompatLoadPointFieldAdded)
         Save<int>(context, 123);
     });
 
-    TLoadSessionGuard guard(Schema);
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(Schema));
 
-    auto p = Deserialize<TPoint>(buffer);
+    auto p = Deserialize<TPoint>(buffer, /*version*/ 0, Schema);
     EXPECT_EQ(p.GetX(), 0);
     EXPECT_EQ(p.GetY(), 123);
 }
@@ -796,10 +795,9 @@ TEST(TPhoenixTest, CompatLoadPointsFieldAdded)
         }
     });
 
-    TLoadSessionGuard guard(ConvertTo<TUniverseSchemaPtr>(Schema));
-    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_TRUE(NDetail::ComputeUniverseLoadSchedule(Schema));
 
-    auto points = Deserialize<std::vector<TPoint>>(buffer);
+    auto points = Deserialize<std::vector<TPoint>>(buffer, /*version*/ 0, Schema);
     EXPECT_EQ(std::ssize(points), N);
     for (int i = 0; i < N; i++) {
         EXPECT_EQ(points[i].GetX(), 0);
@@ -811,9 +809,7 @@ TEST(TPhoenixTest, CompatLoadPointsFieldAdded)
 
 TEST(TPhoenixTest, NativeLoadWithIdenticalSchema)
 {
-    auto schema = ITypeRegistry::Get()->GetUniverseDescriptor().GetSchema();
-    TLoadSessionGuard guard(schema);
-    EXPECT_FALSE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_FALSE(NDetail::ComputeUniverseLoadSchedule(ITypeRegistry::Get()->GetUniverseDescriptor().GetSchema()));
 }
 
 TEST(TPhoenixTest, NativeLoadWithEquivalentSchema)
@@ -825,9 +821,7 @@ TEST(TPhoenixTest, NativeLoadWithEquivalentSchema)
         nameNode->SetValue("~" + nameNode->GetValue());
     }
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(schemaNode);
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_FALSE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_FALSE(NDetail::ComputeUniverseLoadSchedule(ConvertTo<TUniverseSchemaPtr>(schemaNode)));
 }
 
 TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
@@ -842,10 +836,9 @@ TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
             types = [];
         }
     )""")));
-    TLoadSessionGuard guard(loadSchema);
-    EXPECT_FALSE(NDetail::UniverseLoadState->Schedule);
+    EXPECT_FALSE(NDetail::ComputeUniverseLoadSchedule(loadSchema));
 
-    auto s = Deserialize<TDerivedStruct>(buffer);
+    auto s = Deserialize<TDerivedStruct>(buffer, /*version*/ 0, loadSchema);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.B, 456);
 }

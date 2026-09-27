@@ -8429,6 +8429,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     {
         proto->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
             alterData->TableDescriptionFull->GetVectorIndexKmeansTreeDescription());
+        proto->SetVectorIndexHnsw(alterData->TableDescriptionFull->GetVectorIndexHnsw());
         proto->SetVectorIndexEmbeddingColumn(
             alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumn());
         if (alterData->TableDescriptionFull->HasVectorIndexEmbeddingColumnId()) {
@@ -8543,7 +8544,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
         const auto indexIt = Indexes.find(pinfo->ParentPathId);
         if (indexIt != Indexes.end()
-                && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+                && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
                 && indexIt->second->State == NKikimrSchemeOp::EIndexStateReady
                 && !indexIt->second->IndexKeys.empty()) {
             const auto& index = *indexIt->second;
@@ -8554,6 +8555,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 }
                 tableDescr->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
                     std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription));
+                tableDescr->SetVectorIndexHnsw(true);
                 tableDescr->SetVectorIndexEmbeddingColumn(embedding);
                 tableDescr->SetVectorIndexEmbeddingColumnId(columnId);
                 const auto indexPath = PathsById.at(pinfo->ParentPathId);

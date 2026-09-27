@@ -150,7 +150,8 @@ protected:
             return false;
         }
         const auto& alter = schemeTx.GetAlterTable();
-        return alter.HasVectorIndexKmeansTreeDescription()
+        return alter.GetVectorIndexHnsw()
+            && alter.HasVectorIndexKmeansTreeDescription()
             && alter.HasVectorIndexEmbeddingColumnId();
     }
 

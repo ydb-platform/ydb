@@ -440,6 +440,7 @@ message TTableDescription {
     optional string VectorIndexTablePath = 60;
     optional NKikimrProto.TPathID VectorIndexPathId = 61;
     optional string VectorIndexPath = 62;
+    optional bool VectorIndexHnsw = 63;
 }
 
 message TCompressionOptions {
@@ -1352,6 +1353,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
     EIndexTypeLocalCountMinSketch = 14;
+    EIndexTypeGlobalDistributedHnsw = 15;
 }
 
 enum EIndexState {

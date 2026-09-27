@@ -333,7 +333,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
-    if (descr.HasVectorIndexKmeansTreeDescription() && descr.HasVectorIndexEmbeddingColumnId()) {
+    if (descr.GetVectorIndexHnsw()
+            && descr.HasVectorIndexKmeansTreeDescription()
+            && descr.HasVectorIndexEmbeddingColumnId()) {
         HnswSettings = descr.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
         HnswVectorColumnTag = descr.GetVectorIndexEmbeddingColumnId();
     }
@@ -749,6 +751,7 @@ void TUserTable::ApplyAlter(
     // tablets and split destinations reconstruct the same graph.
     if (delta.HasVectorIndexKmeansTreeDescription()) {
         schema.MutableVectorIndexKmeansTreeDescription()->CopyFrom(delta.GetVectorIndexKmeansTreeDescription());
+        schema.SetVectorIndexHnsw(delta.GetVectorIndexHnsw());
         schema.SetVectorIndexEmbeddingColumn(delta.GetVectorIndexEmbeddingColumn());
         schema.SetVectorIndexEmbeddingColumnId(delta.GetVectorIndexEmbeddingColumnId());
     }

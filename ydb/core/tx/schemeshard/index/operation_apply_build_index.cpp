@@ -57,6 +57,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
         TString unused;
         if (NKikimr::NKMeans::ValidateSettings(vectorDescription->GetSettings().settings(), unused)) {
             *operation->MutableVectorIndexKmeansTreeDescription() = *vectorDescription;
+            operation->SetVectorIndexHnsw(true);
             operation->SetVectorIndexEmbeddingColumn(embeddingColumn);
             const TPath mainTable = index.Parent();
             mainTable.Base()->PathId.ToProto(operation->MutableVectorIndexTablePathId());
@@ -193,13 +194,16 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
+        const auto indexInfoIt = context.SS->Indexes.find(index.Base()->PathId);
+        const bool distributedHnsw = indexInfoIt != context.SS->Indexes.end()
+            && indexInfoIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw;
 
         // The embedding column keeps its original base table name. Recover it
         // from the active build when available, or from the persistent index
         // schema once the transient build record has been removed. Both the
         // name and settings are needed for the eager posting-table HNSW build.
         TString embeddingColumn;
-        if (config.HasVectorIndexKmeansTreeDescription()) {
+        if (distributedHnsw && config.HasVectorIndexKmeansTreeDescription()) {
             // KMeans tree index keys are defined as [prefix..., embedding].
             // Keep this extraction under the vector-index type guard so a
             // future index layout cannot accidentally reuse the convention.
@@ -247,7 +251,8 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 // Only the posting table holds the vectors that get indexed.
                 const bool isPostingTable = (indexImplTableName == NTableIndex::NKMeans::PostingTable);
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(),
-                    isPostingTable && config.HasVectorIndexKmeansTreeDescription() ? &config.GetVectorIndexKmeansTreeDescription() : nullptr,
+                    isPostingTable && distributedHnsw && config.HasVectorIndexKmeansTreeDescription()
+                        ? &config.GetVectorIndexKmeansTreeDescription() : nullptr,
                     isPostingTable ? embeddingColumn : TString{}));
             }
         }

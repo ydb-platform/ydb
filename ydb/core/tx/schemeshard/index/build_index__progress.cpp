@@ -1024,7 +1024,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    if (buildInfo.IsBuildVectorIndex() && buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+    if (buildInfo.IsBuildVectorIndex()
+            && (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+                || buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw)) {
         if (auto* desc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&buildInfo.SpecializedIndexDescription)) {
             *indexBuild.MutableVectorIndexKmeansTreeDescription() = *desc;
         }

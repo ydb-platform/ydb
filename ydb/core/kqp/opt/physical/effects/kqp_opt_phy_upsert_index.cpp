@@ -656,6 +656,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             switch (index.second->Type) {
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalSyncDistributedHnsw:
                 case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance:
                 case TIndexDescription::EType::GlobalJson:
@@ -976,7 +977,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         }
 
         const TKikimrTableDescription *prefixTable = nullptr;
-        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree && indexDesc->KeyColumns.size() > 1) {
+        if (TIndexDescription::IsVectorIndex(indexDesc->Type) && indexDesc->KeyColumns.size() > 1) {
             prefixTable = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
                 << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
         }
@@ -1003,7 +1004,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // deleteIndexKeys are already correct
                     break;
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalSyncDistributedHnsw: {
                     if (indexDesc->KeyColumns.size() > 1) {
                         deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
                     }
@@ -1083,7 +1085,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // upsertIndexRows are already correct
                     break;
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalSyncDistributedHnsw: {
                     if (indexDesc->KeyColumns.size() > 1) {
                         if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
                             auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);

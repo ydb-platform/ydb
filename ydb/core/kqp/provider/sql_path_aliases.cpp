@@ -8,6 +8,7 @@
 namespace NYql {
 namespace {
 
+// Keep path-bearing tags below aligned with TKikimrKey::Extract and provider option handling.
 bool IsPathKey(TStringBuf tag) {
     return tag == "table" || tag == "tablescheme" || tag == "tablelist" || tag == "topic"
         || tag == "replication" || tag == "transfer" || tag == "sequence" || tag == "backupCollection"
@@ -115,7 +116,6 @@ bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf
 
     TExprNode::TPtr output;
     TOptimizeExprSettings settings(nullptr);
-    settings.VisitChanges = false;
     const auto status = OptimizeExpr(query, output,
         [localCluster, &normalizePath](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             const bool isRead = node->IsCallable(ReadName);

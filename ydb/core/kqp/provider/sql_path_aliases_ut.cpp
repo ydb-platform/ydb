@@ -14,7 +14,8 @@
 namespace NYql {
 namespace {
 
-TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false, bool withAliases = true) {
+TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false, bool withAliases = true,
+    bool expectUnchanged = false) {
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
     settings.DefaultCluster = "plato";
@@ -49,9 +50,12 @@ TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicClust
         };
     }
     UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", normalizePath), ctx.IssueManager.GetIssues().ToString());
-    if (!withAliases) {
+    if (!withAliases || expectUnchanged) {
         UNIT_ASSERT_VALUES_EQUAL(query.Get(), original);
     }
+    const auto rewritten = query.Get();
+    UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", normalizePath), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(query.Get(), rewritten);
     return KqpExprToPrettyString(*query, ctx);
 }
 
@@ -66,6 +70,11 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
             const auto unchanged = RewriteSql(sql, {}, false, false);
             UNIT_ASSERT_STRING_CONTAINS_C(unchanged, "/alias/table", sql << '\n' << unchanged);
         }
+    }
+
+    Y_UNIT_TEST(ConfiguredAliasesLeaveUnmatchedPathUnchanged) {
+        const auto unchanged = RewriteSql("SELECT * FROM `/other/table`;", {}, false, true, true);
+        UNIT_ASSERT_STRING_CONTAINS(unchanged, "/other/table");
     }
 
     Y_UNIT_TEST(LiteralPathsFromSql) {

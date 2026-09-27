@@ -1295,6 +1295,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(!lateScan.ReadAll());
         UNIT_ASSERT_C(lateScan.IsError(), "late scan of dropped source must fail without crashing the tablet");
 
+        // A path with neither history nor a live mapping must also fail without aborting the tablet.
+        TShardReader missingScan(runtime, TTestTxConfig::TxTablet0, 3, copySnapshot);
+        missingScan.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+        UNIT_ASSERT(!missingScan.ReadAll());
+        UNIT_ASSERT(missingScan.IsError());
+
         TShardReader copyScan(runtime, TTestTxConfig::TxTablet0, copyPathId, copySnapshot);
         copyScan.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
         const auto rows = copyScan.ReadAll();

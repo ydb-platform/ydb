@@ -54,6 +54,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.BlockHashJoinCrossWithJoinFilters-UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL
+ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL_CBO4_ColumnLineageMapping
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
@@ -120,6 +121,7 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Partition
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_SeqNo
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_WriteTimestamp
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.NullableColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
@@ -175,6 +177,7 @@ ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/services/config/ut unittest.sole chunk
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV1
+ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteListRangeV1
 ydb/services/keyvalue/ut unittest.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ConsumerCodecsMustCoverTopicCodecs

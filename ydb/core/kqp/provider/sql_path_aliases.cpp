@@ -116,6 +116,7 @@ bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf
 
     TExprNode::TPtr output;
     TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
     const auto status = OptimizeExpr(query, output,
         [localCluster, &normalizePath](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             const bool isRead = node->IsCallable(ReadName);

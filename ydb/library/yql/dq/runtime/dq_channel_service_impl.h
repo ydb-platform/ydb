@@ -538,6 +538,8 @@ public:
     ~TInputDescriptor();
 
     bool IsEmpty();
+    // lock free: true if the queue is empty, and then the consumer is going to be woken up by the next push
+    bool IsEmptyFast();
     bool PushDataChunk(TDataChunk&& data);
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
@@ -563,6 +565,7 @@ public:
     TDqThreadSafeStats PopStats;
 
     mutable std::mutex QueueMutex;
+    // changed under QueueMutex, read without it by IsEmptyFast; a push increments it before it takes NeedToNotifyInput
     std::atomic<ui64> QueueSize = 0;
     std::atomic<ui64> QueueBytes = 0;
     mutable std::queue<TInputItem> Queue;

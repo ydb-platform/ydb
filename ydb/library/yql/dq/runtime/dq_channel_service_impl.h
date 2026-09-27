@@ -583,9 +583,13 @@ public:
     // Node level memory pressure on this (receiver) node, reported to the sender via TEvChannelUpdateV2.
     // Written under QueueMutex by RefreshMemoryPressure, read by TNodeState::SendUpdateProgress
     std::atomic<bool> MemoryPressure = false;
-    // Written by TNodeState::SendUpdateProgress under TNodeState::Mutex only, read lock free to
+    // Written by TNodeState::SendUpdateProgress under UpdateMutex only, read lock free to
     // detect that a flip of MemoryPressure is not delivered to the sender yet
     std::atomic<bool> LastSentMemoryPressure = false;
+    // Orders the updates of this channel: they go from the consumer thread and from the session thread (on a
+    // discovery), and a flip of MemoryPressure overtaken by the previous state would stick on the sender.
+    // Taken under TNodeState::Mutex by HandleDiscovery, takes nothing itself
+    std::mutex UpdateMutex;
 
     bool IsMemoryPressureReported() const {
         return MemoryPressure.load() == LastSentMemoryPressure.load();
@@ -747,7 +751,9 @@ public:
     // releases what a message leaving the Queue held, under Mutex, and returns what was actually released
     ui64 ReleaseInflight(const TOutputItem& item);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
+    // off Mutex: the consumer calls it on every pop
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    // under UpdateMutex of the descriptor
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
     // SendFromWaiters has taken a chunk off the WaitQueue of a channel and not sequenced it yet
@@ -803,6 +809,21 @@ public:
     NActors::TActorId OutputNodeActorId;
     std::atomic<ui64> OutputNodeGenMajor = 0;
     std::atomic<ui64> OutputNodeGenMinor = 0;
+    // The three above as the consumer threads read them for the updates they send off Mutex: a seqlock, which
+    // only the session thread writes, as it does the fields. An update read from the previous peer is lost or
+    // dropped by the sender as obsolete, and HandleDiscovery resends every one after it has published the new peer
+    struct TPeer {
+        NActors::TActorId ActorId;
+        ui64 GenMajor = 0;
+        ui64 GenMinor = 0;
+    };
+    void PublishPeer();
+    TPeer ReadPeer() const;
+    std::atomic<ui64> PeerSeq = 0;
+    std::atomic<ui64> PeerActorIdX1 = 0;
+    std::atomic<ui64> PeerActorIdX2 = 0;
+    std::atomic<ui64> PeerGenMajor = 0;
+    std::atomic<ui64> PeerGenMinor = 0;
     // written by the session thread only, atomic for the mon page
     std::atomic<ui64> ConfirmedSeqNo = 0;
     // ...

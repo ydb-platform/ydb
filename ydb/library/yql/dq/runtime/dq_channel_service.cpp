@@ -1597,7 +1597,36 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
         LOG_D(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     }
     OutputNodeGenMinor.store(genMinor);
+    PublishPeer();
     FailInputs(OutputNodeActorId, OutputNodeGenMajor.load());
+}
+
+void TNodeState::PublishPeer() {
+    auto seq = PeerSeq.load(std::memory_order_relaxed);
+    PeerSeq.store(seq + 1, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_release);
+    PeerActorIdX1.store(OutputNodeActorId.RawX1(), std::memory_order_relaxed);
+    PeerActorIdX2.store(OutputNodeActorId.RawX2(), std::memory_order_relaxed);
+    PeerGenMajor.store(OutputNodeGenMajor.load(), std::memory_order_relaxed);
+    PeerGenMinor.store(OutputNodeGenMinor.load(), std::memory_order_relaxed);
+    PeerSeq.store(seq + 2, std::memory_order_release);
+}
+
+TNodeState::TPeer TNodeState::ReadPeer() const {
+    while (true) {
+        auto seq = PeerSeq.load(std::memory_order_acquire);
+        if (seq & 1) {
+            continue; // the writer is in the middle, for a few stores
+        }
+        TPeer peer{
+            NActors::TActorId(PeerActorIdX1.load(std::memory_order_relaxed), PeerActorIdX2.load(std::memory_order_relaxed)),
+            PeerGenMajor.load(std::memory_order_relaxed),
+            PeerGenMinor.load(std::memory_order_relaxed)};
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (PeerSeq.load(std::memory_order_relaxed) == seq) {
+            return peer;
+        }
+    }
 }
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
@@ -1620,9 +1649,11 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
 
+    // after ConnectSession has published the peer: an update a consumer sends meanwhile to the previous one is
+    // either before this resend under UpdateMutex, or reads the new peer itself
     for (auto& [_, descriptor] : InputDescriptors) {
         if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
-            SendUpdateProgress(descriptor);
+            UpdateProgress(descriptor);
         }
     }
 }
@@ -2032,7 +2063,7 @@ void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
 }
 
 void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
-    std::lock_guard lock(Mutex);
+    std::lock_guard lock(descriptor->UpdateMutex);
     SendUpdateProgress(descriptor);
 }
 
@@ -2050,10 +2081,11 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         (*InputBufferPressureReports)++;
     }
 
+    auto peer = ReadPeer();
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
-    evUpdate->Record.SetGenMajor(OutputNodeGenMajor.load());
-    evUpdate->Record.SetGenMinor(OutputNodeGenMinor.load());
+    evUpdate->Record.SetGenMajor(peer.GenMajor);
+    evUpdate->Record.SetGenMinor(peer.GenMinor);
     // evUpdate->Record.SetSeqNo(ConfirmedSeqNo);
 
     NActors::ActorIdToProto(descriptor->Info.OutputActorId, evUpdate->Record.MutableSrcActorId());
@@ -2076,7 +2108,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
         << ", Finishing=" << descriptor->Finishing.load() << ", MemoryPressure=" << memoryPressure);
 
-    ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evUpdate.Release(), flags));
+    ActorSystem->Send(new NActors::IEventHandle(peer.ActorId, NodeActorId, evUpdate.Release(), flags));
 }
 
 std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
@@ -2408,6 +2440,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     OutputNodeGenMinor.store(record.GetGenMinor());
+    PublishPeer();
 
     auto seqNo = record.GetSeqNo();
 

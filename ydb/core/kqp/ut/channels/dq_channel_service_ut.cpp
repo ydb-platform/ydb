@@ -790,6 +790,21 @@ struct TSessionTest : public TLoadTest {
         return {};
     }
 
+    static std::shared_ptr<TInputDescriptor> FindInputDescriptor(const std::shared_ptr<TNodeState>& state, ui64 channelId) {
+        std::lock_guard lock(state->Mutex);
+        for (const auto& [info, descriptor] : state->InputDescriptors) {
+            if (info.ChannelId == channelId) {
+                return descriptor;
+            }
+        }
+        return {};
+    }
+
+    static bool IsBound(const std::shared_ptr<TNodeState>& state, const std::shared_ptr<TInputDescriptor>& descriptor) {
+        std::lock_guard lock(state->Mutex);
+        return descriptor->IsBound;
+    }
+
     static std::vector<ui64> GetQueueSeqNos(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         std::vector<ui64> result;
@@ -2033,6 +2048,55 @@ struct TFreeQuotaTest : public TSessionTest {
     }
 };
 
+// Every pop reports its progress to the sender. That took the session Mutex, which the session thread holds for
+// whatever it sends and receives, and the consumer waited on it once per message. The consumer drains its queue
+// here while the test holds the Mutex of its session.
+struct TConsumerPopsWhileSessionLockedTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto receiver = FindNodeState(Service1, Runtime->GetNodeId(0));
+        UNIT_ASSERT_C(receiver, "receiver node session not found");
+
+        // the consumer binds its buffer, which takes the Mutex, and then waits for the whole channel to arrive
+        const int messageCount = 20;
+        ProducerSettings = TWorkerSettings{ .MessageCount = messageCount, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        ConsumerSettings.PauseMessageIndex = 0;
+        ConsumerSettings.PauseDelayMs = 2000;
+        StartChannel(2, true);
+
+        std::shared_ptr<TInputDescriptor> descriptor;
+        UNIT_ASSERT_C(WaitFor([&]() {
+            descriptor = FindInputDescriptor(receiver, 2);
+            return descriptor && IsBound(receiver, descriptor) && descriptor->QueueSize.load() == messageCount + 1;
+        }, TDuration::Seconds(10)), "the channel did not arrive");
+
+        bool drained;
+        {
+            std::lock_guard lock(receiver->Mutex);
+            drained = WaitFor([&]() { return descriptor->QueueSize.load() == 0; }, TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_C(drained, TStringBuilder() << "the consumer stopped at " << descriptor->QueueSize.load()
+            << " queued message(s) while the session Mutex was held");
+
+        WaitChannel([&]() { return TStringBuilder() << "reconciliation log: " << GetReconciliationLog(receiver); });
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        descriptor.reset();
+        receiver.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 // The resends of the reconciliations and the waiters interleave with the messages built off the session lock:
 // every consumer checks the order of what it gets
 struct TOrderedReconTest : public TReconTest {
@@ -2289,6 +2353,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(FreeQuotaOutsideSessionLock) {
         TFreeQuotaTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(ConsumerPopsWhileSessionLocked) {
+        TConsumerPopsWhileSessionLockedTest test;
 
         test.Local = false;
 

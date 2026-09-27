@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NYql {
@@ -105,8 +106,8 @@ bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf
     settings.VisitChanges = false;
     const auto status = OptimizeExpr(query, output,
         [localCluster, &normalizePath](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            const bool isRead = node->IsCallable("Read");
-            if (!isRead && !node->IsCallable("Write")) {
+            const bool isRead = node->IsCallable(ReadName);
+            if (!isRead && !node->IsCallable(WriteName)) {
                 return node;
             }
 

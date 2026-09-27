@@ -1,0 +1,80 @@
+#include "sql_path_aliases.h"
+
+#include <ydb/core/kqp/common/kqp_yql.h>
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+namespace NYql {
+namespace {
+
+TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.DefaultCluster = "plato";
+    settings.ClusterMapping = {{"plato", TString(KikimrProviderName)}};
+    settings.SyntaxVersion = 1;
+    settings.Mode = NSQLTranslation::ESqlMode::QUERY;
+    settings.PathPrefix = TString(pathPrefix);
+    if (dynamicCluster) {
+        settings.DynamicClusterProvider = TString(KikimrProviderName);
+    }
+
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(false);
+
+    auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, TString(sql), settings);
+    UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+
+    TExprContext ctx;
+    TExprNode::TPtr query;
+    UNIT_ASSERT_C(CompileExpr(*ast.Root, query, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", [](TStringBuf path) {
+        return path.StartsWith("/alias/") ? TString("/canonical") + TString(path.SubStr(6)) : TString(path);
+    }), ctx.IssueManager.GetIssues().ToString());
+    return KqpExprToPrettyString(*query, ctx);
+}
+
+}
+
+Y_UNIT_TEST_SUITE(SqlPathAliases) {
+    Y_UNIT_TEST(LiteralPathsFromSql) {
+        for (const TString sql : {
+            "SELECT * FROM `/alias/table`;",
+            "$p = '/alias/table'; SELECT * FROM $p;",
+            "DROP VIEW `/alias/table`;",
+            "DROP EXTERNAL DATA SOURCE `/alias/table`;",
+            "DROP ASYNC REPLICATION `/alias/table`;",
+            "DROP TRANSFER `/alias/table`;",
+            "DROP SECRET `/alias/table`;",
+        }) {
+            const auto rewritten = RewriteSql(sql);
+            UNIT_ASSERT_STRING_CONTAINS_C(rewritten, "/canonical/table", sql << '\n' << rewritten);
+        }
+    }
+
+    Y_UNIT_TEST(ReplicationOnlyRewritesLocalTarget) {
+        const auto rewritten = RewriteSql("CREATE ASYNC REPLICATION replication FOR `/alias/remote` AS `/alias/table` WITH (ENDPOINT = 'localhost:2135', DATABASE = '/Root');");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/alias/remote");
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/canonical/remote"), TString::npos);
+    }
+
+    Y_UNIT_TEST(PathPrefixIsRewritten) {
+        const auto rewritten = RewriteSql("SELECT * FROM table;", "/alias");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
+    }
+
+    Y_UNIT_TEST(OtherClusterIsNotRewritten) {
+        const auto rewritten = RewriteSql("SELECT * FROM `/remote/source`.`/alias/table`;", {}, true);
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/alias/table");
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/canonical/table"), TString::npos);
+    }
+}
+
+}

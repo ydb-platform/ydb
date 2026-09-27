@@ -19,6 +19,7 @@ namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#undef PHOENIX_DEFINE_EXTERNAL_TYPE
 #undef PHOENIX_DEFINE_TYPE
 #undef PHOENIX_DEFINE_TEMPLATE_TYPE
 #undef PHOENIX_DEFINE_OPAQUE_TYPE
@@ -29,14 +30,14 @@ namespace NYT::NPhoenix::NDetail {
 #define PHOENIX_DEFINE_TYPE(type) \
     const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
-        return descriptor; \
+        static const auto& Descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        return Descriptor; \
     } \
     \
     auto type::GetRuntimeFieldDescriptorMap() -> const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& \
     { \
-        static const auto map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
-        return map; \
+        static const auto Map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
+        return Map; \
     } \
     \
     void type::Save(TSaveContext& context) const \
@@ -72,11 +73,46 @@ namespace NYT::NPhoenix::NDetail {
         }); \
     }
 
+#define PHOENIX_DEFINE_EXTERNAL_TYPE(type) \
+    void ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::Save( \
+        TSaveContextImpl& context, \
+        const type& value) \
+    { \
+        ::NYT::NPhoenix::NDetail::SaveImpl(&value, context); \
+    } \
+    \
+    void ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::Load( \
+        TLoadContextImpl& context, \
+        type& value) \
+    { \
+        ::NYT::NPhoenix::NDetail::LoadImpl(&value, context); \
+    } \
+    \
+    auto ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::GetRuntimeFieldDescriptorMap() \
+        -> const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContextImpl>& \
+    { \
+        static const auto Map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<type, TLoadContextImpl>(); \
+        return Map; \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+        }); \
+    }; \
+    \
+    void ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::RegisterMetadata(auto&& registrar)
+
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
     const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
-        return descriptor; \
+        static const auto& Descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        return Descriptor; \
     } \
     \
     template <class T> \
@@ -91,7 +127,7 @@ namespace NYT::NPhoenix::NDetail {
     }
 
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
-    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
+    registrar.template Field<fieldTag, &TAccessor::fieldName>(#fieldName) __VA_ARGS__ ()
 
 #define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version, ...) \
     registrar \
@@ -119,10 +155,50 @@ using TFieldSaveHandler = void (*)(const TThis*, TContext&);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Set by PHOENIX_DECLARE_EXTERNAL_TYPE.
+template <class T>
+concept CExternallyRegistered = TExternalMetadata<T>::External;
+
+template <class T>
+struct TMetadataTraits
+{
+    using TMetadata = T;
+
+    //! Qualified: exactly T, never an override from a more derived type.
+    static void Save(const T* this_, auto& context)
+    {
+        this_->T::Save(context);
+    }
+
+    static void Load(T* this_, auto& context)
+    {
+        this_->T::Load(context);
+    }
+};
+
+template <CExternallyRegistered T>
+struct TMetadataTraits<T>
+{
+    using TMetadata = TExternalMetadata<T>;
+
+    static void Save(const T* this_, auto& context)
+    {
+        TExternalMetadata<T>::Save(context, *this_);
+    }
+
+    static void Load(T* this_, auto& context)
+    {
+        TExternalMetadata<T>::Load(context, *this_);
+    }
+};
+
+template <class T>
+using TMetadataOf = typename TMetadataTraits<T>::TMetadata;
+
 template <class TThis>
 struct TTraits
 {
-    using TVersion = decltype(std::declval<typename TThis::TLoadContextImpl>().GetVersion());
+    using TVersion = decltype(std::declval<typename TMetadataOf<TThis>::TLoadContextImpl>().GetVersion());
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -213,7 +289,7 @@ public:
 template <class TThis>
 decltype(auto) RunRegistrar(auto&& registrar)
 {
-    TThis::RegisterMetadata(registrar);
+    TMetadataOf<TThis>::RegisterMetadata(registrar);
     return std::move(registrar)();
 }
 
@@ -256,7 +332,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        TypeDescriptor_->BaseTypeTags_.push_back(TBase::TypeTag);
+        TypeDescriptor_->BaseTypeTags_.push_back(TMetadataOf<TBase>::TypeTag);
     }
 
     const TTypeDescriptor& operator()() &&;
@@ -293,7 +369,7 @@ auto MakeTypeSchemaBuilderRegistrar()
 {
     return TTypeSchemaBuilderRegistrar(
         GetTypeInfos<TThis>(),
-        TThis::TypeTag,
+        TMetadataOf<TThis>::TypeTag,
         Template,
         TFactoryTraits<TThis>::TFactory::PolymorphicConstructor,
         TFactoryTraits<TThis>::TFactory::ConcreteConstructor);
@@ -326,7 +402,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        This_->TBase::Save(Context_);
+        TMetadataTraits<TBase>::Save(This_, Context_);
     }
 
 private:
@@ -527,7 +603,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        This_->TBase::Load(Context_);
+        TMetadataTraits<TBase>::Load(This_, Context_);
     }
 
 private:
@@ -1049,7 +1125,7 @@ std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadS
     runtimeSchedule->LoadFieldHandlers.reserve(schedule->LoadFieldTags.size());
     runtimeSchedule->MissingFieldHandlers.reserve(schedule->MissingFieldTags.size());
 
-    const auto& runtimeFieldDescriptorMap = TThis::GetRuntimeFieldDescriptorMap();
+    const auto& runtimeFieldDescriptorMap = TMetadataOf<TThis>::GetRuntimeFieldDescriptorMap();
     for (auto fieldTag : schedule->LoadFieldTags) {
         runtimeSchedule->LoadFieldHandlers.push_back(GetOrCrash(runtimeFieldDescriptorMap, fieldTag).LoadHandler);
     }
@@ -1070,7 +1146,7 @@ const TRuntimeTypeLoadSchedule<TThis, TContext>* TUniverseLoadSchedule::FindRunt
 
     auto& slot = RuntimeTypeLoadScheduleSlots[index];
     if (!slot.Initialized) {
-        slot.Schedule = BuildRuntimeTypeLoadSchedule<TThis, TContext>(FindTypeLoadSchedule(TThis::TypeTag));
+        slot.Schedule = BuildRuntimeTypeLoadSchedule<TThis, TContext>(FindTypeLoadSchedule(TMetadataOf<TThis>::TypeTag));
         slot.Initialized = true;
     }
 

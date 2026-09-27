@@ -48,14 +48,16 @@ void TWorkloadCommandBuildIndex::DoConfig(TConfig& config) {
 }
 
 int TWorkloadCommandBuildIndex::DoRun() {
-    if (Params.IndexType == "None") {
+    const auto indexType = Params.GetIndexTypeDDL();
+    const auto hnswSettings = Params.GetHnswSettingsDDL();
+    if (indexType.empty()) {
         return EXIT_SUCCESS;
     }
 
     TStringBuilder ddlQuery;
     ddlQuery << "ALTER TABLE `" << Params.DbPath << "/" << Params.TableOpts.Name << "`\n";
     ddlQuery << "ADD INDEX `" << Params.IndexName << "`\n";
-    ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
+    ddlQuery << "GLOBAL USING " << indexType << "\n";
     ddlQuery << "ON (embedding)\n";
     ddlQuery << "WITH (\n";
     ddlQuery << "    " << Params.GetDistanceDDL();
@@ -72,6 +74,7 @@ int TWorkloadCommandBuildIndex::DoRun() {
     if (Params.KmeansTreeClusters) {
         ddlQuery << ",\n    clusters=" << Params.KmeansTreeClusters;
     }
+    ddlQuery << hnswSettings;
     ddlQuery << "\n);";
 
     if (!ddlQuery.empty()) {

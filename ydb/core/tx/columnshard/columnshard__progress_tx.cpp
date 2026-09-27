@@ -6,6 +6,8 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_TX
 
 namespace NKikimr::NColumnShard {
@@ -155,7 +157,10 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     auto& record = Proto(ev->Get());
     ui64 step = record.GetStep();
     ui64 txId = record.GetTxId();
-    LOG_S_DEBUG("CheckTransaction planStep " << step << " txId " << txId << " at tablet " << TabletID());
+    YDB_LOG_DEBUG("CheckTransaction planStep txId at tablet",
+        {"step", step},
+        {"txId", txId},
+        {"tabletID", TabletID()});
 
     auto frontTx = ProgressTxController->GetFrontTx();
     bool finished = step < frontTx.Step || (step == frontTx.Step && txId < frontTx.TxId);

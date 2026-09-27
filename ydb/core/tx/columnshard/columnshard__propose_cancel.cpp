@@ -1,6 +1,8 @@
 #include "columnshard_impl.h"
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_TX
 
 namespace NKikimr::NColumnShard {
@@ -24,7 +26,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_S_DEBUG("TTxProposeCancel.Execute");
+        YDB_LOG_DEBUG("TTxProposeCancel.Execute");
 
         auto op = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (!op) {
@@ -50,7 +52,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_S_DEBUG("TTxProposeCancel.Complete");
+        YDB_LOG_DEBUG("TTxProposeCancel.Complete");
         if (DoComplete) {
             Self->ProgressTxController->CompleteOnCancel(TxId, ctx);
         }

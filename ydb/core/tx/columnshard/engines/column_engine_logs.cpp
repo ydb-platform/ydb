@@ -25,6 +25,8 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);
@@ -767,7 +769,9 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     auto p = spg.GetPortionOptional(portion);
 
     if (!p) {
-        LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
+        YDB_LOG_WARN("Portion erased already at tablet",
+            {"portionInfo", portionInfo},
+            {"tabletId", TabletId});
         return false;
     } else {
         if (updateStats) {

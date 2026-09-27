@@ -183,7 +183,9 @@ public:
         TControlBoard::RegisterSharedControl(MaxCacheDataSize, icb->BlobCache.MaxCacheDataSize);
         TControlBoard::RegisterSharedControl(MaxInFlightDataSize, icb->BlobCache.MaxInFlightDataSize);
 
-        LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize);
+        YDB_LOG_NOTICE("",
+            {"maxCacheDataSize", (i64)MaxCacheDataSize},
+            {"inFlightDataSize", (i64)InFlightDataSize});
 
         MaxSizeBytes->Set((i64)MaxCacheDataSize);
 
@@ -208,7 +210,9 @@ private:
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             default:
-                LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                YDB_LOG_WARN("Unhandled event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
         };
@@ -233,7 +237,10 @@ private:
         const TBlobRange& blobRange = ev->Get()->BlobRange;
         const bool promote = (i64)MaxCacheDataSize && ev->Get()->ReadOptions.CacheAfterRead;
 
-        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " sender:" << ev->Sender);
+        YDB_LOG_DEBUG("Read",
+            {"request", blobRange},
+            {"cache", (ui32)promote},
+            {"sender", ev->Sender});
 
         if (!HandleSingleRangeRead(TReadItem(ev->Get()->ReadOptions, blobRange), ev->Sender, ctx)) {
             MakeReadRequests(ctx);
@@ -255,7 +262,9 @@ private:
             return true;
         }
 
-        LOG_S_DEBUG("Miss cache: " << blobRange << " sender:" << sender);
+        YDB_LOG_DEBUG("Miss",
+            {"cache", blobRange},
+            {"sender", sender});
         Misses->Inc();
 
         // Update set of outstanding requests.
@@ -266,7 +275,8 @@ private:
         blobInfo.Cache |= readItem.PromoteInCache();
 
         if (inserted) {
-            LOG_S_DEBUG("Enqueue read range: " << blobRange);
+            YDB_LOG_DEBUG("Enqueue read",
+                {"range", blobRange});
 
             ReadQueue.emplace_back(std::move(readItem));
             ReadsInQueue->Set(ReadQueue.size());
@@ -281,7 +291,8 @@ private:
 
     void Handle(TEvBlobCache::TEvReadBlobRangeBatch::TPtr& ev, const TActorContext& ctx) {
         const auto& ranges = ev->Get()->BlobRanges;
-        LOG_S_DEBUG("Batch read request: " << JoinStrings(ranges.begin(), ranges.end(), " "));
+        YDB_LOG_DEBUG("Batch read",
+            {"request", JoinStrings(ranges.begin(), ranges.end(), " ")});
 
         auto& readOptions = ev->Get()->ReadOptions;
         readOptions.CacheAfterRead = (i64)MaxCacheDataSize && readOptions.CacheAfterRead;
@@ -298,7 +309,9 @@ private:
         const auto& data = ev->Get()->Data;
 
         if (blobRange.Size != data.size()) {
-            LOG_S_ERROR("Trying to add invalid data for range: " << blobRange << " size: " << data.size());
+            YDB_LOG_ERROR("Trying to add invalid data",
+                {"range", blobRange},
+                {"size", data.size()});
             return;
         }
 
@@ -309,7 +322,8 @@ private:
             return;
         }
 
-        LOG_S_DEBUG("Adding range: " << blobRange);
+        YDB_LOG_DEBUG("Adding",
+            {"range", blobRange});
 
         AddBytes->Add(blobRange.Size);
 
@@ -321,7 +335,8 @@ private:
     void Handle(TEvBlobCache::TEvForgetBlob::TPtr& ev, const TActorContext&) {
         const TUnifiedBlobId& blobId = ev->Get()->BlobId;
 
-        LOG_S_INFO("Forgetting blob: " << blobId);
+        YDB_LOG_INFO("Forgetting",
+            {"blob", blobId});
 
         Forgets->Inc();
 
@@ -363,7 +378,8 @@ private:
             return;
         }
 
-        LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
+        YDB_LOG_DEBUG("Updating max cache data",
+            {"size", newMaxCacheDataSize});
 
         MaxCacheDataSize = newMaxCacheDataSize;
 
@@ -380,8 +396,10 @@ private:
 
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie, ui32 dsGroup,
         TReadItem::EReadVariant readVariant, const TActorContext& ctx) {
-        LOG_S_DEBUG("Sending read from BlobCache: group: " << dsGroup << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
-                                                           << " cookie: " << cookie);
+        YDB_LOG_DEBUG("Sending read from BlobCache",
+            {"group", dsGroup},
+            {"ranges", JoinStrings(blobRanges.begin(), blobRanges.end(), " ")},
+            {"cookie", cookie});
 
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queires(new TEvBlobStorage::TEvGet::TQuery[blobRanges.size()]);
         for (size_t i = 0; i < blobRanges.size(); ++i) {
@@ -464,7 +482,10 @@ private:
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data,
         const TString& detailedError, const TActorContext& ctx, const bool fromCache = false) {
-        LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
+        YDB_LOG_DEBUG("Send",
+            {"result", blobRange},
+            {"to", to},
+            {"status", status});
 
         ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
     }
@@ -491,7 +512,8 @@ private:
         auto cookieIt = CookieToRange.find(readCookie);
         if (cookieIt == CookieToRange.end()) {
             // This shouldn't happen
-            LOG_S_CRIT("Unknown read result cookie: " << readCookie);
+            YDB_LOG_CRIT("Unknown read result",
+                {"cookie", readCookie});
             return;
         }
 
@@ -515,7 +537,9 @@ private:
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt == OutstandingReads.end()) {
             // This shouldn't happen
-            LOG_S_CRIT("Unknown read result key: " << blobRange << " cookie: " << readCookie);
+            YDB_LOG_CRIT("Unknown read result",
+                {"key", blobRange},
+                {"cookie", readCookie});
             return;
         }
 
@@ -533,7 +557,9 @@ private:
                 InsertIntoCache(blobRange, data);
             }
         } else {
-            LOG_S_WARN("Read failed for range: " << blobRange << " status: " << NKikimrProto::EReplyStatus_Name(status));
+            YDB_LOG_WARN("Read failed",
+                {"range", blobRange},
+                {"status", NKikimrProto::EReplyStatus_Name(status)});
             ReadRangeFailedBytes->Add(blobRange.Size);
             ReadRangeFailedCount->Add(1);
         }
@@ -559,7 +585,8 @@ private:
             auto cookieIt = CookieToRange.find(readCookie);
             if (cookieIt == CookieToRange.end()) {
                 // This might only happen in case fo race between response and pipe close
-                LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
+                YDB_LOG_NOTICE("Unknown read result",
+                    {"cookie", readCookie});
                 return;
             }
 
@@ -580,9 +607,12 @@ private:
         const ui64 tabletId = msg->TabletId;
         Y_ABORT_UNLESS(tabletId != 0);
         if (msg->Status == NKikimrProto::OK) {
-            LOG_S_DEBUG("Pipe connected to tablet: " << tabletId);
+            YDB_LOG_DEBUG("Pipe connected",
+                {"tablet", tabletId});
         } else {
-            LOG_S_DEBUG("Pipe connection to tablet: " << tabletId << " failed with status: " << msg->Status);
+            YDB_LOG_DEBUG("Pipe connection to failed with",
+                {"tablet", tabletId},
+                {"status", msg->Status});
             DestroyPipe(tabletId, ctx);
         }
     }
@@ -591,7 +621,8 @@ private:
         const ui64 tabletId = ev->Get()->TabletId;
         Y_ABORT_UNLESS(tabletId != 0);
 
-        LOG_S_DEBUG("Closed pipe connection to tablet: " << tabletId);
+        YDB_LOG_DEBUG("Closed pipe connection",
+            {"tablet", tabletId});
         DestroyPipe(tabletId, ctx);
     }
 
@@ -620,8 +651,11 @@ private:
                 break;
             }
 
-            LOG_S_DEBUG("Evict: " << it.Key() << " CacheDataSize: " << CacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize
-                                  << " MaxCacheDataSize: " << (i64)MaxCacheDataSize);
+            YDB_LOG_DEBUG("",
+                {"evict", it.Key()},
+                {"cacheDataSize", CacheDataSize},
+                {"inFlightDataSize", (i64)InFlightDataSize},
+                {"maxCacheDataSize", (i64)MaxCacheDataSize});
 
             Evictions->Inc();
             EvictedBytes->Add(it.Key().Size);

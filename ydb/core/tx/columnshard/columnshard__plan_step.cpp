@@ -4,6 +4,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
@@ -41,7 +43,9 @@ private:
 
 bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_ABORT_UNLESS(Ev);
-    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
+    YDB_LOG_DEBUG("Execute",
+        {"txPrefix", TxPrefix()},
+        {"txSuffix", TxSuffix()});
 
     txc.DB.NoMoreReadsForTx();
     NIceDb::TNiceDb db(txc.DB);
@@ -72,12 +76,20 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
             auto planResult = Self->ProgressTxController->PlanTx(step, txId, txc);
             switch (planResult) {
                 case TTxController::EPlanResult::Skipped: {
-                    LOG_S_WARN(TxPrefix() << "Ignoring step " << step << " for unknown txId " << txId << TxSuffix());
+                    YDB_LOG_WARN("Ignoring step for unknown txId",
+                        {"txPrefix", TxPrefix()},
+                        {"step", step},
+                        {"txId", txId},
+                        {"txSuffix", TxSuffix()});
                     break;
                 }
                 case TTxController::EPlanResult::AlreadyPlanned: {
-                    LOG_S_WARN(TxPrefix() << "Ignoring step " << step << " for txId " << txId << " which is already planned for step " << step
-                                          << TxSuffix());
+                    YDB_LOG_WARN("Ignoring step for txId which is already planned for step",
+                        {"txPrefix", TxPrefix()},
+                        {"step", step},
+                        {"txId", txId},
+                        {"#_dup_step", step},
+                        {"txSuffix", TxSuffix()});
                     break;
                 }
                 case TTxController::EPlanResult::Planned: {
@@ -93,8 +105,12 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
         Self->RescheduleWaitingReads();
     } else {
-        LOG_S_ERROR(TxPrefix() << "Ignore old txIds [" << JoinStrings(txIds.begin(), txIds.end(), ", ") << "] for step " << step
-                               << " last planned step " << Self->LastPlannedStep << TxSuffix());
+        YDB_LOG_ERROR("Ignore old txIds for step last planned step",
+            {"txPrefix", TxPrefix()},
+            {"#_num_0", JoinStrings(txIds.begin(), txIds.end(), ", ")},
+            {"step", step},
+            {"#_Self->LastPlannedStep", Self->LastPlannedStep},
+            {"txSuffix", TxSuffix()});
     }
 
     Result = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
@@ -110,7 +126,9 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 void TTxPlanStep::Complete(const TActorContext& ctx) {
     Y_ABORT_UNLESS(Ev);
     Y_ABORT_UNLESS(Result);
-    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
+    YDB_LOG_DEBUG("Complete",
+        {"txPrefix", TxPrefix()},
+        {"txSuffix", TxSuffix()});
 
     ui64 step = Ev->Get()->Record.GetStep();
     for (auto& kv : TxAcks) {
@@ -123,7 +141,10 @@ void TTxPlanStep::Complete(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx) {
     ui64 step = ev->Get()->Record.GetStep();
     ui64 mediatorId = ev->Get()->Record.GetMediatorID();
-    LOG_S_DEBUG("PlanStep " << step << " at tablet " << TabletID() << ", mediator " << mediatorId);
+    YDB_LOG_DEBUG("PlanStep at tablet mediator",
+        {"step", step},
+        {"tabletID", TabletID()},
+        {"mediatorId", mediatorId});
 
     Execute(new TTxPlanStep(this, ev), ctx);
 }

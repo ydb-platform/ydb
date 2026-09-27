@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 class TTxNotifyTxCompletion: public TTransactionBase<TColumnShard> {
@@ -12,7 +14,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_UNUSED(txc);
-        LOG_S_DEBUG("TTxNotifyTxCompletion.Execute at tablet " << Self->TabletID());
+        YDB_LOG_DEBUG("TTxNotifyTxCompletion.Execute at tablet",
+            {"#_Self->TabletID", Self->TabletID()});
 
         const ui64 txId = Ev->Get()->Record.GetTxId();
         auto txOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::Any, /*optional*/ true);

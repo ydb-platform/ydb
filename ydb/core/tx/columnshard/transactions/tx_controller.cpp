@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_TX
 
 namespace NKikimr::NColumnShard {
@@ -338,7 +340,9 @@ size_t TTxController::CleanExpiredTxs() {
                 break;
             }
             ui64 txId = it->TxId;
-            LOG_S_DEBUG(TStringBuilder() << "Removing outdated txId " << txId << " max step " << it->Step << " outdated step ");
+            YDB_LOG_DEBUG("Removing outdated txId max step outdated step",
+                {"txId", txId},
+                {"#_it->Step", it->Step});
             AbortTx(*it);
             ++removedCount;
         }

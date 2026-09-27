@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 class TTxTxAbort: public TTransactionBase<TColumnShard> {
@@ -12,7 +14,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_S_DEBUG("TTxTxAbort.Execute at tablet " << Self->TabletID());
+        YDB_LOG_DEBUG("TTxTxAbort.Execute at tablet",
+            {"#_Self->TabletID", Self->TabletID()});
 
         auto txOperator = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (txOperator) {

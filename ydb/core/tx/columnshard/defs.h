@@ -8,13 +8,11 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
-#include <ydb/core/tx/ctor_logger.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NColumnShard {
 
-using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 struct TLimits {
 private:

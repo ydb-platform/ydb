@@ -656,12 +656,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
         };
 
-        auto tableClient = kikimr.GetTableClient();
-        auto session2 = tableClient.GetSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto session2 = queryClient.GetSession().GetValueSync().GetSession();
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
@@ -1549,7 +1549,7 @@ FROM (
         auto& session = testContext.GetSession();
         auto plan = ExecuteExplainAnalyze(session, R"(
             --SELECT 1 as x; SELECT 2 as y;
-            SELECT * from `/Root/t1`; SELECT * from `/Root/t1`;
+            SELECT a+1 from `/Root/t1`; SELECT a+2 from `/Root/t1`;
         )");
     }
 

@@ -3593,6 +3593,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetInput().empty()) {
                     auto& inputStats = stats.InsertValue("Input", NJson::JSON_ARRAY);
                     for (auto input : (*stat)->GetInput()) {
+                        if(!stageIdToGuid.contains(input.first)) {
+                            continue;
+                        }
                         auto stageGuid = stageIdToGuid.at(input.first);
                         auto planNodeIdIt = guidToPlaneId.find(stageGuid);
                         if (planNodeIdIt == guidToPlaneId.end()) {
@@ -3620,6 +3623,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         if (output.first == 0) {
                             outputName = "RESULT";
                         } else {
+                            if(!stageIdToGuid.contains(output.first)) {
+                                continue;
+                            }
                             auto stageGuid = stageIdToGuid.at(output.first);
                             auto planNodeIdIt = guidToPlaneId.find(stageGuid);
                             if (planNodeIdIt == guidToPlaneId.end()) {

@@ -1,6 +1,6 @@
 # Fulltext Indexes
 
-Fulltext indexes are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient text search within table columns. While traditional secondary indexes optimize searching by equality or range, fulltext indexes allow searching by words, phrases, and (with n-grams) by substrings.
+Fulltext indexes are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient text search within table columns. While traditional secondary indexes optimize searching by equality or range, fulltext indexes allow searching by words and (with n-grams) by substrings.
 
 For the general idea of fulltext search, see [Fulltext search](../concepts/query_execution/fulltext_search.md).
 
@@ -43,7 +43,7 @@ ALTER TABLE articles
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-Here `tokenizer=standard` splits text into words on whitespace and punctuation, and `use_filter_lowercase=true` normalizes all tokens to lowercase, making the search case-insensitive.
+Here `tokenizer=standard` splits text into words on whitespace and punctuation, and `use_filter_lowercase=true` normalizes all tokens to lowercase, making the search case-insensitive. Alternatively, use an [analyzer preset](../yql/reference/syntax/create_table/fulltext_index.md).
 
 Example query:
 
@@ -124,11 +124,11 @@ WHERE body LIKE "%learn%ing%"
 LIMIT 20;
 ```
 
-A `LIKE` / `ILIKE` query uses the same logic as `FulltextMatch(body, ..., "Wildcard" AS Mode)` and accesses the same n-gram index.
+`LIKE` / `ILIKE` use the n-gram index to select candidates, then check the original text. `LIKE` is case-sensitive; `ILIKE` is case-insensitive. See [wildcard restrictions](../yql/reference/builtins/fulltext.md#wildcard).
 
 ### Filtered fulltext index {#filtered}
 
-A filtered fulltext index enables fulltext search within each logical partition defined by filter columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others can be of any comparable type:
+A filtered fulltext index enables fulltext search within each logical partition defined by filter columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others must have types allowed in a primary key:
 
 ```yql
 ALTER TABLE articles
@@ -162,6 +162,8 @@ When you create a fulltext index on a table whose primary key is not a single in
 * generates a `__ydb_row_id` value for every row where the column is omitted from `INSERT` / `UPSERT`;
 * creates a unique [secondary index](../concepts/glossary.md#secondary-index) named `__ydb_unique_row_id` over `__ydb_row_id`. At query time this index maps a matched `__ydb_row_id` back to the table's primary key before the row is read from the main table.
 
+The system column is omitted from `SELECT *`, but can be selected explicitly by name. Updating an existing row with `UPSERT` or `UPDATE` preserves its `__ydb_row_id`.
+
 If the table already has more than one fulltext index, they all **reuse** the same `__ydb_row_id` column and `__ydb_unique_row_id` index — these structures are created only once per table.
 
 {% note warning %}
@@ -193,7 +195,7 @@ Functions and expressions for fulltext search:
 
 The optimizer doesn't select a fulltext index automatically, so you must specify it explicitly using `VIEW IndexName`.
 
-If the `VIEW` expression is not used, `FulltextMatch` / `FulltextScore` queries will fail.
+Without `VIEW`, `FulltextMatch` / `FulltextScore` queries fail, except for `FulltextScore` inside [`HybridRank`](hybrid-search.md).
 
 This limitation may be removed in future versions of {{ ydb-short-name }}.
 
@@ -222,7 +224,7 @@ ALTER TABLE articles DROP INDEX ft_index;
 * Fulltext index access must be specified explicitly using `VIEW IndexName`.
 * Only one text column can be indexed (per fulltext index). Use `COVER` for additional columns.
 * `FulltextMatch` / `FulltextScore` can't be used with `OR` or `NOT`. Combining them with other predicates via `AND` is supported.
-* A single read through `VIEW` supports only one fulltext predicate: multiple `FulltextScore` calls are not supported, and mixing `FulltextMatch` and `FulltextScore` in the same `WHERE` is not supported.
+* Multiple `FulltextMatch` predicates with default keyword settings can be combined with `AND`. A single read through `VIEW` cannot mix `FulltextMatch` and `FulltextScore` or use multiple distinct `FulltextScore` predicates.
 * For relevance access, you must include `FulltextScore(...) > 0` in `WHERE` (otherwise the query fails).
 * [Filtered fulltext indexes](#filtered): every filter column needs an equality predicate in `WHERE`.
-* [Filtered fulltext indexes](#filtered): filter columns must not be primary key columns.
+* [Filtered fulltext indexes](#filtered): filter columns can include part, but not all, of the primary key.

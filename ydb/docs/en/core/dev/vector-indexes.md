@@ -42,8 +42,8 @@ Note that:
 - It is more efficient to pass the parameter from the SDK as a string by serializing the numbers on the application side ([examples](../recipes/ydb-sdk/vector-search.md#search-by-vector)). Alternatively, the value can be passed from the SDK as a vector of numbers and converted from a list using `Knn::ToBinaryString*` functions, but this is slower.
 - The `COVER (embedding, data)` clause is optional and is used to create a [covering index](#covering). This helps further speed up the search.
 - Vector index search is always approximate — its results differ from a full-scan search.
-- Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) parameter improves search quality (recall) at the cost of speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 1 (minimum quality, maximum speed).
-- The `overlap_clusters=3` parameter significantly improves future search quality during indexing by specifying the number of clusters each vector is added to, but increases the index size.
+- Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) parameter improves search quality (recall) at the cost of speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 4 with overlapping clusters (`overlap_clusters > 1`) and 10 without overlap.
+- The `overlap_clusters=3` parameter significantly improves future search quality during indexing by specifying the maximum number of leaf clusters each vector is added to, but increases the index size.
 - The `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they will be autodetected from existing rows.
 
 ### Filtered Vector Index {#filtered}
@@ -61,7 +61,7 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="float", vector_dimension=512);
 ```
 
-Search queries using this filtered index must include conditions on the `user` column:
+Search queries using this filtered index can include conditions on the `user` column:
 
 ```yql
 PRAGMA ydb.KMeansTreeSearchTopSize = "10";
@@ -76,6 +76,8 @@ WHERE user = 'john'
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```
+
+You can search several categories using `IN` or `OR`. With multiple filtering columns, a condition on a leading part of the prefix is also supported. See [filtering with a prefixed vector index](../yql/reference/syntax/select/vector_index.md#filtering).
 
 Indexing and search parameters work the same as for a global index. Because different filtering-column values often hold very different numbers of vectors, a filtered index can additionally use [adaptive clusters](vector-indexes-kmeans-tree-type.md#adaptive-clusters) to pick the number of clusters for each value automatically.
 
@@ -139,7 +141,7 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
 
     * `levels`: number of levels in the tree, defining search depth (recommended 1-3);
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512).
-    * `overlap_clusters`: number of leaf-level clusters each vector is added to (recommended 3).
+    * `overlap_clusters`: maximum number of leaf-level clusters each vector is added to (recommended 3).
 
 Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](query-execution-optimization/query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
 
@@ -155,9 +157,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, overlap_clusters=3);
 ```
 
-In this example, each vector will be added to 3 nearest clusters instead of 1.
+In this example, each vector will be added to up to 3 nearest leaf clusters instead of 1.
 
-The `overlap_clusters` parameter is recommended for nearly all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) values (for example, 3).
+The `overlap_clusters` parameter is recommended for nearly all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) values (for example, 3).
 
 This way, you can reduce the PRAGMA value and significantly speed up the search while maintaining the same recall.
 
@@ -201,9 +203,17 @@ Another way to speed up search is to use table replicas. To do this:
 
 3. Use the [Stale Read-Only](../recipes/ydb-sdk/tx-control.md#stale-read-only) query mode.
 
+## Data requirements and limitations {#limitations}
+
+The vector column stores serialized vectors as `String`. Use the [Knn conversion functions](../yql/reference/udf/list/knn.md#functions-convert) to produce this representation. Vectors must match the index type and dimension. During index construction, a nonempty vector with an incompatible dimension causes the build to fail with `Vector dimension mismatch`; `NULL` and empty embeddings are skipped.
+
+Tables with vector indexes currently do not support [TTL](../concepts/ttl.md). Creating an index on a table with TTL enabled, or enabling TTL on a table with a vector index, is rejected.
+
+`BulkUpsert` does not support tables with synchronous vector indexes. Load data with `BulkUpsert` before creating the index, or use YQL `INSERT` and `UPSERT` to update an indexed table.
+
 ## Updating Vector Indexes {#update}
 
-Updating vector indexes has the following limitations:
+After the index is built, `INSERT`, `UPSERT`, `UPDATE`, and `DELETE` update it synchronously with the main table. A vector search in the same transaction sees earlier writes in that transaction. The following limitations still apply:
 
 ### Clusters are not recalculated during update
 

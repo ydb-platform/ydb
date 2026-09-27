@@ -35,7 +35,7 @@ LIMIT 10;
 Each branch runs against its own index and returns its own list of best-matching documents. {{ ydb-short-name }} then merges these lists into a single ranking — in one of two ways:
 
 * **Reciprocal Rank Fusion (RRF)** — the default. Each branch contributes a term based on a document's *rank* within that branch, so the absolute magnitudes of the scores (which are not comparable across branches) do not matter.
-* **Linear** — a weighted sum of the (optionally min-max normalized) per-branch scores.
+* **Linear** — a weighted sum of the (optionally min-max normalized) per-branch scores. Distances are converted so that smaller distances rank higher.
 
 Per-branch weights, the RRF constant, and the candidate-pool sizes are all configurable. For the full query syntax and parameters, see [{#T}](../../yql/reference/syntax/select/hybrid_search.md).
 

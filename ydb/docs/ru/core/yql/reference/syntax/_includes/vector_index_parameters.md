@@ -1,12 +1,12 @@
   * общие параметры для всех векторных индексов:
-    * `vector_dimension` - размерность вектора эмбеддинга (значение от 1 до 16384);
+    * `vector_dimension` - размерность вектора эмбеддинга (значение от 1 до 65536);
     * `vector_type` - тип значений вектора (`float`, [float16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format), [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format), `uint8`, `int8` или `bit`);
     * `distance` - [функция расстояния](../../udf/list/knn.md#functions-distance) (`cosine`, `manhattan` или `euclidean`), взаимосключающий с `similarity`;
     * `similarity` - [функция схожести](../../udf/list/knn.md#functions-distance) (`inner_product` или `cosine`), взаимосключающий с `distance`;
   * специфичные параметры для `vector_kmeans_tree`{% if backend_name == "YDB" and oss == true %} ([подробнее о типе индекса](../../../../dev/vector-indexes.md#kmeans-tree-type)){% endif %}:
     * `clusters` - количество центроидов для алгоритма k-means (значение от 2 до 2048);
     * `levels` - количество уровней в дереве (значение от 1 до 16);
-    * `overlap_clusters` - число ближайших кластеров, в которые будет добавлен каждый вектор (по умолчанию 1);
-    * `adaptive_clusters` - для [индексов с фильтрацией](../../../../dev/vector-indexes.md#filtered) автоматически выбирать количество кластеров для каждого значения фильтруемой колонки в зависимости от количества векторов у этого значения (`true` или `false`, по умолчанию `false`). Подробнее см. [Адаптивное количество кластеров](../../../../dev/vector-indexes-kmeans-tree-type.md#adaptive-clusters);
+    * `overlap_clusters` - максимальное число ближайших листовых кластеров, в которые добавляется каждый вектор; оно не должно превышать `clusters`. Если параметр не указан, {{ ydb-short-name }} может автоматически включить перекрытие для больших наборов данных. Если перекрытие не включено, каждый вектор попадает в один кластер;
+    * `adaptive_clusters` - для [индексов с фильтрацией](../../../../dev/vector-indexes.md#filtered) автоматически выбирать количество кластеров для каждого значения фильтруемой колонки в зависимости от количества векторов у этого значения (`true` или `false`, по умолчанию `false`; включается при автоматическом подборе параметров). Подробнее см. [Адаптивное количество кластеров](../../../../dev/vector-indexes-kmeans-tree-type.md#adaptive-clusters);
     * общее количество узлов в дереве, рассчитываемое как `clusters` в степени `levels`, должно быть не более чем 1073741824;
     * произведение `vector_dimension` на `clusters` должно быть не более чем 4194304.

@@ -296,6 +296,7 @@ SELECT * FROM FILTER(
 * [VIEW secondary_index](secondary_index.md)
 * [VIEW vector_index](vector_index.md)
 * [VIEW fulltext_index](fulltext_index.md)
+* [Hybrid search](hybrid_search.md)
 * [VIEW json_index](json_index.md)
 
 {% endif %}

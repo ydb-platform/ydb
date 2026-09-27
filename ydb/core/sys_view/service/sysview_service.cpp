@@ -87,6 +87,33 @@ static void CalculateCountersDiff(NKikimrSysView::TDbServiceCounters* diff,
     }
 }
 
+// Whether the elements Clear() kept (protobuf 22.x, recheck on upgrade) outgrew the last Pack.
+// ClearedCount() sees one level only, so any unused role or table slot counts as spare
+static bool HasSpareDetailedElements(
+    const NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters>& payload)
+{
+    // Kept leaves over about 1.25x the used ones, with a floor so small payloads do not churn
+    constexpr int MinSpareLeaves = 64;
+
+    if (payload.ClearedCount() > 0) {
+        return true;
+    }
+
+    int usedLeaves = 0;
+    int spareLeaves = 0;
+    for (const auto& entry : payload) {
+        const auto& tables = entry.GetTables();
+        if (tables.ClearedCount() > 0) {
+            return true;
+        }
+        for (const auto& table : tables) {
+            usedLeaves += table.LeavesSize();
+            spareLeaves += table.GetLeaves().ClearedCount();
+        }
+    }
+    return spareLeaves > std::max(MinSpareLeaves, usedLeaves / 4);
+}
+
 class TSysViewService : public TActorBootstrapped<TSysViewService> {
 public:
     using TBase = TActorBootstrapped<TSysViewService>;
@@ -385,12 +412,13 @@ private:
         auto& record = sendEv->Record;
 
         TDuration packingTime;
+        TStringBuf detailedRelease;
         if (dbCounters.IsConfirmed) {
             for (auto& [service, state] : dbCounters.States) {
                 state.Counters->ToProto(state.Current);
             }
             if constexpr (!isLabeled) {
-                dbCounters.DetailedCurrent = {};
+                detailedRelease = dbCounters.ResetDetailedCurrent();
                 if (!dbCounters.DetailedStates.empty()) {
                     NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
                     auto packStart = Now();
@@ -447,6 +475,7 @@ private:
             {"labeled", isLabeled},
             {"detailedRoles", detailedRoleCount},
             {"detailedTables", detailedTableCount},
+            {"detailedRelease", detailedRelease},
             {"packingTimeMs", packingTime.MilliSeconds()});
 
         Send(MakePipePerNodeCacheID(false),
@@ -1060,7 +1089,12 @@ private:
         // until it is confirmed and reuse it unchanged on every retry. A deeper fix
         // would use a pre-serialized payload (avoiding the copy), but that requires a
         // proto change to support it in the TEventPB send path.
+        // Rebuilt in place at the next confirmed send, see ResetDetailedCurrent
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters> DetailedCurrent;
+        // Confirmed sends in a row that found spare elements in DetailedCurrent
+        ui32 DetailedShrunkSends = 0;
+        // Confirmed sends since the elements of DetailedCurrent were last freed
+        ui32 DetailedSendsSinceRelease = 0;
         ui64 Generation;
         bool IsConfirmed = true;
         bool IsRetrying = false;
@@ -1068,6 +1102,44 @@ private:
         TDbCounters()
             : Generation(RandomNumber<ui64>())
         {}
+
+        // Once per confirmed send, before the rebuild: a retry resends DetailedCurrent unchanged.
+        // Clear() keeps the elements for the next Pack to reuse, = {} frees them. Returns why
+        // they were freed, empty when kept
+        TStringBuf ResetDetailedCurrent() {
+            const TStringBuf reason = CountConfirmedDetailedSend();
+            if (reason) {
+                DetailedCurrent = {};
+                DetailedShrunkSends = 0;
+                DetailedSendsSinceRelease = 0;
+            } else {
+                DetailedCurrent.Clear();
+            }
+            return reason;
+        }
+
+        // Advances the release counters. Returns why DetailedCurrent is to be freed, empty to keep it
+        TStringBuf CountConfirmedDetailedSend() {
+            if (DetailedStates.empty()) {
+                // No role left to Pack: free the elements rather than hold them until a role
+                // registers again. Quiet once nothing is held
+                if (DetailedCurrent.empty() && DetailedCurrent.ClearedCount() == 0) {
+                    return {};
+                }
+                return "unregistered";
+            }
+            if (++DetailedSendsSinceRelease >= DetailedReleasePeriodSends) {
+                return "period";
+            }
+            if (!HasSpareDetailedElements(DetailedCurrent)) {
+                DetailedShrunkSends = 0;
+                return {};
+            }
+            if (++DetailedShrunkSends >= DetailedReleaseAfterShrunkSends) {
+                return "shrunk";
+            }
+            return {};
+        }
     };
 
     std::unordered_map<TString, TDbCounters> DatabaseCounters;
@@ -1082,6 +1154,11 @@ private:
     static constexpr size_t SummaryRetryAttempts = 5;
 
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
+    // Confirmed sends before a shrunk detailed payload is freed, and before any detailed payload
+    // is freed for what ClearedCount() cannot see. At most one confirmed send per interval and
+    // none while a payload is retried, so at least a minute and ten minutes
+    static constexpr ui32 DetailedReleaseAfterShrunkSends = static_cast<ui32>(TDuration::Minutes(1) / ProcessCountersInterval);
+    static constexpr ui32 DetailedReleasePeriodSends = static_cast<ui32>(TDuration::Minutes(10) / ProcessCountersInterval);
 };
 
 THolder<NActors::IActor> CreateSysViewService(

@@ -44,7 +44,6 @@ ydb/core/kqp/ut/indexes KqpIndexes.PreSharding-Unique
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
-ydb/core/kqp/ut/query CS_WriteAffinity.CtasTableSourceWithWhereFilter+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
@@ -61,7 +60,6 @@ ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scan KqpSplit.UndeliveryOnFinishedRead
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsPublicApi+EnableIndexStreamWrite
@@ -90,7 +88,6 @@ ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithre
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldHoldSafeBarrierForInflightWrite
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldPersistTouchedBeforeFirstFlush
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestTest.ShouldNotSendWriteRequestAfterQuorumIsReached
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyShortTopicWithFederationRoot
@@ -172,7 +169,6 @@ ydb/core/transfer/ut/transfer_metrics unittest.sole chunk
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
-ydb/library/actors/http/ut HttpProxy.StreamingCompressedFatRandomResponse1
 ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/actors/util/benchmark g_benchmark.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
@@ -187,9 +183,7 @@ ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup Backup.CompactSearchIndexesWithSharedRowIdRoundTrip
-ydb/tests/functional/backup Backup.UuidValue
 ydb/tests/functional/backup unittest.sole chunk
-ydb/tests/functional/backup/s3_path_style S3PathStyleBackup.DisableVirtualAddressing
 ydb/tests/functional/backup/s3_path_style unittest.sole chunk
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1
@@ -215,7 +209,6 @@ ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_idempotent
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_name_with_symbols
-ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
@@ -884,7 +877,6 @@ ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
-ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tests/stress/remove_storage_groups/tests test_workload.py.TestYdbAlterStorageWorkload.test
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test

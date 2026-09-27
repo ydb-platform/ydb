@@ -35,6 +35,9 @@ NYdb::NQuery::TExecuteQuerySettings GetQuerySettingsFull() {
 NYdb::NQuery::TExecuteQuerySettings GetQuerySettingsNone() {
     NYdb::NQuery::TExecuteQuerySettings execSettings;
     execSettings.StatsMode(NYdb::NQuery::EStatsMode::None);
+    // The flag is explicitly requested here to verify that it is silently
+    // suppressed in None stats mode (see TKqpQueryState::GetCollectAffectedRows).
+    execSettings.CollectAffectedRows(true);
     return execSettings;
 }
 
@@ -51,6 +54,11 @@ NYdb::NQuery::TTxControl BeginReadCommittedRW() {
 
 NYdb::NQuery::TTxControl BeginSerializableRW() {
     return NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW())
+        .CommitTx();
+}
+
+NYdb::NQuery::TTxControl BeginSnapshotRW() {
+    return NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW())
         .CommitTx();
 }
 
@@ -939,6 +947,48 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         const auto readsOff = GetTableReadRows(deleteOff, "/Root/TestTable");
         const auto readsOn = GetTableReadRows(deleteOn, "/Root/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(readsOn - readsOff, rowCount);
+    }
+
+    Y_UNIT_TEST(CollectAffectedRows_EraseReadAccounted_SerializableAndSnapshotRW) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        constexpr ui64 rowCount = 3;
+
+        auto runCase = [&](NYdb::NQuery::TTxControl begin, const TString& modeName) {
+            auto insertRows = [&]() {
+                auto result = session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                    VALUES (1u, "a", 0u, ""), (2u, "b", 0u, ""), (3u, "c", 0u, "");
+                )"), begin, GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                    modeName + ": " + result.GetIssues().ToString());
+            };
+
+            insertRows();
+
+            auto result = session.ExecuteQuery(Q_(R"(
+                DELETE FROM `/Root/TestTable` WHERE Group <= 3u;
+            )"), begin, GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                modeName + ": " + result.GetIssues().ToString());
+
+            const auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, rowCount);
+
+            // Under both SerializableRW and SnapshotRW the DELETE plan reads
+            // the erased rows themselves ( rowCount reads ), and the per-row
+            // existence check performed by the erase is a real read accounted
+            // in the reads stats symmetrically to UPDATE ( another rowCount reads ).
+            const auto readRows = GetTableReadRows(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(readRows, 2 * rowCount);
+        };
+
+        runCase(BeginSerializableRW(), "SerializableRW");
+        runCase(BeginSnapshotRW(), "SnapshotRW");
     }
 }
 

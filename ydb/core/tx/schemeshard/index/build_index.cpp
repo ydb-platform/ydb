@@ -137,6 +137,7 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                     std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
                 break;
@@ -194,6 +195,7 @@ void TSchemeShard::PersistBuildIndexSpecializedDescription(NIceDb::TNiceDb& db, 
 
     switch (info.IndexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
             *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
             break;

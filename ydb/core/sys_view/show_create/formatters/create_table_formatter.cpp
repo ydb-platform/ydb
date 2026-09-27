@@ -487,6 +487,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
                 // Row-table local indexes represented as named scheme objects (e.g. prefix bloom
                 // filter) have no impl table. (Column-table/OLAP local indexes use a separate path.)
                 if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree
+                    && indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw
                     && indexDesc.IndexImplTableDescriptionsSize() > 0) {
                     FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
                 }
@@ -583,6 +584,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
             Stream << " GLOBAL USING vector_kmeans_tree ON ";
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        }
+        case TableIndex::kGlobalDistributedHnswIndex: {
+            Stream << " GLOBAL USING distributed_hnsw ON ";
+            kMeansTreeSettings = index.global_distributed_hnsw_index().vector_settings();
             break;
         }
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {

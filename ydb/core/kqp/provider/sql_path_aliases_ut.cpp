@@ -111,6 +111,24 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
         UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias/"), TString::npos);
     }
 
+    Y_UNIT_TEST(PrefixedDmlPathsAreRewrittenInOnePass) {
+        for (const TString sql : {
+            "PRAGMA TablePathPrefix = '/alias'; REPLACE INTO table (key) VALUES (1);",
+            "PRAGMA TablePathPrefix = '/alias'; UPDATE table SET value = 'updated' WHERE key = 1;",
+            "PRAGMA TablePathPrefix = '/alias'; DELETE FROM table WHERE key = 1;",
+        }) {
+            const auto rewritten = RewriteSql(sql);
+            UNIT_ASSERT_STRING_CONTAINS_C(rewritten, "/canonical/table", sql << '\n' << rewritten);
+            UNIT_ASSERT_VALUES_EQUAL_C(rewritten.find("/alias/table"), TString::npos, sql << '\n' << rewritten);
+        }
+    }
+
+    Y_UNIT_TEST(PrefixedDropThenCreatePathsAreRewrittenInOnePass) {
+        const auto rewritten = RewriteSql("PRAGMA TablePathPrefix = '/alias'; DROP TABLE IF EXISTS table; CREATE TABLE table (key Uint64, PRIMARY KEY (key));");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias/table"), TString::npos);
+    }
+
     Y_UNIT_TEST(PermissionAndExternalTableOptions) {
         const auto permission = RewriteSql("GRANT SELECT ON `/alias/table` TO user;");
         UNIT_ASSERT_STRING_CONTAINS(permission, "/canonical/table");

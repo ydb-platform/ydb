@@ -29,13 +29,25 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
 
     const auto* atom = path->Child(0);
     TString normalized = normalizePath(atom->Content());
-    if (normalized == atom->Content()) {
-        return key;
+    auto newEntry = key->ChildPtr(0);
+    if (normalized != atom->Content()) {
+        auto newPath = ctx.ChangeChild(*path, 0, ctx.NewAtom(atom->Pos(), std::move(normalized)));
+        newEntry = ctx.ChangeChild(*newEntry, 1, std::move(newPath));
     }
 
-    auto newPath = ctx.ChangeChild(*path, 0, ctx.NewAtom(atom->Pos(), std::move(normalized)));
-    auto newEntry = ctx.ChangeChild(*key->Child(0), 1, std::move(newPath));
-    return ctx.ChangeChild(*key, 0, std::move(newEntry));
+    if ((tag == "backupCollection" || tag == "backup" || tag == "restore") && key->Child(0)->ChildrenSize() > 2) {
+        const auto* prefix = key->Child(0)->Child(2);
+        if (prefix->ChildrenSize() == 1 && prefix->Child(0)->IsAtom()) {
+            const auto* prefixAtom = prefix->Child(0);
+            TString normalizedPrefix = normalizePath(prefixAtom->Content());
+            if (normalizedPrefix != prefixAtom->Content()) {
+                auto newPrefix = ctx.ChangeChild(*prefix, 0, ctx.NewAtom(prefixAtom->Pos(), std::move(normalizedPrefix)));
+                newEntry = ctx.ChangeChild(*newEntry, 2, std::move(newPrefix));
+            }
+        }
+    }
+
+    return newEntry == key->ChildPtr(0) ? key : ctx.ChangeChild(*key, 0, std::move(newEntry));
 }
 
 TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx,

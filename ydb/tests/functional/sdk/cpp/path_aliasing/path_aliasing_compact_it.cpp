@@ -230,7 +230,7 @@ namespace NYdb::inline Dev::NPathAliasingTests {
             NView::TViewClient views(*Alias);
             Check(Await(views.DescribeView(A("view"))));
             NQuery::TQueryClient aliasQuery(*Alias);
-            for (const auto& path : {A("table"), A("view"), P("view"), A("view")}) {
+            for (const auto& path : {A("table"), A("view"), P("view")}) {
                 auto result = Await(aliasQuery.ExecuteQuery(
                     Select(path), NQuery::TTxControl::BeginTx().CommitTx()));
                 Check(result);

@@ -39,6 +39,9 @@ TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicClust
     TExprNode::TPtr query;
     UNIT_ASSERT_C(CompileExpr(*ast.Root, query, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
     UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", [](TStringBuf path) {
+        if (path == "/alias") {
+            return TString("/canonical");
+        }
         return path.StartsWith("/alias/") ? TString("/canonical") + TString(path.SubStr(6)) : TString(path);
     }), ctx.IssueManager.GetIssues().ToString());
     return KqpExprToPrettyString(*query, ctx);
@@ -72,6 +75,21 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
     Y_UNIT_TEST(PathPrefixIsRewritten) {
         const auto rewritten = RewriteSql("SELECT * FROM table;", "/alias");
         UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
+    }
+
+    Y_UNIT_TEST(PermissionAndExternalTableOptions) {
+        const auto permission = RewriteSql("GRANT SELECT ON `/alias/table` TO user;");
+        UNIT_ASSERT_STRING_CONTAINS(permission, "/canonical/table");
+
+        const auto externalTable = RewriteSql("CREATE EXTERNAL TABLE `/alias/table` (key Uint64) WITH (DATA_SOURCE = '/alias/ds', LOCATION = '/');");
+        UNIT_ASSERT_STRING_CONTAINS(externalTable, "/canonical/table");
+        UNIT_ASSERT_STRING_CONTAINS(externalTable, "/canonical/ds");
+    }
+
+    Y_UNIT_TEST(BackupCollectionPrefixAndEntry) {
+        const auto rewritten = RewriteSql("PRAGMA TablePathPrefix = '/alias'; CREATE BACKUP COLLECTION collection (TABLE table) WITH (STORAGE = 'cluster');");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias"), TString::npos);
     }
 
     Y_UNIT_TEST(OtherClusterIsNotRewritten) {

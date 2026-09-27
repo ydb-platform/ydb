@@ -219,6 +219,40 @@ void AssertSameSplits(const TSplitResult& expected, const TSplitResult& actual) 
     }
 }
 
+TSplitResult SplitOnce(const TSubset& subset, const TSplitRequest& request,
+        const TKeyBoundary& from = {{}, EBoundarySide::Before}) {
+    TIndexOnlyEnv env;
+    const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), subset.Scheme->Keys);
+    TKeyBlockIterator iter(subset, &env, subset.Scheme->Keys, Cfg(), layout);
+    UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(from.Key.GetCells(),
+        from.Side == EBoundarySide::Before)), int(EReady::Data));
+    TSplitResult result;
+    UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
+    return result;
+}
+
+TSplitResult SplitInChunks(const TSubset& subset, TSplitRequest request) {
+    TSplitResult result;
+    TSplitResult previous;
+    for (ui32 step = 0; step < 100; ++step) {
+        // Rebuild the iterator as a new Execute would.
+        const TKeyBoundary resume = previous.Stopped ? previous.Resume
+            : TKeyBoundary{{}, EBoundarySide::Before};
+        request.Carry = previous.Stopped ? &previous.Carry : nullptr;
+        auto chunk = SplitOnce(subset, request, resume);
+        UNIT_ASSERT(!chunk.Stale);
+        result.Keys.insert(result.Keys.end(), chunk.Keys.begin(), chunk.Keys.end());
+        if (!chunk.Stopped) {
+            UNIT_ASSERT_C(step > 0, "walk finished in one chunk");
+            result.Truncated = chunk.Truncated;
+            return result;
+        }
+        previous = std::move(chunk);
+    }
+    UNIT_FAIL("chunked walk did not finish");
+    return {};
+}
+
 void AssertAbut(const TVector<TKeyBlock>& units, const TKeyCellDefaults& keys) {
     for (size_t i = 1; i < units.size(); ++i) {
         UNIT_ASSERT_C(TBounds::LessByKey(units[i - 1].Bounds, units[i].Bounds, keys),
@@ -999,17 +1033,17 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         TSubset subset(TEpoch::FromIndex(1), scheme);
         subset.Frozen.emplace_back(*cooker, (*cooker)->Snapshot());
 
-        auto extended = [](ui32 value) {
+        auto extended = [](TCell value) {
             TLayoutCook lay;
             lay.Col(0, 0, NScheme::NTypeIds::Uint64)
                 .Col(0, 1, NScheme::NTypeIds::Uint32)
-                .Col(0, 2, NScheme::NTypeIds::Uint32, TCell::Make(value))
+                .Col(0, 2, NScheme::NTypeIds::Uint32, value)
                 .Key({0, 2});
             return lay.RowScheme();
         };
-        const auto firstScheme = extended(77);
-        const auto equalScheme = extended(77);
-        const auto changedScheme = extended(88);
+        const auto firstScheme = extended(TCell::Make(ui32(77)));
+        const auto equalScheme = extended(TCell::Make(ui32(77)));
+        const auto changedScheme = extended(TCell::Make(ui32(88)));
         const auto original = TKeyBlockIterator::BuildLayout(subset, Cfg(1), scheme->Keys);
         const auto first = TKeyBlockIterator::BuildLayout(subset, Cfg(1), firstScheme->Keys);
         const auto equal = TKeyBlockIterator::BuildLayout(subset, Cfg(1), equalScheme->Keys);
@@ -1036,6 +1070,15 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         UNIT_ASSERT_VALUES_EQUAL(firstUnits[1].Bounds.FirstKey.GetCells()[1].AsValue<ui32>(), 77u);
         UNIT_ASSERT_VALUES_EQUAL(changedUnits[1].Bounds.FirstKey.GetCells()[1].AsValue<ui32>(), 88u);
         UNIT_ASSERT(firstUnits[1].SelectionKey != changedUnits[1].SelectionKey);
+
+        const auto nullScheme = extended(TCell());
+        const auto nullLayout = TKeyBlockIterator::BuildLayout(subset, Cfg(1), nullScheme->Keys);
+        TKeyBlockIterator nullIter(subset, &env, nullScheme->Keys, Cfg(1), nullLayout);
+        const TSerializedCellVec nullKey(TVector<TCell>{TCell::Make(ui64(7)), TCell()});
+        for (bool inclusive : {false, true}) {
+            UNIT_ASSERT_VALUES_EQUAL(int(nullIter.Seek(nullKey.GetCells(), inclusive)), int(EReady::Data));
+            UNIT_ASSERT_VALUES_EQUAL(nullIter.Get().SelectionKey, Selection(0x01, nullKey));
+        }
     }
 
     Y_UNIT_TEST(SeparatorCheck) {
@@ -1631,8 +1674,12 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         TCooker older(scheme, TEpoch::FromIndex(2));
         TCooker newer(scheme, TEpoch::FromIndex(3));
         for (ui64 key = 0; key < 40; ++key) {
-            older.Add(*TSchemedCookRow(*scheme).Col(key, ui32(1)));
-            newer.Add(*TSchemedCookRow(*scheme).Col(key, ui32(2)));
+            if (key % 3 != 0) {
+                older.Add(*TSchemedCookRow(*scheme).Col(key, ui32(1)));
+            }
+            if (key % 3 != 1) {
+                newer.Add(*TSchemedCookRow(*scheme).Col(key, ui32(2)));
+            }
         }
         TSubset subset(TEpoch::FromIndex(1), scheme);
         subset.Flatten.push_back(part);
@@ -1655,6 +1702,264 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
             UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, Selection(0x01, target));
             UNIT_ASSERT_VALUES_EQUAL(iter.Get().FromMemtable, bool(key % 2));
             UNIT_ASSERT_VALUES_EQUAL(iter.Get().OwnerRows, key % 2 ? 0u : 1u);
+        }
+    }
+
+    Y_UNIT_TEST(MemtableSeekDoesNotScanWholeTable) {
+        auto scheme = Scheme64();
+        TCooker cooker(scheme, TEpoch::FromIndex(1));
+        constexpr ui64 Rows = 400;
+        for (ui64 key = 0; key < Rows; ++key) {
+            cooker.Add(*TSchemedCookRow(*scheme).Col(key, ui32(key)));
+        }
+        TSubset subset(TEpoch::FromIndex(1), scheme);
+        subset.Frozen.emplace_back(*cooker, (*cooker)->Snapshot());
+        TIndexOnlyEnv env;
+        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(1), scheme->Keys);
+        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(1), layout);
+        for (bool inclusive : {false, true}) {
+            UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(Key64(Rows - 1).GetCells(), inclusive)), int(EReady::Data));
+            UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, Selection(0x01, Key64(Rows - 1)));
+        }
+        UNIT_ASSERT_C(iter.Telemetry().MemtableKeysVisited > 0
+            && iter.Telemetry().MemtableKeysVisited < 8,
+            "visited " << iter.Telemetry().MemtableKeysVisited);
+    }
+
+    // The persisted part forces a walk. The uncharged tail must preserve split keys
+    // without visiting every memtable anchor.
+    Y_UNIT_TEST(SplitPointsSkipsUnchargedMemtableTail) {
+        auto scheme = Scheme64();
+        auto part = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 8);
+        TCooker cooker(scheme, TEpoch::FromIndex(2));
+        constexpr ui64 Tail = 400;
+        for (ui64 key = 8; key < Tail; ++key) {
+            cooker.Add(*TSchemedCookRow(*scheme).Col(key, ui32(key)));
+        }
+        TSubset partOnly(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        TSubset mixed(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        mixed.Frozen.emplace_back(*cooker, (*cooker)->Snapshot());
+        TIndexOnlyEnv partEnv;
+        TIndexOnlyEnv mixedEnv;
+        const auto partLayout = TKeyBlockIterator::BuildLayout(partOnly, Cfg(1), scheme->Keys);
+        const auto mixedLayout = TKeyBlockIterator::BuildLayout(mixed, Cfg(1), scheme->Keys);
+        TKeyBlockIterator partIter(partOnly, &partEnv, scheme->Keys, Cfg(1), partLayout);
+        TKeyBlockIterator mixedIter(mixed, &mixedEnv, scheme->Keys, Cfg(1), mixedLayout);
+        UNIT_ASSERT_VALUES_EQUAL(int(partIter.Seek({}, true)), int(EReady::Data));
+        UNIT_ASSERT_VALUES_EQUAL(int(mixedIter.Seek({}, true)), int(EReady::Data));
+        TSplitRequest request;
+        request.MaxExpectedBytes = 1;
+        request.MaxIndexPages = Max<ui64>();
+        TSplitResult partSplit;
+        TSplitResult mixedSplit;
+        UNIT_ASSERT_VALUES_EQUAL(int(partIter.SplitPoints(request, partSplit)), int(EReady::Data));
+        UNIT_ASSERT_VALUES_EQUAL(int(mixedIter.SplitPoints(request, mixedSplit)), int(EReady::Data));
+        UNIT_ASSERT(!partSplit.Keys.empty());
+        AssertSameSplits(partSplit, mixedSplit);
+        UNIT_ASSERT_C(mixedIter.Telemetry().MemtableKeysVisited < 32,
+            "visited " << mixedIter.Telemetry().MemtableKeysVisited);
+    }
+
+    // All prefix units probe the same persisted page. Skipping them is safe only
+    // when the byte budget can charge that page with probability 1.
+    Y_UNIT_TEST(SplitPointsSkipsRepeatedProbePrefix) {
+        auto scheme = Scheme64();
+        constexpr ui64 Prefix = 400;
+        auto part = CookKeys(scheme, Conf(100), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), {Prefix, Prefix + 1});
+        TCooker cooker(scheme, TEpoch::FromIndex(2));
+        for (ui64 key = 0; key < Prefix; ++key) {
+            cooker.Add(*TSchemedCookRow(*scheme).Col(key, ui32(key)));
+        }
+        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        subset.Frozen.emplace_back(*cooker, (*cooker)->Snapshot());
+        TIndexOnlyEnv env;
+        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(1), scheme->Keys);
+        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(1), layout);
+        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
+        TSplitRequest request;
+        request.Rate = 0.05;
+        request.MaxExpectedBytes = Max<ui64>();
+        request.MaxIndexPages = Max<ui64>();
+        TSplitResult result;
+        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
+        UNIT_ASSERT(!result.Truncated);
+        UNIT_ASSERT(result.Keys.empty());
+        UNIT_ASSERT_C(iter.Telemetry().MemtableKeysVisited < 32,
+            "visited " << iter.Telemetry().MemtableKeysVisited);
+
+        request.EndKey = Key64(Prefix);
+        request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 2;
+        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
+        UNIT_ASSERT(!result.Truncated);
+        UNIT_ASSERT(!result.Keys.empty());
+        UNIT_ASSERT(ComparePartKeys(result.Keys.front().Key.GetCells(),
+            request.EndKey.GetCells(), *scheme->Keys) < 0);
+    }
+
+    // Chunks must preserve repeated page charges and produce the same split keys
+    // as an uninterrupted walk.
+    Y_UNIT_TEST(SplitPointsMaxUnitsPreservesPiece) {
+        auto scheme = Scheme64();
+        auto part = CookRows(scheme, Conf(1, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 24);
+        part.Slices = TSlices::All();
+        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        TSplitRequest base;
+        base.Rate = 0.5;
+        // Four units cost 3.25 pages; five cost 4. Repeated end probes must
+        // retain their probabilities across chunks.
+        const ui64 pageBytes = IndexTools::CountDataSize(*part.Part, {}) / 24;
+        base.MaxExpectedBytes = pageBytes * 7 / 2;
+        base.MaxIndexPages = Max<ui64>();
+        const auto expected = SplitOnce(subset, base);
+        UNIT_ASSERT(!expected.Keys.empty());
+        UNIT_ASSERT(!expected.Stopped);
+        UNIT_ASSERT_VALUES_EQUAL(expected.Keys.front().Key.GetBuffer(), Key64(4).GetBuffer());
+        for (ui64 maxUnits : {ui64(1), ui64(3)}) {
+            base.MaxUnits = maxUnits;
+            AssertSameSplits(expected, SplitInChunks(subset, base));
+        }
+    }
+
+    // Each flat index page must be charged only once across all chunks.
+    Y_UNIT_TEST(SplitPointsChunksShareIndexPages) {
+        auto scheme = Scheme64();
+        auto left = CookRows(scheme, Conf(8, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
+        auto right = CookRows(scheme, Conf(1, false), TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(2), 8);
+        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{left, right});
+        TSplitRequest request;
+        request.Rate = 0.05;
+        request.MaxExpectedBytes = Max<ui64>();
+        request.MaxIndexPages = 2;
+        request.MaxUnits = 1;
+        const auto result = SplitInChunks(subset, request);
+        UNIT_ASSERT(!result.Truncated);
+        UNIT_ASSERT(result.Keys.empty());
+    }
+
+    // Later chunks must spend the original range's remaining index-page budget.
+    Y_UNIT_TEST(SplitPointsChunksShareIndexBudget) {
+        auto scheme = Scheme64();
+        auto part = CookRows(scheme, SmallBTreeConf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 256);
+        part.Slices = TSlices::All();
+        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        TSplitRequest request;
+        request.MaxExpectedBytes = Max<ui64>();
+        request.MaxIndexPages = 4 * (part->IndexPages.GetBTree({}).LevelCount + 1);
+        const auto expected = SplitOnce(subset, request);
+        UNIT_ASSERT(expected.Truncated);
+        UNIT_ASSERT_VALUES_EQUAL(expected.Keys.size(), 1u);
+        request.MaxUnits = 1;
+        AssertSameSplits(expected, SplitInChunks(subset, request));
+    }
+
+    Y_UNIT_TEST(SplitPointsRejectsChangedRequest) {
+        auto scheme = Scheme64();
+        auto part = CookRows(scheme, Conf(1, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
+        part.Slices = TSlices::All();
+        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        const TBounds certain{Key64(0), Key64(1), true, false};
+        TSplitRequest request;
+        request.EndKey = Key64(12);
+        request.Rate = 0.5;
+        request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 4;
+        request.MaxIndexPages = Max<ui64>();
+        request.MaxUnits = 2;
+        request.Certain = &certain;
+        auto chunk = SplitOnce(subset, request);
+        UNIT_ASSERT(chunk.Stopped);
+        UNIT_ASSERT(chunk.Keys.empty());
+        request.MaxUnits = 0;
+        request.Carry = &chunk.Carry;
+
+        const auto checkChanged = [&](auto change) {
+            auto changed = request;
+            change(changed);
+            const auto result = SplitOnce(subset, changed, chunk.Resume);
+            UNIT_ASSERT(result.Stale);
+            UNIT_ASSERT(result.Keys.empty());
+            UNIT_ASSERT(!result.Stopped);
+            UNIT_ASSERT(!result.Truncated);
+        };
+        checkChanged([](auto& changed) { changed.Rate = 0.25; });
+        checkChanged([](auto& changed) { changed.Rate = 1.0; });
+        checkChanged([](auto& changed) { --changed.MaxExpectedBytes; });
+        checkChanged([](auto& changed) { changed.MaxIndexPages = 1; });
+        checkChanged([](auto& changed) { changed.EndKey = Key64(10); });
+        checkChanged([](auto& changed) { changed.EndInclusive = true; });
+        checkChanged([](auto& changed) { changed.Certain = nullptr; });
+        const TBounds changedBounds[] = {
+            {Key64(1), Key64(1), true, false},
+            {Key64(0), Key64(2), true, false},
+            {Key64(0), Key64(1), false, false},
+            {Key64(0), Key64(1), true, true},
+        };
+        for (const auto& bounds : changedBounds) {
+            checkChanged([&](auto& changed) { changed.Certain = &bounds; });
+        }
+
+        // Rejection leaves the checkpoint reusable.
+        const auto expected = SplitOnce(subset, request, chunk.Resume);
+        UNIT_ASSERT(!expected.Stale);
+        UNIT_ASSERT(!expected.Keys.empty());
+        const TBounds equivalent{Key64(0), Key64(1), true, false};
+        request.Certain = &equivalent;
+        const auto resumed = SplitOnce(subset, request, chunk.Resume);
+        UNIT_ASSERT(!resumed.Stale);
+        AssertSameSplits(expected, resumed);
+
+        request.Carry = nullptr;
+        request.MaxUnits = 2;
+        request.MaxIndexPages = 1;
+        request.Certain = nullptr;
+        chunk = SplitOnce(subset, request);
+        UNIT_ASSERT(chunk.Stopped);
+        UNIT_ASSERT(!chunk.Truncated);
+        request.Carry = &chunk.Carry;
+        request.MaxUnits = 0;
+        checkChanged([](auto& changed) { changed.MaxIndexPages = Max<ui64>(); });
+        checkChanged([&](auto& changed) { changed.Certain = &certain; });
+    }
+
+    // Checkpoints survive equivalent part objects, but reject changed layouts.
+    Y_UNIT_TEST(SplitPointsRejectsStaleCarry) {
+        auto scheme = Scheme64();
+        auto part = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
+        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
+        TSplitRequest request;
+        request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 4;
+        request.MaxIndexPages = Max<ui64>();
+        request.MaxUnits = 2;
+        const auto chunk = SplitOnce(subset, request);
+        UNIT_ASSERT(chunk.Stopped);
+        UNIT_ASSERT(!chunk.Stale);
+        UNIT_ASSERT(chunk.Keys.empty());
+
+        request.MaxUnits = 0;
+        request.Carry = &chunk.Carry;
+        const auto expected = SplitOnce(subset, request, chunk.Resume);
+        UNIT_ASSERT(!expected.Keys.empty());
+        const TSplitCheckpoint empty;
+        const std::pair<ui32, const TSplitCheckpoint*> cases[] = {
+            {1, &chunk.Carry}, {1, &empty}, {2, &chunk.Carry},
+        };
+        for (const auto& [cookie, carry] : cases) {
+            auto replacement = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, cookie), TEpoch::FromIndex(1), 16);
+            TSubset changed(TEpoch::FromIndex(1), scheme, TVector<TPartView>{replacement});
+            request.Carry = carry;
+            const auto resumed = SplitOnce(changed, request, chunk.Resume);
+            const bool valid = cookie == 1 && carry == &chunk.Carry;
+            UNIT_ASSERT_VALUES_EQUAL(resumed.Stale, !valid);
+            UNIT_ASSERT(!resumed.Stopped);
+            UNIT_ASSERT(!resumed.Truncated);
+            if (valid) {
+                AssertSameSplits(expected, resumed);
+            } else {
+                UNIT_ASSERT(resumed.Keys.empty());
+                request.Carry = nullptr;
+                const auto restarted = SplitOnce(changed, request);
+                UNIT_ASSERT(!restarted.Stale);
+                UNIT_ASSERT(!restarted.Keys.empty());
+            }
         }
     }
 }

@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <optional>
 #include <set>
 #include <tuple>
 
@@ -172,7 +173,7 @@ TIntrusiveConstPtr<TSlices> SlicesOf(const TPartView& view) {
 }
 
 struct TPageRef {
-    uintptr_t Part = 0;
+    TLogoBlobID Label;
     ui32 Group = 0;
     ui32 PageId = 0;
 
@@ -180,7 +181,8 @@ struct TPageRef {
 
     template <typename H>
     friend H AbslHashValue(H h, const TPageRef& ref) {
-        return H::combine(std::move(h), ref.Part, ref.Group, ref.PageId);
+        const ui64* raw = ref.Label.GetRaw();
+        return H::combine(std::move(h), raw[0], raw[1], raw[2], ref.Group, ref.PageId);
     }
 };
 
@@ -188,6 +190,8 @@ struct TPageUse {
     ui64 Bytes = 0;
     ui64 Units = 0;
     bool Certain = false;
+    // Page end; finite ends allow obsolete per-page state to be discarded.
+    TMark End;
 };
 
 using TPageUseMap = absl::flat_hash_map<TPageRef, TPageUse>;
@@ -197,9 +201,10 @@ class TIndexEnv : public IPages {
 public:
     IPages* Inner = nullptr;
     TPageSet* AllSeen = nullptr;
+    // Shared across chunks so index pages spend budget only once.
+    TPageSet* BudgetSeen = nullptr;
     ui64 MaxPages = Max<ui64>();
     bool BudgetHit = false;
-    TPageSet Seen;
 
     TResult Locate(const TMemTable* memTable, ui64 ref, ui32 tag) override {
         return Inner->Locate(memTable, ref, tag);
@@ -210,9 +215,8 @@ public:
     }
 
     const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-        const TPageRef ref{uintptr_t(part), groupId.Raw(), pageId};
-        const bool limited = MaxPages != Max<ui64>();
-        if (limited && !Seen.contains(ref) && Seen.size() >= MaxPages) {
+        const TPageRef ref{part->Label, groupId.Raw(), pageId};
+        if (BudgetSeen && !BudgetSeen->contains(ref) && BudgetSeen->size() >= MaxPages) {
             BudgetHit = true;
             return nullptr;
         }
@@ -221,8 +225,8 @@ public:
             "key-block iterator requested a non-index page");
         const TSharedData* page = Inner->TryGetPage(part, pageId, groupId);
         if (page) {
-            if (limited) {
-                Seen.insert(ref);
+            if (BudgetSeen) {
+                BudgetSeen->insert(ref);
             }
             AllSeen->insert(ref);
         }
@@ -325,6 +329,19 @@ struct TOwnerLess {
 
 } // namespace
 
+struct TSplitCheckpoint::TState {
+    TString LayoutId;
+    double Rate = 1.0;
+    ui64 MaxExpectedBytes = 0;
+    ui64 MaxIndexPages = 0;
+    TMark End;
+    std::optional<TBounds> Certain;
+    ui64 PieceUnits = 0;
+    double PieceBytes = 0;
+    TPageUseMap PiecePages;
+    TPageSet IndexPages;
+};
+
 struct TKeyBlockIterator::TState {
     struct TWalk {
         TMark Target;
@@ -332,11 +349,6 @@ struct TKeyBlockIterator::TState {
         TMark End;
         ui32 Region = 0;
         absl::flat_hash_map<const TPart*, TPageCursor> Main;
-    };
-
-    struct TAnchors {
-        bool Ready = false;
-        TVector<TMark> Cuts;
     };
 
     struct TRunCursor {
@@ -355,6 +367,8 @@ struct TKeyBlockIterator::TState {
         double PieceBytes = 0;
         TPageUseMap PiecePages;
         TPageUseMap UnitPages;
+        // Includes index pages imported from Carry.
+        TPageSet IndexPages;
         TVector<TRunCursor> Runs;
     };
 
@@ -362,7 +376,6 @@ struct TKeyBlockIterator::TState {
     TIntrusiveConstPtr<TKeyCellDefaults> Keys;
     TConf Conf;
     const TKeyBlocksLayout* Layout = nullptr;
-    TVector<TAnchors> Anchors;
     THolder<TLevels> Levels;
 
     TKeyBlocksTelemetry Telemetry;
@@ -407,43 +420,48 @@ struct TKeyBlockIterator::TState {
         return lo;
     }
 
-    void BuildAnchors(ui32 region) {
-        auto& data = Anchors[region];
-        if (data.Ready) {
-            return;
-        }
-        const TMark start = Canonical(StartOf(Layout->Regions[region].Bounds));
-        const TMark end = EndOf(Layout->Regions[region].Bounds);
+    TMark MemtableCut(const TMemTableSnapshot& mem, const NMem::TTreeIterator& iter) {
+        auto key = ExtendKey({iter.GetKey(), mem->Scheme->Keys->Size()}, KeyDefaults());
+        return BeforeKey(std::move(key));
+    }
+
+    bool IsAnchor(const TMark& cut) const {
+        const auto& buf = cut.Key.GetBuffer();
+        return CityHash64WithSeed(buf.data(), buf.size(), Conf.AnchorSalt) % Conf.MemtableStride == 0;
+    }
+
+    // Search outward from the target; anchors found in one memtable bound the others.
+    void PlaceMemtableUnit(TWalk& walk) {
+        const NMem::TPoint point{walk.Target.Key.GetCells(), KeyDefaults()};
         for (const auto& mem : Subset->Frozen) {
             auto iter = mem.Snapshot.Iterator();
-            const bool found = start.Inf == EInf::Neg
-                ? iter.SeekFirst()
-                : iter.SeekLowerBound(NMem::TPoint{start.Key.GetCells(), KeyDefaults()});
-            if (!found) {
-                continue;
+            if (walk.Target.Inf != EInf::Neg && iter.SeekUpperBound(point, /* backwards */ true)) {
+                do {
+                    ++Telemetry.MemtableKeysVisited;
+                    TMark cut = MemtableCut(mem, iter);
+                    if (CmpPos(cut, walk.Start, KeyDefaults()) <= 0) {
+                        break;
+                    }
+                    if (IsAnchor(cut)) {
+                        walk.Start = std::move(cut);
+                        break;
+                    }
+                } while (iter.Prev());
             }
-            do {
-                auto key = ExtendKey({iter.GetKey(), mem->Scheme->Keys->Size()}, KeyDefaults());
-                TMark cut = BeforeKey(std::move(key));
-                if (CmpPos(cut, end, KeyDefaults()) >= 0) {
-                    break;
-                }
-                if (CmpPos(start, cut, KeyDefaults()) >= 0) {
-                    continue;
-                }
-                const auto& buf = cut.Key.GetBuffer();
-                if (CityHash64WithSeed(buf.data(), buf.size(), Conf.AnchorSalt) % Conf.MemtableStride == 0) {
-                    data.Cuts.push_back(std::move(cut));
-                }
-            } while (iter.Next());
+            if (walk.Target.Inf == EInf::Neg ? iter.SeekFirst() : iter.SeekUpperBound(point)) {
+                do {
+                    ++Telemetry.MemtableKeysVisited;
+                    TMark cut = MemtableCut(mem, iter);
+                    if (CmpPos(cut, walk.End, KeyDefaults()) >= 0) {
+                        break;
+                    }
+                    if (IsAnchor(cut)) {
+                        walk.End = std::move(cut);
+                        break;
+                    }
+                } while (iter.Next());
+            }
         }
-        std::sort(data.Cuts.begin(), data.Cuts.end(), [&](const TMark& a, const TMark& b) {
-            return CmpPos(a, b, KeyDefaults()) < 0;
-        });
-        data.Cuts.erase(std::unique(data.Cuts.begin(), data.Cuts.end(), [&](const TMark& a, const TMark& b) {
-            return CmpPos(a, b, KeyDefaults()) == 0;
-        }), data.Cuts.end());
-        data.Ready = true;
     }
 
     EReady Locate(TWalk& walk, IPages* env) {
@@ -463,16 +481,7 @@ struct TKeyBlockIterator::TState {
             walk.Start = Later(walk.Start, cursor.Page.Begin);
             walk.End = Earlier(walk.End, cursor.Page.End);
         } else {
-            BuildAnchors(walk.Region);
-            const auto& cuts = Anchors[walk.Region].Cuts;
-            auto it = std::upper_bound(cuts.begin(), cuts.end(), walk.Target,
-                [&](const TMark& target, const TMark& cut) { return CmpPos(target, cut, KeyDefaults()) < 0; });
-            if (it != cuts.begin()) {
-                walk.Start = *std::prev(it);
-            }
-            if (it != cuts.end()) {
-                walk.End = *it;
-            }
+            PlaceMemtableUnit(walk);
         }
         Y_ENSURE(CmpPos(walk.Start, walk.Target, KeyDefaults()) <= 0);
         Y_ENSURE(CmpPos(walk.Target, walk.End, KeyDefaults()) < 0);
@@ -480,7 +489,7 @@ struct TKeyBlockIterator::TState {
     }
 
     void AddDataBytes(const TPageSpan& page, const TPart* owner) {
-        if (!SeenData.insert({uintptr_t(page.Part), 0, page.PageId}).second) {
+        if (!SeenData.insert({page.Part->Label, 0, page.PageId}).second) {
             return;
         }
         if (page.Part == owner) {
@@ -493,10 +502,6 @@ struct TKeyBlockIterator::TState {
     void ResetVisits() {
         Telemetry.UnitsTotal = 0;
         Telemetry.UnitsMemtable = 0;
-        Telemetry.OwnerRowsPerUnitMax = 0;
-        Telemetry.OwnerMainGroupBytes = 0;
-        Telemetry.OtherMainGroupBytes = 0;
-        SeenData.clear();
     }
 
     EReady FinishRead() {
@@ -551,10 +556,20 @@ struct TKeyBlockIterator::TState {
     }
 
     void AddMainPage(TSplitWalk& split, const TPageSpan& page, bool certain) {
-        auto& use = split.UnitPages[{uintptr_t(page.Part), 0, page.PageId}];
+        auto& use = split.UnitPages[{page.Part->Label, 0, page.PageId}];
         use.Bytes = page.Bytes;
         use.Certain |= certain;
+        use.End = page.End;
         AddDataBytes(page, Layout->Regions[split.Walk.Region].Owner);
+    }
+
+    // Forget pages that cannot recur, retaining their charges in PieceBytes.
+    void RetirePassedPages(TSplitWalk& split) const {
+        absl::erase_if(split.PiecePages, [&](const auto& entry) {
+            const auto& end = entry.second.End;
+            return end.Inf == EInf::Fin
+                && CmpPos(end, split.Walk.Target, KeyDefaults()) <= 0;
+        });
     }
 
     // Walk each run over [start, end), including one range-end probe.
@@ -602,7 +617,6 @@ struct TKeyBlockIterator::TState {
                 if (CmpPos(target, end, KeyDefaults()) >= 0) {
                     break;
                 }
-
                 // The last overlapping page may have no row reaching end.
                 // Charge a successor even across a sparse gap or slice edge.
                 const auto sliceEndRow = slice.LastRowId == Max<TRowId>()
@@ -651,16 +665,87 @@ struct TKeyBlockIterator::TState {
             use.Bytes = unitUse.Bytes;
             ++use.Units;
             use.Certain |= unitUse.Certain;
+            use.End = unitUse.End;
             split.PieceBytes += Contribution(use, split.Request.Rate);
         }
     }
 
-    void EmitSplit(TSplitWalk& split, const TMark& pos) {
-        if (CmpPos(split.Start, pos, KeyDefaults()) < 0
-            && CmpPos(pos, split.End, KeyDefaults()) < 0)
-        {
-            split.Result.Keys.push_back(ToBoundary(pos));
+    // No slice overlaps an ownerless region. Every unit there probes the same
+    // next page in each run. Skip the remaining anchors if charging those
+    // probes at probability 1 still fits the budget.
+    void SkipUnchargedMemtable(TSplitWalk& split) const {
+        const auto& region = Layout->Regions[split.Walk.Region];
+        const TMark end = Earlier(Canonical(EndOf(region.Bounds)), split.End);
+        if (region.Owner || CmpPos(split.Walk.Target, end, KeyDefaults()) >= 0) {
+            return;
         }
+        double bytes = split.PieceBytes;
+        for (const auto& [ref, unitUse] : split.UnitPages) {
+            Y_UNUSED(unitUse);
+            const auto& use = split.PiecePages.at(ref);
+            bytes += double(use.Bytes) - Contribution(use, split.Request.Rate);
+        }
+        if (!split.UnitPages.empty() && bytes > double(split.Request.MaxExpectedBytes)) {
+            return;
+        }
+        for (const auto& [ref, unitUse] : split.UnitPages) {
+            Y_UNUSED(unitUse);
+            split.PiecePages.at(ref).Certain = true;
+        }
+        split.PieceBytes = bytes;
+        split.Walk.Target = end;
+    }
+
+    bool ImportCarry(TSplitWalk& split, const TSplitCheckpoint& carry) const {
+        if (!carry.State || carry.State->LayoutId != Layout->LayoutId
+            || carry.State->Rate != split.Request.Rate
+            || carry.State->MaxExpectedBytes != split.Request.MaxExpectedBytes
+            || carry.State->MaxIndexPages != split.Request.MaxIndexPages
+            || CmpPos(carry.State->End, split.End, KeyDefaults()) != 0
+            || carry.State->Certain.has_value() != bool(split.Request.Certain))
+        {
+            return false;
+        }
+        if (split.Request.Certain
+            && (CmpPos(StartOf(*carry.State->Certain), StartOf(*split.Request.Certain), KeyDefaults()) != 0
+                || CmpPos(EndOf(*carry.State->Certain), EndOf(*split.Request.Certain), KeyDefaults()) != 0))
+        {
+            return false;
+        }
+        split.PieceUnits = carry.State->PieceUnits;
+        split.PieceBytes = carry.State->PieceBytes;
+        split.PiecePages = carry.State->PiecePages;
+        split.IndexPages = carry.State->IndexPages;
+        return true;
+    }
+
+    void FillCarry(TSplitWalk& split) const {
+        auto carry = std::make_shared<TSplitCheckpoint::TState>();
+        carry->LayoutId = Layout->LayoutId;
+        carry->Rate = split.Request.Rate;
+        carry->MaxExpectedBytes = split.Request.MaxExpectedBytes;
+        carry->MaxIndexPages = split.Request.MaxIndexPages;
+        carry->End = split.End;
+        if (split.Request.Certain) {
+            carry->Certain = *split.Request.Certain;
+        }
+        carry->PieceUnits = split.PieceUnits;
+        carry->PieceBytes = split.PieceBytes;
+        carry->PiecePages = std::move(split.PiecePages);
+        carry->IndexPages = std::move(split.IndexPages);
+        split.Result.Carry.State = std::move(carry);
+    }
+
+    bool EmitSplit(TSplitWalk& split, const TMark& pos) {
+        if (pos.Inf != EInf::Fin || CmpPos(pos, split.End, KeyDefaults()) >= 0) {
+            return false;
+        }
+        // A carried prefix makes the resume boundary a valid interior cut.
+        if (!split.Request.Carry && CmpPos(split.Start, pos, KeyDefaults()) >= 0) {
+            return false;
+        }
+        split.Result.Keys.push_back(ToBoundary(pos));
+        return true;
     }
 };
 
@@ -836,7 +921,6 @@ TKeyBlockIterator::TKeyBlockIterator(
     State->Layout = &layout;
     State->MainEnv.Inner = env;
     State->MainEnv.AllSeen = &State->SeenIndex;
-    State->Anchors.resize(layout.Regions.size());
     State->Telemetry.Parts = subset.Flatten.size();
     State->Telemetry.Memtables = subset.Frozen.size();
     for (const auto& view : subset.Flatten) {
@@ -887,7 +971,12 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
     split.End = RangeEndOf(request);
     Y_ENSURE(CmpPos(split.Start, split.End, State->KeyDefaults()) <= 0,
         "SplitPoints end is before the current position");
-    if (CmpPos(split.End, State->Read.End, State->KeyDefaults()) <= 0) {
+    if (request.Carry && !State->ImportCarry(split, *request.Carry)) {
+        out = {};
+        out.Stale = true;
+        return EReady::Data;
+    }
+    if (!request.Carry && CmpPos(split.End, State->Read.End, State->KeyDefaults()) <= 0) {
         // A singleton has no interior boundary and is exempt from both budgets.
         out = {};
         return EReady::Data;
@@ -895,9 +984,11 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
     split.Walk.Target = split.Start;
     split.Env.Inner = State->MainEnv.Inner;
     split.Env.AllSeen = &State->SeenIndex;
+    split.Env.BudgetSeen = request.MaxIndexPages != Max<ui64>() ? &split.IndexPages : nullptr;
     split.Env.MaxPages = request.MaxIndexPages;
     State->StartChargeRuns(split);
 
+    ui64 visited = 0;
     while (CmpPos(split.Walk.Target, split.End, State->KeyDefaults()) < 0) {
         EReady ready = State->Locate(split.Walk, &split.Env);
         if (ready == EReady::Data) {
@@ -907,9 +998,10 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
             if (!split.Env.BudgetHit) {
                 return EReady::Page;
             }
-            // Keep the first unit's suffix as one exempt piece. Seek already
-            // found its end, even when this walk has a zero index budget.
-            State->EmitSplit(split, CmpPos(split.Walk.Target, split.Start, State->KeyDefaults()) == 0
+            // Only the original range's first unit is exempt. A resumed walk
+            // already has a prefix, so its current boundary is a valid cut.
+            State->EmitSplit(split, !request.Carry
+                && CmpPos(split.Walk.Target, split.Start, State->KeyDefaults()) == 0
                 ? State->Read.End : split.Walk.Target);
             split.Result.Truncated = true;
             break;
@@ -919,14 +1011,28 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
         }
         State->AddUnit(split);
         if (split.PieceUnits && split.PieceBytes > double(request.MaxExpectedBytes)) {
-            State->EmitSplit(split, split.Walk.Start);
-            split.PiecePages.clear();
-            split.PieceBytes = 0;
-            split.PieceUnits = 0;
-            State->AddUnit(split);
+            // -inf cannot be returned as a split key.
+            const TMark cut = split.Walk.Start.Inf == EInf::Fin ? split.Walk.Start : split.Start;
+            if (State->EmitSplit(split, cut)) {
+                split.PiecePages.clear();
+                split.PieceBytes = 0;
+                split.PieceUnits = 0;
+                State->AddUnit(split);
+            }
         }
         ++split.PieceUnits;
+        ++visited;
         split.Walk.Target = split.Walk.End;
+        State->SkipUnchargedMemtable(split);
+        State->RetirePassedPages(split);
+        if (request.MaxUnits && visited >= request.MaxUnits
+            && CmpPos(split.Walk.Target, split.End, State->KeyDefaults()) < 0)
+        {
+            State->FillCarry(split);
+            split.Result.Stopped = true;
+            split.Result.Resume = ToBoundary(split.Walk.Target);
+            break;
+        }
     }
     out = std::move(split.Result);
     return EReady::Data;

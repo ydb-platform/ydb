@@ -44,6 +44,8 @@
 #include <util/generic/vector.h>
 #include <util/system/types.h>
 
+#include <memory>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -79,16 +81,27 @@ namespace NTable {
         // Units visited by Seek/Next since the last Seek.
         ui64 UnitsTotal = 0;
         ui64 UnitsMemtable = 0;
+        // The counters below are not cleared by Seek.
         ui64 OwnerRowsPerUnitMax = 0;
-        // Unique main-group bytes since Seek, classified on first encounter.
+        // Unique main-group bytes, classified on first encounter.
         // Includes SplitPoints and pages probed to detect the range end.
         ui64 OwnerMainGroupBytes = 0;
         ui64 OtherMainGroupBytes = 0;
         ui64 IndexPagesTouched = 0; // unique pages over the iterator's lifetime
+        // Memtable keys examined while locating units.
+        ui64 MemtableKeysVisited = 0;
         // Snapshot counts; Parts and Slices exclude cold parts.
         ui32 Parts = 0;
         ui32 Memtables = 0;
         ui32 Slices = 0;
+    };
+
+    // Unfinished piece and index-page budget.
+    struct TSplitCheckpoint {
+    private:
+        friend class TKeyBlockIterator;
+        struct TState;
+        std::shared_ptr<const TState> State;
     };
 
     struct TSplitRequest {
@@ -98,8 +111,14 @@ namespace NTable {
         double Rate = 1.0; // independent unit selection probability; finite, (0, 1]
         // Zero is a strict limit for both budgets.
         ui64 MaxExpectedBytes = 0; // conservative expected main-group bytes per piece
-        // Unique index pages per walk, including cache hits; Max<ui64>() = unlimited.
+        // Unique index pages across the range and its continuations, including
+        // cache hits; Max<ui64>() = unlimited.
         ui64 MaxIndexPages = 0;
+        // Maximum units examined per call; 0 = unlimited.
+        ui64 MaxUnits = 0;
+        // From a Stopped result; borrowed for this call.
+        // Only MaxUnits may change on resume.
+        const TSplitCheckpoint* Carry = nullptr;
         // Optional selected interval, clipped and charged at rate 1; valid during the call.
         const TBounds* Certain = nullptr;
     };
@@ -107,6 +126,12 @@ namespace NTable {
     struct TSplitResult {
         TVector<TKeyBoundary> Keys; // sorted interior unit boundaries
         bool Truncated = false; // index budget reached; tail remains unchecked
+        // MaxUnits reached; Resume and Carry are valid.
+        bool Stopped = false;
+        TKeyBoundary Resume;
+        TSplitCheckpoint Carry;
+        // Carry is incompatible with this layout or request; Keys is empty.
+        bool Stale = false;
     };
 
     class TKeyBlockIterator {
@@ -152,6 +177,9 @@ namespace NTable {
         // Walks from the last Seek/Next position to EndKey; requires IsValid().
         // Preserves the read cursor. On Page, out is unchanged; the next call starts over.
         // Single units are exempt from both budgets; a truncated tail needs another walk.
+        // On Stopped, Seek(Resume) and call again with Result.Carry. A call without
+        // Carry starts a fresh piece and a fresh index-page budget.
+        // On Stale, drop the carry and walk the original range from its start.
         EReady SplitPoints(const TSplitRequest& request, TSplitResult& out);
 
         TKeyBlocksTelemetry Telemetry() const;

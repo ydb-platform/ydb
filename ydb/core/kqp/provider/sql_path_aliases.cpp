@@ -12,7 +12,7 @@ bool IsPathKey(TStringBuf tag) {
     return tag == "table" || tag == "tablescheme" || tag == "tablelist" || tag == "topic"
         || tag == "replication" || tag == "transfer" || tag == "sequence" || tag == "backupCollection"
         || tag == "backup" || tag == "restore" || tag == "databasePath" || tag == "secret"
-        || tag == "objectId";
+        || tag == "objectId" || tag == "pgObject";
 }
 
 TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
@@ -135,9 +135,9 @@ bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf
 
             auto key = RewriteKey(node->ChildPtr(2), ctx, normalizePath);
             auto result = key == node->ChildPtr(2) ? node : ctx.ChangeChild(*node, 2, std::move(key));
-            if (!isRead && node->Child(2)->IsCallable("Key") && node->Child(2)->ChildrenSize()
-                && node->Child(2)->Child(0)->ChildrenSize()) {
-                const auto tag = node->Child(2)->Child(0)->Child(0)->Content();
+            if (!isRead && result->Child(2)->IsCallable("Key") && result->Child(2)->ChildrenSize()
+                && result->Child(2)->Child(0)->ChildrenSize()) {
+                const auto tag = result->Child(2)->Child(0)->Child(0)->Content();
                 auto options = RewriteOptionPaths(result->ChildPtr(4), tag, ctx, normalizePath);
                 if (options != result->ChildPtr(4)) {
                     result = ctx.ChangeChild(*result, 4, std::move(options));

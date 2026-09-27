@@ -95,6 +95,13 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
         UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
     }
 
+    Y_UNIT_TEST(TableRenameTargetIsRewritten) {
+        const auto rewritten = RewriteSql("ALTER TABLE `/alias/old` RENAME TO `/alias/new`;");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/old");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/new");
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias/"), TString::npos);
+    }
+
     Y_UNIT_TEST(PermissionAndExternalTableOptions) {
         const auto permission = RewriteSql("GRANT SELECT ON `/alias/table` TO user;");
         UNIT_ASSERT_STRING_CONTAINS(permission, "/canonical/table");

@@ -1308,6 +1308,7 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
+        GlobalDistributedHnsw,
         GlobalFulltextPlain,
         GlobalFulltextRelevance,
         LocalBloomFilter,

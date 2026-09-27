@@ -137,7 +137,8 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                 case TIndexDescription::EType::GlobalJsonCompact:
                     // Compact indexes are always updated by the sink (KqpWriteActor)
                     continue;
-                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                case TIndexDescription::EType::GlobalSyncDistributedHnsw: {
                     if (index.KeyColumns.size() == 1) {
                         YQL_ENSURE(implTable->Next && !implTable->Next->Next);
                     } else {

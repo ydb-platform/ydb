@@ -2002,24 +2002,28 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw: {
+            auto* vectorIndex = tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
+                ? index->mutable_global_distributed_hnsw_index()
+                : index->mutable_global_vector_kmeans_tree_index();
             FillGlobalIndexSettings(
-                *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
+                *vectorIndex->mutable_level_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::LevelTablePosition)
             );
             FillGlobalIndexSettings(
-                *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
+                *vectorIndex->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PostingTablePosition)
             );
             const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
             if (prefixVectorIndex) {
                 FillGlobalIndexSettings(
-                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
+                    *vectorIndex->mutable_prefix_table_settings(),
                     tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition)
                 );
             }
 
-            *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+            *vectorIndex->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
         }
@@ -2264,6 +2268,11 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalDistributedHnswIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw);
+            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_distributed_hnsw_index().vector_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:

@@ -2631,7 +2631,7 @@ private:
 
         const TIndexDescription *indexDesc = nullptr;
         for (const auto& index: mainTable->Metadata->Indexes) {
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+            if (TIndexDescription::IsVectorIndex(index.Type) &&
                 index.Name == settings.VectorTopIndex) {
                 indexDesc = &index;
             }

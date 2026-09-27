@@ -1053,6 +1053,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     if (op.HasVectorIndexKmeansTreeDescription()) {
         alterData->TableDescriptionFull->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
             op.GetVectorIndexKmeansTreeDescription());
+        alterData->TableDescriptionFull->SetVectorIndexHnsw(op.GetVectorIndexHnsw());
         alterData->TableDescriptionFull->SetVectorIndexEmbeddingColumn(
             op.GetVectorIndexEmbeddingColumn());
         if (op.HasVectorIndexEmbeddingColumnId()) {

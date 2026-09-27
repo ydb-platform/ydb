@@ -526,6 +526,25 @@ public:
         const TGlobalIndexSettings& prefixTableSettings = {}
     );
 
+    static TIndexDescription CreateDistributedHnswIndex(
+        const std::string& name,
+        const std::string& vectorColumn,
+        const TKMeansTreeSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& levelTableSettings = {},
+        const TGlobalIndexSettings& postingTableSettings = {}
+    );
+
+    static TIndexDescription CreatePrefixedDistributedHnswIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TKMeansTreeSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& levelTableSettings = {},
+        const TGlobalIndexSettings& postingTableSettings = {},
+        const TGlobalIndexSettings& prefixTableSettings = {}
+    );
+
     static TIndexDescription CreateFulltextPlainIndex(
         const std::string& name,
         const std::vector<std::string>& indexColumns,
@@ -1193,6 +1212,8 @@ private:
     // vector KMeansTree
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
+    void AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    void AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
     // fulltext
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
@@ -1450,6 +1471,8 @@ public:
     // vector KMeansTree
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // fulltext
     TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);

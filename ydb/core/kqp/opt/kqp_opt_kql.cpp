@@ -257,6 +257,8 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync unique secondary";
         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             return "global sync vector_kmeans_tree";
+        case NYql::TIndexDescription::EType::GlobalSyncDistributedHnsw:
+            return "global sync distributed_hnsw";
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
         case NYql::TIndexDescription::EType::GlobalFulltextCompact:
             return "global sync fulltext_plain";
@@ -588,7 +590,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
                 return BuildTableMeta(meta, pos, ctx);
             });
         const auto onlyStreamIndexes = std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree
+            return !TIndexDescription::IsVectorIndex(index.second->Type)
                 && index.second->Type != TIndexDescription::EType::GlobalFulltextPlain
                 && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance
                 && index.second->Type != TIndexDescription::EType::GlobalJson;
@@ -1206,6 +1208,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 return false;
             case TIndexDescription::EType::GlobalSyncUnique:
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalSyncDistributedHnsw:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
             case TIndexDescription::EType::GlobalJson:

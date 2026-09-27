@@ -425,6 +425,7 @@ message TableIndex {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
        LocalMinMaxIndex local_min_max_index = 14;
+       GlobalVectorKMeansTreeIndex global_distributed_hnsw_index = 15;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -457,6 +458,7 @@ message TableIndexDescription {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
        GlobalJsonIndex global_json_index = 14;
        LocalMinMaxIndex local_min_max_index = 15;
+       GlobalVectorKMeansTreeIndex global_distributed_hnsw_index = 16;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

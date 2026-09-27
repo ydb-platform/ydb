@@ -2583,6 +2583,8 @@ public:
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
                                 add_index->mutable_global_vector_kmeans_tree_index();
+                            } else if (type == "globalDistributedHnsw") {
+                                add_index->mutable_global_distributed_hnsw_index();
                             } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2703,6 +2705,12 @@ public:
                                                 name, value.StringValue(), error);
                                             break;
                                         }
+                                        case Ydb::Table::TableIndex::kGlobalDistributedHnswIndex: {
+                                            NKikimr::NKMeans::FillSetting(
+                                                *add_index->mutable_global_distributed_hnsw_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
                                         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                             NKikimr::NFulltext::FillSetting(
                                                 *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
@@ -2780,6 +2788,14 @@ public:
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
                             if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalDistributedHnswIndex: {
+                            TString error;
+                            if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_distributed_hnsw_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }
@@ -3349,15 +3365,18 @@ public:
                         return SyncError();
                     }
 
-                    // Only vector_kmeans_tree is supported for rebuild
-                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                    if (!NYql::TIndexDescription::IsVectorIndex(existingIndex->Type)) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
-                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
+                            TStringBuilder() << "REBUILD INDEX is only supported for vector indexes"));
                         return SyncError();
                     }
 
-                    // Set the index type
-                    add_index->mutable_global_vector_kmeans_tree_index();
+                    Ydb::Table::GlobalVectorKMeansTreeIndex* vectorIndex = nullptr;
+                    if (existingIndex->Type == NYql::TIndexDescription::EType::GlobalSyncDistributedHnsw) {
+                        vectorIndex = add_index->mutable_global_distributed_hnsw_index();
+                    } else {
+                        vectorIndex = add_index->mutable_global_vector_kmeans_tree_index();
+                    }
 
                     // If user didn't provide ON columns, inherit from existing index
                     if (!hasUserColumns) {
@@ -3374,7 +3393,7 @@ public:
 
                     // Parse user-provided index settings (don't pre-populate with existing;
                     // schemeshard will merge with existing settings in Prepare)
-                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    auto* vectorSettings = vectorIndex->mutable_vector_settings();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();

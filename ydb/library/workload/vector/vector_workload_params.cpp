@@ -5,6 +5,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
+#include <util/generic/yexception.h>
 
 #include <format>
 #include <string>
@@ -83,8 +84,18 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
-    opts.AddLongOption("index-type", "Type of index. Possible values: 'None', 'KmeansTree'")
+    opts.AddLongOption("index-type", "Type of index: None, KmeansTree (vector_kmeans_tree), DistributedHnsw (distributed_hnsw)")
         .DefaultValue(IndexType).StoreResult(&IndexType);
+    opts.AddLongOption("hnsw-min-rows", "Minimum partition rows for HNSW acceleration (distributed_hnsw)")
+        .DefaultValue(HnswMinRows).StoreResult(&HnswMinRows);
+    opts.AddLongOption("hnsw-connectivity", "HNSW graph connectivity, 1..100 (distributed_hnsw)")
+        .DefaultValue(HnswConnectivity).StoreResult(&HnswConnectivity);
+    opts.AddLongOption("hnsw-construction-candidates", "HNSW construction candidates, 1..1000 (distributed_hnsw)")
+        .DefaultValue(HnswConstructionCandidates).StoreResult(&HnswConstructionCandidates);
+    opts.AddLongOption("hnsw-search-candidates", "HNSW search candidates, 1..1000 (stored in distributed_hnsw index)")
+        .DefaultValue(HnswSearchCandidates).StoreResult(&HnswSearchCandidates);
+    opts.AddLongOption("hnsw-rebuild-threshold-percent", "HNSW committed-change rebuild threshold in percent (distributed_hnsw)")
+        .DefaultValue(HnswRebuildThresholdPercent).StoreResult(&HnswRebuildThresholdPercent);
     opts.AddLongOption("distance", "Distance/similarity function. "
             "Possible values: 'inner_product', 'cosine', 'euclidean', 'manhattan'")
         .DefaultValue("inner_product").StoreResult(&Distance);
@@ -92,6 +103,38 @@ void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
         .StoreResult(&KmeansTreeLevels);
     opts.AddLongOption("kmeans-tree-clusters", "Number of clusters in kmeans. If not set, auto-detected by server. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .StoreResult(&KmeansTreeClusters);
+}
+
+TString TVectorWorkloadParams::GetIndexTypeDDL() const {
+    if (IndexType == "None") {
+        return {};
+    }
+    if (IndexType == "KmeansTree" || IndexType == "vector_kmeans_tree") {
+        return "vector_kmeans_tree";
+    }
+    if (IndexType == "DistributedHnsw" || IndexType == "distributed_hnsw") {
+        return "distributed_hnsw";
+    }
+    ythrow yexception() << "Unknown index type: " << IndexType
+        << ". Expected None, KmeansTree, or DistributedHnsw (distributed_hnsw)";
+}
+
+TString TVectorWorkloadParams::GetHnswSettingsDDL() const {
+    if (GetIndexTypeDDL() != "distributed_hnsw") {
+        return {};
+    }
+    Y_ENSURE(HnswConnectivity >= 1 && HnswConnectivity <= 100,
+        "hnsw-connectivity must be in 1..100");
+    Y_ENSURE(HnswConstructionCandidates >= 1 && HnswConstructionCandidates <= 1000,
+        "hnsw-construction-candidates must be in 1..1000");
+    Y_ENSURE(HnswSearchCandidates >= 1 && HnswSearchCandidates <= 1000,
+        "hnsw-search-candidates must be in 1..1000");
+    return TStringBuilder()
+        << ",\n    hnsw_min_rows=" << HnswMinRows
+        << ",\n    hnsw_connectivity=" << HnswConnectivity
+        << ",\n    hnsw_construction_candidates=" << HnswConstructionCandidates
+        << ",\n    hnsw_search_candidates=" << HnswSearchCandidates
+        << ",\n    hnsw_rebuild_threshold_percent=" << HnswRebuildThresholdPercent;
 }
 
 TString TVectorWorkloadParams::GetDistanceDDL() const {
@@ -128,6 +171,9 @@ void TVectorWorkloadParams::Init() {
 
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
         if (index.GetIndexName() == IndexName) {
+            Y_ENSURE(index.GetIndexType() == NYdb::NTable::EIndexType::GlobalVectorKMeansTree
+                || index.GetIndexType() == NYdb::NTable::EIndexType::GlobalDistributedHnsw,
+                "Index " << IndexName << " must be vector_kmeans_tree or distributed_hnsw");
             indexFound = true;
 
             // Check if we have more than one column (indicating a prefixed index)

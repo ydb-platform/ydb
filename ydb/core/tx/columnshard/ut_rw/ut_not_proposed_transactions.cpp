@@ -54,12 +54,21 @@ public:
         return tables.begin()->second->GetInsertedPortions().size();
     }
 
-    void RebootAndWaitTransactionsAborted() {
-        RebootTablet(Runtime, TTestTxConfig::TxTablet0, Sender);
+    void WaitTransactionsAborted() {
         for (ui32 attempt = 0; CountOperations() && attempt < 100; ++attempt) {
             Runtime.SimulateSleep(TDuration::MilliSeconds(10));
         }
         UNIT_ASSERT_VALUES_EQUAL(CountOperations(), 0);
+    }
+
+    void RebootAndWaitTransactionsAborted() {
+        RebootTablet(Runtime, TTestTxConfig::TxTablet0, Sender);
+        WaitTransactionsAborted();
+    }
+
+    void PlanCommitAfterLastPlannedStep(const ui64 txId) {
+        const ui64 lastPlannedStep = Shard().GetLastPlannedSnapshot().GetPlanStep();
+        PlanCommit(Runtime, Sender, TPlanStep{ lastPlannedStep + 1 }, txId);
     }
 
     TInternalPathId DropTable() {
@@ -152,19 +161,30 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
             shard.Writer.StartCommitWithLock(TxId, lockBeforeRestart), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
     }
 
-    Y_UNIT_TEST(DroppedTableKeptUntilAbortOnRestart) {
+    Y_UNIT_TEST(AbortedOnTableDrop) {
         TShardFixture shard;
         Y_UNUSED(shard.WriteUnderLock());
         const auto pathId = shard.DropTable();
-        UNIT_ASSERT(shard.IsPendingDrop(pathId));
+        shard.WaitTransactionsAborted();
+
+        shard.PassReadWindow();
+        shard.TryCleanupTables(pathId, 60);
+        UNIT_ASSERT(!shard.IsPendingDrop(pathId));
+        UNIT_ASSERT(!shard.HasTable(pathId));
+    }
+
+    Y_UNIT_TEST(DroppedTableKeptWhileTransactionProposed) {
+        TShardFixture shard;
+        Y_UNUSED(shard.WriteUnderLock());
+        Y_UNUSED(shard.Writer.StartCommit(TxId));
+        const auto pathId = shard.DropTable();
 
         shard.PassReadWindow();
         shard.TryCleanupTables(pathId, 10);
         UNIT_ASSERT(shard.IsPendingDrop(pathId));
         UNIT_ASSERT_VALUES_EQUAL(shard.CountOperations(), 1);
 
-        shard.RebootAndWaitTransactionsAborted();
-
+        shard.PlanCommitAfterLastPlannedStep(TxId);
         shard.PassReadWindow();
         shard.TryCleanupTables(pathId, 60);
         UNIT_ASSERT(!shard.IsPendingDrop(pathId));

@@ -50,7 +50,20 @@ void TColumnShard::AbortNotProposedTransactions() {
     for (const ui64 lockId : OperationsManager->GetLockIdsOfNotProposedTransactions()) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
             {"event", "abort_not_proposed_transaction"},
+            {"reason", "restart"},
             {"tabletId", TabletID()},
+            {"lockId", lockId});
+        TransactionToAbort(lockId);
+    }
+}
+
+void TColumnShard::AbortNotProposedTransactions(const TSchemeShardLocalPathId pathId) {
+    for (const ui64 lockId : OperationsManager->GetLockIdsOfNotProposedTransactions(pathId)) {
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+            {"event", "abort_not_proposed_transaction"},
+            {"reason", "table_dropped"},
+            {"tabletId", TabletID()},
+            {"pathId", pathId},
             {"lockId", lockId});
         TransactionToAbort(lockId);
     }

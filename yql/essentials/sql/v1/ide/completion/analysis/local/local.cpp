@@ -286,6 +286,11 @@ private:
             object.Kinds.emplace(EObjectKind::Table);
         }
 
+        if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyExistingViewStack))) {
+            object.Kinds.emplace(EObjectKind::Folder);
+            object.Kinds.emplace(EObjectKind::View);
+        }
+
         if (object.Kinds.empty() && !AnyOf(candidates.Rules, RuleAdapted(IsLikelyTableArgStack))) {
             return Nothing();
         }

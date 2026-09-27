@@ -628,6 +628,9 @@ public:
 
     [[noreturn]] void Commit() &
     {
+        // Under a safe assertion guard the abort throws; a still-armed destructor would
+        // re-emit the fatal event mid-unwind and terminate.
+        Enabled_ = false;
         LogFatalEventAndAbort(LoggingContext_, Logger_, SourceLocation_, Writer_.Finish());
     }
 };

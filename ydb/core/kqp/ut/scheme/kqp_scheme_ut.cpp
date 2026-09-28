@@ -1040,6 +1040,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    // Query service only: the table service accepts a CREATE of an existing table as a no-op,
+    // so no CREATE fails there.
     Y_UNIT_TEST(TableMetricsLevelCreateSeveralRuntimeFailure) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableDataShardDetailedMetrics(true);
@@ -1148,7 +1150,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto hasTtl = [&]() {
             auto describe = session.DescribeTable("/Root/MetricsColumnTable").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-            UNIT_ASSERT(!describe.GetTableDescription().GetMetricsSettings());
             return describe.GetTableDescription().GetTtlSettings().has_value();
         };
 

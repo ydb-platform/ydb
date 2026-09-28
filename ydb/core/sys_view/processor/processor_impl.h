@@ -45,6 +45,7 @@ private:
     struct TTxIntervalMetrics;
     struct TTxIntervalMetricsFailure;
     struct TTxTopPartitions;
+    struct TTxCleanupHourMetrics;
 
     struct TEvPrivate {
         enum EEv {
@@ -55,6 +56,7 @@ private:
             EvApplyCounters,
             EvApplyLabeledCounters,
             EvSendNavigate,
+            EvCleanupHourMetrics,
             EvEnd
         };
 
@@ -71,6 +73,8 @@ private:
         struct TEvApplyLabeledCounters : public TEventLocal<TEvApplyLabeledCounters, EvApplyLabeledCounters> {};
 
         struct TEvSendNavigate : public TEventLocal<TEvSendNavigate, EvSendNavigate> {};
+
+        struct TEvCleanupHourMetrics : public TEventLocal<TEvCleanupHourMetrics, EvCleanupHourMetrics> {};
 
     };
 
@@ -148,6 +152,7 @@ private:
     void Handle(TEvPrivate::TEvApplyCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvSendNavigate::TPtr& ev);
+    void Handle(TEvPrivate::TEvCleanupHourMetrics::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev);
@@ -195,6 +200,7 @@ private:
     void ScheduleApplyCounters();
     void ScheduleApplyLabeledCounters();
     void ScheduleSendNavigate();
+    void ScheduleCleanupHourMetrics();
 
     template <typename TSchema, typename TMap>
     void CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize);
@@ -203,6 +209,8 @@ private:
     void ClearIntervalSummaries(NIceDb::TNiceDb& db);
 
     void Reset(NIceDb::TNiceDb& db, const TActorContext& ctx);
+
+    static constexpr size_t HourMetricsCleanupBatchSize = 1024;
 
     void SendRequests();
     void HandleIntervalMetricsFailure(ui64 requestId);
@@ -237,6 +245,7 @@ private:
             IgnoreFunc(TEvSysView::TEvSendTopPartitions);
             IgnoreFunc(TEvSysView::TEvGetTopPartitionsRequest);
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
+            hFunc(TEvPrivate::TEvCleanupHourMetrics, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateInit unexpected event",
@@ -281,6 +290,7 @@ private:
             hFunc(TEvPrivate::TEvApplyCounters, Handle);
             hFunc(TEvPrivate::TEvApplyLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvSendNavigate, Handle);
+            hFunc(TEvPrivate::TEvCleanupHourMetrics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
@@ -339,6 +349,7 @@ private:
     std::unordered_map<TQueryHash, NKikimrSysView::TQueryMetrics> CurrentHourMetrics;
     TInstant CurrentHourEnd;
     TInstant LastFinalizedQueryMetricsIntervalEnd;
+    bool HourMetricsCleanupInFlight = false;
 
     // NodesToRequest
     using THashVector = std::vector<TQueryHash>;

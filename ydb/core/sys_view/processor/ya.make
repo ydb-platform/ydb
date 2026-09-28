@@ -16,6 +16,7 @@ SRCS(
     tx_interval_summary.cpp
     tx_interval_metrics.cpp
     tx_top_partitions.cpp
+    tx_cleanup_hour_metrics.cpp
 )
 
 PEERDIR(

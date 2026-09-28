@@ -321,7 +321,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 const ui64 hourEndUs = rowset.GetValue<Schema::IntervalMetricsOneHour::HourEnd>();
                 TQueryHash queryHash = rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
                 if (hourEndUs != Self->CurrentHourEnd.MicroSeconds()) {
-                    db.Table<Schema::IntervalMetricsOneHour>().Key(hourEndUs, queryHash).Delete();
                     if (!rowset.Next()) {
                         return false;
                     }
@@ -593,6 +592,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         Self->SignalTabletActive(ctx);
         Self->Become(&TThis::StateWork);
+        Self->ScheduleCleanupHourMetrics();
     }
 };
 

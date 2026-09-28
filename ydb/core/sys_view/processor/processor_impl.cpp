@@ -432,6 +432,13 @@ void TSysViewProcessor::ScheduleSendNavigate() {
     Schedule(SendNavigateInterval, new TEvPrivate::TEvSendNavigate);
 }
 
+void TSysViewProcessor::ScheduleCleanupHourMetrics() {
+    if (!HourMetricsCleanupInFlight) {
+        HourMetricsCleanupInFlight = true;
+        Schedule(TDuration::Zero(), new TEvPrivate::TEvCleanupHourMetrics);
+    }
+}
+
 template <typename TSchema, typename TMap>
 void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize) {
     auto past = IntervalEnd - historySize;
@@ -518,12 +525,9 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     auto partitionNewHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd + TotalInterval);
 
     if (oldHourEnd != newHourEnd) {
-        for (const auto& [queryHash, _] : CurrentHourMetrics) {
-            db.Table<Schema::IntervalMetricsOneHour>().Key(
-                oldHourEnd.MicroSeconds(), queryHash).Delete();
-        }
         CurrentHourMetrics.clear();
         CurrentHourEnd = newHourEnd;
+        ScheduleCleanupHourMetrics();
 
         clearQueryTop(NKikimrSysView::TOP_DURATION_ONE_HOUR, ByDurationHour);
         clearQueryTop(NKikimrSysView::TOP_READ_BYTES_ONE_HOUR, ByReadBytesHour);

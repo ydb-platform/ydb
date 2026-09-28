@@ -45,7 +45,6 @@ public:
             "YDB_OIDC_CLIENT_ID",
             "YDB_OIDC_CLIENT_SECRET",
             "YDB_OIDC_ACCESS_TOKEN",
-            "YDB_OIDC_EXPIRES_AT",
             "YDB_OIDC_SCOPE",
             "YDB_OIDC_CACHE_PATH",
             "YDB_CA_FILE",

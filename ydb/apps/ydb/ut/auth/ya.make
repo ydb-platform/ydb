@@ -24,6 +24,7 @@ PEERDIR(
     contrib/libs/grpc
     contrib/libs/jwt-cpp
     library/cpp/json/writer
+    library/cpp/string_utils/base64
     ydb/core/security/certificate_check/test_utils
     ydb/public/api/client/yc_public/iam
     ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers

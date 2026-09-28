@@ -7,11 +7,11 @@
 
 namespace NYdb::NConsoleClient {
 
-// Loads and validates an OIDC YAML configuration. If cache_path is present,
+// Loads and validates an OIDC JSON or YAML configuration. If cache_path is present,
 // its relative form is resolved against the configuration file directory.
 NOidc::TOidcConfig LoadOidcConfig(const std::string& configFilePath);
 
-// Creates a provider factory from an OIDC YAML configuration. The optional
+// Creates a provider factory from an OIDC JSON or YAML configuration. The optional
 // acceptor is used by Device Authorization Grant when user interaction is
 // required. Pass nullptr when interaction is not needed.
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcFileCredentialsProviderFactory(

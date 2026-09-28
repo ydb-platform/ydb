@@ -16,13 +16,12 @@ class TClientCommandOptions;
 class TOptionsParseResult;
 
 struct TOidcCliOptions {
-    TString ConfigFile;
     TString Issuer;
     TString Flow;
     TString ClientId;
     TString ClientSecret;
-    TString AccessToken;
-    TString ExpiresAt;
+    TString ClientSecretFile;
+    TString AccessTokenFile;
     TString Scope;
     TString CachePath;
 
@@ -33,12 +32,7 @@ struct TOidcCliOptions {
     void Print(IOutputStream& output) const;
 };
 
-struct TOidcAuthOptions {
-    TAuthMethodOption& Config;
-    TAuthMethodOption& Issuer;
-};
-
-TOidcAuthOptions AddOidcOptions(TClientCommandOptions& options, TOidcCliOptions& values, bool profileCommand);
+TAuthMethodOption& AddOidcOptions(TClientCommandOptions& options, TOidcCliOptions& values, bool profileCommand);
 void ResolveOidcOptions(TOidcCliOptions& values, const TOptionsParseResult& result);
 
 } // namespace NYdb::NConsoleClient

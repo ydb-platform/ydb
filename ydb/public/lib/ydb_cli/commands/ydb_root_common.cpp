@@ -654,7 +654,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
-    auto oidcAuth = AddOidcOptions(opts, config.Oidc, false);
+    auto& oidcAuth = AddOidcOptions(opts, config.Oidc, false);
 
     opts.SetAuthMethodsEnvPriority(
         iamTokenAuth,
@@ -664,8 +664,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         ydbTokenAuth,
         ydbUserAuth,
         oauth2TokenExchangeAuth,
-        &oidcAuth.Config,
-        &oidcAuth.Issuer
+        &oidcAuth
     );
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());

@@ -184,9 +184,6 @@ namespace {
     }
 
     std::string TryBlurValue(const TString& authMethod, const TString& value) {
-        if (authMethod == "oidc-client-secret" || authMethod == "oidc-access-token") {
-            return "***";
-        }
         if (authMethod.StartsWith("oidc-")) {
             return value;
         }
@@ -212,16 +209,15 @@ namespace {
             Cout << "  " << authMethod;
             if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
-                || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oidc-config") {
+                || authMethod == "token-file" || authMethod == "yc-token-file") {
                 Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
             } else if (authMethod == "oidc") {
                 const auto data = authValue["data"];
                 if (data.IsMap()) {
-                    for (const char* key : {"issuer", "flow", "client_id", "client_secret", "access_token", "expires_at", "scope", "cache_path"}) {
+                    for (const char* key : {"issuer", "flow", "client_id", "client_secret_file", "access_token_file", "scope", "cache_path"}) {
                         const auto value = data[key];
                         if (value.IsDefined() && value.IsScalar()) {
-                            const bool secret = TStringBuf(key) == "client_secret" || TStringBuf(key) == "access_token";
-                            Cout << Endl << "    " << key << ": " << (secret ? TString("***") : value.as<TString>());
+                            Cout << Endl << "    " << key << ": " << value.as<TString>();
                         }
                     }
                 }
@@ -402,13 +398,11 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"database", Database},
         {"token-file", TokenFile},
         {"oauth2-key-file", Oauth2KeyFile},
-        {"oidc-config", Oidc.ConfigFile},
         {"oidc-issuer", Oidc.Issuer},
         {"oidc-flow", Oidc.Flow},
         {"oidc-client-id", Oidc.ClientId},
-        {"oidc-client-secret", Oidc.ClientSecret},
-        {"oidc-access-token", Oidc.AccessToken},
-        {"oidc-expires-at", Oidc.ExpiresAt},
+        {"oidc-client-secret-file", Oidc.ClientSecretFile},
+        {"oidc-token-file", Oidc.AccessTokenFile},
         {"oidc-scope", Oidc.Scope},
         {"oidc-cache-path", Oidc.CachePath},
         {"yc-token-file", YcTokenFile},
@@ -610,11 +604,6 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
         });
     }
 
-    options.push_back("Use OIDC credentials configuration\t(oidc-config)");
-    actions.push_back([&profile, &profileName]() {
-        SetAuthMethod("oidc-config", "Path to OIDC credentials YAML configuration file", profile, profileName, /* hideInput */ false);
-    });
-
     options.push_back("Set anonymous authentication");
     actions.push_back([&profile, &profileName]() {
         PutAuthMethodWithoutPars(profile, "anonymous-auth");
@@ -634,7 +623,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             description << "Use current settings\t" << method;
             if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
                 description << ": " << BlurSecret(authValue["data"].as<TString>());
-            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file" || method == "oidc-config") {
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file") {
                 description << ": " << authValue["data"].as<TString>();
             }
             options.push_back(description);
@@ -682,18 +671,10 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
 
 void TCommandProfileCommon::ValidateAuth() {
     if (Oidc.HasOptions()) {
-        if (!Oidc.ConfigFile.empty()) {
-            TOidcCliOptions direct = Oidc;
-            direct.ConfigFile.clear();
-            if (direct.HasOptions()) {
-                throw TMisuseException() << "--oidc-config cannot be combined with direct OIDC options";
-            }
-        } else {
-            try {
-                Oidc.MakeConfig();
-            } catch (const std::exception& error) {
-                throw TMisuseException() << error.what();
-            }
+        try {
+            Oidc.MakeConfig();
+        } catch (const std::exception& error) {
+            throw TMisuseException() << error.what();
         }
     }
     size_t authMethodCount =

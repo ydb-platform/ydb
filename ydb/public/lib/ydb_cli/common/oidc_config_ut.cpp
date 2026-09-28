@@ -37,12 +37,37 @@ std::string ExceptionMessage(const std::function<void()>& action) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcConfigFile) {
+    Y_UNIT_TEST(LoadsSecretsFromSeparateFiles) {
+        TTempDir dir;
+        WriteFile(dir.Path() / "token", "Bearer file-token\n");
+        WriteFile(dir.Path() / "secret", "file-secret\n");
+        const auto tokenConfig = WriteFile(dir.Path() / "token.yaml",
+            "issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: token\n");
+        const auto clientConfig = WriteFile(dir.Path() / "client.yaml",
+            "issuer: https://issuer.example\nclient_credentials_grant:\n  client_id: client\n  client_secret_file: secret\n");
+        UNIT_ASSERT_VALUES_EQUAL(CreateOidcFileCredentialsProviderFactory(tokenConfig, nullptr)->CreateProvider()->GetAuthInfo(), "Bearer file-token");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TClientOidcConfig>(LoadOidcConfig(clientConfig).FlowConfig).ClientSecret, "file-secret");
+    }
+
+    Y_UNIT_TEST(RejectsInlineSecrets) {
+        TTempDir dir;
+        for (const auto& grant : {
+                "static_credentials:\n  access_token: do-not-print-this\n",
+                "client_credentials_grant:\n  client_id: client\n  client_secret: do-not-print-this\n"}) {
+            const auto path = WriteFile(dir.Path() / "inline.yaml", std::string("issuer: https://issuer.example\n") + grant);
+            const auto message = ExceptionMessage([&] { LoadOidcConfig(path); });
+            UNIT_ASSERT_STRING_CONTAINS(message, "unknown field");
+            UNIT_ASSERT_VALUES_EQUAL(message.find("do-not-print-this"), std::string::npos);
+        }
+    }
+
     Y_UNIT_TEST(LoadsStaticCredentials) {
         TTempDir dir;
+        WriteFile(dir.Path() / "opaque-access", "opaque-access\n");
         const auto path = WriteFile(dir.Path() / "oidc.yaml", R"(
 issuer: https://issuer.example
 static_credentials:
-  access_token: opaque-access
+  access_token_file: opaque-access
   expires_at: 2000000000
 )");
 
@@ -57,11 +82,12 @@ static_credentials:
 
     Y_UNIT_TEST(LoadsClientAndDeviceCredentials) {
         TTempDir dir;
+        WriteFile(dir.Path() / "secret", "secret\n");
         const auto clientPath = WriteFile(dir.Path() / "client.yaml", R"(
 issuer: https://issuer.example
 client_credentials_grant:
   client_id: client
-  client_secret: secret
+  client_secret_file: secret
   scope: [openid, audience.read]
 )");
         const auto devicePath = WriteFile(dir.Path() / "device.yaml", R"(
@@ -87,32 +113,35 @@ device_authorization_grant:
 
     Y_UNIT_TEST(RejectsUnsupportedLegacySettings) {
         TTempDir dir;
+        WriteFile(dir.Path() / "token", "token\n");
         for (const auto& field : {"socket_timeout", "connect_timeout", "allow_insecure_http", "token_endpoint_auth_method"}) {
             const auto path = WriteFile(dir.Path() / "unsupported.yaml",
-                std::string("issuer: https://issuer.example\n") + field + ": value\nstatic_credentials:\n  access_token: token\n");
+                std::string("issuer: https://issuer.example\n") + field + ": value\nstatic_credentials:\n  access_token_file: token\n");
             UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(path), std::invalid_argument, field);
         }
         for (const auto& field : {"refresh_token", "refresh_expires_at", "client_id", "client_secret"}) {
             const auto path = WriteFile(dir.Path() / "unsupported-static.yaml",
-                std::string("issuer: https://issuer.example\nstatic_credentials:\n  access_token: token\n  ") + field + ": value\n");
+                std::string("issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: token\n  ") + field + ": value\n");
             UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(path), std::invalid_argument, field);
         }
     }
 
     Y_UNIT_TEST(RejectsInsecureIssuer) {
         TTempDir dir;
+        WriteFile(dir.Path() / "token", "token\n");
         const auto path = WriteFile(dir.Path() / "insecure.yaml",
-            "issuer: http://issuer.example\nstatic_credentials:\n  access_token: token\n");
+            "issuer: http://issuer.example\nstatic_credentials:\n  access_token_file: token\n");
         UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(path), std::invalid_argument, "HTTPS");
     }
 
     Y_UNIT_TEST(RequiresExactlyOneGrant) {
         TTempDir dir;
+        WriteFile(dir.Path() / "token", "token\n");
         const auto missingPath = WriteFile(dir.Path() / "missing.yaml", "issuer: https://issuer.example\n");
         const auto multiplePath = WriteFile(dir.Path() / "multiple.yaml", R"(
 issuer: https://issuer.example
 static_credentials:
-  access_token: token
+  access_token_file: token
 device_authorization_grant:
   client_id: cli
 )");
@@ -123,11 +152,12 @@ device_authorization_grant:
 
     Y_UNIT_TEST(RejectsUnknownEmptyAndWrongTypeFields) {
         TTempDir dir;
+        WriteFile(dir.Path() / "secret", "secret\n");
         const auto unknownPath = WriteFile(dir.Path() / "unknown.yaml", R"(
 issuer: https://issuer.example
 client_credentials_grant:
   client_id: client
-  client_secret: secret
+  client_secret_file: secret
   typo_scope: [openid]
 )");
         const auto emptyPath = WriteFile(dir.Path() / "empty.yaml", R"(
@@ -153,7 +183,7 @@ device_authorization_grant:
 issuer: https://issuer.example
 client_credentials_grant:
   client_id: client
-  client_secret: [do-not-print-this-secret]
+  client_secret_file: [do-not-print-this-secret]
 )");
 
         const auto message = ExceptionMessage([&] { LoadOidcConfig(path); });
@@ -163,17 +193,19 @@ client_credentials_grant:
 
     Y_UNIT_TEST(RejectsCoercedScalarTypes) {
         TTempDir dir;
+        WriteFile(dir.Path() / "access", "access\n");
+        WriteFile(dir.Path() / "secret", "secret\n");
         const auto numericClient = WriteFile(dir.Path() / "numeric-client.yaml", R"(
 issuer: https://issuer.example
 client_credentials_grant:
   client_id: 123
-  client_secret: secret
+  client_secret_file: secret
 )");
         const auto booleanSecret = WriteFile(dir.Path() / "boolean-secret.yaml", R"(
 issuer: https://issuer.example
 client_credentials_grant:
   client_id: client
-  client_secret: true
+  client_secret_file: true
 )");
         const auto numericScope = WriteFile(dir.Path() / "numeric-scope.yaml", R"(
 issuer: https://issuer.example
@@ -184,7 +216,7 @@ device_authorization_grant:
         const auto quotedExpiry = WriteFile(dir.Path() / "quoted-expiry.yaml", R"(
 issuer: https://issuer.example
 static_credentials:
-  access_token: access
+  access_token_file: access
   expires_at: "2000000000"
 )");
         UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(numericClient), std::invalid_argument, "client_id");
@@ -195,10 +227,11 @@ static_credentials:
 
     Y_UNIT_TEST(RejectsExpiryThatCannotFitTInstant) {
         TTempDir dir;
+        WriteFile(dir.Path() / "access", "access\n");
         const auto path = WriteFile(dir.Path() / "overflow.yaml", R"(
 issuer: https://issuer.example
 static_credentials:
-  access_token: access
+  access_token_file: access
   expires_at: 18446744073710
 )");
 
@@ -207,11 +240,12 @@ static_credentials:
 
     Y_UNIT_TEST(ResolvesRelativeCachePathFromConfigDirectory) {
         TTempDir dir;
+        WriteFile(dir.Path() / "opaque", "opaque\n");
         const auto path = WriteFile(dir.Path() / "oidc.yaml", R"(
 issuer: https://issuer.example
 cache_path: state/tokens.json
 static_credentials:
-  access_token: opaque
+  access_token_file: opaque
 )");
         (dir.Path() / "state").MkDir();
 
@@ -223,10 +257,11 @@ static_credentials:
 
     Y_UNIT_TEST(CreatesStaticProviderFromFile) {
         TTempDir dir;
+        WriteFile(dir.Path() / "opaque-access", "opaque-access\n");
         const auto path = WriteFile(dir.Path() / "static.yaml", R"(
 issuer: https://issuer.example
 static_credentials:
-  access_token: opaque-access
+  access_token_file: opaque-access
 )");
 
         const auto factory = CreateOidcFileCredentialsProviderFactory(path, nullptr);
@@ -235,12 +270,14 @@ static_credentials:
 
     Y_UNIT_TEST(CacheIdentitySurvivesReloadAndSeparatesCredentials) {
         TTempDir dir;
+        WriteFile(dir.Path() / "first-secret", "first-secret\n");
+        WriteFile(dir.Path() / "second-secret", "second-secret\n");
         const auto path = WriteFile(dir.Path() / "client.yaml", R"(
 issuer: https://issuer.example
 cache_path: tokens.json
 client_credentials_grant:
   client_id: client
-  client_secret: first-secret
+  client_secret_file: first-secret
 )");
         const auto original = LoadOidcConfig(path);
         UNIT_ASSERT(original.Cacher_ != nullptr);
@@ -256,7 +293,7 @@ issuer: https://issuer.example
 cache_path: tokens.json
 client_credentials_grant:
   client_id: client
-  client_secret: second-secret
+  client_secret_file: second-secret
 )");
         const auto changed = LoadOidcConfig(path);
         UNIT_ASSERT(!changed.Cacher_->Read().has_value());

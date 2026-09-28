@@ -1,8 +1,10 @@
 #include "oidc_config.h"
 
+#include "common.h"
 #include "oidc_token_cache.h"
 
 #include <util/folder/path.h>
+#include <util/system/env.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -32,9 +34,10 @@ bool HasImplicitTypedScalar(const YAML::Node& value);
 std::string ReadString(const YAML::Node& mapping, std::string_view key, bool required);
 std::optional<TInstant> ReadInstant(const YAML::Node& mapping, std::string_view key);
 std::vector<std::string> ReadScopes(const YAML::Node& mapping);
-NOidc::TStaticOidcConfig ReadStaticGrant(const YAML::Node& node);
-NOidc::TClientOidcConfig ReadClientGrant(const YAML::Node& node);
+NOidc::TStaticOidcConfig ReadStaticGrant(const YAML::Node& node, const std::string& configFilePath);
+NOidc::TClientOidcConfig ReadClientGrant(const YAML::Node& node, const std::string& configFilePath);
 NOidc::TDeviceOidcConfig ReadDeviceGrant(const YAML::Node& node);
+std::string ReadSecret(const YAML::Node& node, std::string_view key, const char* env, const std::string& configFilePath);
 TParsedConfig ParseConfig(const std::string& configFilePath);
 
 [[noreturn]] void ThrowConfigError(std::string_view field, std::string_view problem) {
@@ -155,19 +158,40 @@ std::vector<std::string> ReadScopes(const YAML::Node& mapping) {
     return result;
 }
 
-NOidc::TStaticOidcConfig ReadStaticGrant(const YAML::Node& node) {
-    CheckKeys(node, StaticGrant, {"access_token", "expires_at"});
+std::string ReadSecret(const YAML::Node& node, std::string_view key, const char* env, const std::string& configFilePath) {
+    const auto file = ReadString(node, key, false);
+    if (!file.empty()) {
+        TFsPath path(file);
+        if (path.IsRelative()) {
+            path = TFsPath(configFilePath).Parent() / path;
+        }
+        return std::string(ReadFromFile(path.GetPath(), TString(key), false));
+    }
+    const auto value = GetEnv(env);
+    if (value.empty()) {
+        ThrowConfigError(key, std::string("provide a secret file or set ") + env);
+    }
+    return std::string(value);
+}
+
+NOidc::TStaticOidcConfig ReadStaticGrant(const YAML::Node& node, const std::string& configFilePath) {
+    CheckKeys(node, StaticGrant, {"access_token_file", "expires_at"});
+    auto token = ReadSecret(node, "access_token_file", "YDB_TOKEN", configFilePath);
+    // The SDK adds Bearer itself; accept either raw or prefixed tokens.
+    if (token.starts_with("Bearer ")) {
+        token.erase(0, 7);
+    }
     return {
-        .AccessToken = ReadString(node, "access_token", true),
+        .AccessToken = std::move(token),
         .ExpiresAt = ReadInstant(node, "expires_at"),
     };
 }
 
-NOidc::TClientOidcConfig ReadClientGrant(const YAML::Node& node) {
-    CheckKeys(node, ClientGrant, {"client_id", "client_secret", "scope"});
+NOidc::TClientOidcConfig ReadClientGrant(const YAML::Node& node, const std::string& configFilePath) {
+    CheckKeys(node, ClientGrant, {"client_id", "client_secret_file", "scope"});
     return {
         .ClientId = ReadString(node, "client_id", true),
-        .ClientSecret = ReadString(node, "client_secret", true),
+        .ClientSecret = ReadSecret(node, "client_secret_file", "YDB_OIDC_CLIENT_SECRET", configFilePath),
         .Scopes = ReadScopes(node),
     };
 }
@@ -207,9 +231,9 @@ TParsedConfig ParseConfig(const std::string& configFilePath) {
     TParsedConfig result;
     result.Config.Issuer = ReadString(root, "issuer", true);
     if (const auto node = root[std::string(StaticGrant)]; node.IsDefined()) {
-        result.Config.FlowConfig = ReadStaticGrant(node);
+        result.Config.FlowConfig = ReadStaticGrant(node, configFilePath);
     } else if (const auto node = root[std::string(ClientGrant)]; node.IsDefined()) {
-        result.Config.FlowConfig = ReadClientGrant(node);
+        result.Config.FlowConfig = ReadClientGrant(node, configFilePath);
     } else {
         result.Config.FlowConfig = ReadDeviceGrant(root[std::string(DeviceGrant)]);
     }

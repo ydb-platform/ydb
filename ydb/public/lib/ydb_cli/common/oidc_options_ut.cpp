@@ -13,20 +13,11 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 TOidcCliOptions DeviceOptions();
-TOidcCliOptions StaticOptions();
 
 TOidcCliOptions DeviceOptions() {
     TOidcCliOptions options;
     options.Issuer = "https://issuer.example";
     options.ClientId = "ydb-cli";
-    return options;
-}
-
-TOidcCliOptions StaticOptions() {
-    TOidcCliOptions options;
-    options.Issuer = "https://issuer.example";
-    options.Flow = "static";
-    options.AccessToken = "opaque-token";
     return options;
 }
 
@@ -37,6 +28,35 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         const auto config = DeviceOptions().MakeConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.Issuer, "https://issuer.example");
         UNIT_ASSERT_VALUES_EQUAL(std::get<NOidc::TDeviceOidcConfig>(config.FlowConfig).ClientId, "ydb-cli");
+    }
+
+    Y_UNIT_TEST(StaticTokenFileAndProfileContainOnlyPath) {
+        TTempDir dir;
+        TOidcCliOptions options;
+        options.Issuer = "https://issuer.example";
+        options.AccessTokenFile = (dir.Path() / "token").GetPath();
+        for (const char* contents : {"private-token\n", "Bearer private-token\n"}) {
+            TFileOutput(options.AccessTokenFile).Write(contents);
+            UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(options)->CreateProvider()->GetAuthInfo(), "Bearer private-token");
+        }
+        const auto auth = options.MakeProfileAuth();
+        UNIT_ASSERT_VALUES_EQUAL(auth["data"]["access_token_file"].as<std::string>(), std::string(options.AccessTokenFile));
+        UNIT_ASSERT(!auth["data"]["access_token"].IsDefined());
+        UNIT_ASSERT(!TString(YAML::Dump(auth)).Contains("private-token"));
+        TStringStream output;
+        options.Print(output);
+        UNIT_ASSERT(!output.Str().Contains("private-token"));
+    }
+
+    Y_UNIT_TEST(RejectsTokenFileForOtherFlows) {
+        auto options = DeviceOptions();
+        options.AccessTokenFile = "/nonexistent/token";
+        for (const char* flow : {"client", "device"}) {
+            options.Flow = flow;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "requires static OIDC flow");
+        }
+        options.Flow = "static";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "does not accept client ID");
     }
 
     Y_UNIT_TEST(ClientFlowAndScopes) {
@@ -51,22 +71,6 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         UNIT_ASSERT_VALUES_EQUAL(client.Scopes[1], "user-context");
     }
 
-    Y_UNIT_TEST(StaticFlowUsesBearerToken) {
-        auto options = StaticOptions();
-        options.ExpiresAt = "2000000000";
-        const auto config = options.MakeConfig();
-        UNIT_ASSERT(std::get<NOidc::TStaticOidcConfig>(config.FlowConfig).ExpiresAt == TInstant::Seconds(2000000000));
-        UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(options)->CreateProvider()->GetAuthInfo(), "Bearer opaque-token");
-    }
-
-    Y_UNIT_TEST(LoadsFileConfiguration) {
-        TTempDir dir;
-        TOidcCliOptions options;
-        options.ConfigFile = (dir.Path() / "oidc.yaml").GetPath();
-        TFileOutput(options.ConfigFile).Write("issuer: https://issuer.example\nstatic_credentials:\n  access_token: file-token\n");
-        UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(options)->CreateProvider()->GetAuthInfo(), "Bearer file-token");
-    }
-
     Y_UNIT_TEST(RequiresIssuerAndFlowCredentials) {
         TOidcCliOptions empty;
         UNIT_ASSERT_EXCEPTION_CONTAINS(empty.MakeConfig(), std::invalid_argument, "requires --oidc-issuer");
@@ -76,35 +80,12 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         options.ClientId = "client";
         options.Flow = "client";
         UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "client_secret is required");
-        options = StaticOptions();
-        options.AccessToken.clear();
-        UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "requires access_token");
     }
 
     Y_UNIT_TEST(RejectsWrongFlowFields) {
         auto options = DeviceOptions();
         options.ClientSecret = "do-not-print-this";
         UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "Client secret requires client OIDC flow");
-        options = StaticOptions();
-        options.ClientId = "client";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "Static OIDC flow does not accept");
-        options = DeviceOptions();
-        options.AccessToken = "do-not-print-this";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "require static OIDC flow");
-    }
-
-    Y_UNIT_TEST(RejectsInvalidExpiration) {
-        auto options = StaticOptions();
-        for (const char* value : {"-1", "not-a-number", "18446744073709551615"}) {
-            options.ExpiresAt = value;
-            UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "non-negative Unix seconds");
-        }
-    }
-
-    Y_UNIT_TEST(RejectsFileAndDirectSettingsTogether) {
-        auto options = DeviceOptions();
-        options.ConfigFile = "oidc.yaml";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "cannot be combined");
     }
 
     Y_UNIT_TEST(RejectsUnknownFlowAndInsecureIssuer) {
@@ -135,28 +116,26 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
     Y_UNIT_TEST(MasksSecretsInConnectionInfo) {
         auto options = DeviceOptions();
         options.ClientSecret = "private-client-secret";
-        options.AccessToken = "private-access-token";
         TStringStream output;
         options.Print(output);
         UNIT_ASSERT_STRING_CONTAINS(output.Str(), "oidc-client-id: ydb-cli");
-        UNIT_ASSERT_STRING_CONTAINS(output.Str(), "oidc-client-secret: ***");
-        UNIT_ASSERT_STRING_CONTAINS(output.Str(), "oidc-access-token: ***");
+        UNIT_ASSERT_STRING_CONTAINS(output.Str(), "YDB_OIDC_CLIENT_SECRET: ***");
+        UNIT_ASSERT(!output.Str().Contains("oidc-client-secret:"));
         UNIT_ASSERT(!output.Str().Contains("private-client-secret"));
-        UNIT_ASSERT(!output.Str().Contains("private-access-token"));
     }
 
     Y_UNIT_TEST(SerializesProfileAuth) {
         auto options = DeviceOptions();
         options.Scope = "openid user-context";
+        options.ClientSecretFile = "/tmp/secret";
+        options.ClientSecret = "never-persist-this";
         const auto auth = options.MakeProfileAuth();
         UNIT_ASSERT_VALUES_EQUAL(auth["method"].as<std::string>(), "oidc");
         UNIT_ASSERT_VALUES_EQUAL(auth["data"]["client_id"].as<std::string>(), "ydb-cli");
         UNIT_ASSERT_VALUES_EQUAL(auth["data"]["scope"].as<std::string>(), "openid user-context");
-        options = {};
-        options.ConfigFile = "/tmp/oidc.yaml";
-        const auto fileAuth = options.MakeProfileAuth();
-        UNIT_ASSERT_VALUES_EQUAL(fileAuth["method"].as<std::string>(), "oidc-config");
-        UNIT_ASSERT_VALUES_EQUAL(fileAuth["data"].as<std::string>(), "/tmp/oidc.yaml");
+        UNIT_ASSERT_VALUES_EQUAL(auth["data"]["client_secret_file"].as<std::string>(), "/tmp/secret");
+        UNIT_ASSERT(!auth["data"]["client_secret"].IsDefined());
+        UNIT_ASSERT(!TString(YAML::Dump(auth)).Contains("never-persist-this"));
     }
 }
 

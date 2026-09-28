@@ -63,11 +63,12 @@ Y_UNIT_TEST_SUITE(TOidcCliAcceptor) {
 
     Y_UNIT_TEST(CreatesCliCredentialsFromConfig) {
         TTempDir dir;
+        TFileOutput((dir.Path() / "token").GetPath()).Write("opaque-access\n");
         const auto path = dir.Path() / "oidc.yaml";
         TFileOutput(path.GetPath()).Write(R"(
 issuer: https://issuer.example
 static_credentials:
-  access_token: opaque-access
+  access_token_file: token
 )");
 
         const auto factory = CreateCliOidcCredentialsProviderFactory(path.GetPath());

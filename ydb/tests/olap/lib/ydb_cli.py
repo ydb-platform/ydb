@@ -218,10 +218,11 @@ class YdbCliHelper:
             errors = self.get_errors(priority)
             if len(errors) == 0:
                 return None
+            main_error = max(errors, key=lambda e: e.priority)
             return WorkloadError(
                 '\n'.join([f'{e.area.name}: {e}' for e in errors]),
-                priority=max(e.priority for e in errors),
-                area=errors[0].area,
+                priority=main_error.priority,
+                area=main_error.area,
                 tb=next((e.__traceback__ for e in errors if e.__traceback__ is not None), None),
             )
 

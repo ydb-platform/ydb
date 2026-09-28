@@ -462,7 +462,7 @@ class LoadSuiteBase:
             node.was_oom = node.node.host in ooms
 
         for err in node_errors:
-            result.add_error(f'Node {err.node.slot} {err.message}', area=ErrorArea.YDB_INFRA)
+            result.add_error(f'Node {err.node.slot} {err.message}', area=ErrorArea.NODE_FAIL)
         return node_errors
 
     @classmethod
@@ -578,7 +578,7 @@ class LoadSuiteBase:
                 errors_by_tests = data.get('errors_by_tests')
                 if not isinstance(errors_by_tests, dict):
                     errors_by_tests = {}
-                errors_by_tests[query_name] = {
+                errors_by_tests[f'{cls.suite()}.{query_name}'] = {
                     **get_test_info(cls.suite(), query_name, result.start_time, end_time),
                     'errors': [e.serialize() for e in errors],
                 }

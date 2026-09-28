@@ -2153,7 +2153,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         AssertTableReads(snapshot, "/Root/HnswFullRange/index/indexImplPostingTable", 1);
     }
 
-    Y_UNIT_TEST_QUAD(HnswFullRangeRebuildUsesStoredSettings, Followers, Split) {
+    Y_UNIT_TEST_QUAD(HnswIndexViewRebuildUsesStoredSettings, Followers, Split) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
@@ -2218,11 +2218,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             }
         }
 
-        // Like the benchmark, search the posting table directly. Its query
-        // requests auto-detected dimensions and omits the graph's tuning.
+        // VIEW must search every posting partition, ignoring k-means pruning,
+        // and reuse the persisted graph settings after splits and restarts.
         const TString target = "DECLARE $q AS List<Float>; $target = Knn::ToBinaryStringFloat($q);";
         const TString query = target + Q_(R"(
-            SELECT pk FROM `/Root/HnswFullRange/index/indexImplPostingTable`
+            PRAGMA ydb.KMeansTreeSearchTopSize = "1";
+            SELECT pk FROM `/Root/HnswFullRange` VIEW index
             ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT 1;
         )");
         auto params = db.GetParamsBuilder();
@@ -2237,8 +2238,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         bool accelerated = false;
         for (ui32 attempt = 0; attempt < 30; ++attempt) {
             const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(query,
-                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::OnlineRO(
-                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::SnapshotRO()).CommitTx(),
                 values, settings).ExtractValueSync(); });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[3]]");
@@ -2276,8 +2276,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         bool updated = false;
         for (ui32 attempt = 0; attempt < 30; ++attempt) {
             const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(query,
-                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::OnlineRO(
-                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::SnapshotRO()).CommitTx(),
                 values, settings).ExtractValueSync(); });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             if (NYdb::FormatResultSetYson(result.GetResultSet(0)) == "[[2]]") {
@@ -2289,8 +2288,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_C(updated, "HNSW cache concealed a replicated vector update");
     }
 
-    Y_UNIT_TEST_TWIN(HnswIndexViewClusterRange, Followers) {
+    Y_UNIT_TEST_QUAD(HnswIndexViewSkipsClusterTraversal, Followers, EnableVectorSearchActor) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)
@@ -2338,7 +2338,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 const auto result = kikimr.RunCall([&] {
                     return session.ExecuteDataQuery(query,
                         TTxControl::BeginTx(Followers ? TTxSettings::StaleRO()
-                            : TTxSettings::OnlineRO(TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                            : TTxSettings::SnapshotRO()).CommitTx(),
                         TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
                 });
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2346,6 +2346,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ui64 rowsRead = 0;
                 for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
                     for (const auto& access : phase.table_access()) {
+                        UNIT_ASSERT_C(!access.name().EndsWith("/indexImplLevelTable"),
+                            "distributed_hnsw VIEW must not traverse k-means clusters");
                         if (access.name() == posting) {
                             rowsRead += access.reads().rows();
                         }
@@ -2357,7 +2359,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 }
                 runtime->SimulateSleep(TDuration::Seconds(1));
             }
-            UNIT_ASSERT_C(accelerated, "VIEW vidx did not use HNSW for a cluster prefix");
+            UNIT_ASSERT_C(accelerated, "VIEW vidx did not use its partition-local HNSW graph");
         }
     }
 

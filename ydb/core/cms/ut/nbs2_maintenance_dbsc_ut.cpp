@@ -25,8 +25,8 @@ constexpr ui64 PartitionId = 70001;
 // Real CMS and DBSC with TCmsTestEnv's mocked cluster; observers only record traffic.
 class TRealDbsControllerEnv : public TCmsTestEnv {
 public:
-    TRealDbsControllerEnv()
-        : TCmsTestEnv(8, 0)
+    explicit TRealDbsControllerEnv(ui32 vdisks = 0)
+        : TCmsTestEnv(8, vdisks)
     {
         for (ui32 i = 0; i < GetNodeCount(); ++i) {
             GetAppData(i).NbsEnabled = true;
@@ -62,15 +62,17 @@ public:
         request->Record.SetTabletId(partitionId);
         auto* group = request->Record.MutablePartitionDDisks()->AddDirectBlockGroupsDDisks();
         for (const ui32 index : nodeIndexes) {
+            const auto& pdisks = TFakeNodeWhiteboardService::Info.at(GetNodeId(index)).PDiskStateInfo;
+            const ui32 pdiskId = pdisks.empty() ? 1 : pdisks.begin()->first;
             auto* disks = group->AddDDiskIds();
             disks->SetHealth(NDbsc::NProto::ONLINE);
             auto* ddisk = disks->MutableDDisk();
             ddisk->SetNodeId(GetNodeId(index));
-            ddisk->SetPDiskId(1);
+            ddisk->SetPDiskId(pdiskId);
             ddisk->SetDDiskSlotId(1);
             auto* buffer = disks->MutablePersistentBuffer();
             buffer->SetNodeId(GetNodeId(index));
-            buffer->SetPDiskId(1);
+            buffer->SetPDiskId(pdiskId);
             buffer->SetDDiskSlotId(2);
         }
 
@@ -183,6 +185,102 @@ Y_UNIT_TEST_SUITE(TCmsNbs2RealDbsControllerTest) {
         const auto stored = env.CheckMaintenanceTaskGet("two-nodes", Ydb::StatusIds::SUCCESS);
         env.CheckActions(stored, {0, 1}, false, ToString(PartitionId));
         env.CheckDbsc(3, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+    }
+
+    Y_UNIT_TEST(PDiskLocksAndNodeMaintenance) {
+        using namespace NKikimrCms;
+
+        for (const bool diskFirst : {true, false}) {
+            TRealDbsControllerEnv env(1);
+            env.UpdateMap(PartitionId, {0, 1, 2, 3, 4});
+            const auto duration = TDuration::Minutes(10).MicroSeconds();
+            const auto& path = TFakeNodeWhiteboardService::Info.at(env.GetNodeId(0))
+                .PDiskStateInfo.begin()->second.GetPath();
+            // A qualified disk name does not need a host; a path does.
+            const auto replace = diskFirst
+                ? MakeAction(TAction::REPLACE_DEVICES, "", duration, env.PDiskName(0))
+                : MakeAction(TAction::REPLACE_DEVICES, "::1", duration, path);
+            const auto shutdown = MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), duration);
+            const auto& firstAction = diskFirst ? replace : shutdown;
+            const auto& secondAction = diskFirst ? shutdown : replace;
+
+            const auto first = env.CheckPermissionRequest("user", false, false, false, true,
+                MODE_FORCE_RESTART, TStatus::ALLOW, firstAction);
+            env.CheckDbsc(1, {diskFirst ? 0u : 1u}, NDbsc::NProto::ALLOW);
+            UNIT_ASSERT_VALUES_EQUAL(first.PermissionsSize(), 1);
+
+            // Both elements remain ONLINE in DBSC; only CMS knows about the first lock.
+            const auto denied = env.CheckPermissionRequest("user", false, false, false, true,
+                MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP, secondAction);
+            env.CheckDbsc(2, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+            UNIT_ASSERT_VALUES_EQUAL(denied.PermissionsSize(), 0);
+            env.CheckListPermissions("user", 1);
+
+            env.CheckDonePermission("user", first.GetPermissions(0).GetId());
+            const auto allowed = env.CheckPermissionRequest("user", false, false, false, true,
+                MODE_FORCE_RESTART, TStatus::ALLOW, secondAction);
+            env.CheckDbsc(3, {diskFirst ? 1u : 0u}, NDbsc::NProto::ALLOW);
+            UNIT_ASSERT_VALUES_EQUAL(allowed.PermissionsSize(), 1);
+            env.CheckDonePermission("user", allowed.GetPermissions(0).GetId());
+
+            const auto mixed = env.CheckPermissionRequest("user", true, false, false, true,
+                MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP, replace, shutdown);
+            env.CheckDbsc(4, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+            UNIT_ASSERT_VALUES_EQUAL(mixed.PermissionsSize(), 0);
+
+            const auto twoDisks = env.CheckPermissionRequest("user", false, false, false, true,
+                MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP,
+                MakeAction(TAction::REPLACE_DEVICES, "", duration, env.PDiskName(0), env.PDiskName(1)));
+            env.CheckDbsc(5, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+            UNIT_ASSERT_VALUES_EQUAL(twoDisks.PermissionsSize(), 0);
+            env.CheckListPermissions("user", 0);
+
+            const auto vdisk = env.CheckPermissionRequest("user", false, false, false, true,
+                MODE_FORCE_RESTART, TStatus::ALLOW,
+                MakeAction(TAction::REPLACE_DEVICES, "", duration, "vdisk-0-1-0-0-0"));
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.PermissionsSize(), 1);
+            env.CheckDbsc(5, {0, 1}, NDbsc::NProto::DENY, {PartitionId}); // No new DBSC check for a VDisk.
+        }
+    }
+
+    Y_UNIT_TEST(PDiskNotificationsAndManualApproval) {
+        using namespace NKikimrCms;
+
+        TRealDbsControllerEnv env(1);
+        env.UpdateMap(PartitionId, {0, 1, 2, 3, 4});
+        const auto duration = TDuration::Minutes(10).MicroSeconds();
+        const auto notification = env.CheckNotification(TStatus::OK, "user", env.GetCurrentTime(),
+            MakeAction(TAction::REPLACE_DEVICES, "", duration, env.PDiskName(0)));
+        const auto replace = MakeAction(TAction::REPLACE_DEVICES, "", duration, env.PDiskName(1));
+
+        const auto pending = env.CheckPermissionRequest("user", false, false, true, true,
+            MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP, replace);
+        env.CheckDbsc(1, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+        UNIT_ASSERT_VALUES_EQUAL(pending.PermissionsSize(), 0);
+        const auto requestId = pending.GetRequestId();
+        const auto before = env.CheckGetRequest("user", requestId);
+
+        const auto denied = env.CheckApproveRequest("user", requestId, false, TStatus::DISALLOW_TEMP);
+        env.CheckDbsc(2, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+        UNIT_ASSERT_VALUES_EQUAL(denied.ManuallyApprovedPermissionsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(before.SerializeAsString(), env.CheckGetRequest("user", requestId).SerializeAsString());
+        env.CheckListPermissions("user", 0);
+
+        env.CheckRejectNotification("user", notification, TStatus::OK);
+        const auto approved = env.CheckApproveRequest("user", requestId);
+        env.CheckDbsc(3, {1}, NDbsc::NProto::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(approved.ManuallyApprovedPermissionsSize(), 1);
+        const auto& approvedAction = approved.GetManuallyApprovedPermissions(0).GetAction();
+        UNIT_ASSERT_VALUES_EQUAL(approvedAction.GetType(), TAction::REPLACE_DEVICES);
+        UNIT_ASSERT_VALUES_EQUAL(approvedAction.DevicesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(approvedAction.GetDevices(0), env.PDiskName(1));
+
+        const auto shutdown = env.CheckPermissionRequest("user", false, false, false, true,
+            MODE_FORCE_RESTART, TStatus::DISALLOW_TEMP,
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), duration));
+        env.CheckDbsc(4, {0, 1}, NDbsc::NProto::DENY, {PartitionId});
+        UNIT_ASSERT_VALUES_EQUAL(shutdown.PermissionsSize(), 0);
+        env.CheckListPermissions("user", 1);
     }
 
     Y_UNIT_TEST(ManualApprovalWithRealDbsController) {

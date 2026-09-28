@@ -41,6 +41,7 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
         case TAction::SHUTDOWN_HOST:
         case TAction::REBOOT_HOST:
         case TAction::RESTART_SERVICES:
+        case TAction::REPLACE_DEVICES:
             break;
         default:
             continue;
@@ -52,13 +53,32 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
             return false;
         }
 
-        const auto items = ClusterInfo->FindLockedItems(action, &ctx);
-        if (items.empty()) {
-            continue;
-        }
-        for (const auto *item : items) {
-            // For the action types above FindLockedItems returns only nodes.
-            nodes.insert(static_cast<const TNodeInfo *>(item)->NodeId);
+        if (action.GetType() == TAction::REPLACE_DEVICES) {
+            // DBSC checks nodes, so conservatively treat PDisk replacement as node maintenance.
+            bool hasPDisk = false;
+            for (const auto &device : action.GetDevices()) {
+                if (ClusterInfo->HasPDisk(device)) {
+                    nodes.insert(ClusterInfo->PDisk(device).NodeId);
+                } else if (ClusterInfo->HasPDisk(action.GetHost(), device)) {
+                    nodes.insert(ClusterInfo->PDisk(action.GetHost(), device).NodeId);
+                } else {
+                    continue;
+                }
+                hasPDisk = true;
+            }
+            // Replacing a VDisk alone does not take the node's DDisks offline.
+            if (!hasPDisk) {
+                continue;
+            }
+        } else {
+            const auto items = ClusterInfo->FindLockedItems(action, &ctx);
+            if (items.empty()) {
+                continue;
+            }
+            for (const auto *item : items) {
+                // For node actions FindLockedItems returns only nodes.
+                nodes.insert(static_cast<const TNodeInfo *>(item)->NodeId);
+            }
         }
 
         // Use the same interval as CMS conflict checks. One DBSC batch must
@@ -72,15 +92,22 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
     }
 
     const TInstant now = ctx.Now();
+    const auto isLocked = [&](const TLockableItem &item) {
+        TErrorInfo lockError;
+        // Include every issued permission; apply CMS time/priority rules to other restrictions.
+        return !item.Locks.empty()
+            || item.IsLocked(lockError, State->Config.DefaultRetryTime, now, horizon, request.GetPriority());
+    };
     for (const auto &entry : ClusterInfo->AllNodes()) {
         const auto &node = *entry.second;
-        TErrorInfo lockError;
-        // Issued permissions may be in use: include all, even this task's, regardless of priority.
-        // Check other restrictions with CMS time/priority rules without changing the snapshot.
-        if (!node.Locks.empty()
-            || node.IsLocked(lockError, State->Config.DefaultRetryTime, now, horizon, request.GetPriority()))
-        {
+        if (isLocked(node)) {
             nodes.insert(node.NodeId);
+        }
+    }
+    for (const auto &entry : ClusterInfo->AllPDisks()) {
+        const auto &pdisk = *entry.second;
+        if (isLocked(pdisk)) {
+            nodes.insert(pdisk.NodeId);
         }
     }
 

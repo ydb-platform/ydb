@@ -497,6 +497,10 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
                 {MakeAction(TAction::RESTART_SERVICES, node, duration), TStatus::WRONG_REQUEST},
                 {MakeAction(TAction::RESTART_SERVICES, node, duration, "unknown-service"), TStatus::WRONG_REQUEST},
                 {MakeAction(TAction::RESTART_SERVICES, node, duration, "dynnode"), TStatus::NO_SUCH_SERVICE},
+                {MakeAction(TAction::REPLACE_DEVICES, node, duration, "pdisk-0-9999"), TStatus::NO_SUCH_DEVICE},
+                {MakeAction(TAction::REPLACE_DEVICES, node, duration, "/missing/path"), TStatus::NO_SUCH_DEVICE},
+                {MakeAction(TAction::REPLACE_DEVICES, node, duration, fixture.Env.PDiskName(0), "missing-device"),
+                    TStatus::NO_SUCH_DEVICE},
             };
             size_t index = 0;
             for (const auto& [action, status] : cases) {

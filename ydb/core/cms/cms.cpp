@@ -1694,7 +1694,8 @@ bool TCms::ValidateManualApprovalTargets(const TPermissionRequest &request, TErr
     for (const auto &action : request.GetActions()) {
         if (action.GetType() != TAction::SHUTDOWN_HOST
             && action.GetType() != TAction::REBOOT_HOST
-            && action.GetType() != TAction::RESTART_SERVICES)
+            && action.GetType() != TAction::RESTART_SERVICES
+            && action.GetType() != TAction::REPLACE_DEVICES)
         {
             continue;
         }
@@ -1717,6 +1718,19 @@ bool TCms::ValidateManualApprovalTargets(const TPermissionRequest &request, TErr
                 error.Reason = Sprintf("No such services: %s on host %s",
                     JoinSeq(", ", action.GetServices()).c_str(), action.GetHost().c_str());
                 return false;
+            }
+        }
+        if (action.GetType() == TAction::REPLACE_DEVICES) {
+            for (const auto &device : action.GetDevices()) {
+                if (!ClusterInfo->HasPDisk(device)
+                    && !ClusterInfo->HasPDisk(action.GetHost(), device)
+                    && !ClusterInfo->HasVDisk(device))
+                {
+                    error.Code = TStatus::NO_SUCH_DEVICE;
+                    error.Reason = Sprintf("Unknown device %s (use cluster state command"
+                        " to get list of known devices)", device.data());
+                    return false;
+                }
             }
         }
     }

@@ -431,7 +431,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     }
 
     bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
-    auto query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
+    query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
     pool->AddQuery(query);
     Y_ENSURE(Queries.emplace(queryId, TQueryState{1, query}).second);
     return query;

@@ -1,15 +1,33 @@
 #include "column_shard_log_writer.h"
 
-#include <ydb/core/driver_lib/run/run.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
+#include <ydb/core/kqp/ut/olap/helpers/get_value.h>
+#include <ydb/core/kqp/ut/olap/helpers/local.h>
+#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
+#include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
+#include <ydb/core/kqp/ut/olap/helpers/writer.h>
+
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/wrappers/fake_storage.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
 TColumnShardLogWriter::TColumnShardLogWriter(
+    TKikimrRunner& runner,
     TLogMessageFilter filter,
     TDatabaseSettings settings,
-    TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
-    TKikimrRunner* runner)
+    TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
     : TBaseSchematizedLogWriter(std::move(filter), std::move(columns))
     , Settings(std::move(settings))
     , Runner(runner)

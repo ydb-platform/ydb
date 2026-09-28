@@ -12,14 +12,13 @@ ENDIF()
 
 SRCS(
     delete_ut.cpp
-    write_log_schematized.cpp
-    write_log_columnshard.cpp
     write_ut.cpp
 )
 
 PEERDIR(
     ydb/core/testlib
     ydb/core/kqp
+    ydb/core/kqp/schematized_log
     ydb/core/kqp/ut/common
     ydb/core/protos
     yql/essentials/sql/pg_dummy

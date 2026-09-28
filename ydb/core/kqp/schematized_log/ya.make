@@ -6,18 +6,19 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
-    contrib/proto/opentelemetry
-    library/cpp/lwtrace/protos
-    library/cpp/messagebus/monitoring
-    ydb/core/base/generated
-    ydb/core/control/lib
-    ydb/core/grpc_services/cancelation/protos
+    ydb/core/testlib
+    ydb/core/kqp
+    ydb/core/kqp/ut/common
     ydb/core/protos
-    ydb/library/aclib/protos/acl
-    ydb/library/aclib/protos/identity
-    ydb/library/actors/struct_log
+    yql/essentials/sql/pg_dummy
+    ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/columnshard
+    ydb/core/kqp/ut/olap/helpers
+    ydb/core/kqp/ut/olap/combinatory
+    ydb/core/wrappers
 )
+
 
 YQL_LAST_ABI_VERSION()
 

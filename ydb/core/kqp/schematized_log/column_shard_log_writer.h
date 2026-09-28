@@ -6,9 +6,6 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
-#include <util/generic/string.h>
-#include <util/system/yassert.h>
-
 namespace NKikimr::NKqp {
 
 class TKikimrRunner;
@@ -30,14 +27,13 @@ public:
     };
 
     TColumnShardLogWriter(
+        TKikimrRunner& runner,
         TLogMessageFilter filter,
         TDatabaseSettings settings,
-        TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
-        TKikimrRunner* runner = nullptr);
+        TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
 
     TKikimrRunner& GetRunner() const {
-        Y_DEBUG_ABORT_UNLESS(Runner);
-        return *Runner;
+        return Runner;
     }
 
     const TDatabaseSettings& GetDatabaseSettings() const {
@@ -61,7 +57,7 @@ protected:
 
     const TDatabaseSettings Settings;
     ui32 CurrentBatchSize {0};
-    TKikimrRunner* Runner {nullptr};
+    TKikimrRunner& Runner;
 };
 
 } // namespace NSchematizedLog

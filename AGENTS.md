@@ -27,3 +27,8 @@
 ## C++
 
 - Use C++20 or earlier
+
+## Attribution
+
+- Do not name branches or repository paths after AI coding assistants.
+- Do not mention AI coding assistants as authors, tools, or promotional credits in commit messages, including `Co-authored-by` trailers.

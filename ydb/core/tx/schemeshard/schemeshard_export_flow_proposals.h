@@ -8,6 +8,13 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+TString ComputeIndexItemSuffix(
+    const NKikimrSchemeOp::TBackupTask* schemeSnapshot,
+    const NKikimrSchemeOp::TPathDescription& sourceDescription,
+    const TString& indexImplTablePath,
+    bool encrypted
+);
+
 bool PrepareExportTableSchemeContext(
     TSchemeShard* ss,
     const TString& sourcePathName,
@@ -18,8 +25,10 @@ bool PrepareExportTableSchemeContext(
 );
 
 bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
     const TString& sourcePathName,
     const NKikimrSchemeOp::TBackupTask& task,
+    const TPath& exportItemPath,
     TExportTableSchemeContext& context,
     TString& error
 );
@@ -40,7 +49,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(

@@ -66,6 +66,7 @@ constexpr ui64 ReadResultSizeEstimationNewApi = 1 + 5 // Key id, length
 constexpr ui64 ErrorMessageSizeEstimation = 128;
 
 constexpr size_t MaxKeySize = 4000;
+constexpr ui64 DefaultRequestsInFlightLimit = 10'000;
 
 bool IsKeyLengthValid(const TString& key) {
     return key.length() <= MaxKeySize;
@@ -100,7 +101,6 @@ TKeyValueState::TKeyValueState()
     , RejectNonExistentStorageChannel(RejectNonExistentStorageChannel_Base)
     , UsePerChannelReadQueues_Base(0, 0, 1)
     , UsePerChannelReadQueues(UsePerChannelReadQueues_Base)
-    , RequestsInFlightLimit(TControlWrapper(10'000, 1, 1'000'000))
 {
     TabletCounters = nullptr;
     Clear();
@@ -646,8 +646,10 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         RejectNonExistentStorageChannel.ResetControl(RejectNonExistentStorageChannel_Base);
         TControlBoard::RegisterSharedControl(UsePerChannelReadQueues_Base, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
         UsePerChannelReadQueues.ResetControl(UsePerChannelReadQueues_Base);
-        RequestsInFlightLimit.ResetControl(TControlWrapper(
-            icb->KeyValueVolumeControls.RequestsInFlightLimit.AtomicLoad()));
+        RequestsInFlightLimit.reset();
+        if (auto control = icb->KeyValueVolumeControls.RequestsInFlightLimit.AtomicLoad()) {
+            RequestsInFlightLimit.emplace(TControlWrapper(std::move(control)));
+        }
 
         YDB_LOG_DEBUG("Init KeyValue with ICB",
             {"keyValue", TabletId},
@@ -655,7 +657,9 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             {"readRequestsInFlightLimit", ReadRequestsInFlightLimit.Update(ctx.Now())},
             {"rejectNonExistentStorageChannel", RejectNonExistentStorageChannel.Update(ctx.Now())},
             {"usePerChannelReadQueues", UsePerChannelReadQueues.Update(ctx.Now())},
-            {"requestsInFlightLimit", RequestsInFlightLimit.Update(ctx.Now())},
+            {"requestsInFlightLimit", RequestsInFlightLimit
+                ? RequestsInFlightLimit->Update(ctx.Now())
+                : DefaultRequestsInFlightLimit},
             {"marker", "KV92"});
     }
 
@@ -2117,7 +2121,9 @@ void TKeyValueState::ProcessPostponedChannels(const TVector<ui32> &channels, con
 }
 
 bool TKeyValueState::TryAcquireRequestSlot(TIntermediate& intermediate, const TActorContext& ctx) {
-    const ui64 limit = RequestsInFlightLimit.Update(ctx.Now());
+    const ui64 limit = RequestsInFlightLimit
+        ? RequestsInFlightLimit->Update(ctx.Now())
+        : DefaultRequestsInFlightLimit;
     if (DataRequestsInFlight.size() >= limit) {
         return false;
     }

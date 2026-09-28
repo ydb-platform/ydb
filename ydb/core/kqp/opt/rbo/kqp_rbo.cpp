@@ -15,6 +15,46 @@ bool HasProperty(ui32 props, ui32 property) {
     return (props & property) == property;
 }
 
+std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrusivePtr<TOpRoot>>& roots) {
+    ui64 counter = 0;
+    ui32 operatorIdx = 0;
+    THashMap<IOperator*, ui32> operatorIds;
+    TVector<NJson::TJsonValue> executionJsons;
+    TVector<NJson::TJsonValue> explainJsons;
+
+    for (auto & rootPtr : roots) {
+        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds));
+        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds));
+    }
+
+    if (roots.size()==1) {
+        return std::make_pair(executionJsons[0], explainJsons[0]);
+    } else {
+        NJson::TJsonValue execResult;
+        execResult["PlanNodeId"] = counter++;
+        execResult["PlanNodeType"] = "ResultSets";
+        execResult["Node Type"] = "ResultSets";
+
+        auto execList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        for (auto & execJson : executionJsons) {
+            execList.AppendValue(execJson);
+        }
+        execResult["Plans"] = execList;
+
+        NJson::TJsonValue explainResult;
+        explainResult["PlanNodeId"] = counter++;
+        explainResult["PlanNodeType"] = "ResultSets";
+        explainResult["Node Type"] = "ResultSets";
+
+        auto explainList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        for (auto & explainJson : explainJsons) {
+            explainList.AppendValue(explainJson);
+        }
+        explainResult["Plans"] = explainList;
+
+        return std::make_pair(execResult, explainResult);
+    }
+}
 } // namespace
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
@@ -179,9 +219,11 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
+    int stageCounter = 0;
 
     for (auto & rootPtr : roots) {
         auto & root = *rootPtr;
+        root.PlanProps.StageGraph.StageCounter = stageCounter;
         SubmitInitialPlanTrace(root, rboCtx);
 
         if (needToLog) {
@@ -211,16 +253,15 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TVector<TIntrusivePtr<TOpRoot>> ro
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
+
+        stageCounter = root.PlanProps.StageGraph.StageCounter;
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-
-    ui64 counter = 0;
-    THashMap<IOperator*, ui32> operatorIds;
-    // FIXME: Generate JSON for the first plan only
-    rboCtx.ExecutionJson = roots[0]->GetExecutionJson(counter, operatorIds);
-    rboCtx.ExplainJson = roots[0]->GetExplainJson(counter, operatorIds);
+    auto [execJson, explainJson] = BuildPlans(roots);
+    rboCtx.ExecutionJson = execJson;
+    rboCtx.ExplainJson = explainJson;
 
     return ConvertToPhysical(roots, rboCtx);
 }

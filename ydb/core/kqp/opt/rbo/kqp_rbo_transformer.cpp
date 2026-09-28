@@ -184,6 +184,11 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                     opRoot->ComputeParents();
                     Roots.push_back(opRoot);
                 }
+
+                if (Roots.size() > 1) {
+                    ResetTypes = true;
+                }
+
                 return node;
             } else {
                 return node;
@@ -361,7 +366,10 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
-    TOptimizeExprSettings settings(&TypeCtx);
+    TOptimizeExprSettings settings(nullptr);
+    if (!ResetTypes) {
+        settings = TOptimizeExprSettings(&TypeCtx);
+    }
     settings.VisitTuples = true;
     Y_ENSURE(Roots.size(), "NEW RBO OpRoot is not initialized.");
 

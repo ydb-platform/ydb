@@ -419,5 +419,6 @@ message TFeatureFlags {
     // Under space pressure, lets PDisk choose which level compaction runs on the disk: one at a time, the one
     // that frees the most chunks, which then reserves exactly the chunks it will write before writing any.
     optional bool EnableVDiskPlannedCompaction = 343 [default = false, (RequireRestart) = true];
-    optional bool EnableCsIndexReadMemoryTracking = 344 [default = false];
+    optional bool EnableStreamingAggregationAdvanced = 344 [default = false];
+    optional bool EnableCsIndexReadMemoryTracking = 345 [default = false];
 }

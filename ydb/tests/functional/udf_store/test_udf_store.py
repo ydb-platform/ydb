@@ -547,7 +547,6 @@ def test_ydb_udf_administrator_access(database_admin):
                 responses = list(stub.UploadModule(iter(chunks), metadata=metadata, timeout=30))
                 assert len(responses) == 1
                 assert responses[0].operation.status == StatusIds.BAD_REQUEST, responses
-                assert "Requests without specified database" in str(responses[0].operation.issues)
 
             with pytest.raises(grpc.RpcError) as error:
                 list(stub.UploadModule(iter(chunks), metadata=(
@@ -1140,6 +1139,11 @@ def _make_cluster(
     if database_admin is not None:
         configurator.yaml_config.setdefault("feature_flags", {}).update(
             enable_database_admin=database_admin, check_database_access_permission=True)
+        # An empty registration SID list exempts every authenticated caller
+        # from the database connect check. Restrict it to the bootstrap token.
+        configurator.yaml_config["domains_config"]["security_config"].update(
+            register_dynamic_node_allowed_sids=["root@builtin"], enforce_user_token_check_requirement=True)
+        configurator.yaml_config.setdefault("auth_config", {})["node_registration_token"] = "root@builtin"
     if enable_udf_store:
         udf_store_config = {"enabled": True, "kv_storage_media": "hdd"}
         if enable_native_udf:

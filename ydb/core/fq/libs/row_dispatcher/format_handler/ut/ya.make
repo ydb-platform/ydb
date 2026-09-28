@@ -7,12 +7,14 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     ydb/core/fq/libs/row_dispatcher/format_handler
     ydb/core/fq/libs/row_dispatcher/format_handler/filters
     ydb/core/fq/libs/row_dispatcher/format_handler/parsers
     ydb/core/fq/libs/row_dispatcher/format_handler/ut/common
 
     yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1
 )
 
 SIZE(MEDIUM)

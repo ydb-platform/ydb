@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
     library/cpp/json
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

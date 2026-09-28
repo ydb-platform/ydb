@@ -16,9 +16,10 @@ IF (NOT WITH_VALGRIND)
     PEERDIR(
         ydb/core/testlib/default
         ydb/core/tx/schemeshard/ut_helpers
+        yql/essentials/sql/v1_dummy
     )
 
-    YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION()
 
     SRCS(
         ut_resource_pool_reboots.cpp

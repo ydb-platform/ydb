@@ -6,6 +6,7 @@ SIZE(LARGE)
 TAG(ya:fat)
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     library/cpp/testing/unittest
     ydb/core/kqp/ut/common
     ydb/core/persqueue/ut/common

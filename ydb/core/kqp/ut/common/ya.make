@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
+    yql/essentials/sql/v1
     yql/essentials/udfs/common/string
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value

@@ -21,6 +21,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/datastreams
+    yql/essentials/sql/v1_dummy
 
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils

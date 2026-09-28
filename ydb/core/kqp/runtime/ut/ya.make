@@ -13,10 +13,12 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util
     library/cpp/testing/unittest
     ydb/core/testlib/basics/pg
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/v1
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm16
     yt/yql/providers/yt/comp_nodes/dq/llvm16

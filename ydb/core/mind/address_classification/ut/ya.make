@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/actors/http
     ydb/core/mind/address_classification
     ydb/core/testlib/default
+    yql/essentials/sql/v1_dummy
 )
 
 YQL_LAST_ABI_VERSION()

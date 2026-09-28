@@ -17,6 +17,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/types
     ydb/services/ydb
+    yql/essentials/sql/v1
 )
 
 SRCS(

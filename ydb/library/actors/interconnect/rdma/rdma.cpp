@@ -41,17 +41,18 @@ public:
         : TSimpleCqBase(as, sz, c, true)
     {}
 
-    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
-        return TSimpleCqBase::Init(ctx, maxCqe, nullptr);
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
+        return TSimpleCqBase::Init(ctx, params, std::move(memPool), nullptr);
     }
 
     virtual ~TSimpleCq() {
         // For simple polling mode CQ, we just can destroy ibv CQ without any issues just aftre joining to the thread
         Cont.store(false, std::memory_order_relaxed);
-        if (Thread.Running())
+        if (Thread.Running()) {
             Thread.Join();
+        }
 
-        DestroyCq();
+        Y_UNUSED(DestroyCq());
     }
 };
 
@@ -61,13 +62,13 @@ public:
         : TSimpleCqBase(as, sz, c, false)
     {}
 
-    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
         CompChannel = ibv_create_comp_channel(ctx->GetContext());
         if (!CompChannel) {
             return errno;
         }
 
-        int err = TSimpleCqBase::Init(ctx, maxCqe, CompChannel);
+        int err = TSimpleCqBase::Init(ctx, params, std::move(memPool), CompChannel);
         if (err) {
             return err;
         }
@@ -80,6 +81,11 @@ public:
         return 0;
     }
 
+    void NotifyErr() noexcept override {
+        DoNotifyErr();
+        WakeUntilFinished();
+    }
+
     void Idle() noexcept override final {
         struct ibv_cq *evCq = nullptr;
         void *evCtx = nullptr;
@@ -87,7 +93,7 @@ public:
         int err = ibv_get_cq_event(CompChannel, &evCq, &evCtx);
         if (err) {
             if (errno != EINTR) {
-                NotifyErr();
+                DoNotifyErr();
                 return;
             }
         }
@@ -100,7 +106,7 @@ public:
         err = ibv_req_notify_cq(evCq, 0);
         if (err) {
             Cerr << "Couldn't request CQ notification\n" << Endl;
-            NotifyErr();
+            DoNotifyErr();
             Y_DEBUG_ABORT_UNLESS(false);
         }
     }
@@ -118,22 +124,16 @@ public:
         // 3. Send signal to the thread to interrupt waiting on the read syscall ()
         // NOTE: There is a tiny chanse the signal was send before thread blocked on the read syscall
         // so in this case repeat send signal until cq thread finished
-        while (!Finished.load(std::memory_order_relaxed)) {
-            Awake();
-            if (Finished.load(std::memory_order_relaxed)) {
-                break;
-            }
-            ThreadYield();
+        if (Thread.Running()) {
+            WakeUntilFinished();
+            // 4. As usual, join and destroy CQ
+            Thread.Join();
         }
 
-        // 4. As usual, join and destroy CQ
-        if (Thread.Running())
-            Thread.Join();
-
-        DestroyCq();
+        const int destroyErr = DestroyCq();
 
         // 5. Destroy completion event channel
-        if (ibv_destroy_comp_channel(CompChannel)) {
+        if (!destroyErr && CompChannel && ibv_destroy_comp_channel(CompChannel)) {
             // https://www.rdmamojo.com/2012/10/26/ibv_destroy_comp_channel
             Cerr << "Unable to destroy completion event channel, errno: " << errno << Endl;
             // it should not happen, but if it happens it is not a fatal error for production
@@ -141,15 +141,15 @@ public:
         }
     }
 private:
-    ibv_comp_channel* CompChannel;
+    ibv_comp_channel* CompChannel = nullptr;
 };
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
-    return CreateCq<TSimpleCq>(ctx, as, maxCqe, maxWr, counter);
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+    return CreateCq<TSimpleCq>(ctx, as, runtimeParams, std::move(memPool), counter);
 }
 
-ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
-    return CreateCq<TSimpleEventDrivenCq>(ctx, as, maxCqe, maxWr, counter);
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+    return CreateCq<TSimpleEventDrivenCq>(ctx, as, runtimeParams, std::move(memPool), counter);
 }
 
 const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;
@@ -174,10 +174,14 @@ int TQueuePair::Init(TRdmaCtx* ctx, ICq* icq, int maxWr) noexcept {
     bzero(&qpInitAttr, sizeof(qpInitAttr));
     qpInitAttr.send_cq = cq;
     qpInitAttr.recv_cq = cq;
+    qpInitAttr.srq = icq->GetSrq();
     qpInitAttr.cap.max_send_wr = static_cast<ui32>(maxWr);
-    qpInitAttr.cap.max_recv_wr = static_cast<ui32>(maxWr);
     qpInitAttr.cap.max_send_sge = static_cast<ui32>(attr.max_sge);
-    qpInitAttr.cap.max_recv_sge = static_cast<ui32>(attr.max_sge);
+    // With SRQ attached the QP has no private receive queue; receive capacity is owned by SRQ.
+    if (!qpInitAttr.srq) {
+        qpInitAttr.cap.max_recv_wr = static_cast<ui32>(maxWr);
+        qpInitAttr.cap.max_recv_sge = static_cast<ui32>(attr.max_sge);
+    }
     qpInitAttr.qp_type = IBV_QPT_RC;
 
     TStringStream ss;
@@ -344,45 +348,107 @@ THandshakeData TQueuePair::GetHandshakeData() const noexcept {
 void TIbVerbsBuilderImpl::AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
     std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
 {
-    WorkBuf.emplace_back(
-        TWrVerbData {
-            .Sg = {
-                .addr = (ui64)mrAddr,
-                .length = dstSize,
-                .lkey = mrlKey,
+    auto& item = WorkBuf.emplace_back();
+    item.SgList.emplace_back(ibv_sge {
+        .addr = reinterpret_cast<ui64>(mrAddr),
+        .length = dstSize,
+        .lkey = mrlKey,
+    });
+    item.Wr = ibv_send_wr {
+       .wr_id = 0/*wrId*/,
+       .sg_list = nullptr,
+       .num_sge = 1,
+       .opcode = IBV_WR_RDMA_READ,
+       .send_flags = IBV_SEND_SIGNALED,
+       .wr = {
+           .rdma = {
+               .remote_addr = reinterpret_cast<ui64>(dstAddr),
+               .rkey = dstRkey,
             },
-            .Wr = {
-               .wr_id = 0/*wrId*/,
-               .sg_list = nullptr,
-               .num_sge = 1,
-               .opcode = IBV_WR_RDMA_READ,
-               .send_flags = IBV_SEND_SIGNALED,
-               .wr = {
-                   .rdma = {
-                       .remote_addr = (ui64)dstAddr,
-                       .rkey = dstRkey,
-                    },
-                },
-            },
-            .IoCb = std::move(ioCb)
-        }
-    );
+        },
+    };
+    item.IoCb = std::move(ioCb);
 }
 
-ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr) noexcept {
+bool TIbVerbsBuilderImpl::AddSendVerb(const TRcBuf& packet,
+    std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+{
+    Y_ABORT_UNLESS(packet);
+    auto memReg = TryExtractFromRcBuf(packet);
+    if (Y_UNLIKELY(memReg.Empty())) {
+        return false;
+    }
+
+    const TContiguousSpan span = packet.GetContiguousSpan();
+
+    const TSendSge sg {
+        .Data = span.Data(),
+        .Size = span.Size(),
+        .MemRegion = memReg.GetMemRegion(),
+    };
+
+    AddSendVerb(std::span<const TSendSge>(&sg, 1), std::move(ioCb));
+
+    return true;
+}
+
+void TIbVerbsBuilderImpl::AddSendVerb(std::span<const TSendSge> sgList,
+    std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+{
+    Y_ABORT_UNLESS(!sgList.empty());
+    Y_ABORT_UNLESS(sgList.size() <= static_cast<size_t>(Max<int>()));
+
+    auto& item = WorkBuf.emplace_back();
+    item.SgList.reserve(sgList.size());
+    item.SendMemRegions.reserve(sgList.size());
+    for (const auto& sg : sgList) {
+        Y_ABORT_UNLESS(sg.Data);
+        Y_ABORT_UNLESS(sg.Size <= Max<ui32>());
+        Y_ABORT_UNLESS(sg.MemRegion);
+        item.SgList.emplace_back(ibv_sge {
+            .addr = reinterpret_cast<ui64>(sg.Data),
+            .length = static_cast<ui32>(sg.Size),
+        });
+        item.SendMemRegions.emplace_back(sg.MemRegion);
+    }
+
+    item.Wr = ibv_send_wr {
+       .wr_id = 0/*wrId*/,
+       .sg_list = nullptr,
+       .num_sge = static_cast<int>(item.SgList.size()),
+       .opcode = IBV_WR_SEND,
+       .send_flags = IBV_SEND_SIGNALED,
+    };
+    item.IoCb = std::move(ioCb);
+}
+
+ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t deviceIndex) noexcept {
     Y_ABORT_UNLESS(wr.size() == WorkBuf.size());
     Y_ABORT_UNLESS(wr.size());
 
-    WorkBuf[0].Wr.sg_list = &WorkBuf[0].Sg;
-    WorkBuf[0].Wr.wr_id = wr[0]->GetId();
-    wr[0]->AttachCb(std::move(WorkBuf[0]).IoCb);
+    auto attach = [&](size_t i) {
+        Y_ABORT_UNLESS(!WorkBuf[i].SgList.empty());
+        Y_ABORT_UNLESS(WorkBuf[i].Wr.num_sge == static_cast<int>(WorkBuf[i].SgList.size()));
+
+        WorkBuf[i].Wr.sg_list = WorkBuf[i].SgList.data();
+        WorkBuf[i].Wr.wr_id = wr[i]->GetId();
+
+        if (!WorkBuf[i].SendMemRegions.empty()) {
+            Y_ABORT_UNLESS(WorkBuf[i].SendMemRegions.size() == WorkBuf[i].SgList.size());
+            for (size_t sgIndex = 0; sgIndex != WorkBuf[i].SgList.size(); ++sgIndex) {
+                WorkBuf[i].SgList[sgIndex].lkey = WorkBuf[i].SendMemRegions[sgIndex]->GetLKey(deviceIndex);
+            }
+        }
+
+        wr[i]->AttachCb(std::move(WorkBuf[i].IoCb));
+        wr[i]->ResetTimer();
+    };
+
+    attach(0);
 
     for (size_t i = 1; i < WorkBuf.size(); i++) {
-        WorkBuf[i].Wr.sg_list = &WorkBuf[i].Sg;
         WorkBuf[i - 1].Wr.next = &WorkBuf[i].Wr;
-        WorkBuf[i].Wr.wr_id = wr[i]->GetId();
-        wr[i]->AttachCb(std::move(WorkBuf[i]).IoCb);
-        wr[i]->ResetTimer();
+        attach(i);
     }
 
     return &WorkBuf[0].Wr;

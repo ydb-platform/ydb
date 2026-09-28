@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/testlib/default
     ydb/services/config
+    yql/essentials/sql/v1_dummy
 )
 
 YQL_LAST_ABI_VERSION()

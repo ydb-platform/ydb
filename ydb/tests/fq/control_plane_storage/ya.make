@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/fq/libs/rate_limiter/events
     ydb/core/testlib/default
     ydb/library/security
+    yql/essentials/sql/v1
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

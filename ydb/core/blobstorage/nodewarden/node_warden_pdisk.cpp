@@ -8,10 +8,14 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
 #include <util/string/split.h>
 
-namespace NKikimr::NStorage {
+#include <optional>
+#include <utility>
 
+namespace NKikimr::NStorage {
     static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
         {NPDisk::DEVICE_TYPE_ROT, 100000000},
         {NPDisk::DEVICE_TYPE_SSD, 200000000},
@@ -47,6 +51,45 @@ namespace NKikimr::NStorage {
         // this branch has no SlotSizeInUnits support: the 2^N slot scaling is folded into the
         // slot count, so the per-slot quota ends up ~unitSizeInBytes * 2^N as on mainline
         pdiskConfig->ExpectedSlotCount = Max(1u, (ui32)lround(slotCount/slotSizeInUnits));
+    }
+
+    void TNodeWarden::UpdateBlobStorageExecutorPoolMapping() {
+        if (Cfg->BlobStorageExecutorPoolIds.empty()) {
+            return;
+        }
+
+        // Runs right after the service-set merge, before any PDisk is started: a PDisk
+        // that left the configuration must free its pool slot immediately, because its
+        // replacement starts before it is destroyed (destruction may even wait for
+        // later service-set updates while its VDisks drain).
+        THashSet<ui32> pdiskIds;
+        for (const auto& pdisk : StaticServices.GetPDisks()) {
+            pdiskIds.insert(pdisk.GetPDiskID());
+        }
+        for (const auto& pdisk : DynamicServices.GetPDisks()) {
+            pdiskIds.insert(pdisk.GetPDiskID());
+        }
+        PDiskToBlobStorageExecutorPool.RetainConfiguredPDisks(pdiskIds);
+    }
+
+    std::optional<ui32> TNodeWarden::GetBlobStorageExecutorPoolId(ui32 pdiskId) {
+        if (Cfg->BlobStorageExecutorPoolIds.empty()) {
+            return std::nullopt;
+        }
+        return PDiskToBlobStorageExecutorPool.AcquirePoolId(Cfg->BlobStorageExecutorPoolIds, pdiskId);
+    }
+
+    void TNodeWarden::ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
+            std::optional<ui32> blobStorageExecutorPoolId) {
+        if (!blobStorageExecutorPoolId) {
+            return;
+        }
+
+        std::optional<TCpuMask> affinity =
+            ActorContext().ActorSystem()->GetExecutorPoolAffinity(*blobStorageExecutorPoolId);
+        if (affinity) {
+            pdiskConfig->BlobStorageExecutorPoolAffinity = std::move(*affinity);
+        }
     }
 
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(
@@ -369,23 +412,30 @@ namespace NKikimr::NStorage {
             record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(*writeBytesPerSecond);
         }
 
+        const ui32 pdiskID = pdisk.GetPDiskID();
+        const std::optional<ui32> assignedExecutorPoolId =
+            temporary ? std::optional<ui32>() : GetBlobStorageExecutorPoolId(pdiskID);
+        const ui32 blobStorageExecutorPoolId = assignedExecutorPoolId.value_or(AppData()->SystemPoolId);
+
         STLOG(PRI_DEBUG, BS_NODE, NW04, "StartLocalPDisk", (NodeId, key.NodeId), (PDiskId, key.PDiskId),
             (Path, TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')),
             (PDiskCategory, TPDiskCategory(record.Record.GetPDiskCategory())),
-            (Temporary, temporary));
+            (Temporary, temporary), (BlobStorageExecutorPoolId, blobStorageExecutorPoolId));
 
         auto pdiskConfig = CreatePDiskConfig(pdisk, &record.PDiskConfigWarning);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
+        } else {
+            ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, assignedExecutorPoolId);
         }
         record.ExpectedSlotCount = pdiskConfig->ExpectedSlotCount;
         record.ExpectedSlotSize = pdiskConfig->ExpectedSlotSize;
 
-        const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, AppData()->SystemPoolId, LocalNodeId);
+        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
+            blobStorageExecutorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
@@ -412,11 +462,26 @@ namespace NKikimr::NStorage {
             }
             LocalPDisks.erase(it);
             PDiskRestartInFlight.erase(pdiskId);
+            PDiskToBlobStorageExecutorPool.ReleasePoolId(pdiskId);
 
             // mark vdisks still living over this PDisk as destroyed ones
             for (auto it = LocalVDisks.lower_bound({LocalNodeId, pdiskId, 0}); it != LocalVDisks.end() &&
                     it->first.NodeId == LocalNodeId && it->first.PDiskId == pdiskId; ++it) {
                 it->second.UnderlyingPDiskDestroyed = true;
+            }
+
+            // A pending slay no longer needs an acknowledgement from a PDisk which has itself been removed.
+            // Complete it here so that a lost TEvSlayResult can't keep the VSlot state forever.
+            for (auto it = SlayInFlight.lower_bound({LocalNodeId, pdiskId, 0});
+                    it != SlayInFlight.end() && it->first.NodeId == LocalNodeId && it->first.PDiskId == pdiskId; ) {
+                const auto current = it++;
+                const TVSlotId vslotId = current->first;
+                const TSlayInFlight slay = current->second;
+                SlayInFlight.erase(current);
+                SendVDiskReport(vslotId, slay.VDiskId,
+                    slay.Action == ESlayAction::DESTROY
+                        ? NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED
+                        : NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
             }
         }
 
@@ -516,16 +581,22 @@ namespace NKikimr::NStorage {
             bool first = true;
             vdisks << "{";
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
-                auto& [key, value] = *it;
+                auto& value = it->second;
 
                 PoisonLocalVDisk(value);
                 vdisks << (std::exchange(first, false) ? "" : ", ") << value.GetVDiskId().ToString();
-                if (const auto it = SlayInFlight.find(key); it != SlayInFlight.end()) {
-                    const ui64 round = NextLocalPDiskInitOwnerRound();
-                    Send(MakeBlobStoragePDiskID(key.NodeId, key.PDiskId), new NPDisk::TEvSlay(value.GetVDiskId(), round,
-                        key.PDiskId, key.VDiskSlotId));
-                    it->second = round;
-                } else {
+            }
+
+            // Slay state owns the original VDisk identity, so it can be replayed even when a deleted VDisk
+            // has already been removed from LocalVDisks.
+            for (auto it = SlayInFlight.lower_bound(from); it != SlayInFlight.end() && it->first <= to; ++it) {
+                it->second.RetryDelay = SlayRetryInitialDelay;
+                IssueSlay(it->first, it->second);
+            }
+
+            for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
+                auto& [key, value] = *it;
+                if (!SlayInFlight.contains(key)) {
                     StartLocalVDiskActor(value);
                 }
             }
@@ -536,7 +607,7 @@ namespace NKikimr::NStorage {
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
-                if (!value.RuntimeData) {
+                if (!value.RuntimeData && !SlayInFlight.contains(key)) {
                     StartLocalVDiskActor(value);
                 }
             }
@@ -576,6 +647,7 @@ namespace NKikimr::NStorage {
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(
             it->second.Record, &it->second.PDiskConfigWarning);
+        ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, GetBlobStorageExecutorPoolId(pdiskId));
 
         Cfg->PDiskKey.Initialize();
         Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, true, pdiskConfig));
@@ -589,7 +661,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
-            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from) {
+            const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from, TVector<TServiceSetPDisk>& pdisksToRestart) {
         THashMap<TPDiskKey, TServiceSetPDisk*> pdiskMap;
         for (int i = 0; i < to->size(); ++i) {
             TServiceSetPDisk *pdisk = to->Mutable(i);
@@ -624,7 +696,7 @@ namespace NKikimr::NStorage {
                     if (localPdiskIt != LocalPDisks.end()) {
                         localPdiskIt->second.Record = pdisk;
                     }
-                    DoRestartLocalPDisk(pdisk);
+                    pdisksToRestart.push_back(pdisk);
                     [[fallthrough]];
                 case NKikimrBlobStorage::INITIAL:
                 case NKikimrBlobStorage::CREATE: {

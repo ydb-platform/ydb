@@ -19,7 +19,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     library/cpp/streams/zstd
-    ydb/core/testlib/default
+    ydb/core/testlib
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/public/lib/ydb_cli/dump
@@ -33,6 +33,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/value
     ydb/library/backup
+    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

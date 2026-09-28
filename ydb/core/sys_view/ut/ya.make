@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     library/cpp/testing/unittest
     library/cpp/yson/node
     ydb/core/kqp/ut/common

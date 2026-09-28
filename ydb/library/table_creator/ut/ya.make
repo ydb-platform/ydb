@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/testlib/default
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1_dummy
     ydb/public/sdk/cpp/src/client/driver
 )
 

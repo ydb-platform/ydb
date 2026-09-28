@@ -324,7 +324,7 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/protobuf_printer
     ydb/public/lib/ydb_cli/dump/files
-    ydb/public/lib/ydb_cli/dump/util
+    ydb/public/lib/ydb_cli/dump/util/view_query_iface
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks

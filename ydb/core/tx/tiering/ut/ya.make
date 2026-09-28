@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/hooks/testing
     ydb/public/lib/yson_value
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

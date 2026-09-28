@@ -24,6 +24,7 @@ PEERDIR(
     yql/essentials/utils/network
     ydb/public/lib/fq
     ydb/services/ydb
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

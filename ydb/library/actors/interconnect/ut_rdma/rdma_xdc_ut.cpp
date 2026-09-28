@@ -1,435 +1,43 @@
-#include <ydb/library/actors/core/event_pb.h>
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include "rdma_xdc_test_common.h"
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/testing/gtest/gtest.h>
+namespace {
 
-#include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
-#include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
-#include <ydb/library/actors/interconnect/channel_scheduler.h>
-#include <ydb/library/actors/interconnect/events_local.h>
+    class TExhaustRdmaMemPoolActor : public TActorBootstrapped<TExhaustRdmaMemPoolActor> {
+    public:
+        TExhaustRdmaMemPoolActor(std::shared_ptr<NInterconnect::NRdma::IMemPool> pool,
+                NThreading::TPromise<size_t> exhausted, NThreading::TPromise<void> released)
+            : Pool(std::move(pool))
+            , Exhausted(std::move(exhausted))
+            , Released(std::move(released))
+        {}
 
-#include <ydb/library/testlib/unittest_gtest_macro_subst.h>
-
-using namespace NActors;
-
-struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
-
-struct TEvSerializeToRopeFailure : public TEventBase<TEvSerializeToRopeFailure, 124> {
-    TString Payload;
-    mutable ui32 SerializeToRopeCallCount = 0;
-
-    explicit TEvSerializeToRopeFailure(size_t payloadSize = 5000)
-        : Payload(payloadSize, 'R')
-    {}
-
-    TString ToStringHeader() const override {
-        return "TEvSerializeToRopeFailure";
-    }
-
-    bool SerializeToArcadiaStream(TChunkSerializer* serializer) const override {
-        return serializer->WriteString(&Payload);
-    }
-
-    std::optional<TRope> SerializeToRope(IRcBufAllocator*) const override {
-        ++SerializeToRopeCallCount;
-        return std::nullopt;
-    }
-
-    TEventSerializationInfo CreateSerializationInfo() const override {
-        TEventSerializationInfo info;
-        info.Sections.push_back(TEventSectionInfo{0, Payload.size(), 0, 0, false, true});
-        return info;
-    }
-
-    ui32 CalculateSerializedSize() const override {
-        return Payload.size();
-    }
-
-    bool IsSerializable() const override {
-        return true;
-    }
-};
-
-static void GTestSkip() {
-    GTEST_SKIP() << "Skipping all rdma tests for suite, set \""
-                 << NRdmaTest::RdmaTestEnvSwitchName << "\" env if it is RDMA compatible";
-}
-
-class XdcRdmaTest : public ::testing::Test {
-public:
-    void SetUp() override {
-        using namespace NRdmaTest;
-        if (NRdmaTest::IsRdmaTestDisabled()) {
-            GTestSkip();
-        }
-    }
-};
-
-class XdcRdmaTestCqMode : public ::testing::TestWithParam<NInterconnect::NRdma::ECqMode> {
-public:
-    void SetUp() override {
-        using namespace NRdmaTest;
-        if (IsRdmaTestDisabled()) {
-            GTestSkip();
-        }
-    }
-};
-
-class TSendActor: public TActorBootstrapped<TSendActor> {
-public:
-    struct TExtCtx {
-        std::atomic<bool> Undelivered = false;
-        bool WaitForUndelivered(ui32 maxAttempt) {
-            while (Undelivered.load(std::memory_order_relaxed) == false && maxAttempt) {
-                Sleep(TDuration::MilliSeconds(1000));
-                maxAttempt--;
+        void Bootstrap() {
+            while (auto buffer = Pool->AllocRcBuf(5000, NInterconnect::NRdma::IMemPool::EMPTY)) {
+                Buffers.emplace_back(std::move(*buffer));
             }
-            return Undelivered.load(std::memory_order_relaxed);
+            Exhausted.SetValue(Buffers.size());
+            Become(&TThis::StateFunc);
         }
+
+    private:
+        void Release() {
+            Buffers.clear();
+            Released.SetValue();
+            PassAway();
+        }
+
+        STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TSystem::PoisonPill, Release)
+        )
+
+    private:
+        const std::shared_ptr<NInterconnect::NRdma::IMemPool> Pool;
+        NThreading::TPromise<size_t> Exhausted;
+        NThreading::TPromise<void> Released;
+        std::vector<TRcBuf> Buffers;
     };
 
-    TSendActor(TActorId recipient, IEventBase* ev, std::shared_ptr<TExtCtx> ctx = nullptr)
-        : Recipient(recipient)
-        , Event(ev)
-        , Ctx(ctx)
-    {}
-
-    void Bootstrap() {
-        Send(Recipient, Event, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-        Become(&TSendActor::StateResolve);
-    }
-
-    void HandleUndelivered() {
-        if (Ctx) {
-            Ctx->Undelivered.store(true);
-        }
-    }
-
-    STATEFN(StateResolve) {
-        switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleUndelivered);
-        }
-    }
-
-private:
-    TActorId Recipient;
-    IEventBase* Event;
-    std::shared_ptr<TExtCtx> Ctx;
-};
-
-class TReceiveActor: public TActorBootstrapped<TReceiveActor> {
-public:
-    TReceiveActor(std::function<void(TEvTestSerialization::TPtr)> check)
-        : Check(check)
-    {}
-
-    void Bootstrap() {
-        Become(&TReceiveActor::StateFunc);
-    }
-    void Handle(TEvTestSerialization::TPtr& ev) {
-        Check(ev);
-        ReceivedEvents.fetch_add(1, std::memory_order_relaxed);
-    }
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvTestSerialization, Handle);
-    )
-public:
-    std::atomic<ui32> ReceivedEvents = 0;
-    bool WaitForReceive(ui32 expected, ui32 maxAttempt) {
-        while (ReceivedEvents.load(std::memory_order_relaxed) != expected && maxAttempt) {
-            Sleep(TDuration::MilliSeconds(1000));
-            maxAttempt--;
-        }
-        auto received = ReceivedEvents.load(std::memory_order_relaxed);
-        if (received != expected) {
-            Cerr << "received != expected " << received << " " << expected << Endl;
-        }
-        return received == expected;
-    }
-private:
-    std::function<void(TEvTestSerialization::TPtr)> Check;
-};
-
-struct TEventsForTest {
-    std::vector<TEvTestSerialization*> Events;
-    std::unordered_map<ui64, std::function<void(TEvTestSerialization*)>> Checks;
-    NMonitoring::TDynamicCounterPtr Counters;
-    std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
-
-    TEventsForTest(ui32 numEvents, bool shuffle = false)
-        : Counters(new NMonitoring::TDynamicCounters())
-        , MemPool(NInterconnect::NRdma::CreateSlotMemPool(Counters.Get(), {}))
-    {
-        Generate(numEvents, MemPool.get(), shuffle);
-    }
-
-    void Generate(ui32 numEvents, NInterconnect::NRdma::IMemPool* memPool, bool shuffle = false) {
-        for (ui32 i = 0; i < numEvents; ++i) {
-            const bool isInline = i % 3 == 0;
-            const bool isXdc = i % 3 == 1;
-            const bool isRdma = i % 3 == 2;
-            ui32 numPayloads = i % 5 + (isXdc || isRdma);
-            ui32 sz = 5000;
-            if (i % 128 == 127) {
-                numPayloads += 500;
-                sz = 512;
-            }
-
-            auto ev = new TEvTestSerialization();
-            ev->Record.SetBlobID(i);
-            ev->Record.SetBuffer(TStringBuilder{} << "hello world " << i);
-            for (ui32 j = 0; j < numPayloads; ++j) {
-                if (isInline) {
-                    ev->AddPayload(TRope(TString(10 + j, j + i)));
-                } else if (isXdc) {
-                    ev->AddPayload(TRope(TString(sz + j, j + i)));
-                } else if (isRdma) {
-                    auto buf = memPool->AllocRcBuf(sz + j, 0).value();
-                    Y_ABORT_UNLESS(buf);
-                    std::fill(buf.GetDataMut(), buf.GetDataMut() + sz + j, j + i);
-                    ev->AddPayload(TRope(std::move(buf)));
-                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), sz + j);
-                }
-            }
-            if (shuffle) {
-                for (ui32 j = 0; j < numPayloads; ++j) {
-                    ev->AddPayload(TRope(TString(10 + j, j + i)));
-                    ev->AddPayload(TRope(TString(5000 + j, j + i)));
-                    auto buf = memPool->AllocRcBuf(5000 + j, 0).value();
-                    std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000 + j, j + i);
-                    ev->AddPayload(TRope(std::move(buf)));
-                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000 + j);
-                }
-            }
-
-            if (isXdc || isRdma) {
-                UNIT_ASSERT(ev->AllowExternalDataChannel());
-            }
-
-            Events.push_back(ev);
-
-            Checks.emplace(i, [i, numPayloads, isInline, sz, shuffle](TEvTestSerialization* ev) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBlobID(), i);
-                UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBuffer(), TStringBuilder{} << "hello world " << i);
-                UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().size(), numPayloads * (shuffle ? 4 : 1));
-                for (ui32 j = 0; j < numPayloads; ++j) {
-                    ui32 payloadSize = isInline ? 10 + j : sz + j;
-                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload()[j].GetSize(), payloadSize);
-                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload()[j].ConvertToString(), TString(payloadSize, j + i));
-                }
-            });
-
-        }
-
-        std::random_shuffle(Events.begin(), Events.end());
-    }
-};
-
-TEvTestSerialization* MakeMultiGlueTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool) {
-    auto ev = new TEvTestSerialization();
-    ev->Record.SetBlobID(blobId);
-    ev->Record.SetBuffer("hello world");
-    auto buf = memPool->AllocRcBuf(5000, 0).value();
-    auto b = buf.data();
-    TRcBuf rcbuf1(TRcBuf::Piece, b, b + 500, buf);
-    std::fill(rcbuf1.UnsafeGetDataMut(), rcbuf1.UnsafeGetDataMut() + 500, 'X');
-    TRcBuf rcbuf2(TRcBuf::Piece, b + 500, b + 2000, buf);
-    std::fill(rcbuf2.UnsafeGetDataMut(), rcbuf2.UnsafeGetDataMut() + 1500, 'Y');
-    TRcBuf rcbuf3(TRcBuf::Piece, b + 2000, b + 5000, buf);
-    std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 3000, 'Z');
-    ev->AddPayload(TRcBuf(std::move(rcbuf1)));
-    ev->AddPayload(TRcBuf(std::move(rcbuf2)));
-    ev->AddPayload(TRcBuf(std::move(rcbuf3)));
-
-    bool done = ev->AllowExternalDataChannel();
-    UNIT_ASSERT_VALUES_EQUAL(done, true); 
-    return ev;
 }
-
-TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool = nullptr, bool withGlue = false, bool withOffset = false) {
-    auto ev = new TEvTestSerialization();
-    ev->Record.SetBlobID(blobId);
-    ev->Record.SetBuffer("hello world");
-    if (!memPool) {
-        TRope tmp(TString(5000, 'X'));
-        if (withOffset) {
-            tmp.Insert(tmp.End(), TRope(TString(999, 'Z')));
-        }
-        ev->AddPayload(std::move(tmp));
-    } else {
-        auto buf = memPool->AllocRcBuf(5000, 0).value();
-        // TRope can "glue" rcbufs if they have the same backend and are placed in contiguous memory regions.
-        if (withGlue) {
-            auto b = buf.data();
-            TRcBuf rcbuf1(TRcBuf::Piece, b, b + 2500, buf);
-            std::fill(rcbuf1.UnsafeGetDataMut(), rcbuf1.UnsafeGetDataMut() + 2500, 'X');
-            TRcBuf rcbuf2(TRcBuf::Piece, b + 2500, b + 5000, buf);
-            std::fill(rcbuf2.UnsafeGetDataMut(), rcbuf2.UnsafeGetDataMut() + 2500, 'X');
-            TRope rope1(std::move(rcbuf1));
-            if (withOffset) {
-                TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
-                std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
-                rope1.Insert(rope1.Begin(), TRope(std::move(rcbuf3)));
-            }
-            ev->AddPayload(std::move(rope1));
-            TRope tmp(std::move(rcbuf2));
-            if (withOffset) {
-                TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
-                std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
-                tmp.Insert(tmp.End(), TRope(std::move(rcbuf3)));
-            }
-            ev->AddPayload(std::move(tmp));
-            {
-                auto it = ev->GetPayload().rbegin();
-                UNIT_ASSERT_VALUES_EQUAL(it->size(), withOffset ? 3499u : 2500u);
-                it++;
-                UNIT_ASSERT_VALUES_EQUAL(it->size(), withOffset ? 3499u : 2500u);
-            }
-        } else {
-            std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
-            TRope tmp(std::move(buf));
-            if (withOffset) {
-                TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
-                std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
-                tmp.Insert(tmp.End(), TRope(std::move(rcbuf3)));
-            }
-            ev->AddPayload(std::move(tmp));
-            UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), withOffset ? 5999u : 5000u);
-        }
-    }
-    bool done = ev->AllowExternalDataChannel();
-    UNIT_ASSERT_VALUES_EQUAL(done, true);
-    return ev;
-}
-
-static bool WaitForRdmaChecksumStatus(TTestICCluster& cluster, ui32 me, ui32 peer, const TString& expected, ui32 maxAttempt,
-        TString& lastStatus)
-{
-    while (maxAttempt--) {
-        try {
-            lastStatus = GetRdmaChecksumStatus(cluster, me, peer);
-            if (lastStatus == expected) {
-                return true;
-            }
-        } catch (const TPatternNotFound&) {
-            lastStatus.clear();
-        }
-        Sleep(TDuration::Seconds(1));
-    }
-    return false;
-}
-
-static TString FormatLastRdmaStatus(const TString& status) {
-    return status.empty() ? TString("<no session>") : status;
-}
-
-struct TCounterSumConsumer : NMonitoring::ICountableConsumer {
-    const TString CounterName;
-    ui64 Sum = 0;
-
-    explicit TCounterSumConsumer(TStringBuf counterName)
-        : CounterName(counterName)
-    {}
-
-    void OnCounter(const TString& /*labelName*/, const TString& labelValue,
-            const NMonitoring::TCounterForPtr* counter) override {
-        if (labelValue == CounterName) {
-            Sum += counter->Val();
-        }
-    }
-
-    void OnHistogram(const TString& /*labelName*/, const TString& /*labelValue*/,
-            NMonitoring::IHistogramSnapshotPtr /*snapshot*/, bool /*derivative*/) override {
-    }
-
-    void OnGroupBegin(const TString& /*labelName*/, const TString& /*labelValue*/,
-            const NMonitoring::TDynamicCounters* /*group*/) override {
-    }
-
-    void OnGroupEnd(const TString& /*labelName*/, const TString& /*labelValue*/,
-            const NMonitoring::TDynamicCounters* /*group*/) override {
-    }
-};
-
-static ui64 GetNodeCounterSum(TTestICCluster& cluster, ui32 nodeId, TStringBuf counterName) {
-    const auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", ToString(nodeId));
-    if (!nodeCounters) {
-        return 0;
-    }
-
-    TCounterSumConsumer consumer(counterName);
-    nodeCounters->Accept({}, {}, consumer);
-    return consumer.Sum;
-}
-
-static bool WaitForNodeCounterSum(TTestICCluster& cluster, ui32 nodeId, TStringBuf counterName, ui64 expected,
-        TDuration timeout, ui64& lastValue) {
-    const TInstant deadline = TInstant::Now() + timeout;
-    while (TInstant::Now() < deadline) {
-        lastValue = GetNodeCounterSum(cluster, nodeId, counterName);
-        if (lastValue == expected) {
-            return true;
-        }
-        Sleep(TDuration::MilliSeconds(100));
-    }
-    return false;
-}
-
-class TWaitForConnectionActor: public TActorBootstrapped<TWaitForConnectionActor> {
-public:
-    TWaitForConnectionActor(ui32 peerNodeId, NThreading::TPromise<bool> promise, ui32 attempts)
-        : PeerNodeId(peerNodeId)
-        , Promise(std::move(promise))
-        , AttemptsLeft(attempts)
-    {}
-
-    void Bootstrap() {
-        Become(&TWaitForConnectionActor::StateFunc);
-        SendConnect();
-    }
-
-private:
-    void SendConnect() {
-        if (!AttemptsLeft) {
-            return Finish(false);
-        }
-        --AttemptsLeft;
-        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvInterconnect::TEvConnectNode);
-    }
-
-    void Finish(bool connected) {
-        Promise.SetValue(connected);
-        PassAway();
-    }
-
-    void Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {
-        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvents::TEvUnsubscribe);
-        Finish(true);
-    }
-
-    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
-    }
-
-    void Handle(TEvents::TEvWakeup::TPtr&) {
-        SendConnect();
-    }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvInterconnect::TEvNodeConnected, Handle);
-        hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
-    )
-
-private:
-    const ui32 PeerNodeId;
-    NThreading::TPromise<bool> Promise;
-    ui32 AttemptsLeft;
-};
 
 TEST_F(XdcRdmaTest, SerializeToRope) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
@@ -607,7 +215,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
     TSessionParams p;
     p.UseExternalDataChannel = true;
     p.UseXdcShuffle = true;
-    p.UseRdma = true;
+    p.UseRdmaRead = true;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
     constexpr size_t prefixSize = 17;
@@ -745,7 +353,7 @@ TEST_P(XdcRdmaPayloadChecksumTest, RdmaPayloadChecksums) {
     TSessionParams p;
     p.UseExternalDataChannel = true;
     p.UseXdcShuffle = true;
-    p.UseRdma = true;
+    p.UseRdmaRead = true;
     p.ChecksumRdmaEvent = true;
     p.AllowDisablingPayloadChecksums = params.AllowDisablingPayloadChecksums;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
@@ -814,7 +422,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     TSessionParams p;
     p.UseExternalDataChannel = true;
     p.UseXdcShuffle = true;
-    p.UseRdma = true;
+    p.UseRdmaRead = true;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
     constexpr size_t payloadSize = 128;
@@ -862,7 +470,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
     TSessionParams p;
     p.UseExternalDataChannel = true;
     p.UseXdcShuffle = true;
-    p.UseRdma = true;
+    p.UseRdmaRead = true;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
     auto* ev = new TEvSerializeToRopeFailure();
@@ -901,7 +509,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) 
     TSessionParams p;
     p.UseExternalDataChannel = true;
     p.UseXdcShuffle = true;
-    p.UseRdma = true;
+    p.UseRdmaRead = true;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
     constexpr size_t payloadSize = 128;
@@ -952,7 +560,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     TSessionParams p;
     p.UseExternalDataChannel = true;
     p.UseXdcShuffle = true;
-    p.UseRdma = true;
+    p.UseRdmaRead = true;
     TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
 
     constexpr size_t rdmaChunkSize = 64;
@@ -1000,12 +608,14 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
 }
 #endif
 
-TEST_F(XdcRdmaTest, SendRdma) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTransportTest, SendRdma) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-    auto* ev = MakeTestEvent(123, memPool.get());
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get()));
 
-    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1013,19 +623,54 @@ TEST_F(XdcRdmaTest, SendRdma) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTransportTest, SendRdmaEmptyProtoRecordWithPayload) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-    auto ev = new TEvTestSerialization();
+
+    auto buf = memPool->AllocRcBuf(5000, 0).value();
+    std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
+
+    std::unique_ptr<TEvTestSerialization> ev = std::make_unique<TEvTestSerialization>();
+    ev->AddPayload(TRope(std::move(buf)));
+    UNIT_ASSERT_VALUES_EQUAL(ev->Record.ByteSize(), 0);
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.ByteSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
+    cluster.RegisterActor(senderPtr, 2);
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, GetExpectedRdmaStatus(params), 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+}
+
+TEST_P(XdcRdmaTransportTest, SendRdmaWithShuffledPayload) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
+    auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+    auto ev = std::make_unique<TEvTestSerialization>();
     ev->Record.SetBlobID(123);
     ev->Record.SetBuffer("hello world");
     for (ui32 i = 0; i < 10; ++i) {
@@ -1057,17 +702,19 @@ TEST_F(XdcRdmaTest, SendRdmaWithShuffledPayload) {
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTransportTest, SendRdmaWithRegionOffset) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-    auto* ev = MakeTestEvent(123, memPool.get(), false, true);
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get(), false, true));
 
-    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1075,21 +722,23 @@ TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5999u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X') + TString(999, 'Z'));
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTransportTest, SendRdmaWithGlueWithRegionOffset) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeTestEvent(123, memPool.get(), true, true);
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get(), true, true));
 
-    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1101,21 +750,23 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), pattern1);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].ConvertToString(), pattern2);
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaTransportTest, SendRdmaWithGlue) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeTestEvent(123, memPool.get(), true, false);
+    std::unique_ptr<IEventBase> ev(MakeTestEvent(123, memPool.get(), true, false));
 
-    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1125,21 +776,23 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(2500, 'X'));
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].ConvertToString(), TString(2500, 'X'));
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
-    TTestICCluster cluster(2);
+TEST_P(XdcRdmaPoolPressureTest, SendRdmaWithMultiGlue) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(), GetRdmaSettingsCustomizer(params));
     auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
-    auto* ev = MakeMultiGlueTestEvent(123, memPool.get());
+    std::unique_ptr<IEventBase> ev(MakeMultiGlueTestEvent(123, memPool.get()));
 
-    auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1151,30 +804,30 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].ConvertToString(), TString(1500, 'Y'));
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[2].ConvertToString(), TString(3000, 'Z'));
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
-    auto senderPtr = new TSendActor(receiver, ev);
+    auto senderPtr = new TSendActor(receiver, std::move(ev));
     cluster.RegisterActor(senderPtr, 2);
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, RestoreRdmaSession) {
+TEST_P(XdcRdmaPoolPressureTest, RestoreRdmaSession) {
+    const auto params = GetParam();
     constexpr TStringBuf RdmaRetryWatchdogPendingSessions = "RdmaRetryWatchdogPendingSessions";
 
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(9999)); //Disable dead peer detection to parallel activity
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(9999), TNode::DefaultInflight(),
+        GetRdmaSettingsCustomizer(params)); //Disable dead peer detection to parallel activity
 
-    std::vector<TRcBuf> occupiedBuffers;
-
-    // Create reciever
+    // Create receiver
     ui32 index = 0;
-    auto recieverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), index++);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1182,61 +835,59 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
     // Send one packet to establish session
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(0, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(0, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
 
-        UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+        UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
     }
     ui64 lastWatchdogPending = 0;
     UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
             TDuration::Seconds(5), lastWatchdogPending),
         "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 
-    // Exhaust the same allocation class (5KB) that receiver uses for RDMA sections.
-    // This makes the "undelivered due to no RDMA memory on receiver" check deterministic.
-    for (;;) {
-        auto buf = pool->AllocRcBuf(5000, 0);
-        if (!buf) {
-            break;
-        }
-        occupiedBuffers.emplace_back(std::move(*buf));
-    }
-    UNIT_ASSERT(!occupiedBuffers.empty());
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, GetExpectedRdmaStatus(params), 30, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    // SlotMemPool caches slots per thread. Exhaust the 5 KiB allocation class on node 1's
+    // executor thread so the input session cannot satisfy the next RDMA section allocation
+    // from its local cache after the global pool has been exhausted.
+    auto exhaustedPromise = NThreading::NewPromise<size_t>();
+    auto exhaustedFuture = exhaustedPromise.GetFuture();
+    auto releasedPromise = NThreading::NewPromise<void>();
+    auto releasedFuture = releasedPromise.GetFuture();
+    const TActorId poolExhaustionActor = cluster.RegisterActor(new TExhaustRdmaMemPoolActor(
+        pool, std::move(exhaustedPromise), std::move(releasedPromise)), 1);
+    UNIT_ASSERT(exhaustedFuture.Wait(TDuration::Seconds(30)));
+    UNIT_ASSERT(exhaustedFuture.GetValueSync() > 0);
 
     // Send more
     {
         auto extCtx = std::make_shared<TSendActor::TExtCtx>();
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(1, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev, extCtx);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(1, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev), extCtx);
         cluster.RegisterActor(senderPtr, 2);
         // Undelivered because we can't allocate memory on the receiver side
         UNIT_ASSERT(extCtx->WaitForUndelivered(10));
     }
 
     // The event was not delivered
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 
     // Session is going to be recreated without RDMA,
     // but pending handshake timers are triggered (we can't check it directly in this UT).
-    TString lastRdmaStatus;
-    for (size_t i = 0; i < 10; i++) {
-        lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
-        if (lastRdmaStatus == "Off") {
-            break;
-        }
-        Sleep(TDuration::Seconds(1));
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "Off");
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "Off", 30, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), "Off");
     lastRdmaStatus.clear();
     UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 1,
             TDuration::Seconds(30), lastWatchdogPending),
@@ -1245,54 +896,43 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     // Send one more time (will be delivered through TCP)
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(1, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(1, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
-    UNIT_ASSERT(recieverPtr->WaitForReceive(2, 20));
-    // Free memory
-    occupiedBuffers.clear();
-    // Wait for the pending handshake timer
-    Sleep(TDuration::MilliSeconds(5000));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(2, 20));
+    // Free memory on the same executor thread whose local cache was exhausted.
+    cluster.KillActor(1, poolExhaustionActor);
+    UNIT_ASSERT(releasedFuture.Wait(TDuration::Seconds(30)));
 
-    for (size_t i = 0; i < 5; i++) {
-        try {
-            lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
-        } catch (const TPatternNotFound&) {
-            // retry case if the session was not created yet
-            Sleep(TDuration::Seconds(1));
-            continue;
-        }
-        if (lastRdmaStatus == "On") {
-            break;
-        }
-        Sleep(TDuration::Seconds(1));
-    }
+    // Wait until the delayed RDMA retry closes the TCP-only session, or until RDMA
+    // is restored by an already pending reconnect.
+    UNIT_ASSERT_C(WaitForRdmaSessionDropOrStatus(cluster, 2, 1, GetExpectedRdmaStatus(params), 45, lastRdmaStatus),
+        "last RDMA status before reconnect: " << FormatLastRdmaStatus(lastRdmaStatus));
 
     {
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        auto* ev = MakeTestEvent(2, memPool.get());
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(2, memPool.get()));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
-    UNIT_ASSERT(recieverPtr->WaitForReceive(3, 20));
-    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum", 30, lastRdmaStatus),
+    UNIT_ASSERT(receiverPtr->WaitForReceive(3, 20));
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, GetExpectedRdmaStatus(params), 30, lastRdmaStatus),
         "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
-    UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), "On | SoftwareChecksum");
+    UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), GetExpectedRdmaStatus(params).c_str());
     UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
             TDuration::Seconds(10), lastWatchdogPending),
         "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 }
 
-TEST_P(XdcRdmaTestCqMode, SendMix) {
-    TTestICCluster::Flags flags = TTestICCluster::EMPTY;
-    if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
-        flags = TTestICCluster::RDMA_POLLING_CQ;
-    }
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
+TEST_P(XdcRdmaTransportTest, SendMix) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(2), TNode::DefaultInflight(),
+        GetRdmaSettingsCustomizer(params));
 
     ui32 index = 0;
-    auto recieverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
         Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), index++);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
@@ -1300,7 +940,7 @@ TEST_P(XdcRdmaTestCqMode, SendMix) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     Sleep(TDuration::MilliSeconds(1000));
 
@@ -1308,26 +948,26 @@ TEST_P(XdcRdmaTestCqMode, SendMix) {
     auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
     for (ui32 i = 0; i < numEvents; ++i) {
         const bool isRdma = i % 2 == 0;
-        auto* ev = MakeTestEvent(i, isRdma ? memPool.get() : nullptr);
-        auto senderPtr = new TSendActor(receiver, ev);
+        std::unique_ptr<IEventBase> ev(MakeTestEvent(i, isRdma ? memPool.get() : nullptr));
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
-    UNIT_ASSERT(recieverPtr->WaitForReceive(numEvents, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(numEvents, 20));
 }
 
-TEST_P(XdcRdmaTestCqMode, SendMixBig) {
-    TTestICCluster::Flags flags = TTestICCluster::EMPTY;
-    if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
-        flags = TTestICCluster::RDMA_POLLING_CQ;
-    }
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
+TEST_P(XdcRdmaPoolPressureTest, SendMixBig) {
+    const auto params = GetParam();
+    // Heavy payload validation in this test may starve progress long enough to trip default DeadPeer=2s.
+    // Use the same relaxed connectivity envelope as SendMixBigShuffle.
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     std::mutex mtx;
     mtx.lock();
     TEventsForTest events(500);
     mtx.unlock();
 
-    auto recieverPtr = new TReceiveActor([&events, &mtx](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([&events, &mtx](TEvTestSerialization::TPtr ev) {
         ui64 blobId = ev->Get()->Record.GetBlobID();
         {
             std::lock_guard<std::mutex> guard(mtx);
@@ -1337,11 +977,11 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
             events.Checks.erase(checkIt);
         }
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
 
-    for (auto* ev : events.Events) {
-        auto senderPtr = new TSendActor(receiver, ev);
+    for (auto& ev : events.Events) {
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
@@ -1357,9 +997,10 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
     UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0u);
 }
 
-TEST_F(XdcRdmaTest, SendMixBigShuffle) {
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+TEST_P(XdcRdmaPoolPressureTest, SendMixBigShuffle) {
+    const auto params = GetParam();
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
     TEventsForTest events(1000, true);
 
     auto receiverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
@@ -1372,8 +1013,8 @@ TEST_F(XdcRdmaTest, SendMixBigShuffle) {
     const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
 
-    for (auto* ev : events.Events) {
-        auto senderPtr = new TSendActor(receiver, ev);
+    for (auto& ev : events.Events) {
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
@@ -1386,7 +1027,7 @@ TEST_F(XdcRdmaTest, SendMixBigShuffle) {
 static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz, TTestICCluster& cluster,
     std::shared_ptr<NInterconnect::NRdma::IMemPool> pool)
 {
-    auto ev = new TEvTestSerialization();
+    auto ev = std::make_unique<TEvTestSerialization>();
     ev->Record.SetBlobID(0);
     ev->Record.SetBuffer(TStringBuilder{} << "hello world ");
     for (ui32 j = 0; j < numPayloads; ++j) {
@@ -1397,7 +1038,7 @@ static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz
     }
     UNIT_ASSERT(ev->AllowExternalDataChannel());
 
-    auto recieverPtr = new TReceiveActor([numPayloads, payloadSz](TEvTestSerialization::TPtr ev) {
+    auto receiverPtr = new TReceiveActor([numPayloads, payloadSz](TEvTestSerialization::TPtr ev) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayloadCount(), numPayloads);
         for (ui32 j = 0; j < numPayloads; ++j) {
             TRope buf = ev->Get()->GetPayload(j);
@@ -1411,124 +1052,140 @@ static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz
             }
         }
     });
-    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
-
-    Sleep(TDuration::MilliSeconds(100));
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
 
     {
-        auto senderPtr = new TSendActor(receiver, ev);
+        auto senderPtr = new TSendActor(receiver, std::move(ev));
         cluster.RegisterActor(senderPtr, 2);
     }
 
-    UNIT_ASSERT(recieverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
-TEST_F(XdcRdmaTest, Send1Payload) {
+TEST_P(XdcRdmaPoolPressureTest, Send1Payload) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(1, 8192, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, Send2Payloads) {
+TEST_P(XdcRdmaPoolPressureTest, Send2Payloads) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(2, 8192, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, Send250Payloads) {
-        const NInterconnect::NRdma::TMemPoolSettings settings {
+TEST_P(XdcRdmaPoolPressureTest, Send250Payloads) {
+    const auto params = GetParam();
+    const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(250, 512, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, Send500Payloads) {
+TEST_P(XdcRdmaPoolPressureTest, Send500Payloads) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(500, 512, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, Send4000Payloads) {
+TEST_P(XdcRdmaPoolPressureTest, Send4000Payloads) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(4000, 512, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, Send16000Payloads) {
+TEST_P(XdcRdmaPoolPressureTest, Send16000Payloads) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(16000, 512, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, Send32000Payloads) {
+TEST_P(XdcRdmaPoolPressureTest, Send32000Payloads) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     DoSendHugePayloadsNum(32000, 512, cluster, pool);
 }
 
-TEST_F(XdcRdmaTest, SendXPayloads) {
+TEST_P(XdcRdmaPoolPressureTest, SendXPayloads) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     for (size_t i = 640; i < 650; i++) {
         DoSendHugePayloadsNum(i, 512, cluster, pool);
     }
 }
 
-TEST_F(XdcRdmaTest, SendXPayloadsWithRandSize) {
+TEST_P(XdcRdmaPoolPressureTest, SendXPayloadsWithRandSize) {
+    const auto params = GetParam();
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
     auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
 
-    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
-        TDuration::Minutes(1), 50u << 20);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(params),
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20, GetRdmaSettingsCustomizer(params));
+    WaitForInterconnectConnection(cluster, 2, 1);
 
     for (size_t i = 640; i < 650; i++) {
         DoSendHugePayloadsNum(i, 512 + (RandomNumber<ui16>(4096) * 4), cluster, pool);
@@ -1537,21 +1194,30 @@ TEST_F(XdcRdmaTest, SendXPayloadsWithRandSize) {
 
 INSTANTIATE_TEST_SUITE_P(
     XdcRdmaTest,
-    XdcRdmaTestCqMode,
+    XdcRdmaTransportTest,
     ::testing::Values(
-        NInterconnect::NRdma::ECqMode::POLLING,
-        NInterconnect::NRdma::ECqMode::EVENT
+        TRdmaTransportTestParams{NInterconnect::NRdma::ECqMode::POLLING, false},
+        TRdmaTransportTestParams{NInterconnect::NRdma::ECqMode::EVENT, false},
+        TRdmaTransportTestParams{NInterconnect::NRdma::ECqMode::POLLING, true},
+        TRdmaTransportTestParams{NInterconnect::NRdma::ECqMode::EVENT, true}
     ),
-    [](const testing::TestParamInfo<NInterconnect::NRdma::ECqMode>& info) {
+    [](const testing::TestParamInfo<TRdmaTransportTestParams>& info) {
         const NInterconnect::NRdma::TMemPoolSettings settings {
             .SizeLimitMb = 256
         };
         NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
-        switch (info.param) {
-            case NInterconnect::NRdma::ECqMode::POLLING:
-                return "POLLING";
-            case NInterconnect::NRdma::ECqMode::EVENT:
-                return "EVENT";
-        }
+        return FormatRdmaTransportParam(info.param);
+    }
+);
+
+INSTANTIATE_TEST_SUITE_P(
+    XdcRdmaTest,
+    XdcRdmaPoolPressureTest,
+    ::testing::Values(
+        TRdmaTransportTestParams{NInterconnect::NRdma::ECqMode::POLLING, false},
+        TRdmaTransportTestParams{NInterconnect::NRdma::ECqMode::EVENT, false}
+    ),
+    [](const testing::TestParamInfo<TRdmaTransportTestParams>& info) {
+        return FormatRdmaTransportParam(info.param);
     }
 );

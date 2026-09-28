@@ -3,6 +3,12 @@
 #include "rdma.h"
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/util/rc_buf.h>
+
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <variant>
 
 namespace NInterconnect::NRdma {
 
@@ -11,6 +17,7 @@ namespace NInterconnect::NRdma {
         EvGetCqHandle = Start,
         EvRdmaIoDone,
         EvRdmaReadDone,
+        EvRdmaIoReceiveDone,
     };
 
     struct TEvGetCqHandle: public NActors::TEventLocal<TEvGetCqHandle, ui32(ERdma::EvGetCqHandle)> {
@@ -21,9 +28,16 @@ namespace NInterconnect::NRdma {
         ICq::TPtr CqPtr;
     };
 
-    struct TEvRdmaIoDone : public NActors::TEventLocal<TEvRdmaIoDone, (ui32)ERdma::EvRdmaIoDone> {
-        struct TSuccess {
-        };
+    struct TSuccess {
+    };
+
+    struct TSuccessReceive {
+        TRcBuf Buf;
+    };
+
+    template <typename TDerived, typename TSuccessRecord, ERdma EventId>
+    struct TEvRdmaIoDoneCommon : public NActors::TEventLocal<TDerived, (ui32)EventId> {
+        using TSuccess = TSuccessRecord;
 
         // Error during work completion, i.e. rdma read timeout
         struct TWcErr {
@@ -34,42 +48,55 @@ namespace NInterconnect::NRdma {
         struct TCqErr {
         };
 
-        // Post wr error
+        // Post WR error
         struct TWrErr {
             int Code;
         };
 
-        static TEvRdmaIoDone* Success() {
-            return new TEvRdmaIoDone();
+        static TDerived* Success(TSuccess success) {
+            return new TDerived(std::move(success));
         }
 
-        static TEvRdmaIoDone* WcError(int code) {
-            return new TEvRdmaIoDone(code);
+        template <typename... TArgs>
+        static TDerived* Success(TArgs&&... args) {
+            return new TDerived(TSuccess{std::forward<TArgs>(args)...});
         }
 
-        static TEvRdmaIoDone* CqError() {
-            return new TEvRdmaIoDone(TCqErr());
+        static TDerived* WcError(int code) {
+            return new TDerived(TWcErr{code});
         }
 
-        static TEvRdmaIoDone* WrError(int code) {
-            return new TEvRdmaIoDone(TWrErr(code));
+        static TDerived* CqError() {
+            return new TDerived(TCqErr());
         }
 
-        TEvRdmaIoDone()
+        static TDerived* WrError(int code) {
+            return new TDerived(TWrErr{code});
+        }
+
+        TEvRdmaIoDoneCommon()
             : Record(TSuccess())
         {}
 
-        TEvRdmaIoDone(int errCode)
+        TEvRdmaIoDoneCommon(TSuccess success)
+            : Record(std::move(success))
+        {}
+
+        TEvRdmaIoDoneCommon(int errCode)
             : Record(TWcErr {
                 .Code = errCode,
             })
         {}
 
-        TEvRdmaIoDone(TCqErr err)
+        TEvRdmaIoDoneCommon(TWcErr err)
             : Record(err)
         {}
 
-        TEvRdmaIoDone(TWrErr err)
+        TEvRdmaIoDoneCommon(TCqErr err)
+            : Record(err)
+        {}
+
+        TEvRdmaIoDoneCommon(TWrErr err)
             : Record(err)
         {}
 
@@ -110,6 +137,16 @@ namespace NInterconnect::NRdma {
         }
 
         std::variant<TSuccess, TWcErr, TCqErr, TWrErr> Record;
+    };
+
+    struct TEvRdmaIoDone : public TEvRdmaIoDoneCommon<TEvRdmaIoDone, TSuccess, ERdma::EvRdmaIoDone> {
+        using TBase = TEvRdmaIoDoneCommon<TEvRdmaIoDone, TSuccess, ERdma::EvRdmaIoDone>;
+        using TBase::TBase;
+    };
+
+    struct TEvRdmaIoReceiveDone : public TEvRdmaIoDoneCommon<TEvRdmaIoReceiveDone, TSuccessReceive, ERdma::EvRdmaIoReceiveDone> {
+        using TBase = TEvRdmaIoDoneCommon<TEvRdmaIoReceiveDone, TSuccessReceive, ERdma::EvRdmaIoReceiveDone>;
+        using TBase::TBase;
     };
 
     struct TEvRdmaReadDone : NActors::TEventLocal<TEvRdmaReadDone, (ui32)ERdma::EvRdmaReadDone> {

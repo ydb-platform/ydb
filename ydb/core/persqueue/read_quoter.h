@@ -105,7 +105,7 @@ class TConsumerReadQuota {
 
 class TPartitionQuoterBase : public TActorBootstrapped<TPartitionQuoterBase> {
 
-const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
+const TDuration WAKE_UP_TIMEOUT = TDuration::MilliSeconds(50);
 
 public:
     TPartitionQuoterBase(

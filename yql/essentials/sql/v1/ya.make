@@ -1,6 +1,11 @@
 LIBRARY()
 
+PROVIDES(
+    yql_v1_sql_translator
+)
+
 PEERDIR(
+    yql/essentials/sql/v1/translator_iface
     library/cpp/charset
     library/cpp/enumbitset
     library/cpp/json
@@ -61,6 +66,7 @@ RECURSE(
     lexer
     perf
     proto_parser
+    translator_iface
 )
 
 RECURSE_FOR_TESTS(

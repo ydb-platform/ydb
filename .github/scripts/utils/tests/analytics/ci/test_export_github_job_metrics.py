@@ -21,6 +21,7 @@ from github_actions.export_github_job_metrics import (
     attach_pull_requests,
     completed_since,
     last_export_at,
+    metrics_from_workflow_run,
     open_runs_to_save,
     pull_refs_from_commit_pulls,
     pull_requests_have_target,
@@ -142,6 +143,38 @@ class AlreadyExportedTest(unittest.TestCase):
         self.assertFalse(already_exported(10, 2, exported))
         self.assertFalse(already_exported(12, 1, exported))
         self.assertFalse(already_exported(None, 1, exported))
+
+    def test_rerun_keeps_a_new_job_on_the_same_attempt(self):
+        run = {
+            "id": 10,
+            "run_attempt": 1,
+            "event": "push",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "main",
+            "html_url": "https://example.test/run/10",
+        }
+        jobs = [
+            {
+                "id": 100,
+                "name": "Build and test relwithdebinfo",
+                "started_at": "2026-09-28T10:00:00Z",
+                "completed_at": "2026-09-28T10:05:00Z",
+                "conclusion": "success",
+                "steps": [],
+            },
+            {
+                "id": 200,
+                "name": "Build and test relwithdebinfo",
+                "started_at": "2026-09-28T11:00:00Z",
+                "completed_at": "2026-09-28T11:05:00Z",
+                "conclusion": "success",
+                "steps": [],
+            },
+        ]
+        rows = metrics_from_workflow_run(run, jobs, skip_job_ids={100})
+        job_rows = [row for row in rows if row.get("name") == "job"]
+        self.assertEqual([row["github_job_id"] for row in job_rows], [200])
 
 
 class UpsertMissingColumnsTest(unittest.TestCase):

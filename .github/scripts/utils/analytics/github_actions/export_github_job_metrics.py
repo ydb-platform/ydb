@@ -54,7 +54,11 @@ def _first_pr_base(run: Dict[str, Any]) -> Optional[str]:
     return base.get("ref")
 
 
-def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def metrics_from_workflow_run(
+    run: Dict[str, Any],
+    jobs: List[Dict[str, Any]],
+    skip_job_ids: Optional[set] = None,
+) -> List[Dict[str, Any]]:
     now = datetime.now(timezone.utc)
     run_id = _as_uint(run.get("id"))
     if run_id is None:
@@ -76,7 +80,7 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     rows: List[Dict[str, Any]] = []
     for job in jobs:
         job_id = _as_uint(job.get("id"))
-        if job_id is None:
+        if job_id is None or (skip_job_ids is not None and job_id in skip_job_ids):
             continue
         job_name = job.get("name") or ""
         job_started = parse_datetime(job.get("started_at"))
@@ -263,6 +267,42 @@ def exported_run_ids(since: datetime, table_path: Optional[str] = None) -> set:
     return ids
 
 
+def exported_job_ids(since: datetime, table_path: Optional[str] = None) -> set:
+    """Job ids that already have a github_job row in this window.
+
+    Re-run failed jobs keeps the same run attempt and allocates new job ids.
+    Skipping a whole attempt would drop those jobs.
+    """
+    if not has_send_credentials():
+        return set()
+    ts = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        with _open_ydb_wrapper() as wrapper:
+            if not wrapper.check_credentials():
+                return set()
+            path = table_path or resolve_table_path(wrapper)
+            rows = wrapper.execute_scan_query(
+                f"""
+                SELECT github_job_id
+                FROM `{path}`
+                WHERE event_ts >= Timestamp("{ts}")
+                  AND source = "github_job"
+                  AND name = "job"
+                """
+            )
+    except Exception as exc:  # noqa: BLE001 — re-export the window
+        print(f"Warning: exported job query failed: {exc}")
+        return set()
+    ids = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        job_id = _as_uint(row.get("github_job_id"))
+        if job_id:
+            ids.add(job_id)
+    return ids
+
+
 def upload_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) -> int:
     if not rows:
         return 0
@@ -435,21 +475,27 @@ def collect_rows(
     repo: str,
     workflow: str,
     created_since: datetime,
-    exported: Optional[set] = None,
+    skip_job_ids: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     run_count = 0
-    exported = exported or set()
+    skip_job_ids = skip_job_ids or set()
     for run in iter_workflow_runs(org, repo, workflow, created_since):
         run_id = run.get("id")
-        if run_id is None or already_exported(run_id, run.get("run_attempt"), exported):
+        if run_id is None:
             continue
         try:
             jobs = list_run_jobs(org, repo, int(run_id))
         except Exception as exc:  # noqa: BLE001 — keep exporting other runs
             print(f"Warning: failed to list jobs for run {run_id}: {exc}")
             continue
-        rows.extend(metrics_from_workflow_run(attach_pull_requests(org, repo, run), jobs))
+        rows.extend(
+            metrics_from_workflow_run(
+                attach_pull_requests(org, repo, run),
+                jobs,
+                skip_job_ids=skip_job_ids,
+            )
+        )
         run_count += 1
         if run_count % 20 == 0:
             print(f"Collected {len(rows)} metric rows from {run_count} runs...")
@@ -585,9 +631,10 @@ def main(argv=None) -> int:
         last_export, watermark_ok = last_export_at(args.table_path)
         since = completed_since(args.hours, last_export, watermark_ok=watermark_ok)
         exported = exported_run_ids(since, table_path=args.table_path)
+        known_jobs = exported_job_ids(since, table_path=args.table_path)
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
-            f"since {since.isoformat()} skip={len(exported)}"
+            f"since {since.isoformat()} skip_jobs={len(known_jobs)}"
         )
         rows: List[Dict[str, Any]] = []
         still_open: List[tuple] = []
@@ -596,7 +643,7 @@ def main(argv=None) -> int:
         open_since = datetime.now(timezone.utc) - MAX_LOOKBACK
         for workflow in workflows:
             try:
-                rows.extend(collect_rows(args.org, args.repo, workflow, since, exported))
+                rows.extend(collect_rows(args.org, args.repo, workflow, since, known_jobs))
             except Exception as exc:  # noqa: BLE001 — keep other workflows
                 print(f"Warning: failed to export workflow {workflow}: {exc}")
             for status in ("in_progress", "queued"):
@@ -609,7 +656,7 @@ def main(argv=None) -> int:
         previous = load_open_runs(args.table_path)
         for run_id, attempt in previous:
             ref = (run_id, attempt)
-            if ref in still_open or already_exported(run_id, attempt, exported):
+            if ref in still_open:
                 continue
             try:
                 run = fetch_run(args.org, args.repo, run_id)
@@ -622,7 +669,13 @@ def main(argv=None) -> int:
                 continue
             try:
                 jobs = list_run_jobs(args.org, args.repo, run_id)
-                rows.extend(metrics_from_workflow_run(attach_pull_requests(args.org, args.repo, run), jobs))
+                rows.extend(
+                    metrics_from_workflow_run(
+                        attach_pull_requests(args.org, args.repo, run),
+                        jobs,
+                        skip_job_ids=known_jobs,
+                    )
+                )
             except Exception as exc:  # noqa: BLE001
                 print(f"Warning: failed to export finished run {run_id}: {exc}")
                 remember_ref(held, ref)

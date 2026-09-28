@@ -1,10 +1,8 @@
 #include "schemeshard__operation_common.h"
-#include "schemeshard__operation_streaming_query_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/services/metadata/abstract/service.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
@@ -64,40 +62,6 @@ public:
 private:
     const TOperationId OperationId;
     const i64 RunDelta;
-};
-
-class TDone : public NKikimr::NSchemeShard::TDone {
-    using TBase = NKikimr::NSchemeShard::TDone;
-
-public:
-    using TBase::TBase;
-
-private:
-    bool ProgressState(TOperationContext& context) override {
-        const auto* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        if (context.SS->StreamingQueries.at(txState->TargetPathId)->OperationOwnerActorId) {
-            context.OnComplete.PublishAndWaitPublication(OperationId, txState->TargetPathId);
-            return false;
-        }
-
-        return TBase::ProgressState(context);
-    }
-
-    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
-        const auto* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(ev->Get()->PathId == txState->TargetPathId);
-        const auto& query = context.SS->StreamingQueries.at(txState->TargetPathId);
-        if (query->OperationOwnerActorId) {
-            context.OnComplete.Send(
-                NMetadata::NProvider::MakeServiceId(context.Ctx.SelfID.NodeId()),
-                MakeStreamingOperationTrackerRequest(TPath::Init(txState->TargetPathId, context.SS), context.SS->Generation(), *query)
-            );
-        }
-
-        return TBase::ProgressState(context);
-    }
 };
 
 class TAlterStreamingQuery : public TSubOperation {
@@ -186,7 +150,6 @@ class TAlterStreamingQuery : public TSubOperation {
             .AlterVersion = oldStreamingQueryInfo->AlterVersion + 1,
             .Properties = info.GetProperties(),
             .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
-            .OperationOwnerUserToken = info.HasOperationOwnerActorId() && context.UserToken ? std::make_optional<NACLib::TUserToken>(context.UserToken->GetUserSID(), context.UserToken->GetGroupSIDs()) : std::nullopt,
         });
 
         if (!Transaction.GetReplaceIfExists()) {

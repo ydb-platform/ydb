@@ -9588,11 +9588,7 @@
                 "ColumnId": 5,
                 "ColumnName": "OperationOwnerActorId",
                 "ColumnType": "ActorID"
-            },
-            {
-                "ColumnId": 6,
-                "ColumnName": "OperationOwnerUserToken",
-                "ColumnType": "String"
+
             }
         ],
         "ColumnsDropped": [],
@@ -9603,8 +9599,7 @@
                     2,
                     3,
                     4,
-                    5,
-                    6
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

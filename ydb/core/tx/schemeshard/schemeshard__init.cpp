@@ -2190,17 +2190,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& streamingQuery = Self->StreamingQueries.Set(pathId, new TStreamingQueryInfo());
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
-
                 streamingQuery->OperationOwnerActorId = rowset.GetValue<Schema::StreamingQueryState::OperationOwnerActorId>();
-                if (streamingQuery->OperationOwnerActorId) {
+
+                const auto pathIt = Self->PathsById.find(pathId);
+                if (streamingQuery->OperationOwnerActorId && pathIt != Self->PathsById.end() && !pathIt->second->Dropped()) {
                     StreamingQueriesOperationsToResume.emplace_back(pathId);
                 }
 
-                if (const auto& serializedUserToken = rowset.GetValue<Schema::StreamingQueryState::OperationOwnerUserToken>()) {
-                    streamingQuery->OperationOwnerUserToken = NACLib::TUserToken(serializedUserToken);
-                }
-
-                const auto pathIt = Self->PathsById.find(pathId);
                 if (pathIt == Self->PathsById.end() || (pathIt->second->StepCreated != InvalidStepId && !pathIt->second->Dropped())) {
                     Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
                     if (const auto& props = streamingQuery->Properties.GetProperties();

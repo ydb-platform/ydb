@@ -378,9 +378,9 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1ms</text>
 </g>
 <g><title>Stage 0 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -464,9 +464,9 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>521us</text>
 </g>
 <g><title>Stage 1 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -550,9 +550,9 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>469us</text>
 </g>
 <g><title>Stage 2 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -648,9 +648,9 @@
   <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <g><title>Stage 2 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -805,9 +805,9 @@
 <path d='M1272,47c0,0,0,-13,0,-13c0,0,0,13,1,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 1 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -898,9 +898,9 @@
 <path d='M665,47c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,-13,19,-13c6,0,12,13,19,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 0 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -1011,9 +1011,9 @@
   <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <g><title>Stage 3 tasks: finished 0 of 1</title>
-<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
-<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 2' preserveAspectRatio='none' pointer-events='none'>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,1L13,2L0,2z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
 </svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
@@ -1092,10 +1092,10 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2024-08-15T06:59:24.501000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 <g><title>2024-08-15T06:59:25.501000Z</title>
-<text x='963' y='13' class='texts'>0:01</text>
+<text x='959' y='13' class='texte'>0:01</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

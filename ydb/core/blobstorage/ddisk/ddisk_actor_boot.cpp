@@ -1,4 +1,5 @@
 #include "ddisk_actor.h"
+#include <algorithm>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 
@@ -221,31 +222,97 @@ namespace NKikimr::NDDisk {
 
         if (msg.IsEndOfLog) {
             ValidateChecksumsModeAfterLogReplay();
-            if (Config.EnableChecksums && !IsBroken()) {
-                // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
-                // the replayed increments. Used-block bitmaps are not persisted, so the restored
-                // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
-                // are tracked again (bitmap restore from the extents on disk is a later phase).
-                IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
-                RestoredIntegrityMapping = {};
-                // A durable increment is only logged after formatting, so restored chunks are Ready.
-                // Empty integrity chunks (no restored extents) are released here.
-                ReclaimUnusedIntegrityChunks();
-            }
-            RestoredIntegrityMapping = {};
-            CreatePersistentBuffer();
-
-            LogReplayComplete = true;
-            if (DeferredCutLogFreeUpToLsn) {
-                const ui64 freeUpToLsn = *DeferredCutLogFreeUpToLsn;
-                DeferredCutLogFreeUpToLsn.reset();
-                ProcessCutLog(freeUpToLsn);
-            }
-            StartHandlingQueries();
+            ReconcileStartupReservations();
         } else {
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound,
                 msg.NextPosition));
         }
+    }
+
+    void TDDiskActor::ReconcileStartupReservations() {
+        // Snapshot the complete recovered live set before boot-time integrity reclamation
+        // changes it. Failed recovery cannot establish which owned chunks are orphans.
+        if (!IsBroken()) {
+            absl::flat_hash_set<TChunkIdx> live(PersistentBufferChunks.begin(), PersistentBufferChunks.end());
+            for (const auto& [tabletId, chunks] : ChunkRefs) {
+                Y_UNUSED(tabletId);
+                for (const auto& [vChunkIndex, ref] : chunks) {
+                    Y_UNUSED(vChunkIndex);
+                    live.insert(ref.ChunkIdx);
+                }
+            }
+            for (const auto& chunk : RestoredIntegrityMapping.IntegrityChunks) {
+                live.insert(chunk.ChunkIdx);
+            }
+            for (const auto& extent : RestoredIntegrityMapping.Extents) {
+                live.insert(extent.Ref.IntegrityChunkIdx);
+            }
+            std::sort(OwnedChunksOnBoot.begin(), OwnedChunksOnBoot.end());
+            OwnedChunksOnBoot.erase(std::unique(OwnedChunksOnBoot.begin(), OwnedChunksOnBoot.end()),
+                OwnedChunksOnBoot.end());
+            for (const TChunkIdx chunk : OwnedChunksOnBoot) {
+                if (!live.contains(chunk)) {
+                    StartupOrphanChunks.push(chunk);
+                }
+            }
+        }
+        OwnedChunksOnBoot.clear();
+        ForgetNextStartupOrphan();
+    }
+
+    void TDDiskActor::ForgetNextStartupOrphan() {
+        if (Stopping) {
+            return;
+        }
+        if (StartupOrphanChunks.empty()) {
+            FinishRecovery();
+            return;
+        }
+        auto request = std::make_unique<NPDisk::TEvChunkForget>(PDiskParams->Owner,
+            PDiskParams->OwnerRound, TVector<TChunkIdx>{StartupOrphanChunks.front()});
+        request->IsDDisk = true;
+        Send(BaseInfo.PDiskActorID, request.release(), IEventHandle::FlagTrackDelivery, StartupForgetCookie);
+    }
+
+    void TDDiskActor::Handle(NPDisk::TEvChunkForgetResult::TPtr ev) {
+        if (ev->Cookie != StartupForgetCookie || Stopping || StartupOrphanChunks.empty()) {
+            return;
+        }
+        const auto& msg = *ev->Get();
+        if (msg.Status == NKikimrProto::ERROR) {
+            // Chunk validation rejected this orphan (e.g. it is committed). Preserve it
+            // and continue individually so it cannot prevent reclaiming other reservations.
+            YDB_LOG_WARN("DDisk startup orphan cleanup rejected; preserving chunk",
+                {"DDiskId", DDiskId}, {"chunk", StartupOrphanChunks.front()}, {"reason", msg.ErrorReason});
+        } else if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "startup orphan cleanup")) {
+            return;
+        }
+        StartupOrphanChunks.pop();
+        ForgetNextStartupOrphan();
+    }
+
+    void TDDiskActor::FinishRecovery() {
+        if (Config.EnableChecksums && !IsBroken()) {
+            // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
+            // the replayed increments. Used-block bitmaps are not persisted, so the restored
+            // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
+            // are tracked again (bitmap restore from the extents on disk is a later phase).
+            IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
+            RestoredIntegrityMapping = {};
+            // A durable increment is only logged after formatting, so restored chunks are Ready.
+            // Empty integrity chunks (no restored extents) are released here.
+            ReclaimUnusedIntegrityChunks();
+        }
+        RestoredIntegrityMapping = {};
+        CreatePersistentBuffer();
+
+        LogReplayComplete = true;
+        if (DeferredCutLogFreeUpToLsn) {
+            const ui64 freeUpToLsn = *DeferredCutLogFreeUpToLsn;
+            DeferredCutLogFreeUpToLsn.reset();
+            ProcessCutLog(freeUpToLsn);
+        }
+        StartHandlingQueries();
     }
 
     void TDDiskActor::CreatePersistentBuffer() {

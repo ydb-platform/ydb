@@ -18,7 +18,47 @@ TObjectPool<T, TTraits>::~TObjectPool()
 }
 
 template <class T, class TTraits>
-auto TObjectPool<T, TTraits>::Allocate() -> TObjectPtr
+auto TObjectPool<T, TTraits>::AllocateShared() -> TSharedObjectPtr
+{
+    // Do not use TDeleter here: it adds an extra branch to the destruction path.
+    return TSharedObjectPtr(DoAllocate(), [] (T* obj) {
+        ObjectPool<T, TTraits>().Reclaim(obj);
+    });
+}
+
+template <class T, class TTraits>
+TObjectPool<T, TTraits>::TDeleter::TDeleter(bool pooled) noexcept
+    : Pooled_(pooled)
+{ }
+
+template <class T, class TTraits>
+TObjectPool<T, TTraits>::TDeleter::TDeleter(std::default_delete<T>) noexcept
+{ }
+
+template <class T, class TTraits>
+void TObjectPool<T, TTraits>::TDeleter::operator()(T* obj) const
+{
+    if (Pooled_) {
+        ObjectPool<T, TTraits>().Reclaim(obj);
+    } else {
+        delete obj;
+    }
+}
+
+template <class T, class TTraits>
+auto TObjectPool<T, TTraits>::AllocateUnique() -> TObjectUniquePtr
+{
+    return TObjectUniquePtr(DoAllocate(), TDeleter(true));
+}
+
+template <class T, class TTraits>
+auto TObjectPool<T, TTraits>::AllocateUniqueUnpooled() -> TObjectUniquePtr
+{
+    return std::unique_ptr<T>(TTraits::Allocate());
+}
+
+template <class T, class TTraits>
+T* TObjectPool<T, TTraits>::DoAllocate()
 {
     T* obj = nullptr;
     while (PooledObjects_.Dequeue(&obj)) {
@@ -34,9 +74,7 @@ auto TObjectPool<T, TTraits>::Allocate() -> TObjectPtr
         obj = TTraits::Allocate();
     }
 
-    return TObjectPtr(obj, [] (T* obj) {
-        ObjectPool<T, TTraits>().Reclaim(obj);
-    });
+    return obj;
 }
 
 template <class T, class TTraits>

@@ -147,46 +147,6 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT_VALUES_EQUAL("[H1,H2]", cfg.GetEnabledDDisks().Print());
     }
 
-    Y_UNIT_TEST(ShouldNotPromoteWhenEnabledDDisksEnough)
-    {
-        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
-        // Enabled DDisks == quorum (3), nothing to promote.
-        UNIT_ASSERT_VALUES_EQUAL(3u, cfg.GetEnabledDDisks().Count());
-
-        const auto before = cfg.GetDDisks();
-        const TString result = cfg.PromoteHostIfNeeded();
-
-        UNIT_ASSERT_STRING_CONTAINS(result, "Enabled DDisks already enough");
-        UNIT_ASSERT_VALUES_EQUAL(before.Print(), cfg.GetDDisks().Print());
-    }
-
-    Y_UNIT_TEST(ShouldPromoteWhenEnabledDDisksBelowQuorum)
-    {
-        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
-        // Disable one primary DDisk host so only 2 enabled DDisks remain.
-        cfg.DisableHost(0);
-        UNIT_ASSERT_VALUES_EQUAL(2u, cfg.GetEnabledDDisks().Count());
-
-        const TString result = cfg.PromoteHostIfNeeded();
-
-        // Host 3 (first enabled non-DDisk host) is promoted to Primary.
-        UNIT_ASSERT_STRING_CONTAINS(result, "Promote");
-        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
-        UNIT_ASSERT(cfg.GetEnabledDDisks().Get(3));
-        UNIT_ASSERT_VALUES_EQUAL(3u, cfg.GetEnabledDDisks().Count());
-    }
-
-    Y_UNIT_TEST(ShouldPromoteHost)
-    {
-        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
-        cfg.DisableHost(0);
-
-        const TString result = cfg.PromoteHostIfNeeded();
-
-        UNIT_ASSERT_STRING_CONTAINS(result, "Promote");
-        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
-    }
-
     Y_UNIT_TEST(ShouldEvacuateHost)
     {
         auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
@@ -196,20 +156,6 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT_STRING_CONTAINS(result, "H0 demoted, H3 promoted");
         UNIT_ASSERT(cfg.GetDDiskRole(0) == EHostRole::None);
         UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
-    }
-
-    Y_UNIT_TEST(ShouldNotPromoteWhenNoCandidate)
-    {
-        // All hosts are primary DDisks; there is no candidate to promote.
-        auto cfg = TVChunkConfig::MakeDefault(0, 3, 3);
-        cfg.DisableHost(0);
-        UNIT_ASSERT_VALUES_EQUAL(2u, cfg.GetEnabledDDisks().Count());
-
-        const auto before = cfg.GetDDisks();
-        const TString result = cfg.PromoteHostIfNeeded();
-
-        UNIT_ASSERT_STRING_CONTAINS(result, "Can't find primary candidate");
-        UNIT_ASSERT_VALUES_EQUAL(before.Print(), cfg.GetDDisks().Print());
     }
 
     Y_UNIT_TEST(ShouldPromoteHostRoles)

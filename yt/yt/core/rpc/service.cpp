@@ -4,16 +4,6 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void IServiceContext::SetRequestInfo()
-{
-    SetRawRequestInfo(std::string(), false);
-}
-
-void IServiceContext::SetResponseInfo()
-{
-    SetRawResponseInfo(std::string(), false);
-}
-
 void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
 {
     asyncMessage.Subscribe(BIND([this, this_ = MakeStrong(this)] (const TErrorOr<TSharedRefArray>& result) {
@@ -29,13 +19,12 @@ void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
 }
 
 void IServiceContext::ReplyAndLogFrom(
-    bool incremental,
-    TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages)
+    TFuture<std::pair<TSharedRefArray, NLogging::TLoggingTagList>> asyncMessages)
 {
-    asyncMessages.Subscribe(BIND([this, this_ = MakeStrong(this), incremental] (const TErrorOr<std::pair<TSharedRefArray, std::string>>& result) {
+    asyncMessages.Subscribe(BIND([this, this_ = MakeStrong(this)] (const TErrorOr<std::pair<TSharedRefArray, NLogging::TLoggingTagList>>& result) {
         if (result.IsOK()) {
-            const auto& [response, logMessage] = result.Value();
-            SetRawResponseInfo(logMessage, incremental);
+            const auto& [response, tags] = result.Value();
+            AnnotateResponse().With(tags);
             Reply(response);
         } else {
             Reply(TError(result));

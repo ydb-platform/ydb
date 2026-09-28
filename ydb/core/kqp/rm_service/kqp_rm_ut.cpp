@@ -36,6 +36,9 @@ using namespace NResourceBroker;
 namespace {
 
 constexpr ui64 KQP_QUEUE_MEMORY_LIMIT = 50'000;
+constexpr ui64 TOTAL_MEMORY_LIMIT = 100'000;
+// what the resource broker estimates a kqp_query task to take before it has measured any
+const TDuration KQP_TASK_DEFAULT_DURATION = TDuration::Seconds(5);
 
 TTenantTestConfig MakeTenantTestConfig() {
     TTenantTestConfig cfg = {
@@ -98,10 +101,10 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     task = config.AddTasks();
     task->SetName(NLocalDb::KqpResourceManagerTaskName);
     task->SetQueueName("queue_kqp_resource_manager");
-    task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
+    task->SetDefaultDuration(KQP_TASK_DEFAULT_DURATION.GetValue());
 
     config.MutableResourceLimit()->AddResource(10);
-    config.MutableResourceLimit()->AddResource(100'000);
+    config.MutableResourceLimit()->AddResource(TOTAL_MEMORY_LIMIT);
 
     return config;
 }
@@ -130,12 +133,25 @@ NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfi
     config.SetComputeActorsCount(100);
     config.SetPublishStatisticsIntervalSec(0);
     config.SetQueryMemoryLimit(1000);
+    // no band, so a demand past the memory arena grows it at once, and the execution units take no memory: the
+    // tests that do not exercise the arena keep their resource broker expectations
+    config.SetExecutionUnitMemory(0);
+    config.SetMemoryArenaMinFreeSize(0);
+    config.SetMemoryArenaMaxFreeSize(0);
 
     auto* infoExchangerRetrySettings = config.MutableInfoExchangerSettings();
     auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
     exchangerSettings->SetStartDelayMs(50);
     exchangerSettings->SetMaxDelayMs(50);
 
+    return config;
+}
+
+NKikimrConfig::TTableServiceConfig::TResourceManager MakeArenaConfig(ui64 executionUnitMemory, ui64 minFree, ui64 maxFree) {
+    auto config = MakeKqpResourceManagerConfig();
+    config.SetExecutionUnitMemory(executionUnitMemory);
+    config.SetMemoryArenaMinFreeSize(minFree);
+    config.SetMemoryArenaMaxFreeSize(maxFree);
     return config;
 }
 
@@ -202,16 +218,46 @@ public:
         WaitForBootstrap();
     }
 
-    void SetSpillingPercent(double spillingPercent) {
-        auto config = MakeKqpResourceManagerConfig();
-        config.SetSpillingPercent(spillingPercent);
-
+    void Reconfigure(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {
         auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         request->Record.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager()->CopyFrom(config);
 
         auto edge = Runtime->AllocateEdgeActor();
         Runtime->Send(new IEventHandle(ResourceManagers.front(), edge, request.Release()), 0, true);
         Runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge);
+    }
+
+    void SetSpillingPercent(double spillingPercent) {
+        auto config = MakeKqpResourceManagerConfig();
+        config.SetSpillingPercent(spillingPercent);
+        Reconfigure(config);
+    }
+
+    // the arena gauges of the resource manager: what the resource broker granted, the demand, the refused part
+    void AssertArenaSensors(i64 size, i64 used, i64 deficit) {
+        auto kqp = GetServiceCounters(Counters, "kqp");
+        UNIT_ASSERT_VALUES_EQUAL(kqp->GetCounter("RM/ArenaSize", false)->Val(), size);
+        UNIT_ASSERT_VALUES_EQUAL(kqp->GetCounter("RM/ArenaUsed", false)->Val(), used);
+        UNIT_ASSERT_VALUES_EQUAL(kqp->GetCounter("RM/ArenaDeficit", false)->Val(), deficit);
+    }
+
+    i64 RmRate(const TString& name) {
+        return GetServiceCounters(Counters, "kqp")->GetCounter(name, true)->Val();
+    }
+
+    TIntrusivePtr<NResourceBroker::IResourceBroker> GetInstantBroker(ui32 nodeInd = 0) {
+        auto edge = Runtime->AllocateEdgeActor(nodeInd);
+        Runtime->Send(new IEventHandle(ResourceBrokers[nodeInd], edge,
+            new TEvResourceBroker::TEvResourceBrokerRequest), nodeInd, true);
+        auto response = Runtime->GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(edge);
+        UNIT_ASSERT(response);
+        return response->Get()->ResourceBroker;
+    }
+
+    // runs the periodic arena pass of the resource manager actor: the shrinks, the growths below the burst
+    // threshold, the charge of the demand changes the allocation path left to it, and the gauges
+    void TickArenaAdjust() {
+        Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(2));
     }
 
     void AssertResourceBrokerSensors(i64 cpu, i64 mem, i64 enqueued, std::optional<i64> finished, i64 infly) {
@@ -258,6 +304,17 @@ public:
 
     TIntrusivePtr<NRm::TTxState> MakePoolTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm, double memoryPoolPercent) {
         return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "pool", memoryPoolPercent, "db", false);
+    }
+
+    TString RenderBrokerState(ui32 nodeInd = 0) {
+        TMockMonRequest request;
+        auto edge = Runtime->AllocateEdgeActor(nodeInd);
+        Runtime->Send(new IEventHandle(ResourceBrokers[nodeInd], edge, new NMon::TEvHttpInfo(request)), nodeInd, true);
+
+        TAutoPtr<IEventHandle> handle;
+        auto* response = Runtime->GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        return response->Answer;
     }
 
     TString RenderRmMonPage() {
@@ -378,6 +435,36 @@ public:
         UNIT_TEST(P14PoolSensorsPersistAcrossIdle);
         UNIT_TEST(P15PoolSensorsAppearAfterFlagEnabled);
         UNIT_TEST(P16MonPageListsIdlePool);
+        UNIT_TEST(ArenaFollowsExternalMemory);
+        UNIT_TEST(ArenaHysteresis);
+        UNIT_TEST(ArenaExecutionUnitMemory);
+        UNIT_TEST(ArenaConfigReloadRepricesUnits);
+        UNIT_TEST(ArenaDeficitWhenBrokerRefuses);
+        UNIT_TEST(ArenaGrowRefusalLoggedOnChange);
+        UNIT_TEST(ArenaGrowRetriesWithDeficitOnly);
+        UNIT_TEST(ArenaBrokerNotReady);
+        UNIT_TEST(ArenaMixedRequestMemoryFailureLeavesArenaUntouched);
+        UNIT_TEST(ArenaConcurrent);
+        UNIT_TEST(ArenaSpillingPressure);
+        UNIT_TEST(ArenaDisabled);
+        UNIT_TEST(ArenaMonPage);
+        UNIT_TEST(ArenaStoppedAfterRmPoison);
+        UNIT_TEST(ArenaChargePublished);
+        UNIT_TEST(ArenaDeficitRetriedOnQueueLimitRaise);
+        UNIT_TEST(ArenaConfigReloadMovesThresholds);
+        UNIT_TEST(ArenaDemandPastNodeTotal);
+        UNIT_TEST(ArenaDoesNotChargePools);
+        UNIT_TEST(ArenaGrowthCapLeavesRoomForRunningQueries);
+        UNIT_TEST(ArenaMixesExternalMemoryAndUnits);
+        UNIT_TEST(ArenaAbsorbsChurn);
+        UNIT_TEST(ArenaReleasesIdleReservation);
+        UNIT_TEST(ArenaShrinksWhenNodeTotalDrops);
+        UNIT_TEST(ArenaReclaimsSurplusWhileGrowthIsWanted);
+        UNIT_TEST(ArenaFreePartRefusesMemory);
+        UNIT_TEST(ArenaWithheldGrowthWaitsForPass);
+        UNIT_TEST(ArenaBurstGrowsOnAllocation);
+        UNIT_TEST(ArenaDefaultsAgainstASmallQueue);
+        UNIT_TEST(ArenaLifetimeIsNotAQueryDuration);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -417,6 +504,36 @@ public:
     void P14PoolSensorsPersistAcrossIdle();
     void P15PoolSensorsAppearAfterFlagEnabled();
     void P16MonPageListsIdlePool();
+    void ArenaFollowsExternalMemory();
+    void ArenaHysteresis();
+    void ArenaExecutionUnitMemory();
+    void ArenaConfigReloadRepricesUnits();
+    void ArenaDeficitWhenBrokerRefuses();
+    void ArenaGrowRefusalLoggedOnChange();
+    void ArenaGrowRetriesWithDeficitOnly();
+    void ArenaBrokerNotReady();
+    void ArenaMixedRequestMemoryFailureLeavesArenaUntouched();
+    void ArenaConcurrent();
+    void ArenaSpillingPressure();
+    void ArenaDisabled();
+    void ArenaMonPage();
+    void ArenaStoppedAfterRmPoison();
+    void ArenaChargePublished();
+    void ArenaDeficitRetriedOnQueueLimitRaise();
+    void ArenaConfigReloadMovesThresholds();
+    void ArenaDemandPastNodeTotal();
+    void ArenaDoesNotChargePools();
+    void ArenaGrowthCapLeavesRoomForRunningQueries();
+    void ArenaMixesExternalMemoryAndUnits();
+    void ArenaAbsorbsChurn();
+    void ArenaReleasesIdleReservation();
+    void ArenaShrinksWhenNodeTotalDrops();
+    void ArenaReclaimsSurplusWhileGrowthIsWanted();
+    void ArenaFreePartRefusesMemory();
+    void ArenaWithheldGrowthWaitsForPass();
+    void ArenaBurstGrowsOnAllocation();
+    void ArenaDefaultsAgainstASmallQueue();
+    void ArenaLifetimeIsNotAQueryDuration();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -1004,18 +1121,22 @@ void KqpRm::TaskQuotaManagerOptional() {
         auto tx = MakeTx(1, rm);
         const ui64 taskId = 1;
         const ui64 initialLimit = 100;
-        // the node service prepays the initial limit as external memory before the task starts
+        // the node service prepays the initial limit as external memory before the task starts; the memory arena
+        // charges it to the node total (900 left, the spilling threshold at 800) until the task quota manager dies
         UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialLimit}));
+        AssertResourceBrokerSensors(0, 100, 0, 0, 1);
         UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100}));
-        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+        AssertResourceBrokerSensors(0, 200, 0, 0, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 600);
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
         const auto statsBefore = rm->GetLocalResources();
+        UNIT_ASSERT_VALUES_EQUAL(statsBefore.Memory, 800);
 
         // task level manager: 1 MB allocation step, more than the tx availability
         auto qm = CreateTaskQuotaManager(rm, tx, taskId, initialLimit);
         UNIT_ASSERT(qm->AllocateQuota(50, /* isOptional = */ true)); // fits in the prepaid limit
-        UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 700 + 50); // tx value plus the local leftover
-        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // 1 MB step > 700: refused in advance
+        UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 600 + 50); // tx value plus the local leftover
+        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // 1 MB step > 600: refused in advance
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // the resource manager was not asked
         // a negative tx value dominates the local leftover
@@ -1024,18 +1145,23 @@ void KqpRm::TaskQuotaManagerOptional() {
         tx->TotalMemoryCookie->MemoryAvailability.store(700);
         qm->FreeQuota(50);
         qm.reset();
+        // the task quota manager returned the prepay, and the periodic pass the arena memory to the node total
+        TickArenaAdjust();
+        const auto statsAfterTask = rm->GetLocalResources();
+        UNIT_ASSERT_VALUES_EQUAL(statsAfterTask.Memory, statsBefore.Memory + initialLimit);
+        AssertResourceBrokerSensors(0, 100, 0, 1, 1);
 
         // channel level manager: 16 byte allocation step. The tx reports less than the aligned request although
         // the resource manager has 700 bytes and would grant it: refused in advance, the resource manager not asked
         auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
         tx->TotalMemoryCookie->MemoryAvailability.store(100);
         UNIT_ASSERT(!cm->AllocateQuota(200, /* isOptional = */ true)); // 208 > 100: refused in advance
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory);
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 100); // nothing prepaid here
         tx->TotalMemoryCookie->MemoryAvailability.store(700);
         UNIT_ASSERT(cm->AllocateQuota(200, /* isOptional = */ true)); // 208 <= 700: the same request is granted by the resource manager
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory - 208);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory - 208);
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700 - 208); // the cookie follows the allocation
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
         cm->FreeQuota(200); // the 208 stay prepaid in the channel manager until it dies
@@ -1058,7 +1184,7 @@ void KqpRm::TaskQuotaManagerOptional() {
         tx->TotalMemoryCookie->MemoryAvailability.store(700);
         rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600});
         cm.reset();
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsAfterTask.Memory);
 
         rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100});
     }
@@ -1496,6 +1622,1339 @@ void KqpRm::P16MonPageListsIdlePool() {
     const TString page = RenderRmMonPage();
     UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_idle</td><td>100</td><td>0</td><td>0</td>");
     UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_live</td><td>100</td><td>40</td><td>0</td>");
+}
+
+// The memory arena (issue #53093), with the fixture config: no band, so a demand past the arena grows it at once on
+// the allocation path, and the units priced at 0. A growth merges a delta task into the arena task, so the merged
+// donor counts as a finished task. A free only moves the demand: the periodic pass gives the surplus back.
+void KqpRm::ArenaFollowsExternalMemory() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    AssertArenaSensors(0, 0, 0);
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
+        AssertResourceManagerStats(rm, 900, 99);
+        AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+        AssertArenaSensors(100, 100, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700); // the spilling threshold at 800 sees the prepay
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50}));
+        AssertResourceManagerStats(rm, 850, 99);
+        AssertResourceBrokerSensors(0, 150, 0, 1, 1);
+        AssertArenaSensors(150, 150, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 2);
+
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50});
+        AssertResourceManagerStats(rm, 850, 99);
+        AssertResourceBrokerSensors(0, 150, 0, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
+        TickArenaAdjust();
+        AssertResourceManagerStats(rm, 900, 99);
+        AssertResourceBrokerSensors(0, 100, 0, 1, 1);
+        AssertArenaSensors(100, 100, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
+        AssertResourceManagerStats(rm, 900, 100);
+        TickArenaAdjust();
+        AssertResourceManagerStats(rm, 1000, 100);
+        AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+        AssertArenaSensors(0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 0);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 2);
+}
+
+// MinFree = 100, MaxFree = 300: the pass resizes the arena to the demand plus 200 whenever its free part leaves the
+// band, and leaves it alone inside it; a demand that overruns the arena by 300 or less waits for the pass
+void KqpRm::ArenaHysteresis() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        // free -100 < 100, below the burst threshold: grown to 100 + 200 by the pass
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+        AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+        AssertResourceManagerStats(rm, 1000, 100);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+        AssertResourceManagerStats(rm, 700, 100);
+        AssertArenaSensors(300, 100, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+
+        // free 100: in band
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+        TickArenaAdjust();
+        AssertArenaSensors(300, 200, 0);
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+        AssertResourceManagerStats(rm, 700, 100);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+
+        // free 50 < 100: grown to 250 + 200
+        UNIT_ASSERT(rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 50}));
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 450, 0, 1, 1);
+        AssertResourceManagerStats(rm, 550, 100);
+        AssertArenaSensors(450, 250, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
+
+        // the arena backs nothing any more, so the pass gives the whole of it back
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 200});
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50});
+        AssertResourceBrokerSensors(0, 450, 0, 1, 1);
+        AssertResourceManagerStats(rm, 550, 100);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+        AssertResourceManagerStats(rm, 1000, 100);
+        AssertArenaSensors(0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 0);
+}
+
+// A demand that overruns the arena by more than MaxFree (300 here) grows it on the allocation path, to the demand plus
+// the headroom of 200, RM/ArenaBurstGrows; an overrun up to MaxFree is left to the pass
+void KqpRm::ArenaBurstGrowsOnAllocation() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    // 200 over an empty arena: the pass grows it to 400
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 200}));
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 400, 0, 0, 1);
+    AssertResourceManagerStats(rm, 600, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 0);
+
+    // 500 over 400: not past 400 + 300
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 300}));
+    AssertResourceBrokerSensors(0, 400, 0, 0, 1);
+    AssertResourceManagerStats(rm, 600, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 0);
+
+    // 750 over 400: the request itself grows the arena to 950 and charges it
+    UNIT_ASSERT(rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 250}));
+    AssertResourceBrokerSensors(0, 950, 0, 1, 1);
+    AssertResourceManagerStats(rm, 50, 100);
+    AssertArenaSensors(950, 750, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
+
+    rm->FreeResources(*tx, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 250});
+    rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 300});
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 200});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertArenaSensors(0, 0, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+}
+
+// Every granted execution unit takes ExecutionUnitMemory (10 here) from the arena; a refused one takes nothing
+void KqpRm::ArenaExecutionUnitMemory() {
+    StartRms({MakeArenaConfig(10, 0, 0), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    auto result = rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1000});
+    UNIT_ASSERT(!result);
+    UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughComputeActors"), 1);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+    AssertArenaSensors(0, 0, 0);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 3}));
+    AssertResourceBrokerSensors(0, 30, 0, 0, 1);
+    AssertResourceManagerStats(rm, 970, 97);
+    AssertArenaSensors(30, 30, 0);
+
+    // a mixed request: the per tx task of the memory part plus 20 more in the arena
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 2, .Memory = 100}));
+    AssertResourceBrokerSensors(0, 150, 0, 1, 2);
+    AssertResourceManagerStats(rm, 850, 95);
+    AssertArenaSensors(50, 50, 0);
+
+    // the memory part goes back at once, the arena part on the pass
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 2, .Memory = 100});
+    AssertResourceBrokerSensors(0, 50, 0, 1, 2);
+    AssertResourceManagerStats(rm, 950, 97);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 30, 0, 1, 2);
+    AssertResourceManagerStats(rm, 970, 97);
+    AssertArenaSensors(30, 30, 0);
+
+    tx2.Reset(); // finishes the per tx task
+    AssertResourceBrokerSensors(0, 30, 0, 2, 1);
+
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 3});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertArenaSensors(0, 0, 0);
+}
+
+// The execution units in use are a count priced when the arena is adjusted: a config reload re-prices them on the
+// next pass
+void KqpRm::ArenaConfigReloadRepricesUnits() {
+    StartRms({MakeArenaConfig(10, 0, 0), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 2}));
+    AssertResourceBrokerSensors(0, 20, 0, 0, 1);
+    AssertResourceManagerStats(rm, 980, 98);
+
+    Reconfigure(MakeArenaConfig(25, 0, 0));
+    AssertResourceBrokerSensors(0, 20, 0, 0, 1);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 50, 0, 1, 1);
+    AssertResourceManagerStats(rm, 950, 98);
+    AssertArenaSensors(50, 50, 0);
+
+    Reconfigure(MakeArenaConfig(0, 0, 0));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+    AssertResourceManagerStats(rm, 1000, 98);
+    AssertArenaSensors(0, 0, 0);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 2});
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The resource broker refuses the growth (queue limit 50'000, another task in flight): the request is satisfied
+// anyway, the deficit is charged to the node total, and the periodic pass asks again once there is room
+void KqpRm::ArenaDeficitWhenBrokerRefuses() {
+    auto config = MakeKqpResourceManagerConfig();
+    config.SetQueryMemoryLimit(100'000'000); // the node total does not refuse first, as it would in production
+    const ui64 qml = config.GetQueryMemoryLimit();
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
+
+    // 1'000 + 49'500 > 50'000: refused, and the deficit equals the delta so there is nothing smaller to retry
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 49'500}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
+    AssertResourceManagerStats(rm, qml - 1'000 - 49'500, 98);
+    AssertArenaSensors(0, 49'500, 49'500);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+
+    // the allocation path does not ask again after a refusal, or a node under memory pressure would ask once per
+    // request: 49'600 past the arena, and no resource broker call
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 1);
+
+    // 400 + 49'500 <= 50'000, so the growth the resource broker refused goes through on the next pass
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600});
+    AssertResourceBrokerSensors(0, 400, 0, 0, 1);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 49'900, 0, 0, 2);
+    AssertResourceManagerStats(rm, qml - 400 - 49'500, 98);
+    AssertArenaSensors(49'500, 49'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 1);
+
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 49'500});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 400, 0, 1, 1);
+    AssertResourceManagerStats(rm, qml - 400, 99);
+    AssertArenaSensors(0, 0, 0);
+
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 400});
+    AssertResourceBrokerSensors(0, 0, 0, 1, 1);
+    AssertResourceManagerStats(rm, qml, 100);
+
+    tx1.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
+// A refused growth is logged on a change of outcome only: the periodic pass keeps asking in silence, the allocation
+// path does not ask at all, and a refusal after a grant is news again. A refusal goes stale once a pass finds no
+// growth wanted
+void KqpRm::ArenaGrowRefusalLoggedOnChange() {
+    auto config = MakeArenaConfig(0, 1'000, 3'000); // headroom 2'000
+    config.SetQueryMemoryLimit(100'000'000); // the node total does not refuse first, as it would in production
+
+    // the runtime hands a log event to the logger actor on the spot, past the mailboxes and the observer, so the
+    // event filter is what sees it
+    struct TGrowthLine {
+        TString Text;
+        TString Size;
+        TString Delta;
+        TString Granted;
+    };
+    TVector<TGrowthLine> lines;
+    Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_NOTICE);
+    TTestActorRuntimeBase::TEventFilter prevFilter;
+    prevFilter = Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == NLog::TEvLog::EventType) {
+            const auto* log = ev->Get<NLog::TEvLog>();
+            if (log->Component == NKikimrServices::KQP_RESOURCE_MANAGER && log->Line.StartsWith("Memory arena growth")) {
+                const auto& fields = *log->StructuredMessage;
+                lines.push_back({log->Line, fields.GetValue<TString>("size").value_or(""),
+                    fields.GetValue<TString>("delta").value_or(""), fields.GetValue<TString>("granted").value_or("")});
+            }
+        }
+        return prevFilter(runtime, ev);
+    });
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000}));
+
+    // 1'000 + 47'500 + 2'000 > 50'000 refused, the deficit of 47'500 alone granted: not the full growth, so the
+    // gate is set
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500}));
+    AssertArenaSensors(47'500, 47'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Text, "Memory arena growth partly granted by the resource broker");
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Size, "0");
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Delta, "49500");
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Granted, "47500");
+
+    // the passes ask for the headroom again and are refused again, in silence; a dispatch of two seconds runs at
+    // least one of them, and possibly more
+    const i64 grows = RmRate("RM/ArenaGrows");
+    TickArenaAdjust();
+    TickArenaAdjust();
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), grows);
+    UNIT_ASSERT_GE(RmRate("RM/ArenaGrowFailures"), 2);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+
+    // the allocation path does not ask while the refusal stands, not even past the burst threshold: 47'500 + 3'100
+    // overruns the arena by more than 3'000, and the demand change waits for the next pass
+    const i64 failures = RmRate("RM/ArenaGrowFailures");
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 3'100}));
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 3'100});
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), failures);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), grows);
+
+    // the memory tx1 gives back makes room for the headroom: the next pass gets it, which is logged once
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 1'000});
+    TickArenaAdjust();
+    AssertArenaSensors(49'500, 47'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), grows + 1);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(lines[1].Text, "Memory arena growth granted again by the resource broker");
+    UNIT_ASSERT_VALUES_EQUAL(lines[1].Size, "47500");
+    UNIT_ASSERT_VALUES_EQUAL(lines[1].Delta, "2000");
+
+    // 2'000 more eat the whole free part, so the pass asks for the headroom again: 49'500 + 2'000 > 50'000, refused
+    // outright, and news again
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000}));
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000}));
+    TickArenaAdjust();
+    AssertArenaSensors(49'500, 49'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Text, "Memory arena growth refused by the resource broker");
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Size, "49500");
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Delta, "2000");
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Granted, "0");
+
+    rm->FreeResources(*tx2, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000});
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000});
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500});
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, config.GetQueryMemoryLimit(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+
+    // the pass that emptied the arena found no growth wanted, so the refusal is stale: a grant with no refusal
+    // before it is not news
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000}));
+    TickArenaAdjust();
+    AssertArenaSensors(3'000, 1'000, 0);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, config.GetQueryMemoryLimit(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+    Runtime->SetEventFilter(prevFilter);
+}
+
+// When the full growth (demand plus the hysteresis headroom) is refused, the arena asks for the deficit alone;
+// the headroom stays pending until the periodic pass asks again
+void KqpRm::ArenaGrowRetriesWithDeficitOnly() {
+    auto config = MakeArenaConfig(0, 1'000, 3'000); // headroom 2'000
+    config.SetQueryMemoryLimit(100'000'000);
+    const ui64 qml = config.GetQueryMemoryLimit();
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
+
+    // 1'000 + 49'500 > 50'000 refused, 1'000 + 47'500 <= 50'000 granted
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500}));
+    AssertResourceBrokerSensors(0, 48'500, 0, 0, 2);
+    AssertResourceManagerStats(rm, qml - 1'000 - 47'500, 98);
+    AssertArenaSensors(47'500, 47'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // the per tx memory returned by tx1 makes room for the headroom: 47'500 + 2'000 <= 50'000, taken by the pass
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 1'000});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 49'500, 0, 1, 2);
+    AssertResourceManagerStats(rm, qml - 49'500, 98);
+    AssertArenaSensors(49'500, 47'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // the arena covers the freed demand: the surplus waits for the periodic pass, which shrinks it to the headroom
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500});
+    AssertResourceBrokerSensors(0, 49'500, 0, 1, 2);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 1);
+    AssertResourceManagerStats(rm, qml, 99);
+    AssertArenaSensors(0, 0, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1});
+    AssertResourceBrokerSensors(0, 0, 0, 2, 1);
+    AssertResourceManagerStats(rm, qml, 100);
+
+    tx1.Reset();
+    tx2.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+    AssertResourceManagerStats(rm, qml, 100);
+}
+
+// Demand accepted before the resource broker is attached is charged and in deficit; the arena task is created by
+// the first pass after the resource broker arrives
+void KqpRm::ArenaBrokerNotReady() {
+    auto prevObserverFunc = Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvResourceBroker::EvResourceBrokerResponse) {
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
+    AssertResourceManagerStats(rm, 900, 99);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+    AssertArenaSensors(0, 100, 100);
+    UNIT_ASSERT_STRING_CONTAINS(RenderRmMonPage(),
+        "Memory arena: size 0, used 100 (external 100, execution units 1 x 0), charged 100, deficit 100, broker task 0");
+
+    // the memory part still needs the resource broker
+    auto result = rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
+    UNIT_ASSERT(!result);
+    UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
+
+    Runtime->SetObserverFunc(prevObserverFunc);
+    Runtime->Send(new IEventHandle(ResourceBrokers[0], ResourceManagers[0], new TEvResourceBroker::TEvResourceBrokerRequest));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+    AssertArenaSensors(100, 100, 0);
+    AssertResourceManagerStats(rm, 900, 99);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
+    TickArenaAdjust();
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+}
+
+// The arena part of a request is applied after the memory part succeeded: a refused memory part leaves the
+// arena untouched, no rollback is involved
+void KqpRm::ArenaMixedRequestMemoryFailureLeavesArenaUntouched() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    auto result = rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 10'000, .ExternalMemory = 100});
+    UNIT_ASSERT(!result);
+    UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+    AssertArenaSensors(0, 0, 0);
+    UNIT_ASSERT_VALUES_EQUAL(tx->TxExternalDataQueryMemory.load(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 0);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100, .ExternalMemory = 100}));
+    AssertResourceManagerStats(rm, 800, 99);
+    AssertResourceBrokerSensors(0, 200, 0, 0, 2);
+    AssertArenaSensors(100, 100, 0);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100, .ExternalMemory = 100});
+    TickArenaAdjust();
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 1, 1);
+    AssertArenaSensors(0, 0, 0);
+
+    tx.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
+// Concurrent demand changes: a growth on the allocation path that finds another resize in progress does not wait for
+// it, and the pass converges to the final demand with no change lost
+void KqpRm::ArenaConcurrent() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+
+        NPar::LocalExecutor().RunAdditionalThreads(10);
+        std::atomic<ui64> failedAllocations = 0;
+
+        NPar::LocalExecutor().ExecRange([&](int index) {
+            const ui64 taskId = index + 1;
+            for (auto j = 0u; j < 20u; j++) {
+                const ui64 external = (j % 20 + 1) * 10;
+                if (!rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = external})) {
+                    failedAllocations++;
+                    continue;
+                }
+                rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = external});
+            }
+        }, 0, 10, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+
+        UNIT_ASSERT_VALUES_EQUAL(failedAllocations.load(), 0); // the arena never refuses
+        TickArenaAdjust();
+        AssertResourceManagerStats(rm, 1000, 100);
+        AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+        AssertArenaSensors(0, 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    }
+
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+}
+
+// The arena charge moves the spilling cookie like any other allocation: the prepaid memory past the threshold
+// makes the quota managers refuse optional requests in advance and the node total refuse memory requests
+void KqpRm::ArenaSpillingPressure() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 850}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -50); // 800 - 850
+        AssertResourceManagerStats(rm, 150, 99);
+
+        auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
+        UNIT_ASSERT(!cm->AllocateQuota(16, /* isOptional = */ true));
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // refused in advance
+        cm.reset();
+
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 200}));
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 150}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -200);
+        AssertResourceManagerStats(rm, 0, 99);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 150});
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 850});
+        TickArenaAdjust();
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
+        AssertResourceManagerStats(rm, 1000, 100);
+    }
+}
+
+// EnableMemoryArena = false: the demand is only counted, the resource broker is not involved and the node total
+// is not charged; a runtime switch creates or finishes the arena task on the next pass
+void KqpRm::ArenaDisabled() {
+    auto disabled = MakeKqpResourceManagerConfig();
+    disabled.SetEnableMemoryArena(false);
+
+    StartRms({disabled, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    // the gauge follows on the periodic pass
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
+    AssertResourceManagerStats(rm, 1000, 99);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
+    UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
+    TickArenaAdjust();
+    AssertArenaSensors(0, 100, 0);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
+
+    Reconfigure(MakeKqpResourceManagerConfig()); // enabled
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+    AssertResourceManagerStats(rm, 900, 99);
+    AssertArenaSensors(100, 100, 0);
+    UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+
+    Reconfigure(disabled);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertResourceManagerStats(rm, 1000, 99);
+    AssertArenaSensors(0, 100, 0);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 0);
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+}
+
+void KqpRm::ArenaMonPage() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
+
+    UNIT_ASSERT_STRING_CONTAINS(RenderRmMonPage(),
+        "Memory arena: size 100, used 100 (external 100, execution units 1 x 0), charged 100, deficit 0, broker task ");
+
+    // the demand is still shown when the arena is disabled, the supply and the charge are not
+    auto disabled = MakeKqpResourceManagerConfig();
+    disabled.SetEnableMemoryArena(false);
+    Reconfigure(disabled);
+    TickArenaAdjust();
+    UNIT_ASSERT_STRING_CONTAINS(RenderRmMonPage(),
+        "Memory arena: size 0, used 100 (external 100, execution units 1 x 0), charged 0, deficit 0, broker task 0, disabled");
+}
+
+// The resource manager outlives its actor: after the actor died the resource broker dropped the arena task and the
+// node total is not charged any more; the demand of the surviving txs is still counted, and the resource broker is
+// not called any more
+void KqpRm::ArenaStoppedAfterRmPoison() {
+    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm_second = GetKqpResourceManager(ResourceManagers[1].NodeId());
+    auto tx = MakeTx(1, rm_second);
+
+    UNIT_ASSERT(rm_second->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+    AssertResourceManagerStats(rm_second, 900, 99);
+
+    const TActorId edge = Runtime->AllocateEdgeActor(1);
+    Runtime->Send(new IEventHandle(
+        ResourceManagers[1], edge, new TEvents::TEvPoison, IEventHandle::FlagTrackDelivery, 0),
+        1, false);
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 1);
+    UNIT_ASSERT(Runtime->DispatchEvents(options));
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+
+    // the resource broker removed the tasks of the dead actor
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 100, 0);
+    AssertResourceManagerStats(rm_second, 1000, 99);
+
+    // a new demand is still counted, and the resource broker is not asked to grow the arena
+    UNIT_ASSERT(rm_second->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50}));
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertResourceManagerStats(rm_second, 1000, 99);
+    UNIT_ASSERT_VALUES_EQUAL(rm_second->GetLocalResources().ExternalMemory, 150);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+
+    rm_second->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50});
+    rm_second->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertResourceManagerStats(rm_second, 1000, 100);
+    UNIT_ASSERT_VALUES_EQUAL(rm_second->GetLocalResources().ExternalMemory, 0);
+}
+
+// An external memory only request takes the Memory == 0 path of AllocateResources, which does not publish: the pass
+// publishes the charge it moves, the headroom of the hysteresis with it
+void KqpRm::ArenaChargePublished() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // drain the bootstrap time publishes first, so that the only publish left is the one of the arena
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+    CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm);
+
+    auto tx = MakeTx(1, rm);
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
+    AssertResourceManagerStats(rm, 1000, 99);
+    TickArenaAdjust();
+    AssertResourceManagerStats(rm, 700, 99); // 100 plus the headroom of 200
+    CheckSnapshot(0, {{700, 99}, {1000, 100}}, rm);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
+    AssertResourceManagerStats(rm, 700, 100);
+    TickArenaAdjust();
+    AssertResourceManagerStats(rm, 1000, 100);
+    CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm);
+}
+
+// A raised resource broker queue limit lets a refused arena growth through on the next pass: the resource manager
+// is subscribed to the queue config, and the node total follows the limit the resource broker pushes
+void KqpRm::ArenaDeficitRetriedOnQueueLimitRaise() {
+    auto config = MakeKqpResourceManagerConfig();
+    config.SetQueryMemoryLimit(100'000'000);
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000}));
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 49'500}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
+    AssertArenaSensors(0, 49'500, 49'500);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 1);
+
+    // the queue limit goes from 50'000 to 100'000, the node total follows it
+    auto brokerConfig = MakeResourceBrokerTestConfig();
+    auto* limit = brokerConfig.MutableQueues(1)->MutableLimit();
+    limit->ClearResource();
+    limit->SetCpu(4);
+    limit->SetMemory(100'000);
+    auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+    configure->Record.CopyFrom(brokerConfig);
+    Runtime->Send(new IEventHandle(ResourceBrokers[0], Runtime->AllocateEdgeActor(), configure.Release()));
+    TDispatchOptions pushed;
+    pushed.FinalEvents.emplace_back(TEvResourceBroker::EvConfigResponse, 1);
+    UNIT_ASSERT(Runtime->DispatchEvents(pushed));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 50'500, 0, 0, 2);
+    AssertArenaSensors(49'500, 49'500, 0);
+    AssertResourceManagerStats(rm, 100'000 - 1'000 - 49'500, 98);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 1);
+
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 49'500});
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 1);
+    AssertResourceManagerStats(rm, 100'000, 100);
+    tx1.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
+// A config reload that moves the thresholds resizes the arena on the next pass; a max below the min is raised to it
+void KqpRm::ArenaConfigReloadMovesThresholds() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+    AssertArenaSensors(100, 100, 0);
+
+    // free 0 < 100: grown to 100 + 200
+    Reconfigure(MakeArenaConfig(0, 100, 300));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 300, 0, 1, 1);
+    AssertResourceManagerStats(rm, 700, 100);
+    AssertArenaSensors(300, 100, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
+
+    // the max is raised to the min: the band is [300, 300], free 200 < 300: grown to 100 + 300
+    Reconfigure(MakeArenaConfig(0, 300, 100));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 400, 0, 2, 1);
+    AssertResourceManagerStats(rm, 600, 100);
+    AssertArenaSensors(400, 100, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 3);
+
+    // free 300 > 0: shrunk to the demand
+    Reconfigure(MakeArenaConfig(0, 0, 0));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 100, 0, 2, 1);
+    AssertResourceManagerStats(rm, 900, 100);
+    AssertArenaSensors(100, 100, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A demand past the node total: the arena task stops at the limit, the rest is a charged deficit that pushes the
+// node total past it, so nothing else is admitted and the cookies report the pressure
+void KqpRm::ArenaDemandPastNodeTotal() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 1'200}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 1);
+    AssertArenaSensors(1000, 1'200, 200);
+    AssertResourceManagerStats(rm, 0, 99);
+    UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -400); // 800 - 1'200
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0); // the resource broker was not asked for more
+
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1}));
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 1'200});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
+}
+
+// The growth cap counts the memory the running queries hold, so the resource broker queue never holds the arena
+// plus the tx tasks past the node total; what the cap withholds waits for the periodic pass
+void KqpRm::ArenaGrowthCapLeavesRoomForRunningQueries() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600}));
+    AssertResourceBrokerSensors(0, 600, 0, 0, 1);
+    AssertResourceManagerStats(rm, 400, 100);
+
+    // the cap is 1000 - 600 held by tx1: only 400 of the 600 demanded are asked of the resource broker
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 600}));
+    AssertArenaSensors(400, 600, 200);
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 2); // tx2 has no task of its own: it requested no memory
+    AssertResourceManagerStats(rm, 0, 100);
+    UNIT_ASSERT_VALUES_EQUAL(tx2->GetMemoryAvailability(), -400); // 800 - 600 - 600
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0); // the resource broker was not asked past the cap
+
+    // the memory tx1 returns raises the cap, and the pass takes the growth that was withheld
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600});
+    TickArenaAdjust();
+    AssertArenaSensors(600, 600, 0);
+    AssertResourceBrokerSensors(0, 600, 0, 1, 2); // the delta task merged into the arena task counts as finished
+    AssertResourceManagerStats(rm, 400, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 600});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceBrokerSensors(0, 0, 0, 2, 1);
+    AssertResourceManagerStats(rm, 1000, 100);
+
+    tx1.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+}
+
+// The arena demand is the external memory plus the priced execution units, the way the node service requests them:
+// one request that takes both, and each part alone moves the arena on the next pass
+void KqpRm::ArenaMixesExternalMemoryAndUnits() {
+    StartRms({MakeArenaConfig(10, 0, 0), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 2, .ExternalMemory = 100}));
+    AssertResourceBrokerSensors(0, 120, 0, 0, 1); // 100 external plus 2 units of 10
+    AssertArenaSensors(120, 120, 0);
+    AssertResourceManagerStats(rm, 880, 98);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 110, 0, 0, 1);
+    AssertArenaSensors(110, 110, 0);
+    AssertResourceManagerStats(rm, 890, 99);
+
+    // the unit left in use is re-priced, the external part is not
+    Reconfigure(MakeArenaConfig(20, 0, 0));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 120, 0, 1, 1);
+    AssertArenaSensors(120, 120, 0);
+    AssertResourceManagerStats(rm, 880, 99);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 0);
+}
+
+// Churn inside the band never reaches the resource broker: a task that starts or ends only moves the demand, and
+// the arena stays above it the whole time
+void KqpRm::ArenaAbsorbsChurn() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+
+    for (ui32 i = 0; i < 100; ++i) {
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 50}));
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 150);
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 50});
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
+    }
+
+    // one growth at the start and nothing since: the node total carries the arena, which never dropped below the
+    // demand
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    AssertResourceManagerStats(rm, 700, 100);
+    AssertArenaSensors(300, 100, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 0);
+
+    // the last free empties the arena, which the periodic pass then gives back whole
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The free part of the arena counts against the node total like the demand: a Memory request it keeps out is
+// refused, also after a pass while the free part stays within the band, and gets in once a pass has shrunk the arena
+void KqpRm::ArenaFreePartRefusesMemory() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    // 700 plus the headroom of 200: the node total has 100 left
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 700}));
+    AssertResourceBrokerSensors(0, 900, 0, 0, 1);
+    AssertArenaSensors(900, 700, 0);
+    AssertResourceManagerStats(rm, 100, 100);
+
+    // the free part of 200 is within the band: the pass keeps it
+    UNIT_ASSERT(!rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 150}));
+    TickArenaAdjust();
+    UNIT_ASSERT(!rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 150}));
+    AssertArenaSensors(900, 700, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+
+    // the free part of 600 is past the band: refused until the pass shrinks the arena to 300 + 200
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 400});
+    UNIT_ASSERT(!rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 150}));
+    TickArenaAdjust();
+    AssertArenaSensors(500, 300, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 150}));
+    AssertResourceBrokerSensors(0, 650, 0, 0, 2);
+    AssertResourceManagerStats(rm, 350, 100);
+
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 150});
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 300});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 1, 1);
+    tx2.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
+// A growth the cap withholds is not asked again on the allocation path, not even past the burst threshold: the
+// demand beyond the arena is charged by the next pass
+void KqpRm::ArenaWithheldGrowthWaitsForPass() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600}));
+
+    // the band asks for 350 + 200 and the cap allows 1000 - 600: the arena takes 400 and goes on wanting more
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 350}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 2);
+    AssertArenaSensors(400, 350, 0);
+    AssertResourceManagerStats(rm, 0, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+
+    // 750 over 400 is past 400 + 300, and still no growth on the allocation path, and no charge
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 400}));
+    AssertArenaSensors(400, 350, 0);
+    UNIT_ASSERT_VALUES_EQUAL(tx2->GetMemoryAvailability(), -200); // 800 - 600 - 400
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+
+    // the pass charges the 350 the arena does not back; the cap still withholds the growth
+    TickArenaAdjust();
+    AssertArenaSensors(400, 750, 350);
+    UNIT_ASSERT_VALUES_EQUAL(tx2->GetMemoryAvailability(), -550); // 800 - 600 - 750
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 2);
+    AssertResourceManagerStats(rm, 0, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 400});
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 350});
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 1, 1);
+    tx1.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
+// The proto defaults against a kqp queue sized like a small node. A light task the node service starts charges the
+// light limit twice, for the program and for its channels, plus the unit price, 3 MiB in all, and the band adds up
+// to 128 MiB on top: the arena fills the queue long before the tasks do, and a Memory request that needs its free part
+// is refused. Past the queue the demand is a charged deficit: extra Memory requests are refused and the cookies
+// report the pressure
+void KqpRm::ArenaDefaultsAgainstASmallQueue() {
+    auto config = MakeKqpResourceManagerConfig();
+    config.ClearExecutionUnitMemory();
+    config.ClearMemoryArenaMinFreeSize();
+    config.ClearMemoryArenaMaxFreeSize();
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // the kqp queue of a node with a hard limit of 1.25 GiB, at the 20 percent the memory controller gives it; the
+    // resource manager takes its node total from the queue config the resource broker pushes
+    const ui64 queue = 256_MB;
+    auto brokerConfig = MakeResourceBrokerTestConfig();
+    auto* limit = brokerConfig.MutableQueues(1)->MutableLimit();
+    limit->ClearResource();
+    limit->SetCpu(4);
+    limit->SetMemory(queue);
+    brokerConfig.MutableResourceLimit()->ClearResource();
+    brokerConfig.MutableResourceLimit()->AddResource(10);
+    brokerConfig.MutableResourceLimit()->AddResource(queue);
+    auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+    configure->Record.CopyFrom(brokerConfig);
+    Runtime->Send(new IEventHandle(ResourceBrokers[0], Runtime->AllocateEdgeActor(), configure.Release()));
+    TDispatchOptions pushed;
+    pushed.FinalEvents.emplace_back(TEvResourceBroker::EvConfigResponse, 1);
+    UNIT_ASSERT(Runtime->DispatchEvents(pushed));
+    AssertResourceManagerStats(rm, queue, 100);
+
+    auto tx = MakeTx(1, rm);
+    // what the node service asks for a light task: the light limit for the program and again for its channels
+    const NRm::TKqpResourcesRequest lightTask{.ExecutionUnits = 1, .ExternalMemory = 2 * 1_MB};
+
+    // 60 tasks demand 180 MiB. The 43rd overruns the empty arena by more than 128 MiB and grows it to its 129 MiB
+    // plus 80 MiB; the pass then finds a free part under 32 MiB and grows the arena as far as the queue allows, so
+    // the free part of 76 MiB is within the band and a Memory request of 30 MiB is refused, before and after a pass
+    for (ui64 taskId = 1; taskId <= 60; ++taskId) {
+        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, lightTask));
+    }
+    AssertArenaSensors(209_MB, 129_MB, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+    TickArenaAdjust();
+    AssertArenaSensors(256_MB, 180_MB, 0);
+    AssertResourceManagerStats(rm, 0, 40);
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 30_MB}));
+    TickArenaAdjust();
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 30_MB}));
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // 30 more tasks push the demand past the queue: charged as a deficit by the pass, the resource broker not asked
+    // for more, and a Memory request of 1 MiB is refused with the cookie reporting the pressure
+    for (ui64 taskId = 61; taskId <= 90; ++taskId) {
+        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, lightTask));
+    }
+    TickArenaAdjust();
+    AssertArenaSensors(256_MB, 270_MB, 14_MB);
+    AssertResourceManagerStats(rm, 0, 10);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaBurstGrows"), 1);
+    auto refused = rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1_MB});
+    UNIT_ASSERT(!refused);
+    UNIT_ASSERT_EQUAL(refused.GetStatus(), NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY);
+    UNIT_ASSERT_LT(tx->GetMemoryAvailability(), 0);
+
+    for (ui64 taskId = 1; taskId <= 90; ++taskId) {
+        rm->FreeResources(*tx, taskId, lightTask);
+    }
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, queue, 100);
+    tx.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+}
+
+// The arena task outlives the queries it backs, so the resource broker must not take its lifetime for the
+// execution time of a query. That average is what the broker shows for the task type and estimates a task's
+// finish time from, and the estimate is what a queue's planned resource usage, and so its turn to be scheduled,
+// would be built on if a kqp task ever waited in the queue; the instant submits of the resource manager never do
+void KqpRm::ArenaLifetimeIsNotAQueryDuration() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        // one growth, and no merge with it: the arena task is the first the queue has seen
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+
+        // long enough that the resource broker would visibly raise its estimate if it took this for a query:
+        // one sample of a minute in a window of twenty would carry the average from 5 seconds to nearly 8
+        Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::Minutes(1));
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    }
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+
+    // the minute the arena lasted left the estimate where it started
+    const TInstant probeAt = Runtime->GetCurrentTime();
+    auto broker = GetInstantBroker();
+    const TActorId client = Runtime->AllocateEdgeActor();
+    UNIT_ASSERT(broker->SubmitTaskInstant(TEvResourceBroker::TEvSubmitTask(
+        1'000, "probe", {0, 1}, NLocalDb::KqpResourceManagerTaskName, 0, {}), client));
+    UNIT_ASSERT_STRING_CONTAINS(RenderBrokerState(),
+        "FinishTime: " + (probeAt + KQP_TASK_DEFAULT_DURATION).ToStringLocalUpToSeconds());
+
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(1'000, /* cancel */ true), client));
+}
+
+// A node total that drops below what the arena holds takes effect on the arena too: the next pass gives back the
+// surplus it is no longer entitled to, down to the demand it still backs
+void KqpRm::ArenaShrinksWhenNodeTotalDrops() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // the resource broker queue config as the resource manager receives it, as in TotalLimitReconfigure
+    auto setTotal = [&](ui64 memory) {
+        auto response = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+        response->QueueConfig.ConstructInPlace();
+        response->QueueConfig->MutableLimit()->SetMemory(memory);
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), Runtime->AllocateEdgeActor(), response.Release()));
+        Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+    };
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 150}));
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 350, 0, 0, 1); // 150 plus the headroom of 200
+        AssertResourceManagerStats(rm, 650, 100);
+        AssertArenaSensors(350, 150, 0);
+
+        // still room for all of it
+        setTotal(500);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 350, 0, 0, 1);
+        AssertResourceManagerStats(rm, 150, 100);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+
+        // 350 no longer fits: the arena gives back what it is not entitled to and keeps backing its 150
+        setTotal(250);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 250, 0, 0, 1);
+        AssertArenaSensors(250, 150, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 150});
+    }
+
+    // and the whole of it once the demand is gone
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 250, 100);
+}
+
+// A node total that drops is acted on even while the band is asking for a bigger arena: the part the arena does
+// not back is given back, although the growth itself stays out of reach
+void KqpRm::ArenaReclaimsSurplusWhileGrowthIsWanted() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto setTotal = [&](ui64 memory) {
+        auto response = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+        response->QueueConfig.ConstructInPlace();
+        response->QueueConfig->MutableLimit()->SetMemory(memory);
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), Runtime->AllocateEdgeActor(), response.Release()));
+        Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+    };
+
+    setTotal(300);
+    {
+        auto tx = MakeTx(1, rm);
+        // the band asks for 250 + 200 and the node total allows 300: the arena takes what it may and goes on
+        // wanting more, its free part of 50 staying below the 100 the band wants
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 250}));
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+        AssertArenaSensors(300, 250, 0);
+
+        // the total drops below the arena: the 20 it does not back are given back all the same
+        setTotal(280);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 280, 0, 0, 1);
+        AssertArenaSensors(280, 250, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 250});
+    }
+
+    // the pass gives the arena back whole
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 280, 100);
+}
+
+// The resource broker admits a task larger than its own total limit only while nothing at all is running, so an
+// arena that outlived its demand would block such a task for good
+void KqpRm::ArenaReleasesIdleReservation() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto broker = GetInstantBroker();
+    const TActorId client = Runtime->AllocateEdgeActor();
+    const auto oversized = [&](ui64 taskId) {
+        return TEvResourceBroker::TEvSubmitTask(taskId, "oversized",
+            {0, TOTAL_MEMORY_LIMIT + 1}, "unknown", 0, {});
+    };
+
+    // nothing has run yet, so the task is admitted over the limit
+    UNIT_ASSERT(broker->SubmitTaskInstant(oversized(1), client));
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(1), client));
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+        UNIT_ASSERT(!broker->SubmitTaskInstant(oversized(2), client)); // the arena task is running
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    }
+
+    // the arena holds its task until the periodic pass
+    UNIT_ASSERT(!broker->SubmitTaskInstant(oversized(3), client));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+
+    UNIT_ASSERT(broker->SubmitTaskInstant(oversized(4), client));
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(4), client));
+}
+
+// The arena charges the node total only: the pool of a tx sees the memory requests of the tx, not its prepay
+void KqpRm::ArenaDoesNotChargePools() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50); // pool limit 500, threshold at 400 used
+    UNIT_ASSERT(tx->PoolMemoryCookie);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 300}));
+    UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 500); // 1000 - 300 - 200
+    UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), 400);
+    UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+    UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 400);
+    UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), 300);
+    UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 300);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 300});
+    TickArenaAdjust();
+    UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 800);
+    UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), 400);
 }
 
 } // namespace NKqp

@@ -445,9 +445,9 @@
     ],
     "test.test[expr-decimal_arithmetic_common_type--Debug]": [
         {
-            "checksum": "8af3ab61cf828f88c29c972aa4e6a28e",
-            "size": 1265,
-            "uri": "https://{canondata_backend}/1900335/d4bc60156cb053fed60a55548cae4cc59c4ad67a/resource.tar.gz#test.test_expr-decimal_arithmetic_common_type--Debug_/opt.yql"
+            "checksum": "fac1c19708dceca0bdedb300b2450999",
+            "size": 1153,
+            "uri": "https://{canondata_backend}/1937027/fc1e221d6303da0c4eec278a1c676d54ea46047e/resource.tar.gz#test.test_expr-decimal_arithmetic_common_type--Debug_/opt.yql"
         }
     ],
     "test.test[expr-decimal_arithmetic_common_type--Results]": [

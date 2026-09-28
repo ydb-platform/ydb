@@ -613,11 +613,13 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
     TVector<NThreading::TFuture<TDbgSnapshot>> futures;
     if (dbgIndex) {
         if (*dbgIndex < DirectBlockGroups.size()) {
-            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot(
+                EDbgMonSnapshotDetail::PerVChunk));
         }
     } else {
         for (const auto& dbg: DirectBlockGroups) {
-            futures.push_back(dbg->BuildMonSnapshot());
+            futures.push_back(
+                dbg->BuildMonSnapshot(EDbgMonSnapshotDetail::Summary));
         }
     }
 

@@ -100,7 +100,7 @@ TVChunk::TVChunk(
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
           DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
-          IsTouched(),
+          touched,
           dirtyMapState,
           BlockSize,
           BlocksCount))
@@ -289,6 +289,50 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
                          << " updated to " << ToString(state));
 }
 
+void TVChunk::BalanceDDisks(THostIndex sourceHost, THostIndex targetHost)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto message = TStringBuilder()
+                   << "Balance from " << PrintHostAndNode(sourceHost) << " -> "
+                   << PrintHostAndNode(targetHost);
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s DDisk balancing requested: %s",
+        LogTitle.GetWithTime().c_str(),
+        message.c_str());
+
+    auto prepare =
+        [weakSelf = weak_from_this(), sourceHost, targetHost]() -> TVChunkConfig
+    {
+        if (auto self = weakSelf.lock()) {
+            TVChunkConfig newConfig = self->VChunkConfig;
+            if (!newConfig.GetDisabledHosts().Get(targetHost) &&
+                !newConfig.GetDDisks().Get(targetHost))
+            {
+                newConfig.PromoteHost(targetHost);
+                self->BalanceSourceHost = sourceHost;
+                self->DirectBlockGroup->AllocateDDiskPromotion(
+                    newConfig.GetVChunkIndex(),
+                    targetHost);
+            }
+            return newConfig;
+        }
+        return TVChunkConfig{};
+    };
+
+    UpdateConfig(std::move(prepare), message);
+}
+
+bool TVChunk::IsTouched() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return TouchedState != ETouchedState::NotTouched;
+}
+
 void TVChunk::UpdateHostCount(size_t newHostCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -370,7 +414,7 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
-    sb << "BehindBrief:" << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
+    sb << "BehindBrief: " << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
@@ -1015,7 +1059,7 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
     StartPersist();
-    DemoteUnavailableHostsIfNeeded();
+    DemoteIfNeeded();
     ScheduleCleaningUp();
 }
 
@@ -1025,11 +1069,6 @@ void TVChunk::Touch()
         TouchedState = ETouchedState::Persisting;
         DoPersistTouched();
     }
-}
-
-bool TVChunk::IsTouched() const
-{
-    return TouchedState != ETouchedState::NotTouched;
 }
 
 void TVChunk::DoPersistTouched()
@@ -1213,6 +1252,7 @@ void TVChunk::PersistNextPendingConfig()
         (const TPersistResultFuture& f) mutable
         {
             if (f.GetValue() != EPersistResult::Success) {
+                // Config persistence must never fail.
                 return;
             }
             executor->ExecuteSimple(
@@ -1247,8 +1287,9 @@ void TVChunk::OnConfigPersisted(
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
     ApplyConfig(config, message);
+    DirectBlockGroup->CommitDDiskPromotion(config);
     StartPersist();
-    DemoteUnavailableHostsIfNeeded();
+    DemoteIfNeeded();
 }
 
 void TVChunk::ApplyConfig(
@@ -1267,6 +1308,11 @@ void TVChunk::ApplyConfig(
         newConfig.DebugPrint().c_str());
 
     VChunkConfig = newConfig;
+    if (BalanceSourceHost != InvalidHostIndex &&
+        !VChunkConfig.GetDDisks().Get(BalanceSourceHost))
+    {
+        BalanceSourceHost = InvalidHostIndex;
+    }
     BlocksDirtyMap->UpdateConfig(VChunkConfig, IsTouched());
 
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
@@ -1350,14 +1396,23 @@ TVChunkConfig TVChunk::PrepareNewConfig(
         }
         case EHostState::Offline: {
             newConfig.DisableHost(hostIndex);
-            const TString message = newConfig.PromoteHostIfNeeded();
-            if (!message.empty()) {
+            if (newConfig.GetEnabledDDisks().Count() <
+                QuorumDirectBlockGroupHostCount)
+            {
+                const THostIndex hostToPromote =
+                    DirectBlockGroup->AllocateDDiskForPromote(newConfig);
+                if (hostToPromote == InvalidHostIndex) {
+                    break;
+                }
                 LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "%s %s",
+                    "%s Promote %s %s",
                     LogTitle.GetWithTime().c_str(),
-                    message.c_str());
+                    PrintHostIndex(hostToPromote).c_str(),
+                    newConfig.DebugPrint().c_str());
+
+                newConfig.PromoteHost(hostToPromote);
             }
 
             break;
@@ -1407,11 +1462,17 @@ void TVChunk::OnCopyComplete(
     StartPersist();
 }
 
+void TVChunk::DemoteIfNeeded()
+{
+    DemoteUnavailableHostsIfNeeded();
+    DemoteUnnecessaryHostsIfNeeded();
+}
+
 void TVChunk::DemoteUnavailableHostsIfNeeded()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (GetDDisksForDemote().Empty()) {
+    if (GetDDisksFromUnavailableHostsForDemote().Empty()) {
         return;
     }
 
@@ -1419,7 +1480,8 @@ void TVChunk::DemoteUnavailableHostsIfNeeded()
     {
         if (auto self = weakSelf.lock()) {
             auto newConfig = self->VChunkConfig;
-            for (auto hostIndex: self->GetDDisksForDemote()) {
+            for (auto hostIndex: self->GetDDisksFromUnavailableHostsForDemote())
+            {
                 newConfig.DemoteHost(hostIndex);
             }
 
@@ -1431,9 +1493,34 @@ void TVChunk::DemoteUnavailableHostsIfNeeded()
     UpdateConfig(std::move(prepare), "Demote unavailable hosts");
 }
 
-THostMask TVChunk::GetDDisksForDemote() const
+void TVChunk::DemoteUnnecessaryHostsIfNeeded()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (GetUnnecessaryDDisksForDemote().Empty()) {
+        return;
+    }
+
+    auto prepare = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            auto newConfig = self->VChunkConfig;
+            for (auto hostIndex: self->GetUnnecessaryDDisksForDemote()) {
+                newConfig.DemoteHost(hostIndex);
+            }
+
+            return newConfig;
+        }
+        return TVChunkConfig{};
+    };
+
+    UpdateConfig(std::move(prepare), "Demote unnecessary hosts");
+}
+
+THostMask TVChunk::GetDDisksFromUnavailableHostsForDemote() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
     auto healthyDDisks = GetHealthyDDisks();
     if (healthyDDisks.Count() < QuorumDirectBlockGroupHostCount) {
         return THostMask::MakeEmpty();
@@ -1443,6 +1530,24 @@ THostMask TVChunk::GetDDisksForDemote() const
                              .Exclude(VChunkConfig.GetEnabledDDisks())
                              .Exclude(healthyDDisks);
     return ddiskToDemote;
+}
+
+THostMask TVChunk::GetUnnecessaryDDisksForDemote() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto healthyDDisks = GetHealthyDDisks();
+    if (healthyDDisks.Count() < QuorumDirectBlockGroupHostCount + 1) {
+        return THostMask::MakeEmpty();
+    }
+
+    if (BalanceSourceHost != InvalidHostIndex &&
+        healthyDDisks.Get(BalanceSourceHost))
+    {
+        return THostMask::MakeOne(BalanceSourceHost);
+    }
+
+    return DirectBlockGroup->SelectDDiskForDemote(healthyDDisks);
 }
 
 void TVChunk::WaitForDirtyMapReady()

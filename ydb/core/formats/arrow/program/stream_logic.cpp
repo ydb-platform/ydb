@@ -19,10 +19,10 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TStreamLogicProcessor::DoExecute(
+TConclusion<TExecutionResult> TStreamLogicProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     AFL_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 TConclusion<bool> TStreamLogicProcessor::AddMonoValue(

@@ -38,6 +38,7 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
     settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
     settings.SetStopAtCurrentEndOffsets(!streamingMode);
+    settings.SetAllowConsumerRewindForDisposition(streamingMode);
 
     if (streamingMode) {
         auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();

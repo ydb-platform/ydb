@@ -54,11 +54,47 @@ void CollectOlapReadsUnderCombineInput(const TExprBase& combineInput, TOlapReads
     out.WideReads = FindWideOlapReadsInExpr(ptr);
 }
 
-bool ExprTreeContainsOlapJsonValue(const TExprNode::TPtr& root) {
+// `includeSqlJsonValue == false`: only already lowered OLAP JSON_VALUE nodes.
+// `includeSqlJsonValue == true`: also not-yet-pushed SQL JSON_VALUE nodes.
+bool ExprTreeContainsJsonValue(const TExprNode::TPtr& root, const bool includeSqlJsonValue) {
     if (!root) {
         return false;
     }
-    return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+    return !!FindNode(root, [includeSqlJsonValue](const TExprNode::TPtr& n) {
+        return TKqpOlapJsonValue::Match(n.Get()) || (includeSqlJsonValue && TCoJsonValue::Match(n.Get()));
+    });
+}
+
+bool ExprTreeContainsOlapJsonValue(const TExprNode::TPtr& root) {
+    return ExprTreeContainsJsonValue(root, /*includeSqlJsonValue=*/false);
+}
+
+bool ExprTreeContainsAnyJsonValue(const TExprNode::TPtr& root) {
+    return ExprTreeContainsJsonValue(root, /*includeSqlJsonValue=*/true);
+}
+
+// The forced DISTINCT key is neither a stored column nor a pushed projection output, and there is no JSON_VALUE
+// anywhere in the read pipeline that a later projection pushdown could still turn into such an output.
+// Report a clear issue instead of injecting KqpOlapDistinct and failing later in type annotation.
+bool ReportUnresolvableDistinctKey(TExprContext& ctx, TPositionHandle pos, TStringBuf keyColumn, bool onReadColumns, bool onProjections,
+    const std::initializer_list<TExprNode::TPtr>& subtrees)
+{
+    if (onReadColumns || onProjections) {
+        return false;
+    }
+    for (const auto& subtree : subtrees) {
+        if (ExprTreeContainsAnyJsonValue(subtree)) {
+            return false;
+        }
+    }
+    ctx.AddError(TIssue(
+        ctx.GetPosition(pos),
+        TStringBuilder()
+            << "OptForceOlapPushdownDistinct = '" << keyColumn
+            << "' is neither a stored column nor a pushed OLAP projection output. Alias the DISTINCT expression `AS "
+            << keyColumn << "` and enable PRAGMA kikimr.OptEnableOlapPushdownProjections."
+    ));
+    return true;
 }
 
 std::optional<ui64> TryParseLiteralItemsLimit(const TExprNode::TPtr& node) {
@@ -424,6 +460,10 @@ std::optional<TExprBase> TryReplaceBlockOlapReadInputWithDistinct(
         return std::nullopt;
     }
 
+    if (ReportUnresolvableDistinctKey(ctx, pos, keyColumn, onReadColumns, onProjections, { read.Process().Ptr(), combineInput.Ptr() })) {
+        return std::nullopt;
+    }
+
     auto olapDistinct = Build<TKqpOlapDistinct>(ctx, pos)
         .Input(read.Process().Body())
         .Key().Build(keyColumn)
@@ -689,6 +729,11 @@ TExprBase ApplyOlapDistinctReadFallback(const TExprBase& readNode, TExprContext&
     }
 
     if (!scan.FallbackDistinctColumn || *scan.FallbackDistinctColumn != keyColumn) {
+        return readNode;
+    }
+
+    if (ReportUnresolvableDistinctKey(ctx, readNode.Pos(), keyColumn, fbOnRead, fbOnProj,
+            { read.Process().Ptr(), scan.CombineSubgraphForKey })) {
         return readNode;
     }
 

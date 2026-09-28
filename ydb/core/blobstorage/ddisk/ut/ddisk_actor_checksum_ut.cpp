@@ -2742,6 +2742,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             ctx.SendPDiskResponse(disk, *first, new NPDisk::TEvChunkReadRawResult(storage.Read(*first->Get())));
             ctx.Runtime.Sim([&] { return !completed; });
             ctx.Runtime.FilterFunction = {};
+            NDDisk::NTesting::IgnoreShutdownChunkForget(ctx.Runtime);
             SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
             auto result = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
             UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 123);

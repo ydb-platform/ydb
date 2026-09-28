@@ -1,6 +1,6 @@
-====================CC-PDDC====================
+====================CC0-1.0====================
   Doug Lea and released to the public domain, as explained at
-  http://creativecommons.org/licenses/publicdomain.  Send questions,
+  http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
 
 
 ====================COPYRIGHT====================
@@ -296,6 +296,8 @@ typedef enum ffi_abi
 #define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
 
+#define FFI_TARGET_HAS_INT128 1
+
 #endif
 
 
@@ -395,6 +397,8 @@ typedef enum ffi_abi
 /* No complex type on Windows */
 #define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
+
+#define FFI_TARGET_HAS_INT128 1
 
 #endif
 
@@ -496,6 +500,8 @@ typedef enum ffi_abi
 #define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
 
+#define FFI_TARGET_HAS_INT128 1
+
 #endif
 
 
@@ -595,6 +601,8 @@ typedef enum ffi_abi
 /* No complex type on Windows */
 #define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
+
+#define FFI_TARGET_HAS_INT128 1
 
 #endif
 
@@ -827,9 +835,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -841,6 +846,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -994,9 +1003,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -1008,6 +1014,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -1270,32 +1280,15 @@ typedef enum ffi_abi {
 # define FFI_GO_CLOSURES 1
 #endif
 
-/* ppc_closure.S and linux64_closure.S expect this.  */
-#define FFI_PPC_TYPE_LAST FFI_TYPE_POINTER
-
-/* We define additional types below.  If generic types are added that
-   must be supported by powerpc libffi then it is likely that
-   FFI_PPC_TYPE_LAST needs increasing *and* the jump tables in
-   ppc_closure.S and linux64_closure.S be extended.  */
-
-#if !(FFI_TYPE_LAST == FFI_PPC_TYPE_LAST		\
-      || (FFI_TYPE_LAST == FFI_TYPE_COMPLEX		\
-	  && !defined FFI_TARGET_HAS_COMPLEX_TYPE))
-# error "You likely have a broken powerpc libffi"
+/* Complex types are supported on ELFv2 (the only PowerPC64 variant where
+   the assembly and C-side passing/return logic has been wired up).  Under
+   ELFv2, float/double _Complex are passed and returned as a 2-element
+   homogeneous floating-point aggregate, but each scalar half consumes a
+   GPR shadow slot of its own — i.e. the same way the underlying C ABI
+   handles them, which is what GCC's split_complex_arg emits.  */
+#if defined(POWERPC64) && _CALL_ELF == 2
+# define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
-
-/* Needed for soft-float long-double-128 support.  */
-#define FFI_TYPE_UINT128 (FFI_PPC_TYPE_LAST + 1)
-
-/* Needed for FFI_SYSV small structure returns.  */
-#define FFI_SYSV_TYPE_SMALL_STRUCT (FFI_PPC_TYPE_LAST + 2)
-
-/* Used by ELFv2 for homogenous structure returns.  */
-#define FFI_V2_TYPE_VECTOR		(FFI_PPC_TYPE_LAST + 1)
-#define FFI_V2_TYPE_VECTOR_HOMOG	(FFI_PPC_TYPE_LAST + 2)
-#define FFI_V2_TYPE_FLOAT_HOMOG		(FFI_PPC_TYPE_LAST + 3)
-#define FFI_V2_TYPE_DOUBLE_HOMOG	(FFI_PPC_TYPE_LAST + 4)
-#define FFI_V2_TYPE_SMALL_STRUCT	(FFI_PPC_TYPE_LAST + 5)
 
 #if _CALL_ELF == 2
 # define FFI_TRAMPOLINE_SIZE 32
@@ -1309,16 +1302,6 @@ typedef enum ffi_abi {
 # else /* POWERPC || POWERPC_AIX */
 #  define FFI_TRAMPOLINE_SIZE 40
 # endif
-#endif
-
-#ifndef LIBFFI_ASM
-#if defined(POWERPC_DARWIN) || defined(POWERPC_AIX)
-struct ffi_aix_trampoline_struct {
-    void * code_pointer;	/* Pointer to ffi_closure_ASM */
-    void * toc;			/* TOC */
-    void * static_chain;	/* Pointer to closure */
-};
-#endif
 #endif
 
 #endif
@@ -1532,9 +1515,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -1546,6 +1526,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -1699,9 +1683,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -1713,6 +1694,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -1866,9 +1851,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -1880,6 +1862,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -2033,9 +2019,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -2047,6 +2030,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -2200,9 +2187,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -2214,6 +2198,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -2367,9 +2355,6 @@ typedef enum ffi_abi {
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -2381,6 +2366,10 @@ typedef enum ffi_abi {
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -2806,6 +2795,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.  */
 #include <ffi_common.h>
 #include "internal.h"
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h> /* FlushInstructionCache */
 #endif
 #include <tramp.h>
@@ -3165,7 +3155,7 @@ extend_hfa_type (void *dest, void *src, int h)
   void *x0;
 
 #define BTI_J "hint #36"
-  asm volatile (
+  __asm__ volatile (
 	"adr	%0, 0f\n"
 "	add	%0, %0, %1\n"
 "	br	%0\n"
@@ -3245,18 +3235,18 @@ compress_hfa_type (void *dest, void *reg, int h)
 	*(float *)dest = *(float *)reg;
       break;
     case AARCH64_RET_S2:
-      asm ("ldp q16, q17, [%1]\n\t"
+      __asm__ ("ldp q16, q17, [%1]\n\t"
 	   "st2 { v16.s, v17.s }[0], [%0]"
 	   : : "r"(dest), "r"(reg) : "memory", "v16", "v17");
       break;
     case AARCH64_RET_S3:
-      asm ("ldp q16, q17, [%1]\n\t"
+      __asm__ ("ldp q16, q17, [%1]\n\t"
 	   "ldr q18, [%1, #32]\n\t"
 	   "st3 { v16.s, v17.s, v18.s }[0], [%0]"
 	   : : "r"(dest), "r"(reg) : "memory", "v16", "v17", "v18");
       break;
     case AARCH64_RET_S4:
-      asm ("ldp q16, q17, [%1]\n\t"
+      __asm__ ("ldp q16, q17, [%1]\n\t"
 	   "ldp q18, q19, [%1, #32]\n\t"
 	   "st4 { v16.s, v17.s, v18.s, v19.s }[0], [%0]"
 	   : : "r"(dest), "r"(reg) : "memory", "v16", "v17", "v18", "v19");
@@ -3273,18 +3263,18 @@ compress_hfa_type (void *dest, void *reg, int h)
 	*(double *)dest = *(double *)reg;
       break;
     case AARCH64_RET_D2:
-      asm ("ldp q16, q17, [%1]\n\t"
+      __asm__ ("ldp q16, q17, [%1]\n\t"
 	   "st2 { v16.d, v17.d }[0], [%0]"
 	   : : "r"(dest), "r"(reg) : "memory", "v16", "v17");
       break;
     case AARCH64_RET_D3:
-      asm ("ldp q16, q17, [%1]\n\t"
+      __asm__ ("ldp q16, q17, [%1]\n\t"
 	   "ldr q18, [%1, #32]\n\t"
 	   "st3 { v16.d, v17.d, v18.d }[0], [%0]"
 	   : : "r"(dest), "r"(reg) : "memory", "v16", "v17", "v18");
       break;
     case AARCH64_RET_D4:
-      asm ("ldp q16, q17, [%1]\n\t"
+      __asm__ ("ldp q16, q17, [%1]\n\t"
 	   "ldp q18, q19, [%1, #32]\n\t"
 	   "st4 { v16.d, v17.d, v18.d, v19.d }[0], [%0]"
 	   : : "r"(dest), "r"(reg) : "memory", "v16", "v17", "v18", "v19");
@@ -3313,6 +3303,32 @@ allocate_int_to_reg_or_stack (struct call_context *context,
 
   state->ngrn = N_X_ARG_REG;
   return allocate_to_stack (state, stack, size, size);
+}
+
+static void *
+allocate_int128_to_reg_or_stack (struct call_context *context,
+			         struct arg_state *state, void *stack)
+{
+  unsigned ngrn = state->ngrn;
+  void *ret;
+
+  /* The normal AArch64 ABI requires even Xreg; Darwin does not. */
+#ifndef __APPLE__
+  ngrn += ngrn & 1;
+#endif
+
+  if (ngrn < N_X_ARG_REG)
+    {
+      ret = &context->x[ngrn];
+      ngrn += 2;
+    }
+  else
+    {
+      ret = allocate_to_stack (state, stack, 16, 16);
+      ngrn = N_X_ARG_REG;
+    }
+  state->ngrn = ngrn;
+  return ret;
 }
 
 ffi_status FFI_HIDDEN
@@ -3352,6 +3368,11 @@ ffi_prep_cif_machdep (ffi_cif *cif)
       break;
     case FFI_TYPE_POINTER:
       flags = (sizeof(void *) == 4 ? AARCH64_RET_UINT32 : AARCH64_RET_INT64);
+      break;
+
+    case FFI_TYPE_UINT128:
+    case FFI_TYPE_SINT128:
+      flags = AARCH64_RET_INT128;
       break;
 
     case FFI_TYPE_FLOAT:
@@ -3517,6 +3538,12 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *orig_rvalue,
 #endif
 	      }
 	  }
+	  break;
+
+	case FFI_TYPE_UINT128:
+	case FFI_TYPE_SINT128:
+	  dest = allocate_int128_to_reg_or_stack (context, &state, stack);
+	  memcpy (dest, a, 16);
 	  break;
 
 	case FFI_TYPE_FLOAT:
@@ -3801,6 +3828,11 @@ ffi_closure_SYSV_inner (ffi_cif *cif,
 	  avalue[i] = allocate_int_to_reg_or_stack (context, &state, stack, s);
 	  break;
 
+	case FFI_TYPE_UINT128:
+	case FFI_TYPE_SINT128:
+	  avalue[i] = allocate_int128_to_reg_or_stack (context, &state, stack);
+	  break;
+
 	case FFI_TYPE_FLOAT:
 	case FFI_TYPE_DOUBLE:
 	case FFI_TYPE_LONGDOUBLE:
@@ -4020,6 +4052,8 @@ typedef enum ffi_abi
 #define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
 
+#define FFI_TARGET_HAS_INT128 1
+
 #endif
 
 
@@ -4096,9 +4130,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.  */
  * The ELF Notes section needs to indicate if BTI is supported, as the first ELF loaded that doesn't
  * declare this support disables it for memory region containing the loaded library.
  */
-# define GNU_PROPERTY_AARCH64_BTI (1 << 0)         /* Has Branch Target Identification */
+# define AARCH64_BTI (1 << 0)         /* Has Branch Target Identification */
 	.text
 	.align 4
+
+#if defined(__ARM_FEATURE_GCS_DEFAULT) && __ARM_FEATURE_GCS_DEFAULT == 1
+#define AARCH64_GCS (1<<2)
+#else
+#define AARCH64_GCS 0 /* No GCS */
+#endif
 
 /* ffi_call_SYSV
    extern void ffi_call_SYSV (void *stack, void *frame,
@@ -4707,22 +4747,47 @@ CNAME(ffi_go_closure_SYSV):
 #endif /* FFI_CLOSURES */
 #endif /* __arm64__ */
 
+#define GNU_PROPERTY(value)						\
+	.pushsection .note.gnu.property, "a";				\
+	.balign 8;							\
+	.long 4;							\
+	.long 0x10;							\
+	.long 0x5;							\
+	.asciz "GNU";							\
+	.long 0xc0000000; /* GNU_PROPERTY_AARCH64_FEATURE_1_AND */	\
+	.long 4;							\
+	.long value;							\
+	.long 0;							\
+	.popsection;
+
+#ifdef __ARM_BUILDATTR64_FV
+/* Add AArch64 feature bits build attributes.  */
+# define FEATURE_1_AND_MARK(value)					\
+    .aeabi_subsection aeabi_feature_and_bits, optional, ULEB128;	\
+    .if ((value) & AARCH64_BTI);					\
+    .aeabi_attribute Tag_Feature_BTI, 1;				\
+    .else;								\
+    .aeabi_attribute Tag_Feature_BTI, 0;				\
+    .endif;								\
+    .if ((value) & AARCH64_POINTER_AUTH);				\
+    .aeabi_attribute Tag_Feature_PAC, 1;				\
+    .else;								\
+    .aeabi_attribute Tag_Feature_PAC, 0;				\
+    .endif;								\
+    .if ((value) & AARCH64_GCS);					\
+    .aeabi_attribute Tag_Feature_GCS, 1;				\
+    .else;								\
+    .aeabi_attribute Tag_Feature_GCS, 0;				\
+    .endif;
+#else
+/* Add a NT_GNU_PROPERTY_TYPE_0 note.  */
+# define FEATURE_1_AND_MARK(value) GNU_PROPERTY (value)
+#endif /* __ARM_BUILDATTR64_FV */
+
 #if defined __ELF__ && defined __linux__
 	.section .note.GNU-stack,"",%progbits
-
-	.pushsection .note.gnu.property, "a";
-	.balign 8;
-	.long 4;
-	.long 0x10;
-	.long 0x5;
-	.asciz "GNU";
-	.long 0xc0000000; /* GNU_PROPERTY_AARCH64_FEATURE_1_AND */
-	.long 4;
-	.long GNU_PROPERTY_AARCH64_BTI | GNU_PROPERTY_AARCH64_POINTER_AUTH;
-	.long 0;
-	.popsection;
+FEATURE_1_AND_MARK(AARCH64_BTI | AARCH64_POINTER_AUTH | AARCH64_GCS)
 #endif
-
 
 
 ====================File: src/arm/ffi.c====================
@@ -5864,9 +5929,11 @@ typedef enum ffi_abi {
 #endif
 
 
+#ifdef __ELF__
 	/* We require interworking on LDM, which implies ARMv5T,
 	   which implies the existance of BLX.  */
  	.arch	armv5t
+#endif
 
 	/* Note that we use STC and LDC to encode VFP instructions,
 	   so that we do not need ".fpu vfp", nor get that added to
@@ -6594,11 +6661,9 @@ ffi_closure_free (void *ptr)
 
 #define USE_LOCKS 1
 #define USE_DL_PREFIX 1
-#ifdef __GNUC__
-#ifndef USE_BUILTIN_FFS
-#define USE_BUILTIN_FFS 1
-#endif
-#endif
+/* dlmalloc's bit-index macros use __builtin_clz/__builtin_ctz directly on any
+   GNU-compatible compiler, so USE_BUILTIN_FFS (and pulling in <strings.h> for
+   ffs()) is no longer needed (libffi #754).  */
 
 /* We need to use mmap, not sbrk.  */
 #define HAVE_MORECORE 0
@@ -8431,12 +8496,12 @@ LCFI..1:
 
 	/* look up the proper starting point in table  */
 	/* by using return type as offset */
-	lhz	r3, 10(r3)	/* load type from return type */
 	ld	r4, LC..60(2)	/* get address of jump table */
 	sldi	r3, r3, 4	/* now multiply return type by 16 */
 	ld	r0, 240+16(r1)	/* load return address */
 	add	r3, r3, r4	/* add contents of table to table address */
 	mtctr	r3
+	mtlr	r0
 	bctr			/* jump to it */
 
 /* Each fragment must be exactly 16 bytes long (4 instructions).
@@ -8444,96 +8509,78 @@ LCFI..1:
 	.align 4
 
 L..60:
-/* case FFI_TYPE_VOID */
-	mtlr r0
+/* case PPC_LD_NONE */
+	addi r1, r1, 240
+	blr
+	nop
+	nop
+
+/* case PPC_LD_R3 */
+	ld r3, 112+0(r1)
 	addi r1, r1, 240
 	blr
 	nop
 
-/* case FFI_TYPE_INT */
-	lwa r3, 112+4(r1)
-	mtlr r0
+/* case PPC_LD_R3R4 */
+	ld r3, 112+0(r1)
+	ld r4, 112+8(r1)
 	addi r1, r1, 240
 	blr
 
-/* case FFI_TYPE_FLOAT */
+/* case PPC_LD_F32 */
 	lfs f1, 112+0(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_DOUBLE */
-	lfd f1, 112+0(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_LONGDOUBLE */
-	lfd f1, 112+0(r1)
-	mtlr r0
-	lfd f2, 112+8(r1)
-	b L..finish
-
-/* case FFI_TYPE_UINT8 */
-	lbz r3, 112+7(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_SINT8 */
-	lbz r3, 112+7(r1)
-	mtlr r0
-	extsb r3, r3
-	b L..finish
-
-/* case FFI_TYPE_UINT16 */
-	lhz r3, 112+6(r1)
-	mtlr r0
-L..finish:
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_SINT16 */
-	lha r3, 112+6(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_UINT32 */
-	lwz r3, 112+4(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_SINT32 */
-	lwa r3, 112+4(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_UINT64 */
-	ld r3, 112+0(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_SINT64 */
-	ld r3, 112+0(r1)
-	mtlr r0
-	addi r1, r1, 240
-	blr
-
-/* case FFI_TYPE_STRUCT */
-	mtlr r0
 	addi r1, r1, 240
 	blr
 	nop
 
-/* case FFI_TYPE_POINTER */
-	ld r3, 112+0(r1)
-	mtlr r0
+/* case PPC_LD_F64 */
+	lfd f1, 112+0(r1)
 	addi r1, r1, 240
 	blr
+	nop
+
+/* case PPC_LD_F128 */
+	lfd f1, 112+0(r1)
+	lfd f2, 112+8(r1)
+	addi r1, r1, 240
+	blr
+
+/* case PPC_LD_U8 */
+	lbz r3, 112+7(r1)
+	addi r1, r1, 240
+	blr
+	nop
+
+/* case PPC_LD_S8 */
+	lbz r3, 112+7(r1)
+	extsb r3, r3
+	addi r1, r1, 240
+	blr
+
+/* case PPC_LD_U16 */
+	lhz r3, 112+6(r1)
+	addi r1, r1, 240
+	blr
+	nop
+
+/* case PPC_LD_S16 */
+	lha r3, 112+6(r1)
+	addi r1, r1, 240
+	blr
+	nop
+
+/* case PPC_LD_U32 */
+	lwz r3, 112+4(r1)
+	addi r1, r1, 240
+	blr
+	nop
+
+/* case PPC_LD_S32 */
+	lwa r3, 112+4(r1)
+	addi r1, r1, 240
+	blr
+	nop
+
 LFE..0:
 
 #else /* ! __64BIT__ */
@@ -8612,12 +8659,12 @@ LCFI..1:
 
 	/* look up the proper starting point in table  */
 	/* by using return type as offset */
-	lhz	r3, 6(r3)	/* load type from return type */
 	lwz	r4, LC..60(2)	/* get address of jump table */
 	slwi	r3, r3, 4	/* now multiply return type by 16 */
 	lwz	r0, 176+8(r1)	/* load return address */
 	add	r3, r3, r4	/* add contents of table to table address */
 	mtctr	r3
+	mtlr	r0
 	bctr			/* jump to it */
 
 /* Each fragment must be exactly 16 bytes long (4 instructions).
@@ -8625,96 +8672,66 @@ LCFI..1:
 	.align 4
 
 L..60:
-/* case FFI_TYPE_VOID */
-	mtlr r0
+/* case PPC_LD_NONE */
+	addi r1, r1, 176
+	blr
+	nop
+	nop
+
+/* case PPC_LD_R3 */
+	lwz r3, 56+0(r1)
 	addi r1, r1, 176
 	blr
 	nop
 
-/* case FFI_TYPE_INT */
+/* case PPC_LD_R3R4 */
 	lwz r3, 56+0(r1)
-	mtlr r0
+	lwz r4, 56+4(r1)
 	addi r1, r1, 176
 	blr
 
-/* case FFI_TYPE_FLOAT */
+/* case PPC_LD_F32 */
 	lfs f1, 56+0(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_DOUBLE */
-	lfd f1, 56+0(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_LONGDOUBLE */
-	lfd f1, 56+0(r1)
-	mtlr r0
-	lfd f2, 56+8(r1)
-	b L..finish
-
-/* case FFI_TYPE_UINT8 */
-	lbz r3, 56+3(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_SINT8 */
-	lbz r3, 56+3(r1)
-	mtlr r0
-	extsb r3, r3
-	b L..finish
-
-/* case FFI_TYPE_UINT16 */
-	lhz r3, 56+2(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_SINT16 */
-	lha r3, 56+2(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_UINT32 */
-	lwz r3, 56+0(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_SINT32 */
-	lwz r3, 56+0(r1)
-	mtlr r0
-	addi r1, r1, 176
-	blr
-
-/* case FFI_TYPE_UINT64 */
-	lwz r3, 56+0(r1)
-	mtlr r0
-	lwz r4, 56+4(r1)
-	b L..finish
-
-/* case FFI_TYPE_SINT64 */
-	lwz r3, 56+0(r1)
-	mtlr r0
-	lwz r4, 56+4(r1)
-	b L..finish
-
-/* case FFI_TYPE_STRUCT */
-	mtlr r0
 	addi r1, r1, 176
 	blr
 	nop
 
-/* case FFI_TYPE_POINTER */
-	lwz r3, 56+0(r1)
-	mtlr r0
-L..finish:
+/* case PPC_LD_F64 */
+	lfd f1, 56+0(r1)
 	addi r1, r1, 176
 	blr
+	nop
+
+/* case PPC_LD_F128 */
+	lfd f1, 56+0(r1)
+	lfd f2, 56+8(r1)
+	addi r1, r1, 176
+	blr
+
+/* case PPC_LD_U8 */
+	lbz r3, 56+3(r1)
+	addi r1, r1, 176
+	blr
+	nop
+
+/* case PPC_LD_S8 */
+	lbz r3, 56+3(r1)
+	extsb r3, r3
+	addi r1, r1, 176
+	blr
+
+/* case PPC_LD_U16 */
+	lhz r3, 56+2(r1)
+	addi r1, r1, 176
+	blr
+	nop
+
+/* case PPC_LD_S16 */
+	lha r3, 56+2(r1)
+	addi r1, r1, 176
+	blr
+	nop
+
 LFE..0:
 #endif
 	.ef __LINE__
@@ -10151,6 +10168,26 @@ ffi_call_int (ffi_cif *cif,
   if (rvalue && ecif.rvalue == smst_buffer)
     {
       unsigned int rsize = cif->rtype->size;
+#ifdef FFI_TARGET_HAS_COMPLEX_TYPE
+      /* Integer-typed _Complex: the .Lsmall_struct return path stored
+	 r3 at buffer offset 0 and r4 at offset 8.  Extract one inner-
+	 sized half from each slot — right-justified on BE, low-address
+	 on LE — and lay them out as the natural packed complex value
+	 the caller expects (real@0, imag@hsize).  */
+      if (cif->rtype->type == FFI_TYPE_COMPLEX
+	  && (cif->flags & (FLAG_RETURNS_FP | FLAG_RETURNS_VEC)) == 0)
+	{
+	  size_t hsize = cif->rtype->elements[0]->size;
+#ifndef __LITTLE_ENDIAN__
+	  size_t off = 8 - hsize;
+#else
+	  size_t off = 0;
+#endif
+	  memcpy ((char *) rvalue,         (char *) smst_buffer + off, hsize);
+	  memcpy ((char *) rvalue + hsize, (char *) smst_buffer + 8 + off, hsize);
+	}
+      else
+#endif
 #ifndef __LITTLE_ENDIAN__
       /* The SYSV ABI returns a structure of up to 4 bytes in size
 	 left-padded in r3.  */
@@ -10384,32 +10421,15 @@ typedef enum ffi_abi {
 # define FFI_GO_CLOSURES 1
 #endif
 
-/* ppc_closure.S and linux64_closure.S expect this.  */
-#define FFI_PPC_TYPE_LAST FFI_TYPE_POINTER
-
-/* We define additional types below.  If generic types are added that
-   must be supported by powerpc libffi then it is likely that
-   FFI_PPC_TYPE_LAST needs increasing *and* the jump tables in
-   ppc_closure.S and linux64_closure.S be extended.  */
-
-#if !(FFI_TYPE_LAST == FFI_PPC_TYPE_LAST		\
-      || (FFI_TYPE_LAST == FFI_TYPE_COMPLEX		\
-	  && !defined FFI_TARGET_HAS_COMPLEX_TYPE))
-# error "You likely have a broken powerpc libffi"
+/* Complex types are supported on ELFv2 (the only PowerPC64 variant where
+   the assembly and C-side passing/return logic has been wired up).  Under
+   ELFv2, float/double _Complex are passed and returned as a 2-element
+   homogeneous floating-point aggregate, but each scalar half consumes a
+   GPR shadow slot of its own — i.e. the same way the underlying C ABI
+   handles them, which is what GCC's split_complex_arg emits.  */
+#if defined(POWERPC64) && _CALL_ELF == 2
+# define FFI_TARGET_HAS_COMPLEX_TYPE
 #endif
-
-/* Needed for soft-float long-double-128 support.  */
-#define FFI_TYPE_UINT128 (FFI_PPC_TYPE_LAST + 1)
-
-/* Needed for FFI_SYSV small structure returns.  */
-#define FFI_SYSV_TYPE_SMALL_STRUCT (FFI_PPC_TYPE_LAST + 2)
-
-/* Used by ELFv2 for homogenous structure returns.  */
-#define FFI_V2_TYPE_VECTOR		(FFI_PPC_TYPE_LAST + 1)
-#define FFI_V2_TYPE_VECTOR_HOMOG	(FFI_PPC_TYPE_LAST + 2)
-#define FFI_V2_TYPE_FLOAT_HOMOG		(FFI_PPC_TYPE_LAST + 3)
-#define FFI_V2_TYPE_DOUBLE_HOMOG	(FFI_PPC_TYPE_LAST + 4)
-#define FFI_V2_TYPE_SMALL_STRUCT	(FFI_PPC_TYPE_LAST + 5)
 
 #if _CALL_ELF == 2
 # define FFI_TRAMPOLINE_SIZE 32
@@ -10423,16 +10443,6 @@ typedef enum ffi_abi {
 # else /* POWERPC || POWERPC_AIX */
 #  define FFI_TRAMPOLINE_SIZE 40
 # endif
-#endif
-
-#ifndef LIBFFI_ASM
-#if defined(POWERPC_DARWIN) || defined(POWERPC_AIX)
-struct ffi_aix_trampoline_struct {
-    void * code_pointer;	/* Pointer to ffi_closure_ASM */
-    void * toc;			/* TOC */
-    void * static_chain;	/* Pointer to closure */
-};
-#endif
 #endif
 
 #endif
@@ -10549,263 +10559,137 @@ ENTRY(ffi_closure_SYSV)
 	lwz %r0,148(%r1)
 	add %r3,%r3,%r4		# add contents of table to table address
 	mtctr %r3
+	mtlr %r0
+	.cfi_restore 65
 	bctr			# jump to it
 
 # Each of the ret_typeX code fragments has to be exactly 16 bytes long
 # (4 instructions). For cache effectiveness we align to a 16 byte boundary
 # first.
+
 	.align 4
-# case FFI_TYPE_VOID
 .Lret_type0:
-	mtlr %r0
-	addi %r1,%r1,144
+
+.macro E index
+	.align 4
+.endm
+
+.macro epilogue
+	addi %r1, %r1, 144
 	.cfi_def_cfa_offset 0
 	blr
 	.cfi_def_cfa_offset 144
-	nop
+.endm
 
-# case FFI_TYPE_INT
+E PPC_LD_NONE
+	epilogue
+
+E PPC_LD_R3
 	lwz %r3,112+0(%r1)
-	mtlr %r0
-.Lfinish:
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
+	epilogue
 
-# case FFI_TYPE_FLOAT
-#ifndef __NO_FPRS__
+E PPC_LD_R3R4
+.Lr3r4:
+	lwz %r3,112+0(%r1)
+	lwz %r4,112+4(%r1)
+	epilogue
+
+E PPC_LD_F32
+#ifdef __NO_FPRS__
+	trap
+#else
 	lfs %f1,112+0(%r1)
-#else
-	nop
+	epilogue
 #endif
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
 
-# case FFI_TYPE_DOUBLE
-#ifndef __NO_FPRS__
+E PPC_LD_F64
+#ifdef __NO_FPRS__
+	trap
+#else
 	lfd %f1,112+0(%r1)
-#else
-	nop
+	epilogue
 #endif
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
 
-# case FFI_TYPE_LONGDOUBLE
-#ifndef __NO_FPRS__
+E PPC_LD_F128
+#ifdef __NO_FPRS__
+	trap
+#else
 	lfd %f1,112+0(%r1)
 	lfd %f2,112+8(%r1)
-	mtlr %r0
-	b .Lfinish
-#else
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-	nop
+	epilogue
 #endif
 
-# case FFI_TYPE_UINT8
+E PPC_LD_U8
 #ifdef __LITTLE_ENDIAN__
 	lbz %r3,112+0(%r1)
 #else
 	lbz %r3,112+3(%r1)
 #endif
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
+	epilogue
 
-# case FFI_TYPE_SINT8
+E PPC_LD_S8
 #ifdef __LITTLE_ENDIAN__
 	lbz %r3,112+0(%r1)
 #else
 	lbz %r3,112+3(%r1)
 #endif
 	extsb %r3,%r3
-	mtlr %r0
-	b .Lfinish
+	epilogue
 
-# case FFI_TYPE_UINT16
+E PPC_LD_U16
 #ifdef __LITTLE_ENDIAN__
 	lhz %r3,112+0(%r1)
 #else
 	lhz %r3,112+2(%r1)
 #endif
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
+	epilogue
 
-# case FFI_TYPE_SINT16
+E PPC_LD_S16
 #ifdef __LITTLE_ENDIAN__
 	lha %r3,112+0(%r1)
 #else
 	lha %r3,112+2(%r1)
 #endif
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
+	epilogue
 
-# case FFI_TYPE_UINT32
-	lwz %r3,112+0(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-
-# case FFI_TYPE_SINT32
-	lwz %r3,112+0(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-
-# case FFI_TYPE_UINT64
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
-	mtlr %r0
-	b .Lfinish
-
-# case FFI_TYPE_SINT64
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
-	mtlr %r0
-	b .Lfinish
-
-# case FFI_TYPE_STRUCT
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-	nop
-
-# case FFI_TYPE_POINTER
-	lwz %r3,112+0(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-
-# case FFI_TYPE_UINT128
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
+E PPC32_LD_R3R6
 	lwz %r5,112+8(%r1)
-	b .Luint128
-
-# The return types below are only used when the ABI type is FFI_SYSV.
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 1. One byte struct.
-	lbz %r3,112+0(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 2. Two byte struct.
-	lhz %r3,112+0(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 3. Three byte struct.
-	lwz %r3,112+0(%r1)
-#ifdef __LITTLE_ENDIAN__
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-#else
-	srwi %r3,%r3,8
-	mtlr %r0
-	b .Lfinish
-#endif
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 4. Four byte struct.
-	lwz %r3,112+0(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 5. Five byte struct.
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
-#ifdef __LITTLE_ENDIAN__
-	mtlr %r0
-	b .Lfinish
-#else
-	li %r5,24
-	b .Lstruct567
-#endif
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 6. Six byte struct.
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
-#ifdef __LITTLE_ENDIAN__
-	mtlr %r0
-	b .Lfinish
-#else
-	li %r5,16
-	b .Lstruct567
-#endif
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 7. Seven byte struct.
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
-#ifdef __LITTLE_ENDIAN__
-	mtlr %r0
-	b .Lfinish
-#else
-	li %r5,8
-	b .Lstruct567
-#endif
-
-# case FFI_SYSV_TYPE_SMALL_STRUCT + 8. Eight byte struct.
-	lwz %r3,112+0(%r1)
-	lwz %r4,112+4(%r1)
-	mtlr %r0
-	b .Lfinish
+	lwz %r6,112+12(%r1)
+	b .Lr3r4
 
 #ifndef __LITTLE_ENDIAN__
+E PPC32_SYSV_LD_STRUCT_3
+	lwz %r3,112+0(%r1)
+	srwi %r3,%r3,8
+	epilogue
+
+E PPC32_SYSV_LD_STRUCT_5
+	lwz %r3,112+0(%r1)
+	lwz %r4,112+4(%r1)
+	li %r5,24
+	b .Lstruct567
+
+E PPC32_SYSV_LD_STRUCT_6
+	lwz %r3,112+0(%r1)
+	lwz %r4,112+4(%r1)
+	li %r5,16
+	b .Lstruct567
+
+E PPC32_SYSV_LD_STRUCT_7
+	lwz %r3,112+0(%r1)
+	lwz %r4,112+4(%r1)
+	li %r5,8
+	nop
+
 .Lstruct567:
 	subfic %r6,%r5,32
 	srw %r4,%r4,%r5
 	slw %r6,%r3,%r6
 	srw %r3,%r3,%r5
 	or %r4,%r6,%r4
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
-	.cfi_def_cfa_offset 144
+	epilogue
 #endif
 
-.Luint128:
-	lwz %r6,112+12(%r1)
-	mtlr %r0
-	addi %r1,%r1,144
-	.cfi_def_cfa_offset 0
-	blr
 	.cfi_endproc
 END(ffi_closure_SYSV)
 
@@ -12445,6 +12329,19 @@ FFI_COMPLEX_TYPEDEF(double, double, const);
 FFI_COMPLEX_TYPEDEF(longdouble, long double, FFI_LDBL_CONST);
 #endif
 
+#ifdef FFI_TARGET_HAS_INT128
+# ifdef HAVE_INT128
+FFI_TYPEDEF(uint128, __uint128_t, FFI_TYPE_UINT128, const);
+FFI_TYPEDEF(sint128, __int128_t, FFI_TYPE_SINT128, const);
+# else
+/* We don't actually need compiler support for __int128_t, as we don't
+   use the type itself within libffi.  Obviously the size is 16; make
+   the conservative assumption that the alignment must also be 16. */
+const ffi_type ffi_type_uint128 = { 16, 16, FFI_TYPE_UINT128, NULL };
+const ffi_type ffi_type_sint128 = { 16, 16, FFI_TYPE_SINT128, NULL };
+# endif
+#endif /* FFI_TARGET_HAS_INT128 */
+
 
 ====================File: src/x86/ffi.c====================
 /* -----------------------------------------------------------------------
@@ -12819,7 +12716,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	  size_t za = FFI_ALIGN (z, FFI_SIZEOF_ARG);
 	  size_t align = FFI_SIZEOF_ARG;
 
-	  /* Issue 434: For thiscall and fastcall, if the paramter passed
+	  /* Issue 434: For thiscall and fastcall, if the parameter passed
 	     as 64-bit integer or struct, all following integer parameters
 	     will be passed on stack.  */
 	  if ((cabi == FFI_THISCALL || cabi == FFI_FASTCALL)
@@ -12968,7 +12865,7 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
 	  if (t == FFI_TYPE_STRUCT && ty->alignment >= 16)
 	    align = 16;
 
-	  /* Issue 434: For thiscall and fastcall, if the paramter passed
+	  /* Issue 434: For thiscall and fastcall, if the parameter passed
 	     as 64-bit integer or struct, all following integer parameters
 	     will be passed on stack.  */
 	  if ((cabi == FFI_THISCALL || cabi == FFI_FASTCALL)
@@ -13389,6 +13286,20 @@ enum x86_64_reg_class
 
 #define SSE_CLASS_P(X)	((X) >= X86_64_SSE_CLASS && X <= X86_64_SSEUP_CLASS)
 
+/* On most x86-64 targets `long double` is the 80-bit x87 type: classified
+   X87/X87UP, passed in memory, returned in st(0).  But some targets (notably
+   x86_64 Android, and anything built with -mlong-double-128) make `long double`
+   the IEEE binary128 quad type, which the psABI passes and returns in SSE
+   registers exactly like __float128 (class SSE/SSEUP -> one %xmm register).
+   Detect that at compile time and classify long double accordingly.  A mantissa
+   of 113 bits uniquely identifies binary128 (x87 extended is 64).  */
+#if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE \
+    && defined(__LDBL_MANT_DIG__) && __LDBL_MANT_DIG__ == 113
+# define FFI_LONGDOUBLE_BINARY128 1
+#else
+# define FFI_LONGDOUBLE_BINARY128 0
+#endif
+
 /* x86-64 register passing implementation.  See x86-64 ABI for details.  Goal
    of this code is to classify each 8bytes of incoming argument by the register
    class and assign registers accordingly.  */
@@ -13458,6 +13369,8 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
     case FFI_TYPE_SINT32:
     case FFI_TYPE_UINT64:
     case FFI_TYPE_SINT64:
+    case FFI_TYPE_UINT128:
+    case FFI_TYPE_SINT128:
     case FFI_TYPE_POINTER:
     do_integer:
       {
@@ -13498,8 +13411,14 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
       return 1;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
     case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+      /* IEEE binary128: one %xmm register, like __float128.  */
+      classes[0] = X86_64_SSE_CLASS;
+      classes[1] = X86_64_SSEUP_CLASS;
+#else
       classes[0] = X86_64_X87_CLASS;
       classes[1] = X86_64_X87UP_CLASS;
+#endif
       return 2;
 #endif
     case FFI_TYPE_STRUCT:
@@ -13609,6 +13528,10 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
 	  case FFI_TYPE_SINT64:
 	    goto do_integer;
 
+	  case FFI_TYPE_SINT128:
+	  case FFI_TYPE_UINT128:
+	    return 0;
+
 	  case FFI_TYPE_FLOAT:
 	    classes[0] = X86_64_SSE_CLASS;
 	    if (byte_offset % 8)
@@ -13622,8 +13545,13 @@ classify_argument (ffi_type *type, enum x86_64_reg_class classes[],
 	    return 2;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
 	  case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+	    /* _Complex binary128 is 32 bytes -> passed/returned in memory.  */
+	    return 0;
+#else
 	    classes[0] = X86_64_COMPLEX_X87_CLASS;
 	    return 1;
+#endif
 #endif
 	  }
       }
@@ -13732,6 +13660,10 @@ ffi_prep_cif_machdep (ffi_cif *cif)
     case FFI_TYPE_SINT64:
       flags = UNIX64_RET_INT64;
       break;
+    case FFI_TYPE_UINT128:
+    case FFI_TYPE_SINT128:
+      flags = UNIX64_RET_ST_RAX_RDX | (16 << UNIX64_SIZE_SHIFT);
+      break;
     case FFI_TYPE_POINTER:
       flags = (sizeof(void *) == 4 ? UNIX64_RET_UINT32 : UNIX64_RET_INT64);
       break;
@@ -13743,7 +13675,11 @@ ffi_prep_cif_machdep (ffi_cif *cif)
       break;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
     case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+      flags = UNIX64_RET_XMM128;	/* returned in %xmm0 (16 bytes) */
+#else
       flags = UNIX64_RET_X87;
+#endif
       break;
 #endif
     case FFI_TYPE_STRUCT:
@@ -13801,9 +13737,20 @@ ffi_prep_cif_machdep (ffi_cif *cif)
 	  break;
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
 	case FFI_TYPE_LONGDOUBLE:
+#if FFI_LONGDOUBLE_BINARY128
+	  /* _Complex binary128 (32 bytes) is returned in memory.  */
+	  gprcount++;
+	  flags = UNIX64_RET_VOID | UNIX64_FLAG_RET_IN_MEM;
+#else
 	  flags = UNIX64_RET_X87_2;
+#endif
 	  break;
 #endif
+	case FFI_TYPE_SINT128:
+	case FFI_TYPE_UINT128:
+	  gprcount++;
+	  flags = UNIX64_RET_VOID | UNIX64_FLAG_RET_IN_MEM;
+	  break;
 	default:
 	  return FFI_BAD_TYPEDEF;
 	}
@@ -13920,7 +13867,13 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      switch (classes[j])
 		{
 		case X86_64_NO_CLASS:
+		  break;
 		case X86_64_SSEUP_CLASS:
+		  /* The upper 8 bytes of the same %xmm register written by
+		     the preceding SSE class (e.g. the high half of a
+		     binary128 long double).  */
+		  memcpy ((char *) &reg_args->sse[ssecount - 1] + 8, a,
+			  size < 8 ? size : 8);
 		  break;
 		case X86_64_INTEGER_CLASS:
 		case X86_64_INTEGERSI_CLASS:
@@ -14177,7 +14130,12 @@ ffi_closure_unix64_inner(ffi_cif *cif,
 	  avalue[i] = a;
 	  for (j = 0; j < n; j++, a += 8)
 	    {
-	      if (SSE_CLASS_P (classes[j]))
+	      if (classes[j] == X86_64_SSEUP_CLASS)
+		/* The high half of the same %xmm register as the preceding
+		   SSE class (e.g. the upper bits of a binary128 long double);
+		   it does not consume another register.  */
+		memcpy (a, (char *) &reg_args->sse[ssecount - 1] + 8, 8);
+	      else if (SSE_CLASS_P (classes[j]))
 		memcpy (a, &reg_args->sse[ssecount++], 8);
 	      else
 		memcpy (a, &reg_args->gpr[gprcount++], 8);
@@ -14284,9 +14242,6 @@ ffi_tramp_arch (size_t *tramp_size, size_t *map_size)
 
 #if defined (X86_64) && defined (__i386__)
 #undef X86_64
-#warning ******************************************************
-#warning ********** X86 IS DEFINED ****************************
-#warning ******************************************************
 #define X86
 #endif
 
@@ -14298,6 +14253,10 @@ ffi_tramp_arch (size_t *tramp_size, size_t *map_size)
 #define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
 #ifndef _MSC_VER
 #define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
+#ifdef X86_64
+#define FFI_TARGET_HAS_INT128
 #endif
 
 /* ---- Generic type definitions ----------------------------------------- */
@@ -14440,6 +14399,7 @@ typedef enum ffi_abi {
 #include <ffi_common.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <tramp.h>
 
 #ifdef X86_WIN64
@@ -14525,6 +14485,7 @@ EFI64(ffi_prep_cif_machdep)(ffi_cif *cif)
 #if defined(_MSC_VER)
 #pragma runtime_checks("s", off)
 #endif
+FFI_ASAN_NO_SANITIZE
 static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      void **avalue, void *closure)
@@ -14538,13 +14499,33 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 
   FFI_ASSERT(cif->abi == FFI_GNUW64 || cif->abi == FFI_WIN64);
 
-  /* If we have any large structure arguments, make a copy so we are passing
-     by value.  */
+  /* If we have any int128 or irregularly sized structure arguments,
+     make a copy so we are passing by value.  */
   for (i = 0; i < nargs; i++)
     {
       ffi_type *at = arg_types[i];
       int size = at->size;
-      if (at->type == FFI_TYPE_STRUCT && size > 8)
+      bool needcopy = false;
+
+      switch (at->type)
+	{
+	case FFI_TYPE_UINT128:
+	case FFI_TYPE_SINT128:
+	  needcopy = true;
+	  break;
+	case FFI_TYPE_STRUCT:
+	  switch (size)
+	    {
+	    case 1:
+	    case 2:
+	    case 4:
+	    case 8:
+	      break;
+	    default:
+	      needcopy = true;
+	    }
+	}
+      if (needcopy)
         {
           char *argcopy = alloca (size);
           memcpy (argcopy, avalue[i], size);
@@ -14865,7 +14846,7 @@ ffi_closure_win64_inner(ffi_cif *cif,
 
 ffi_call_i386:
 L(UW0):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 #if !HAVE_FASTCALL
 	movl	4(%esp), %ecx
@@ -14884,8 +14865,8 @@ L(UW0):
 	   perspective of the unwind info, it hasn't moved.  */
 	movl	%ecx, %ebp
 L(UW1):
-	# cfi_def_cfa(%ebp, 8)
-	# cfi_rel_offset(%ebp, 0)
+	/* cfi_def_cfa(%ebp, 8) */
+	/* cfi_rel_offset(%ebp, 0) */
 
 	movl	%edx, %esp		/* set outgoing argument stack */
 	movl	20+R_EAX*4(%ebp), %eax	/* set register arguments */
@@ -14897,7 +14878,7 @@ L(UW1):
 	movl	12(%ebp), %ecx		/* load return type code */
 	movl	%ebx, 8(%ebp)		/* preserve %ebx */
 L(UW2):
-	# cfi_rel_offset(%ebx, 8)
+	/* cfi_rel_offset(%ebx, 8) */
 
 	andl	$X86_RET_TYPE_MASK, %ecx
 #ifdef __PIC__
@@ -14949,13 +14930,13 @@ L(e1):
 	movl	%ebp, %esp
 	popl	%ebp
 L(UW3):
-	# cfi_remember_state
-	# cfi_def_cfa(%esp, 4)
-	# cfi_restore(%ebx)
-	# cfi_restore(%ebp)
+	/* cfi_remember_state */
+	/* cfi_def_cfa(%esp, 4) */
+	/* cfi_restore(%ebx) */
+	/* cfi_restore(%ebp) */
 	ret
 L(UW4):
-	# cfi_restore_state
+	/* cfi_restore_state */
 
 E(L(store_table), X86_RET_STRUCTPOP)
 	jmp	L(e1)
@@ -14975,7 +14956,7 @@ E(L(store_table), X86_RET_UNUSED15)
 	ud2
 
 L(UW5):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(ffi_call_i386)
 
 /* The inner helper is declared as
@@ -15070,11 +15051,11 @@ L(C1(UW,UWN)):								\
 	FFI_HIDDEN(C(ffi_go_closure_EAX))
 C(ffi_go_closure_EAX):
 L(UW6):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	subl	$closure_FS, %esp
 L(UW7):
-	# cfi_def_cfa_offset(closure_FS + 4)
+	/* cfi_def_cfa_offset(closure_FS + 4) */
 	FFI_CLOSURE_SAVE_REGS
 	movl	4(%eax), %edx			/* copy cif */
 	movl	8(%eax), %ecx			/* copy fun */
@@ -15083,7 +15064,7 @@ L(UW7):
 	movl	%eax, closure_CF+36(%esp)	/* closure is user_data */
 	jmp	L(do_closure_i386)
 L(UW8):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_go_closure_EAX))
 
 	.balign	16
@@ -15091,11 +15072,11 @@ ENDF(C(ffi_go_closure_EAX))
 	FFI_HIDDEN(C(ffi_go_closure_ECX))
 C(ffi_go_closure_ECX):
 L(UW9):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	subl	$closure_FS, %esp
 L(UW10):
-	# cfi_def_cfa_offset(closure_FS + 4)
+	/* cfi_def_cfa_offset(closure_FS + 4) */
 	FFI_CLOSURE_SAVE_REGS
 	movl	4(%ecx), %edx			/* copy cif */
 	movl	8(%ecx), %eax			/* copy fun */
@@ -15104,7 +15085,7 @@ L(UW10):
 	movl	%ecx, closure_CF+36(%esp)	/* closure is user_data */
 	jmp	L(do_closure_i386)
 L(UW11):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_go_closure_ECX))
 
 /* The closure entry points are reached from the ffi_closure trampoline.
@@ -15116,11 +15097,11 @@ ENDF(C(ffi_go_closure_ECX))
 
 C(ffi_closure_i386):
 L(UW12):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	subl	$closure_FS, %esp
 L(UW13):
-	# cfi_def_cfa_offset(closure_FS + 4)
+	/* cfi_def_cfa_offset(closure_FS + 4) */
 
 	FFI_CLOSURE_SAVE_REGS
 	FFI_CLOSURE_COPY_TRAMP_DATA
@@ -15165,17 +15146,17 @@ E(L(load_table2), X86_RET_VOID)
 L(e2):
 	addl	$closure_FS, %esp
 L(UW16):
-	# cfi_adjust_cfa_offset(-closure_FS)
+	/* cfi_adjust_cfa_offset(-closure_FS) */
 	ret
 L(UW17):
-	# cfi_adjust_cfa_offset(closure_FS)
+	/* cfi_adjust_cfa_offset(closure_FS) */
 E(L(load_table2), X86_RET_STRUCTPOP)
 	addl	$closure_FS, %esp
 L(UW18):
-	# cfi_adjust_cfa_offset(-closure_FS)
+	/* cfi_adjust_cfa_offset(-closure_FS) */
 	ret	$4
 L(UW19):
-	# cfi_adjust_cfa_offset(closure_FS)
+	/* cfi_adjust_cfa_offset(closure_FS) */
 E(L(load_table2), X86_RET_STRUCTARG)
 	jmp	L(e2)
 E(L(load_table2), X86_RET_STRUCT_1B)
@@ -15192,7 +15173,7 @@ E(L(load_table2), X86_RET_UNUSED15)
 	ud2
 
 L(UW20):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_closure_i386))
 
 	.balign	16
@@ -15200,11 +15181,11 @@ ENDF(C(ffi_closure_i386))
 	FFI_HIDDEN(C(ffi_go_closure_STDCALL))
 C(ffi_go_closure_STDCALL):
 L(UW21):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	subl	$closure_FS, %esp
 L(UW22):
-	# cfi_def_cfa_offset(closure_FS + 4)
+	/* cfi_def_cfa_offset(closure_FS + 4) */
 	FFI_CLOSURE_SAVE_REGS
 	movl	4(%ecx), %edx			/* copy cif */
 	movl	8(%ecx), %eax			/* copy fun */
@@ -15213,7 +15194,7 @@ L(UW22):
 	movl	%ecx, closure_CF+36(%esp)	/* closure is user_data */
 	jmp	L(do_closure_STDCALL)
 L(UW23):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_go_closure_STDCALL))
 
 /* For REGISTER, we have no available parameter registers, and so we
@@ -15224,20 +15205,18 @@ ENDF(C(ffi_go_closure_STDCALL))
 	FFI_HIDDEN(C(ffi_closure_REGISTER))
 C(ffi_closure_REGISTER):
 L(UW24):
-	# cfi_startproc
-	# cfi_def_cfa(%esp, 8)
-	# cfi_offset(%eip, -8)
+	/* cfi_startproc */
+	/* cfi_def_cfa(%esp, 8) */
+	/* cfi_offset(%eip, -8) */
 	_CET_ENDBR
 	subl	$closure_FS-4, %esp
 L(UW25):
-	# cfi_def_cfa_offset(closure_FS + 4)
+	/* cfi_def_cfa_offset(closure_FS + 4) */
 	FFI_CLOSURE_SAVE_REGS
-	movl	closure_FS-4(%esp), %ecx	/* load retaddr */
-	movl	closure_FS(%esp), %eax		/* load closure */
-	movl	%ecx, closure_FS(%esp)		/* move retaddr */
+	movl	closure_FS-4(%esp), %eax	/* load closure */
 	jmp	L(do_closure_REGISTER)
 L(UW26):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_closure_REGISTER))
 
 /* For STDCALL (and others), we need to pop N bytes of arguments off
@@ -15249,11 +15228,11 @@ ENDF(C(ffi_closure_REGISTER))
 	FFI_HIDDEN(C(ffi_closure_STDCALL))
 C(ffi_closure_STDCALL):
 L(UW27):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	subl	$closure_FS, %esp
 L(UW28):
-	# cfi_def_cfa_offset(closure_FS + 4)
+	/* cfi_def_cfa_offset(closure_FS + 4) */
 
 	FFI_CLOSURE_SAVE_REGS
 
@@ -15344,7 +15323,7 @@ E(L(load_table3), X86_RET_UNUSED15)
 	ud2
 
 L(UW31):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_closure_STDCALL))
 
 #if defined(FFI_EXEC_STATIC_TRAMP)
@@ -15444,14 +15423,14 @@ ENDF(C(trampoline_code_table))
 	FFI_HIDDEN(C(ffi_closure_raw_SYSV))
 C(ffi_closure_raw_SYSV):
 L(UW32):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	subl	$raw_closure_S_FS, %esp
 L(UW33):
-	# cfi_def_cfa_offset(raw_closure_S_FS + 4)
+	/* cfi_def_cfa_offset(raw_closure_S_FS + 4) */
 	movl	%ebx, raw_closure_S_FS-4(%esp)
 L(UW34):
-	# cfi_rel_offset(%ebx, raw_closure_S_FS-4)
+	/* cfi_rel_offset(%ebx, raw_closure_S_FS-4) */
 
 	movl	FFI_TRAMPOLINE_SIZE+8(%eax), %edx	/* load cl->user_data */
 	movl	%edx, 12(%esp)
@@ -15474,7 +15453,7 @@ L(pc4):
 #endif
 	movl	raw_closure_S_FS-4(%esp), %ebx
 L(UW35):
-	# cfi_restore(%ebx)
+	/* cfi_restore(%ebx) */
 	movl	16(%esp), %eax				/* Optimistic load */
 	jmp	*%ecx
 
@@ -15511,17 +15490,17 @@ E(L(load_table4), X86_RET_VOID)
 L(e4):
 	addl	$raw_closure_S_FS, %esp
 L(UW36):
-	# cfi_adjust_cfa_offset(-raw_closure_S_FS)
+	/* cfi_adjust_cfa_offset(-raw_closure_S_FS) */
 	ret
 L(UW37):
-	# cfi_adjust_cfa_offset(raw_closure_S_FS)
+	/* cfi_adjust_cfa_offset(raw_closure_S_FS) */
 E(L(load_table4), X86_RET_STRUCTPOP)
 	addl	$raw_closure_S_FS, %esp
 L(UW38):
-	# cfi_adjust_cfa_offset(-raw_closure_S_FS)
+	/* cfi_adjust_cfa_offset(-raw_closure_S_FS) */
 	ret	$4
 L(UW39):
-	# cfi_adjust_cfa_offset(raw_closure_S_FS)
+	/* cfi_adjust_cfa_offset(raw_closure_S_FS) */
 E(L(load_table4), X86_RET_STRUCTARG)
 	jmp	L(e4)
 E(L(load_table4), X86_RET_STRUCT_1B)
@@ -15538,7 +15517,7 @@ E(L(load_table4), X86_RET_UNUSED15)
 	ud2
 
 L(UW40):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_closure_raw_SYSV))
 
 #define raw_closure_T_FS	(16+16+8)
@@ -15548,27 +15527,27 @@ ENDF(C(ffi_closure_raw_SYSV))
 	FFI_HIDDEN(C(ffi_closure_raw_THISCALL))
 C(ffi_closure_raw_THISCALL):
 L(UW41):
-	# cfi_startproc
+	/* cfi_startproc */
 	_CET_ENDBR
 	/* Rearrange the stack such that %ecx is the first argument.
 	   This means moving the return address.  */
 	popl	%edx
 L(UW42):
-	# cfi_def_cfa_offset(0)
-	# cfi_register(%eip, %edx)
+	/* cfi_def_cfa_offset(0) */
+	/* cfi_register(%eip, %edx) */
 	pushl	%ecx
 L(UW43):
-	# cfi_adjust_cfa_offset(4)
+	/* cfi_adjust_cfa_offset(4) */
 	pushl	%edx
 L(UW44):
-	# cfi_adjust_cfa_offset(4)
-	# cfi_rel_offset(%eip, 0)
+	/* cfi_adjust_cfa_offset(4) */
+	/* cfi_rel_offset(%eip, 0) */
 	subl	$raw_closure_T_FS, %esp
 L(UW45):
-	# cfi_adjust_cfa_offset(raw_closure_T_FS)
+	/* cfi_adjust_cfa_offset(raw_closure_T_FS) */
 	movl	%ebx, raw_closure_T_FS-4(%esp)
 L(UW46):
-	# cfi_rel_offset(%ebx, raw_closure_T_FS-4)
+	/* cfi_rel_offset(%ebx, raw_closure_T_FS-4) */
 
 	movl	FFI_TRAMPOLINE_SIZE+8(%eax), %edx	/* load cl->user_data */
 	movl	%edx, 12(%esp)
@@ -15591,7 +15570,7 @@ L(pc5):
 #endif
 	movl	raw_closure_T_FS-4(%esp), %ebx
 L(UW47):
-	# cfi_restore(%ebx)
+	/* cfi_restore(%ebx) */
 	movl	16(%esp), %eax				/* Optimistic load */
 	jmp	*%ecx
 
@@ -15628,18 +15607,18 @@ E(L(load_table5), X86_RET_VOID)
 L(e5):
 	addl	$raw_closure_T_FS, %esp
 L(UW48):
-	# cfi_adjust_cfa_offset(-raw_closure_T_FS)
+	/* cfi_adjust_cfa_offset(-raw_closure_T_FS) */
 	/* Remove the extra %ecx argument we pushed.  */
 	ret	$4
 L(UW49):
-	# cfi_adjust_cfa_offset(raw_closure_T_FS)
+	/* cfi_adjust_cfa_offset(raw_closure_T_FS) */
 E(L(load_table5), X86_RET_STRUCTPOP)
 	addl	$raw_closure_T_FS, %esp
 L(UW50):
-	# cfi_adjust_cfa_offset(-raw_closure_T_FS)
+	/* cfi_adjust_cfa_offset(-raw_closure_T_FS) */
 	ret	$8
 L(UW51):
-	# cfi_adjust_cfa_offset(raw_closure_T_FS)
+	/* cfi_adjust_cfa_offset(raw_closure_T_FS) */
 E(L(load_table5), X86_RET_STRUCTARG)
 	jmp	L(e5)
 E(L(load_table5), X86_RET_STRUCT_1B)
@@ -15656,7 +15635,7 @@ E(L(load_table5), X86_RET_UNUSED15)
 	ud2
 
 L(UW52):
-	# cfi_endproc
+	/* cfi_endproc */
 ENDF(C(ffi_closure_raw_THISCALL))
 
 #endif /* !FFI_NO_RAW_API */
@@ -15735,6 +15714,10 @@ ENDF(C(__x86.get_pc_thunk.dx))
 
 #ifdef HAVE_AS_X86_PCREL
 # define PCREL(X)	X-.
+#elif defined(__clang__)
+/* clang's integrated assembler rejects the X@rel variant (#947); the
+   pc-relative label difference works wherever @rel would.  */
+# define PCREL(X)	X - .
 #else
 # define PCREL(X)	X@rel
 #endif
@@ -16250,6 +16233,13 @@ E(L(store_table), UNIX64_RET_ST_XMM0_XMM1)
 E(L(store_table), UNIX64_RET_ST_RAX_RDX)
 	_CET_ENDBR
 	movq	%rdx, 8(%rsi)
+	jmp	L(s2)
+E(L(store_table), UNIX64_RET_XMM128)
+	_CET_ENDBR
+	movups	%xmm0, (%rdi)
+	ret
+
+	.balign 8
 L(s2):
 	movq	%rax, (%rsi)
 	shrl	$UNIX64_SIZE_SHIFT, %ecx
@@ -16435,6 +16425,13 @@ E(L(load_table), UNIX64_RET_ST_XMM0_XMM1)
 E(L(load_table), UNIX64_RET_ST_RAX_RDX)
 	_CET_ENDBR
 	movq	8(%rsi), %rdx
+	jmp	L(l2)
+E(L(load_table), UNIX64_RET_XMM128)
+	_CET_ENDBR
+	movups	(%rsi), %xmm0
+	ret
+
+	.balign	8
 L(l2):
 	movq	(%rsi), %rax
 	ret
@@ -16607,6 +16604,10 @@ EHFrame0:
 #endif
 
 #ifdef HAVE_AS_X86_PCREL
+# define PCREL(X)	X - .
+#elif defined(__clang__)
+/* clang's integrated assembler rejects the X@rel variant (#947); the
+   pc-relative label difference works wherever @rel would.  */
 # define PCREL(X)	X - .
 #else
 # define PCREL(X)	X@rel

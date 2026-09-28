@@ -16,7 +16,6 @@ DECLARE_REFCOUNTED_STRUCT(TTestValue)
 struct TTestValue
     : TSyncCacheValueBase<std::string, TTestValue>
 {
-public:
     using TSyncCacheValueBase::TSyncCacheValueBase;
 
     i64 Weight = 1;

@@ -4,9 +4,11 @@
 
 namespace NKikimr::NMiniKQL {
 
-NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page) {
-    MKQL_ENSURE(!page.Empty(), "sanity check");
-    return spiller.Put(Serialize(std::move(page)));
+NYql::TChunkedBuffer Serialize(const TMKQLBitMap& bits) {
+    NYql::TChunkedBuffer buffer;
+    NYql::TChunkedBufferOutput output(buffer);
+    ::Save(&output, bits.Chunks());
+    return buffer;
 }
 
 NYql::TChunkedBuffer Serialize(TPackResult&& result) {
@@ -29,6 +31,31 @@ struct OutputStreamTo: public IOutputStream{
         To = To.subspan(len);
     }
 };
+
+struct TChunkedBufferInput final : public IInputStream {
+    explicit TChunkedBufferInput(NYql::TChunkedBuffer&& buffer)
+        : Buffer(std::move(buffer))
+    {}
+
+    size_t DoRead(void* data, size_t len) override {
+        const size_t toRead = Min(len, Buffer.Size());
+        OutputStreamTo output;
+        output.To = std::span<char>{static_cast<char*>(data), toRead};
+        const size_t read = Buffer.CopyTo(output, toRead);
+        Buffer.Erase(read);
+        return read;
+    }
+
+    NYql::TChunkedBuffer Buffer;
+};
+
+void Parse(NYql::TChunkedBuffer&& buffer, TMKQLBitMap& bits) {
+    TChunkedBufferInput input(std::move(buffer));
+    TMKQLBitMap parsed;
+    ::Load(&input, parsed.Chunks());
+    MKQL_ENSURE(input.Buffer.Empty(), "unexpected trailing data in probe match bitmap");
+    bits = std::move(parsed);
+}
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout) {
     TPackResult res;

@@ -517,7 +517,7 @@ namespace NKikimr::NBsController {
             for (const TPDiskId& pdiskId : state.PDisksToRemove) {
                 TPDiskInfo *pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
                 Y_ABORT_UNLESS(pdiskInfo);
-                if (pdiskInfo->NumActiveSlots) {
+                if (pdiskInfo->NumActiveDynamicSlots) {
                     *errorDescription = TStringBuilder() << "failed to remove PDisk# " << pdiskId << " as it has active VSlots";
                     return false;
                 }
@@ -924,7 +924,7 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(pdisk);
             const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
             Y_ABORT_UNLESS(group);
-            pdisk->NumActiveSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+            pdisk->NumActiveDynamicSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
@@ -950,7 +950,7 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::TConfigState::CheckConsistency() const {
 #ifndef NDEBUG
             PDisks.ForEach([&](const auto& pdiskId, const auto& pdisk) {
-                ui32 numActiveSlots = 0;
+                ui32 numActiveDynamicSlots = 0;
                 for (const auto& [vslotId, vslot] : pdisk.VSlotsOnPDisk) {
                     const TVSlotInfo *vslotInTable = VSlots.Find(TVSlotId(pdiskId, vslotId));
                     Y_ABORT_UNLESS(vslot == vslotInTable);
@@ -958,10 +958,10 @@ namespace NKikimr::NBsController {
                     if (!vslot->IsBeingDeleted()) {
                         const TGroupInfo *group = Groups.Find(vslot->GroupId);
                         Y_ABORT_UNLESS(group);
-                        numActiveSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
+                        numActiveDynamicSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
                     }
                 }
-                Y_ABORT_UNLESS(pdisk.NumActiveSlots == numActiveSlots);
+                Y_ABORT_UNLESS(pdisk.NumActiveDynamicSlots == numActiveDynamicSlots);
             });
             VSlots.ForEach([&](const auto& vslotId, const auto& vslot) {
                 Y_ABORT_UNLESS(vslot.VSlotId == vslotId);

@@ -223,27 +223,6 @@ void TVChunkConfig::PromoteHost(THostIndex hostIndex)
     }
 }
 
-TString TVChunkConfig::PromoteHostIfNeeded()
-{
-    TStringBuilder result;
-    auto enabledDDisks = GetEnabledDDisks();
-    if (enabledDDisks.Count() >= QuorumDirectBlockGroupHostCount) {
-        result << "Enabled DDisks already enough " << DebugPrint();
-        return result;
-    }
-    const THostIndex hostToPromote =
-        GetPrimaryCandidate(DDiskHosts, EnabledHosts);
-    if (hostToPromote == InvalidHostIndex) {
-        result << "Can't find primary candidate " << DebugPrint();
-        return result;
-    }
-
-    result << "Promote " << PrintHostIndex(hostToPromote) << " "
-           << DebugPrint();
-    PromoteHost(hostToPromote);
-    return result;
-}
-
 EHostRole TVChunkConfig::GetPBufferRole(THostIndex hostIndex) const
 {
     return PBufferHosts.GetRole(hostIndex);

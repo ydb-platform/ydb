@@ -65,7 +65,13 @@ struct TObjectNameConstraints {
 struct TFolderName: TIdentifier {
 };
 
-struct TTableName: TIdentifier {
+struct TObjectName: TIdentifier {
+};
+
+struct TTableName: TObjectName {
+};
+
+struct TViewName: TObjectName {
 };
 
 struct TClusterName: TIdentifier {
@@ -98,6 +104,7 @@ using TGenericName = std::variant<
     THintName,
     TFolderName,
     TTableName,
+    TViewName,
     TClusterName,
     TColumnName,
     TBindingName,

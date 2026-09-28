@@ -1344,9 +1344,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             }
             // metrics are replaced as a whole on the receiving side, so zero values are
             // reported by omitting the field
-            UNIT_ASSERT_VALUES_EQUAL(metrics.HasSlotCount(), expectedSlotCount != 0);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0);
             UNIT_ASSERT(metrics.HasSlotSizeInUnits());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotCount(), expectedSlotCount);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
             if (expectedSlotSize) {
                 UNIT_ASSERT(metrics.HasExpectedSlotSize());

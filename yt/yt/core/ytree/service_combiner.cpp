@@ -151,7 +151,8 @@ private:
             ? request->limit()
             : DefaultVirtualChildLimit;
 
-        context->SetRequestInfo("Limit: %v", limit);
+        context->AnnotateRequest()
+            .With("Limit", limit);
 
         std::vector<TFuture<TYPathProxy::TRspGetPtr>> innerFutures;
         for (const auto& service : Services_) {
@@ -213,7 +214,8 @@ private:
             ? request->limit()
             : DefaultVirtualChildLimit;
 
-        context->SetRequestInfo("Limit: %v", limit);
+        context->AnnotateRequest()
+            .With("Limit", limit);
 
         std::vector<TFuture<TYPathProxy::TRspListPtr>> innerFutures;
         for (const auto& service : Services_) {

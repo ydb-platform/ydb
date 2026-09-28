@@ -81,12 +81,17 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
     Y_UNIT_TEST(TestCheckpoints) {
         const TString topicName = "Checkpoints";
         PQCreateStream(topicName);
+        const auto initSink = [&](TPqIoTestFixture& setup) {
+            auto settings = BuildPqTopicSinkSettings(topicName);
+            settings.SetEnableDeduplication(true);
+            setup.InitAsyncOutput(std::move(settings));
+        };
 
         TSinkState state1;
         NDqProto::TCheckpoint checkpoint;
         {
             TPqIoTestFixture setup;
-            setup.InitAsyncOutput(topicName);
+            initSink(setup);
 
             const std::vector<TString> data1 = { "1" };
             setup.AsyncOutputWrite(data1);
@@ -102,7 +107,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
         {
             TPqIoTestFixture setup;
-            setup.InitAsyncOutput(topicName);
+            initSink(setup);
             setup.LoadSink(state1, checkpoint);
 
             const std::vector<TString> data3 = { "4", "5" };
@@ -115,13 +120,25 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
         {
             TPqIoTestFixture setup;
-            setup.InitAsyncOutput(topicName);
+            initSink(setup);
             setup.LoadSink(state1, checkpoint);
 
             const std::vector<TString> data4 = { "4", "5" };
-            setup.AsyncOutputWrite(data4); // This write should be deduplicated
+            auto future = setup.CaSetup->AsyncOutputPromises->StateSaved.GetFuture();
+            setup.AsyncOutputWrite(data4, CreateCheckpoint(1)); // This write should be deduplicated
+            UNIT_ASSERT(future.Wait(WaitTimeout));
 
-            auto result = PQReadUntil(topicName, 4);
+            NYdb::NTopic::TTopicClient client(setup.Driver, NYdb::NTopic::TTopicClientSettings()
+                .DiscoveryEndpoint(GetDefaultPqEndpoint()).Database(GetDefaultPqDatabase()));
+            const auto description = client.DescribeTopic(topicName,
+                NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValue(WaitTimeout);
+            UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+            const auto& partitions = description.GetTopicDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionStats());
+            UNIT_ASSERT_VALUES_EQUAL(partitions.front().GetPartitionStats()->GetEndOffset(), 5);
+
+            auto result = PQReadUntil(topicName, 5);
             const std::vector<TString> expected = { "1", "2", "3", "4", "5" };
             UNIT_ASSERT_EQUAL(result, expected);
         }
@@ -285,11 +302,6 @@ Y_UNIT_TEST_SUITE(TDqPqWriteActor) {
             {102, "query:execution:7:0:2:42", "query:execution:7:0"},
             {103, "query:execution:7:0:3:0", "query:execution:7:0"},
             {104, "query:execution:7:0:4:0", "query:execution:7:0"},
-            {105, "query:execution:70:0:1:0", "query:execution:70:0"},
-            {106, "query:execution:7:1:1:0", "query:execution:7:1"},
-            {107, "query:other:7:0:1:0", "query:other:7:0"},
-            {108, "query:execution:7:0:1:0", std::nullopt},
-            {109, "query:execution:7:0:1:0", "other-writer"},
             {110, "query:execution:7:0:1:extra", "query:execution:7:0"},
             {111, "query:execution:7:0:1", "query:execution:7:0"},
             {112, "query:execution:7:0:1:0:extra", "query:execution:7:0"},
@@ -313,7 +325,7 @@ Y_UNIT_TEST_SUITE(TDqPqWriteActor) {
         begin->Get()->Reply(EStatus::SUCCESS, {});
         AssertSaved();
 
-        UNIT_ASSERT_VALUES_EQUAL(Counter("Listed"), 16);
+        UNIT_ASSERT_VALUES_EQUAL(Counter("Listed"), 11);
         UNIT_ASSERT_VALUES_EQUAL(Counter("Canceled"), 1); // NOT_FOUND did not cancel a publication.
         UNIT_ASSERT_VALUES_EQUAL(Counter("ListRequests"), 1);
         UNIT_ASSERT_VALUES_EQUAL(Counter("CancelRequests"), 2);

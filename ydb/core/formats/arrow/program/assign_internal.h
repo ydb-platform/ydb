@@ -17,7 +17,7 @@ private:
 
     virtual NJson::TJsonValue DoDebugJson() const override;
 
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual TString DoGetSignalCategoryName() const override;
 

@@ -633,6 +633,8 @@ namespace NKikimr::NDDisk {
         THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
         TIntrusivePtr<TPDiskParams> PDiskParams;
         std::vector<TChunkIdx> OwnedChunksOnBoot;
+        std::queue<TChunkIdx> StartupOrphanChunks;
+        static constexpr ui64 StartupForgetCookie = Max<ui64>() - 1;
         ui64 ChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingQueries;
         bool HandlingQueries = false;
@@ -645,6 +647,10 @@ namespace NKikimr::NDDisk {
         void Handle(NPDisk::TEvYardInitResult::TPtr ev);
         void Handle(NPDisk::TEvReadLogResult::TPtr ev);
         void ValidateChecksumsModeAfterLogReplay();
+        void ReconcileStartupReservations();
+        void ForgetNextStartupOrphan();
+        void Handle(NPDisk::TEvChunkForgetResult::TPtr ev);
+        void FinishRecovery();
         void StartHandlingQueries();
         void HandleSingleQuery();
 
@@ -668,6 +674,9 @@ namespace NKikimr::NDDisk {
         // Newly reserved chunks are zeroed in slices before they become allocatable in
         // checksums-disabled mode. Value is the next byte offset to format.
         absl::flat_hash_map<TChunkIdx, ui32> FormattingChunks;
+        // Abandoned allocations may still have writes in flight. Never reuse them for PB.
+        absl::flat_hash_set<TChunkIdx> PendingChunkRelease;
+        absl::flat_hash_set<TChunkIdx> ShutdownChunkReleasesIssued;
         bool ReserveInFlight = false;
 
         struct TChunkForData {
@@ -710,6 +719,8 @@ namespace NKikimr::NDDisk {
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
+        void HandleStopping(NPDisk::TEvChunkReserveResult::TPtr ev);
+        void ReleaseUncommittedChunks();
         void HandleChunkReserved();
         size_t CountPendingPersistentBufferChunkAllocations() const;
         void IssueNextChunkFormatWrite(TChunkIdx chunkIdx);

@@ -330,6 +330,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
         const auto isAlreadyExists =
             dstPath.Check()
                 .IsResolved()
+                .NotDeleted()
                 .NotUnderDeleting();
         if (isAlreadyExists) {
             return {CreateAlterExternalDataSource(id, tx)};

@@ -153,6 +153,29 @@ TEST(TProcTest, BlockDeviceStat)
         EXPECT_EQ(stat.TimeSpentFlushing, TDuration::MilliSeconds(3564406312ul));
     }
     {
+        // Linux right-aligns each value in /sys/{block,dev/block}/.../stat to width 8.
+        auto stat = ParseBlockDeviceStat(
+            "   78548        0   173024    74289  1234567       89  7654321   123456 "
+            "       7   234567   345678        9       10       11       12       13       14");
+        EXPECT_EQ(stat.ReadsCompleted, 78548ll);
+        EXPECT_EQ(stat.ReadsMerged, 0ll);
+        EXPECT_EQ(stat.SectorsRead, 173024ll);
+        EXPECT_EQ(stat.TimeSpentReading, TDuration::MilliSeconds(74289ul));
+        EXPECT_EQ(stat.WritesCompleted, 1234567ll);
+        EXPECT_EQ(stat.WritesMerged, 89ll);
+        EXPECT_EQ(stat.SectorsWritten, 7654321ll);
+        EXPECT_EQ(stat.TimeSpentWriting, TDuration::MilliSeconds(123456ul));
+        EXPECT_EQ(stat.IOCurrentlyInProgress, 7ll);
+        EXPECT_EQ(stat.TimeSpentDoingIO, TDuration::MilliSeconds(234567ul));
+        EXPECT_EQ(stat.WeightedTimeSpentDoingIO, TDuration::MilliSeconds(345678ul));
+        EXPECT_EQ(stat.DiscardsCompleted, 9ll);
+        EXPECT_EQ(stat.DiscardsMerged, 10ll);
+        EXPECT_EQ(stat.SectorsDiscarded, 11ll);
+        EXPECT_EQ(stat.TimeSpentDiscarding, TDuration::MilliSeconds(12ul));
+        EXPECT_EQ(stat.FlushesCompleted, 13ll);
+        EXPECT_EQ(stat.TimeSpentFlushing, TDuration::MilliSeconds(14ul));
+    }
+    {
         for (const std::string& disk : ListDisks()) {
             auto stat = GetBlockDeviceStat(disk);
             EXPECT_TRUE(stat);

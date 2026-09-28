@@ -529,8 +529,8 @@ namespace NKikimr::NBsController {
                 TPDiskInfo* pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
                 Y_ABORT_UNLESS(pdisk);
 
-                pdisk->NumActiveSlots -= pdisk->GetOwnerWeight(oldSizeInUnits);
-                pdisk->NumActiveSlots += pdisk->GetOwnerWeight(newSizeInUnits);
+                pdisk->NumActiveDynamicSlots -= pdisk->GetOwnerWeight(oldSizeInUnits);
+                pdisk->NumActiveDynamicSlots += pdisk->GetOwnerWeight(newSizeInUnits);
             }
 
             // update the group size

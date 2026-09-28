@@ -202,6 +202,21 @@ TString AtomListValue(const TExprNode& node, bool quoteString) {
     return {};
 }
 
+TString FormatOlapUdfArgument(const TExprBase& argument) {
+    if (const auto column = argument.Maybe<TKqpOlapApplyColumnArg>()) {
+        return TStringBuilder() << '`' << column.Cast().ColumnName().StringValue() << '`';
+    }
+    return NPlanUtils::PrettyExprStr(argument);
+}
+
+TString FormatOlapUdf(const TKqpOlapUdf& udf) {
+    TVector<TString> args;
+    for (const auto& argument : udf.Args()) {
+        args.emplace_back(FormatOlapUdfArgument(TExprBase(argument)));
+    }
+    return TStringBuilder() << "Udf(" << udf.KernelName().StringValue() << ")(" << JoinStrings(args, ", ") << ')';
+}
+
 TString FormatOlapFilterExpr(const TExprNode::TPtr& node) {
     if (!node) {
         return {};
@@ -231,6 +246,8 @@ TString FormatOlapFilterExpr(const TExprNode::TPtr& node) {
         } catch (...) {
             return {};
         }
+    } else if (auto olapUdf = TMaybeNode<TKqpOlapUdf>(node)) {
+        return FormatOlapUdf(olapUdf.Cast());
     }
 
     for (const auto& child : node->Children()) {

@@ -342,25 +342,23 @@ void TPlan::PrintDataFlowTimeline(TStringBuilder& builder, const TString& title,
 // centre of its band, given here in pixels. The area is curved between the
 // bands and closed against the left edge. Both control points of a curve sit
 // at the mid height, so the area steps from one band to the next rather than
-// ramping between them.
-static void PrintNodeTasksArea(TStringBuilder& builder, const std::vector<i32>& extents, ui32 height, TStringBuf color) {
+// ramping between them. Y counts half bands, not pixels - band i spans
+// [2i, 2i + 2] - so that the centres and the mid heights stay exact with about
+// as many nodes as pixels: rounded to pixels, the control points of a one
+// pixel step landed on its start and bent the step into a hook.
+static void PrintNodeTasksArea(TStringBuilder& builder, const std::vector<i32>& extents, TStringBuf color) {
     ui32 count = extents.size();
     i32 px0 = extents.front();
-    i32 py0 = height / (2 * count);
-    builder << "<path d='M0,0L" << px0 << ",0L" << px0 << ',' << py0;
+    builder << "<path d='M0,0L" << px0 << ",0L" << px0 << ",1";
     for (ui32 i = 1; i < count; i++) {
         i32 pxi = extents[i];
-        i32 pyi = (2 * i + 1) * height / (2 * count);
-        i32 dym = (py0 + pyi) / 2 - py0;
-        builder
-            << 'c' << 0 << ',' << dym << ',' << pxi - px0 << ',' << dym << ',' << pxi - px0 << ',' << pyi - py0;
+        builder << "c0,1," << pxi - px0 << ",1," << pxi - px0 << ",2";
         px0 = pxi;
-        py0 = pyi;
     }
-    builder << 'L' << px0 << ',' << height << "L0," << height << "z' stroke='none' fill='" << color << "' opacity='0.5'/>" << Endl;
+    builder << 'L' << px0 << ',' << 2 * count << "L0," << 2 * count << "z' stroke='none' fill='" << color << "' opacity='0.5'/>" << Endl;
 }
 
-void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 height) {
+void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes) {
     ui64 total = 0;
     for (const auto& node : nodes) {
         total += node.Tasks;
@@ -370,11 +368,12 @@ void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNode
     }
     // A node with the average task count takes a third of the column, busier
     // ones grow past it up to the column width; the count text sits at the
-    // right. Anything non-zero keeps at least a pixel.
+    // right. The extent, value * count / total thirds of the column, is
+    // rounded to the nearest pixel, as rounding down would short the narrow
+    // nodes more than the wide ones. Anything non-zero keeps at least a pixel.
     ui64 count = nodes.size();
-    ui64 unit = Config.TaskWidth / 3;
     auto extent = [&](ui32 value) -> i32 {
-        return value ? std::clamp<ui64>(value * unit * count / total, 1, Config.TaskWidth) : 0;
+        return value ? std::clamp<ui64>((2 * count * value * Config.TaskWidth + 3 * total) / (6 * total), 1, Config.TaskWidth) : 0;
     };
     std::vector<i32> all;
     std::vector<i32> running;
@@ -384,21 +383,75 @@ void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNode
         running.push_back(extent(node.Tasks - std::min(node.Finished, node.Tasks)));
         anyRunning |= running.back() > 0;
     }
-    // Its own viewport, so that the plot follows the stage box when the script
-    // slims it, as the percent-based overlays do. The two areas share one
-    // translucent colour: the running share is where they overlap.
+    // Its own viewport, pixels across and half bands down, stretched over the
+    // stage box, so that the plot follows the box when the script slims it, as
+    // the percent-based overlays do. The two areas share one translucent
+    // colour: the running share is where they overlap. The pointer passes
+    // through to the wait and throughput bands under the plot, whose tooltips
+    // it would hide otherwise; the task tooltip stays on the count.
     builder
         << "<svg x='" << Config.TaskLeft << "' y='0' width='" << Config.TaskWidth << "' height='100%' viewBox='0 0 "
-        << Config.TaskWidth << ' ' << height << "' preserveAspectRatio='none'>" << Endl;
-    PrintNodeTasksArea(builder, all, height, Config.Palette.Cpu.Medium);
+        << Config.TaskWidth << ' ' << 2 * count << "' preserveAspectRatio='none' pointer-events='none'>" << Endl;
+    PrintNodeTasksArea(builder, all, Config.Palette.Cpu.Medium);
     if (anyRunning) {
-        PrintNodeTasksArea(builder, running, height, Config.Palette.Cpu.Medium);
+        PrintNodeTasksArea(builder, running, Config.Palette.Cpu.Medium);
     }
     builder << "</svg>" << Endl;
 }
 
-void TPlan::PrintTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks, ui32 height) {
-    PrintNodeTasks(builder, {{.Tasks = tasks, .Finished = finishedTasks}}, height);
+void TPlan::PrintTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks) {
+    PrintNodeTasks(builder, {{.Tasks = tasks, .Finished = finishedTasks}});
+}
+
+// The tooltip of the per-node profile: a summary, a list of every node would
+// not fit a tooltip on a large cluster. The busiest node is named when it
+// stands alone - the one to look at when the profile has a spike.
+static void PrintNodeTasksSummary(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 tasks) {
+    auto counted = [&](ui64 n, TStringBuf word) {
+        builder << n << ' ' << word << (n == 1 ? "" : "s");
+    };
+    ui32 nodeTasks = 0;
+    ui32 minTasks = nodes.front().Tasks;
+    ui32 maxTasks = 0;
+    ui32 maxNodes = 0;
+    ui32 maxNodeId = 0;
+    ui32 runningNodes = 0;
+    for (const auto& node : nodes) {
+        nodeTasks += node.Tasks;
+        minTasks = std::min(minTasks, node.Tasks);
+        if (node.Tasks > maxTasks) {
+            maxTasks = node.Tasks;
+            maxNodes = 0;
+            maxNodeId = node.NodeId;
+        }
+        maxNodes += node.Tasks == maxTasks;
+        runningNodes += node.Finished < node.Tasks;
+    }
+    if (nodes.size() == 1) {
+        builder << "; on node " << nodes.front().NodeId;
+    } else {
+        builder << "; ";
+        counted(nodes.size(), "node");
+        builder << ", ";
+        if (minTasks == maxTasks) {
+            counted(maxTasks, "task");
+            builder << " each";
+        } else {
+            builder << minTasks << " to " << maxTasks << " tasks each, " << maxTasks << " on ";
+            if (maxNodes == 1) {
+                builder << "node " << maxNodeId;
+            } else {
+                counted(maxNodes, "node");
+            }
+        }
+        if (runningNodes && runningNodes < nodes.size()) {
+            builder << "; running on ";
+            counted(runningNodes, "node");
+        }
+    }
+    if (nodeTasks < tasks) {
+        builder << "; not started: " << tasks - nodeTasks;
+    }
 }
 
 void TPlan::PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label) {
@@ -1104,20 +1157,13 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
         }
         s->Svg << "finished " << s->FinishedTasks << " of " << s->Tasks;
         if (!s->Nodes.empty()) {
-            ui32 nodeTasks = 0;
-            for (const auto& node : s->Nodes) {
-                s->Svg << "; node " << node.NodeId << ": " << node.Finished << "/" << node.Tasks;
-                nodeTasks += node.Tasks;
-            }
-            if (nodeTasks < s->Tasks) {
-                s->Svg << "; not started: " << s->Tasks - nodeTasks;
-            }
+            PrintNodeTasksSummary(s->Svg, s->Nodes, s->Tasks);
         }
         s->Svg << "</title>" << Endl;
         if (s->Nodes.empty()) {
-            PrintTasks(s->Svg, s->Tasks, s->FinishedTasks, s->Height);
+            PrintTasks(s->Svg, s->Tasks, s->FinishedTasks);
         } else {
-            PrintNodeTasks(s->Svg, s->Nodes, s->Height);
+            PrintNodeTasks(s->Svg, s->Nodes);
         }
         s->Svg
         << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
@@ -1338,7 +1384,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         }
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         if (node->Tasks) {
-            PrintTasks(builder, node->Tasks, node->FinishedTasks, node->Height);
+            PrintTasks(builder, node->Tasks, node->FinishedTasks);
             builder
             << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(node->Tasks));
         }
@@ -1402,11 +1448,14 @@ void TVisualizer::PrintColumnHeaders(TStringBuilder& svg, ui64 maxSec, ui64 delt
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
         << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics");
     // The timeline column is titled by its own scale: the ticks the grid lines
-    // running down the document are drawn at.
+    // running down the document are drawn at. Each mark ends at its grid line,
+    // so the label reads as the time elapsed up to it; the origin is the one
+    // exception, a bare "0" starting at the line, since nothing lies to its left.
     for (ui64 t = 0; t <= maxSec; t += deltaSec) {
         ui64 x1 = t * w * 1000 / MaxTime;
         svg << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
-            << SvgTextS(x + x1 + 2, titleHeight, Sprintf("%lu:%.2lu", t / 60, t % 60))
+            << (t ? SvgTextE(x + x1 - 2, titleHeight, Sprintf("%lu:%.2lu", t / 60, t % 60))
+                  : SvgTextS(x + 2, titleHeight, "0"))
             << "</g>" << Endl;
     }
     svg << "</svg>" << Endl

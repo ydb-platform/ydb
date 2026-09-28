@@ -22,6 +22,10 @@ enum class EYtWriteMode: ui32 {
     Append                  /* "append" */,
     Drop                    /* "drop" */,
     DropIfExists            /* "drop_if_exists" */,
+    CreateSymlink           /* "create_symlink" */,
+    CreateSymlinkIfNotExists /* "create_symlink_if_not_exists" */,
+    DropSymlink             /* "drop_symlink" */,
+    DropSymlinkIfExists     /* "drop_symlink_if_exists" */,
     Flush                   /* "flush" */,
     Create                  /* "create" */,
     CreateIfNotExists       /* "create_if_not_exists" */,
@@ -32,6 +36,16 @@ enum class EYtWriteMode: ui32 {
     DropObject              /* "dropObject" "drop_object" */,
     DropObjectIfExists      /* "dropObjectIfExists" "drop_object_if_exists" */,
 };
+
+constexpr bool IsCreateSymlinkMode(EYtWriteMode mode) {
+    return mode == EYtWriteMode::CreateSymlink
+        || mode == EYtWriteMode::CreateSymlinkIfNotExists;
+}
+
+constexpr bool IsDropSymlinkMode(EYtWriteMode mode) {
+    return mode == EYtWriteMode::DropSymlink
+        || mode == EYtWriteMode::DropSymlinkIfExists;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

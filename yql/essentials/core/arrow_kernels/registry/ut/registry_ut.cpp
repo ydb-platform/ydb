@@ -259,6 +259,23 @@ Y_UNIT_TEST(TestUdfLangVer) {
     }, MakeLangVersion(2025, 2));
 }
 
+Y_UNIT_TEST(TestToString) {
+    TExprContext ctx;
+    auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+    FillStaticModules(*functionRegistry);
+    const auto nodeFactory = GetBuiltinFactory();
+    TKernelRequestBuilder b(*functionRegistry, MakeLangVersion(2025, 2));
+    const auto blockOptUtf8Type = ctx.MakeType<TBlockExprType>(
+        ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Utf8)));
+    const auto blockOptStringType = ctx.MakeType<TBlockExprType>(
+        ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+    UNIT_ASSERT_VALUES_EQUAL(
+        b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::ToString, blockOptUtf8Type, blockOptStringType),
+        0);
+    const auto kernels = LoadKernels(b.Serialize(), *functionRegistry, nodeFactory, MakeLangVersion(2025, 2));
+    UNIT_ASSERT_VALUES_EQUAL(kernels.size(), 1);
+}
+
 Y_UNIT_TEST(TestScalarApply) {
     TestOne([](auto& b, auto& ctx) {
         const auto stringType = ctx.template MakeType<TDataExprType>(EDataSlot::String);

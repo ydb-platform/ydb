@@ -42,11 +42,11 @@ struct TDbgHeaderCell
     TVector<TDbgId> DbgIds;
 };
 
-// A reusable default config and the number of VChunks matching it.
+// A reusable default config and the number of selected VChunks matching it.
 struct TDefaultConfigEntry
 {
     TVChunkConfig Config;
-    size_t VChunkCount = 0;
+    size_t SelectedVChunkCount = 0;
 };
 
 using TDbgConfigHeaders = std::array<TDbgHeaderCell, VChunkPerRegionCount>;
@@ -67,7 +67,8 @@ public:
         size_t regionCount,
         size_t directBlockGroupCount,
         const TVChunkConfigs& vChunkConfigs,
-        const ITouchedProvider& touchedProvider);
+        const ITouchedProvider& touchedProvider,
+        EDDiskBalanceStrategy strategy);
 
     // Returns the rendered column headers.
     const TDbgConfigHeaders& GetHeaders() const
@@ -100,6 +101,8 @@ public:
     }
 
 private:
+    explicit TDbgConfigTableData(EDDiskBalanceStrategy strategy);
+
     void FillDefaultConfigs(
         size_t regionCount,
         size_t directBlockGroupCount,
@@ -118,6 +121,8 @@ private:
         TDbgTableCell* destination);
 
     TDefaultConfigEntry& GetDefaultConfig(TDbgId dbgId, TVChunkId vChunkId);
+
+    const EDDiskBalanceStrategy Strategy;
 
     TDbgConfigHeaders Headers;
     TDbgConfigTable Table;
@@ -168,9 +173,10 @@ TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
     size_t regionCount,
     size_t directBlockGroupCount,
     const TVChunkConfigs& vChunkConfigs,
-    const ITouchedProvider& touchedProvider)
+    const ITouchedProvider& touchedProvider,
+    EDDiskBalanceStrategy strategy)
 {
-    TDbgConfigTableData result;
+    TDbgConfigTableData result(strategy);
     result.DefaultConfigs.resize(dbgs.size());
     for (const auto& dbg: dbgs) {
         Y_ABORT_UNLESS(dbg.Index < dbgs.size());
@@ -181,6 +187,10 @@ TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
             result.Table[connection.DDiskId.NodeId];
             result.Table[connection.PBufferId.NodeId];
         }
+    }
+
+    if (dbgs.empty()) {
+        return result;
     }
 
     result.FillDefaultConfigs(
@@ -197,21 +207,36 @@ TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
     return result;
 }
 
+TDbgConfigTableData::TDbgConfigTableData(EDDiskBalanceStrategy strategy)
+    : Strategy(strategy)
+{}
+
 void TDbgConfigTableData::FillDefaultConfigs(
     size_t regionCount,
     size_t directBlockGroupCount,
     const ITouchedProvider& touchedProvider)
 {
     for (ui32 regionIndex = 0; regionIndex < regionCount; ++regionIndex) {
-        const auto touchedVChunks =
-            touchedProvider.GetTouchedVChunks(regionIndex);
-        Y_FOR_EACH_BIT(vChunkIndexInRegion, touchedVChunks)
+        TRegionVChunks touchedVChunks;
+        if (Strategy == EDDiskBalanceStrategy::Touched) {
+            touchedVChunks = touchedProvider.GetTouchedVChunks(regionIndex);
+        }
+        for (size_t vChunkIndexInRegion = 0;
+             vChunkIndexInRegion < VChunkPerRegionCount;
+             ++vChunkIndexInRegion)
         {
             const TVChunkId vChunkId =
                 GetVChunkIndex(regionIndex, vChunkIndexInRegion);
             const TDbgId dbgId =
                 GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
-            ++GetDefaultConfig(dbgId, vChunkId).VChunkCount;
+            if (dbgId >= DefaultConfigs.size()) {
+                continue;
+            }
+            if (Strategy == EDDiskBalanceStrategy::Configured ||
+                touchedVChunks[vChunkIndexInRegion])
+            {
+                ++GetDefaultConfig(dbgId, vChunkId).SelectedVChunkCount;
+            }
         }
     }
 }
@@ -224,18 +249,19 @@ void TDbgConfigTableData::ApplyRealConfigs(
 {
     for (const auto& [vChunkId, config]: vChunkConfigs) {
         Y_ABORT_UNLESS(vChunkId == config.GetVChunkIndex());
-        if (!touchedProvider.Get(vChunkId)) {
+        const TDbgId dbgId =
+            GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
+        Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
+        const auto& dbg = dbgs[dbgId];
+        if (Strategy == EDDiskBalanceStrategy::Touched &&
+            !touchedProvider.Get(vChunkId))
+        {
             continue;
         }
 
-        const TDbgId dbgId =
-            GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
         auto& entry = GetDefaultConfig(dbgId, vChunkId);
-        Y_ABORT_UNLESS(entry.VChunkCount != 0);
-        --entry.VChunkCount;
-
-        Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
-        const auto& dbg = dbgs[dbgId];
+        Y_ABORT_UNLESS(entry.SelectedVChunkCount != 0);
+        --entry.SelectedVChunkCount;
         const auto* freshDDisks = dbg.FreshDDisks.FindPtr(vChunkId);
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
         const auto disabledHosts = config.GetDisabledHosts();
@@ -268,7 +294,7 @@ void TDbgConfigTableData::TransferDefaultConfigsToTable(
         Y_ABORT_UNLESS(dbg.Index < DefaultConfigs.size());
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
         for (const auto& entry: DefaultConfigs[dbg.Index]) {
-            if (entry.VChunkCount == 0) {
+            if (entry.SelectedVChunkCount == 0) {
                 continue;
             }
 
@@ -282,11 +308,11 @@ void TDbgConfigTableData::TransferDefaultConfigsToTable(
                     const auto state =
                         config.GetHostHumanReadableState(host, false);
                     Table[connection.DDiskId.NodeId][columnIndex]
-                        .DDiskStates[state] += entry.VChunkCount;
+                        .DDiskStates[state] += entry.SelectedVChunkCount;
                 }
                 if (config.GetPBufferRole(host) != EHostRole::None) {
                     Table[connection.PBufferId.NodeId][columnIndex]
-                        .PBufferCount += entry.VChunkCount;
+                        .PBufferCount += entry.SelectedVChunkCount;
                 }
             }
         }
@@ -346,21 +372,46 @@ TDefaultConfigEntry& TDbgConfigTableData::GetDefaultConfig(
 void RenderDbgConfigHeader(
     IOutputStream& str,
     ui64 tabletId,
-    const TDbgHeaderCell& cell)
+    TDbgId dbgIndex,
+    ui32 imbalancePercent)
 {
-    if (cell.DbgIds.empty()) {
-        str << "-";
-        return;
-    }
+    str << "<a href='?TabletID=" << tabletId << "&page=dbg&dbg=" << dbgIndex
+        << "'>DBG #" << dbgIndex << "</a> Imb: " << imbalancePercent << "%";
+}
 
-    for (size_t i = 0; i < cell.DbgIds.size(); ++i) {
-        if (i != 0) {
-            str << "<br>";
+const TDDiskImbalance& GetDDiskImbalance(
+    const TDbgSnapshot& dbg,
+    EDDiskBalanceStrategy strategy)
+{
+    return strategy == EDDiskBalanceStrategy::Configured
+               ? dbg.ConfiguredDDiskImbalance
+               : dbg.TouchedDDiskImbalance;
+}
+
+void RenderDDiskBalanceStrategySelector(
+    IOutputStream& str,
+    ui64 tabletId,
+    EDDiskBalanceStrategy strategy)
+{
+    str << " <form method='get' action='' style='display:inline'>"
+           "<input type='hidden' name='TabletID' value='"
+        << tabletId
+        << "'/><input type='hidden' name='page' value='overview'/>"
+           "<label><select name='strategy' aria-label='DDisk balance strategy' "
+           "onchange='this.form.submit()'>";
+    for (const auto candidate:
+         {EDDiskBalanceStrategy::Touched, EDDiskBalanceStrategy::Configured})
+    {
+        str << "<option value='" << DDiskBalanceStrategyParam(candidate) << "'";
+        if (candidate == strategy) {
+            str << " selected";
         }
-        const TDbgId dbgIndex = cell.DbgIds[i];
-        str << "<a href='?TabletID=" << tabletId << "&page=dbg&dbg=" << dbgIndex
-            << "'>DBG #" << dbgIndex << "</a>";
+        str << ">"
+            << (candidate == EDDiskBalanceStrategy::Touched ? "Touched"
+                                                            : "Configured")
+            << "</option>";
     }
+    str << "</select></label></form>";
 }
 
 bool IsEmpty(const TDbgTableCell& cell)
@@ -449,7 +500,8 @@ void RenderDbgConfigTable(
     const TVector<TDbgSnapshot>& dbgs,
     const TTabletInfo& tabletInfo,
     const TVChunkConfigs& vChunkConfigs,
-    const ITouchedProvider& touchedProvider)
+    const ITouchedProvider& touchedProvider,
+    EDDiskBalanceStrategy strategy)
 {
     const size_t regionCount = GetRegionCount(
         tabletInfo.BlockCount,
@@ -460,7 +512,8 @@ void RenderDbgConfigTable(
         regionCount,
         tabletInfo.VolumeDirectBlockGroupCount,
         vChunkConfigs,
-        touchedProvider);
+        touchedProvider,
+        strategy);
 
     TVector<TNodeId> nodeIds;
     nodeIds.reserve(tableData.GetTable().size());
@@ -470,9 +523,18 @@ void RenderDbgConfigTable(
     }
     Sort(nodeIds);
 
+    size_t headerRowCount = 0;
+    for (const auto& cell: tableData.GetHeaders()) {
+        headerRowCount = Max(headerRowCount, cell.DbgIds.size());
+    }
+
     HTML (str) {
         TAG (TH3) {
             str << "Direct Block Group config";
+            RenderDDiskBalanceStrategySelector(
+                str,
+                tabletInfo.TabletId,
+                strategy);
         }
         if (dbgs.empty()) {
             DIV_CLASS ("alert alert-info") {
@@ -482,20 +544,65 @@ void RenderDbgConfigTable(
         }
         TABLE_CLASS ("table table-condensed table-bordered") {
             TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "Node";
-                    }
-                    for (const auto& headerCell: tableData.GetHeaders()) {
-                        TABLEH () {
-                            RenderDbgConfigHeader(
-                                str,
-                                tabletInfo.TabletId,
-                                headerCell);
+                for (size_t headerRow = 0; headerRow < headerRowCount;
+                     ++headerRow)
+                {
+                    TABLER () {
+                        if (headerRow == 0) {
+                            str << "<th rowspan=\"" << headerRowCount
+                                << "\">Node</th>";
                         }
-                    }
-                    TABLEH () {
-                        str << "Total";
+                        for (const auto& headerCell: tableData.GetHeaders()) {
+                            if (headerRow < headerCell.DbgIds.size()) {
+                                const TDbgId dbgId =
+                                    headerCell.DbgIds[headerRow];
+                                const auto& configuredImbalance =
+                                    dbgs[dbgId].ConfiguredDDiskImbalance;
+                                const auto& touchedImbalance =
+                                    dbgs[dbgId].TouchedDDiskImbalance;
+                                const auto& selectedImbalance =
+                                    GetDDiskImbalance(dbgs[dbgId], strategy);
+                                const TString tooltip =
+                                    TStringBuilder()
+                                    << "Config: "
+                                    << FormatDDiskImbalance(configuredImbalance)
+                                    << "&#10;Touched: "
+                                    << FormatDDiskImbalance(touchedImbalance);
+                                TABLEH_ATTRS({{"title", tooltip}})
+                                {
+                                    RenderDbgConfigHeader(
+                                        str,
+                                        tabletInfo.TabletId,
+                                        dbgId,
+                                        selectedImbalance.Percent);
+                                    if (selectedImbalance.Moves) {
+                                        RenderBalanceDDisksButton(
+                                            str,
+                                            tabletInfo.TabletId,
+                                            EMonPage::Overview,
+                                            dbgId,
+                                            dbgId + 1,
+                                            strategy);
+                                    }
+                                }
+                            } else {
+                                TABLEH () {
+                                    str << "-";
+                                }
+                            }
+                        }
+                        str << "<th>Total";
+                        const size_t from = headerRow * VChunkPerRegionCount;
+                        const size_t to =
+                            Min(from + VChunkPerRegionCount, dbgs.size());
+                        RenderBalanceDDisksButton(
+                            str,
+                            tabletInfo.TabletId,
+                            EMonPage::Overview,
+                            from,
+                            to,
+                            strategy);
+                        str << "</th>";
                     }
                 }
             }
@@ -702,7 +809,8 @@ void RenderOverview(
         data.Dbgs,
         data.TabletInfo,
         vChunkConfigs,
-        touchedProvider);
+        touchedProvider,
+        data.SelectedDDiskBalanceStrategy);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

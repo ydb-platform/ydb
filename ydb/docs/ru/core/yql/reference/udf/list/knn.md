@@ -56,6 +56,8 @@
 
 ```yql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
+Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
+Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -74,11 +76,15 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
   `1` — `Float` (4 байта на элемент);  
   `2` — `Uint8` (1 байт на элемент);
   `3` — `Int8` (1 байт на элемент);
+  `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
+  `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
   `10` — `Bit` (1 бит на элемент).  
 
 Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
 
 #### Детали имплементации {#functions-convert-details}
+
+`ToBinaryStringFloat16` и `ToBinaryStringBFloat16` округляют координаты `Float` до ближайшего представимого значения, при равенстве расстояний — до чётного. `FloatFromBinaryString` преобразует их обратно в `Float`. Для векторных индексов с такими форматами укажите `vector_type=float16` или `vector_type=bfloat16`.
 
 `ToBinaryStringBit` преобразует в `1` все координаты, которые больше `0`. Остальные координаты преобразуются в `0`.
 
@@ -117,7 +123,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 

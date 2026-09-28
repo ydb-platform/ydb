@@ -7,8 +7,11 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
-    TTxScheduleTraversal(TSelf* self)
+    const bool ForceTraversal;
+
+    TTxScheduleTraversal(TSelf* self, bool forceTraversal)
         : TTxBase(self)
+        , ForceTraversal(forceTraversal)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SCHEDULE_TRAVERSAL; }
@@ -38,8 +41,9 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
         // First try to dispatch a table analyze operation.
         Self->ScheduleNextAnalyze(db, ctx);
 
-        // Next, if there is no analyze operation, try to schedule background traversal.
-        if (!Self->TraversalPathId
+        // Avoid immediate retries of failed background scans.
+        if (!ForceTraversal
+                && !Self->TraversalPathId
                 && Self->StatisticsTablePathId
                 && !Self->ScheduleTraversals.empty()
                 && Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection()) {
@@ -53,12 +57,30 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
             {"tabletId", Self->TabletID()});
 
         Self->ResolveStatisticsTablePathId();
-        Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+        if (!ForceTraversal) {
+            if (Self->EnableColumnStatistics) {
+                Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            } else {
+                Self->TraversalSchedulerStarted = false;
+            }
+        }
     }
 };
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvScheduleTraversal::TPtr&) {
-    Execute(new TTxScheduleTraversal(this), TActivationContext::AsActorContext());
+    Execute(new TTxScheduleTraversal(this, /*forceTraversal=*/false), TActivationContext::AsActorContext());
+}
+
+void TStatisticsAggregator::Handle(TEvPrivate::TEvScheduleForceTraversal::TPtr&) {
+    Execute(new TTxScheduleTraversal(this, /*forceTraversal=*/true), TActivationContext::AsActorContext());
+}
+
+void TStatisticsAggregator::StartTraversalScheduler() {
+    if (!EnableColumnStatistics || TraversalSchedulerStarted) {
+        return;
+    }
+    TraversalSchedulerStarted = true;
+    Schedule(TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
 }
 
 } // NKikimr::NStat

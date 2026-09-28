@@ -1225,7 +1225,7 @@ TStatus AnnotateOlapBinaryLogicOperator(const TExprNode::TPtr& node, TExprContex
 }
 
 bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* itemType, TExprContext& ctx) {
-    if (TKqpOlapApply::Match(node)) {
+    if (TKqpOlapApply::Match(node) || TKqpOlapUdf::Match(node)) {
         return true;
     } else if (TKqpOlapAnd::Match(node) || TKqpOlapOr::Match(node) || TKqpOlapXor::Match(node) || TKqpOlapNot::Match(node)) {
         bool res = true;
@@ -1494,6 +1494,24 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapUdf(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpOlapUdf::idx_KernelName), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* outputType = node->Child(TKqpOlapUdf::idx_OutputType);
+    if (!EnsureType(*outputType, ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(outputType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+    return TStatus::Ok;
+}
+
 bool ValidateOlapJsonOperation(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto column = node->Child(TKqpOlapJsonOperationBase::idx_Column);
     if (!EnsureAtom(*column, ctx)) {
@@ -1713,9 +1731,19 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
             }
         }
         if (!keyItemType) {
-            const auto jsonVals = FindNodes(inputPtr, [&](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
-            if (jsonVals.size() == 1) {
-                if (const auto* ta = jsonVals.front()->GetTypeAnn().Get()) {
+            // Fallback when the DISTINCT key is a SELECT alias, but the pushed JSON_VALUE projection is still named
+            // after the source JSON column (the alias-projection rewrite did not run). Use that projection's type
+            // only when exactly one JSON_VALUE lives under KqpOlapProjection; JSON_VALUE inside a pushed filter
+            // (KqpOlapFilter) must not make the key ambiguous.
+            TExprNode::TListType projectionJsonVals;
+            for (const auto& projNode : FindNodes(inputPtr, [](const TExprNode::TPtr& n) { return TKqpOlapProjection::Match(n.Get()); })) {
+                const auto& op = projNode->ChildRef(TKqpOlapProjection::idx_OlapOperation);
+                if (TKqpOlapJsonValue::Match(op.Get())) {
+                    projectionJsonVals.push_back(op);
+                }
+            }
+            if (projectionJsonVals.size() == 1) {
+                if (const auto* ta = projectionJsonVals.front()->GetTypeAnn().Get()) {
                     keyItemType = ta;
                 }
             }
@@ -1725,7 +1753,9 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
         ctx.AddError(TIssue(
             ctx.GetPosition(key->Pos()),
             TStringBuilder() << "OLAP DISTINCT key '" << keyName
-                << "' is not present in the input row type and no matching OLAP projection or JSON_VALUE was found"
+                << "' is neither a stored column nor a pushed OLAP projection output. "
+                << "Alias the DISTINCT expression `AS " << keyName << "`, enable "
+                << "PRAGMA kikimr.OptEnableOlapPushdownProjections and make sure OptForceOlapPushdownDistinct names that alias."
         ));
         return TStatus::Error;
     }
@@ -2893,12 +2923,17 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
 }
 
 TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize()) {
+        const auto sourceType = input->ChildPtr(0)->GetTypeAnn();
+        Y_ENSURE(sourceType && sourceType->GetKind() == ETypeAnnotationKind::List, "Invalid type for EmptySource input, expected List");
+        Y_ENSURE(sourceType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct, "Invalid type Empty source input, expected Struct");
+        input->SetTypeAnn(sourceType);
+        return TStatus::Ok;
+    }
 
     TVector<const TItemExprType*> resultItems;
     auto resultType = ctx.MakeType<TStructExprType>(resultItems);
-
     input->SetTypeAnn(ctx.MakeType<TListExprType>(resultType));
-
     return TStatus::Ok;
 }
 
@@ -3277,7 +3312,8 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
 
         // Special case for scalar aggregation (aka aggregation with empty keys).
         if (scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
-            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1" ||
+             aggFunction == "some")) {
             aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
         }
 
@@ -3331,7 +3367,7 @@ TStatus AnnotateOpGroupingSets(const TExprNode::TPtr& input, TExprContext& ctx) 
         for (const auto& traits : aggregate.AggregationTraitsList()) {
             const auto function = traits.AggregationFunction().StringValue();
             // For empty keys column may become optional.
-            if (function == "min" || function == "max" || function == "sum" || function == "avg" || function == "variance_1_1") {
+            if (function == "min" || function == "max" || function == "sum" || function == "avg" || function == "variance_1_1" || function == "some") {
                 scalarOptionalResults.insert(traits.ResultColName().StringValue());
             }
         }
@@ -3804,6 +3840,7 @@ public:
         AddHandler({TKqpOlapFilter::CallableName()}, Hndl(&AnnotateOlapFilter));
         AddHandler({TKqpOlapApplyColumnArg::CallableName()}, Hndl(&AnnotateOlapApplyColumnArg));
         AddHandler({TKqpOlapApply::CallableName()}, Hndl(&AnnotateOlapApply));
+        AddHandler({TKqpOlapUdf::CallableName()}, Hndl(&AnnotateOlapUdf));
         AddHandler({TKqpOlapAgg::CallableName()}, Hndl(&AnnotateOlapAgg));
         AddHandler({TKqpOlapDistinct::CallableName()}, Hndl(&AnnotateOlapDistinct));
         AddHandler({TKqpOlapExtractMembers::CallableName()}, Hndl(&AnnotateOlapExtractMembers));

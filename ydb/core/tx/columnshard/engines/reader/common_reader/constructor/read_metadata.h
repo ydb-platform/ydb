@@ -17,13 +17,14 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TSpecialReadContext;
 class IDataSource;
+class TDataSourceLease;
 
 class ISourcesConstructor {
 private:
     virtual void DoClear() = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::shared_ptr<IDataSource> DoTryExtractNext(
+    virtual std::unique_ptr<TDataSourceLease> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) = 0;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
     virtual TString DoDebugString() const = 0;
@@ -69,13 +70,7 @@ public:
         return DoIsFinished();
     }
 
-    std::shared_ptr<IDataSource> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
-        AFL_VERIFY(!IsFinished());
-        AFL_VERIFY(InitCursorFlag);
-        auto result = DoTryExtractNext(context, inFlightCurrentLimit);
-        //        AFL_VERIFY(result);
-        return result;
-    }
+    std::unique_ptr<TDataSourceLease> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit);
 
     void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {
         AFL_VERIFY(!InitCursorFlag);

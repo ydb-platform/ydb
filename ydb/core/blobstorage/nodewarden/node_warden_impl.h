@@ -301,6 +301,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         TControlWrapper EnableChunkKeeper;
+        TControlWrapper SpaceReportPeriodSeconds;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;

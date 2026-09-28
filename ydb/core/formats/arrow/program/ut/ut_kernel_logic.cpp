@@ -114,4 +114,18 @@ Y_UNIT_TEST_SUITE(JsonValue) {
     }
 };
 
+Y_UNIT_TEST_SUITE(KernelLogic) {
+    Y_UNIT_TEST(ToStringPreservesAddressForStringRepresentations) {
+        const auto makeKernel = [](const std::shared_ptr<arrow::DataType>& input, const std::shared_ptr<arrow::DataType>& output) {
+            arrow::compute::ScalarKernel kernel;
+            kernel.signature = arrow::compute::KernelSignature::Make({ input }, output);
+            return kernel;
+        };
+
+        UNIT_ASSERT(TToStringKernel(makeKernel(arrow::utf8(), arrow::binary())).GetOriginalAddressFromInput());
+        UNIT_ASSERT(TToStringKernel(makeKernel(arrow::binary(), arrow::binary())).GetOriginalAddressFromInput());
+        UNIT_ASSERT(!TToStringKernel(makeKernel(arrow::utf8(), arrow::utf8())).GetOriginalAddressFromInput());
+    }
+};
+
 } // namespace NKikimr::NArrow::NSSA

@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -24,8 +25,6 @@
 #include <functional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
 
 struct TDBGReadBlocksResponse
 {
@@ -115,6 +114,22 @@ public:
     virtual ~IDirectBlockGroup() = default;
 
     virtual void Register(TVChunkWeakPtr vChunk) = 0;
+
+    // Reserves the least loaded enabled host without a DDisk in config.
+    // Returns InvalidHostIndex when no host is available.
+    virtual THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) = 0;
+
+    // Reserves the selected host for a VChunk DDisk promotion.
+    virtual void AllocateDDiskPromotion(
+        ui32 vChunkId,
+        THostIndex hostIndex) = 0;
+
+    // Releases the reservation after config persistence succeeds or is
+    // canceled.
+    virtual void CommitDDiskPromotion(const TVChunkConfig& config) = 0;
+
+    // Selects a DDisk on the most loaded candidate host for demotion.
+    virtual THostMask SelectDDiskForDemote(THostMask candidates) const = 0;
 
     virtual TExecutorPtr GetExecutor() = 0;
 
@@ -241,7 +256,11 @@ public:
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
-    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const = 0;
+
+    // Requests balancing of DDisks in this DBG using the strategy.
+    virtual void BalanceDDisks(EDDiskBalanceStrategy strategy) = 0;
 
     // Sums (and optionally lists) vchunk stats on the executor thread.
     virtual NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(

@@ -139,6 +139,13 @@ keeping automatic pool sizing enabled. They do not affect the YDB CLI.
 The Builder exposes all three switches; saved profile parameters and comparisons
 retain their values.
 
+For `local-ydb`, `actor-system.use-waker: true` enables the experimental waker
+for automatically configured BASIC executor pools through YDBD's `use_waker`.
+It defaults to `false` and requires a YDBD build that supports this field.
+When disabled, the field is omitted from the generated YDB configuration so
+older external binaries keep working. The saved profile and Builder retain the
+explicit boolean value.
+
 Set `ydbd-binary: /absolute/path/to/ydbd` in a `local-ydb` profile to
 use a different YDBD build. The Builder exposes the same optional executable
 path. It refers to a readable executable on the benchmark host (not the browser

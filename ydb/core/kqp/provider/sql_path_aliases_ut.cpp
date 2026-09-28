@@ -70,11 +70,15 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
             const auto unchanged = RewriteSql(sql, {}, false, false);
             UNIT_ASSERT_STRING_CONTAINS_C(unchanged, "/alias/table", sql << '\n' << unchanged);
         }
+        const auto repeatedSlash = RewriteSql("GRANT ALL ON `//alias` TO user;", {}, false, false);
+        UNIT_ASSERT_STRING_CONTAINS(repeatedSlash, "//alias");
     }
 
     Y_UNIT_TEST(ConfiguredAliasesLeaveUnmatchedPathUnchanged) {
         const auto unchanged = RewriteSql("SELECT * FROM `/other/table`;", {}, false, true, true);
         UNIT_ASSERT_STRING_CONTAINS(unchanged, "/other/table");
+        const auto repeatedSlash = RewriteSql("SELECT * FROM `//other/table`;", {}, false, true, true);
+        UNIT_ASSERT_STRING_CONTAINS(repeatedSlash, "//other/table");
     }
 
     Y_UNIT_TEST(LiteralPathsFromSql) {
@@ -132,6 +136,10 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
     Y_UNIT_TEST(PermissionAndExternalTableOptions) {
         const auto permission = RewriteSql("GRANT SELECT ON `/alias/table` TO user;");
         UNIT_ASSERT_STRING_CONTAINS(permission, "/canonical/table");
+
+        const auto repeatedSlash = RewriteSql("GRANT ALL ON `//alias` TO user;");
+        UNIT_ASSERT_STRING_CONTAINS(repeatedSlash, "/canonical");
+        UNIT_ASSERT_VALUES_EQUAL(repeatedSlash.find("//alias"), TString::npos);
 
         const auto externalTable = RewriteSql("CREATE EXTERNAL TABLE `/alias/table` (key Uint64) WITH (DATA_SOURCE = '/alias/ds', LOCATION = '/');");
         UNIT_ASSERT_STRING_CONTAINS(externalTable, "/canonical/table");

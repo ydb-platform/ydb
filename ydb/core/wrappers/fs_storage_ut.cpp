@@ -14,6 +14,7 @@
 
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
@@ -219,6 +220,8 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST(AbortMultipartUploadDeletesIncompleteFile);
     UNIT_TEST(DeleteObjectReturnsNotImplementedError);
     UNIT_TEST(ListObjectsReturnsFilesInDirectory);
+    UNIT_TEST(ListObjectsReturnsFilesByPrefix);
+    UNIT_TEST(ListObjectsPaginatesFilesWithExactFilePrefix);
     UNIT_TEST(CheckObjectExistsReturnsNotImplementedError);
     UNIT_TEST(UploadPartCopyReturnsNotImplementedError);
     UNIT_TEST(ConcurrentMultipartUploadSessionsForSameKey);
@@ -606,6 +609,93 @@ public:
             UNIT_ASSERT(allKeys.contains(file2));
             UNIT_ASSERT(allKeys.contains(file3));
         }
+    }
+
+    void ListObjectsReturnsFilesByPrefix() {
+        const TVector<TString> files = {
+            KeyPath("data/data_001.csv"),
+            KeyPath("data/data_00_parts/nested/chunk.csv"),
+            KeyPath("data/data_00.csv.sha256"),
+            KeyPath("data/data_01.csv"),
+            KeyPath("data/data_00_parts/chunk.csv"),
+            KeyPath("data/other/data_00.csv"),
+            KeyPath("data/data_00.csv"),
+            KeyPath("other/data_00.csv"),
+        };
+        for (const auto& file : files) {
+            auto result = PutObject(file, "data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        const TString prefix = KeyPath("data/data_00");
+        UNIT_ASSERT(!TFsPath(prefix).Exists());
+
+        auto result = ListObjects(prefix);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT(!result.GetResult().GetIsTruncated());
+
+        const TVector<TString> expectedKeys = {
+            KeyPath("data/data_00.csv"),
+            KeyPath("data/data_00.csv.sha256"),
+            KeyPath("data/data_001.csv"),
+            KeyPath("data/data_00_parts/chunk.csv"),
+            KeyPath("data/data_00_parts/nested/chunk.csv"),
+        };
+        const auto& contents = result.GetResult().GetContents();
+        UNIT_ASSERT_VALUES_EQUAL(contents.size(), expectedKeys.size());
+        for (size_t i = 0; i < expectedKeys.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                TString(contents[i].GetKey().data(), contents[i].GetKey().size()), expectedKeys[i]);
+        }
+
+        auto emptyResult = ListObjects(KeyPath("data/data_02"));
+        UNIT_ASSERT_C(emptyResult.IsSuccess(), emptyResult.GetError().GetMessage());
+        UNIT_ASSERT(emptyResult.GetResult().GetContents().empty());
+        UNIT_ASSERT(!emptyResult.GetResult().GetIsTruncated());
+    }
+
+    void ListObjectsPaginatesFilesWithExactFilePrefix() {
+        const TVector<TString> expectedKeys = {
+            KeyPath("data/data_00.csv"),
+            KeyPath("data/data_00.csv.backup"),
+            KeyPath("data/data_00.csv.parts/chunk.csv"),
+            KeyPath("data/data_00.csv.sha256"),
+        };
+        for (auto it = expectedKeys.rbegin(); it != expectedKeys.rend(); ++it) {
+            auto result = PutObject(*it, "data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+        for (const auto& file : {KeyPath("data/data_00.cs"), KeyPath("data/data_01.csv")}) {
+            auto result = PutObject(file, "other data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        const TString& prefix = expectedKeys.front();
+        for (int maxKeys : {1, 2, 3, 4, 10}) {
+            TString marker;
+            for (size_t offset = 0; offset < expectedKeys.size();) {
+                auto result = ListObjects(prefix, maxKeys, marker);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+
+                const auto& contents = result.GetResult().GetContents();
+                const size_t pageSize = Min<size_t>(maxKeys, expectedKeys.size() - offset);
+                UNIT_ASSERT_VALUES_EQUAL_C(contents.size(), pageSize,
+                    TStringBuilder() << "maxKeys# " << maxKeys << ", marker# " << marker);
+                for (size_t i = 0; i < pageSize; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        TString(contents[i].GetKey().data(), contents[i].GetKey().size()), expectedKeys[offset + i]);
+                }
+
+                offset += pageSize;
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResult().GetIsTruncated(), offset < expectedKeys.size());
+                marker = TString(contents.back().GetKey().data(), contents.back().GetKey().size());
+            }
+        }
+
+        auto result = ListObjects(prefix, 1, expectedKeys.back());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT(result.GetResult().GetContents().empty());
+        UNIT_ASSERT(!result.GetResult().GetIsTruncated());
     }
 
     void CheckObjectExistsReturnsNotImplementedError() {

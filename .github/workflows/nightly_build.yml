@@ -47,22 +47,6 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 2
-    - name: Use analytics client from workflow revision
-      continue-on-error: true
-      shell: bash
-      run: |
-        # matrix.branch may be a stable cut that does not yet have the client.
-        # Use the revision that provided this workflow file.
-        head_sha="$(git rev-parse HEAD)"
-        workflow_sha="${{ github.sha }}"
-        if [ "$head_sha" = "$workflow_sha" ]; then
-          exit 0
-        fi
-        git fetch --depth=1 origin "$workflow_sha"
-        git checkout "$workflow_sha" -- \
-          .github/scripts/analytics/resolve_github_job_id.py \
-          .github/scripts/utils/analytics \
-          .github/actions/test_ya
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -100,6 +84,10 @@ jobs:
         GITHUB_TOKEN: ${{ github.token }}
       shell: bash
       run: |
+        if [ ! -f .github/scripts/utils/analytics/github_actions/ci_metrics.py ]; then
+          echo "analytics client is not on this branch, skipping"
+          exit 0
+        fi
         python3 -m pip install ydb ydb[yc] >/dev/null
         BINARY=""
         for candidate in \

@@ -7,15 +7,22 @@
 namespace NActors {
     template<typename T> struct dependent_false : std::false_type {};
 
+    namespace NDetail {
+        TAutoPtr<IEventHandle> MakeBootstrapEventHandle(const TActorId& self, const TActorId& parentId);
+        [[noreturn]] void AbortUnexpectedBootstrapMessage(const IEventHandle& ev);
+    }
+
     template<typename TDerived>
     class TActorBootstrapped: public TActor<TDerived> {
     protected:
         TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
-            return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parentId, {}, 0);
+            return NDetail::MakeBootstrapEventHandle(self, parentId);
         }
 
         STFUNC(StateBootstrap) {
-            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Unexpected bootstrap message: %s", ev->GetTypeName().data());
+            if (Y_UNLIKELY(ev->GetTypeRewrite() != TEvents::TSystem::Bootstrap)) {
+                NDetail::AbortUnexpectedBootstrapMessage(*ev);
+            }
             using T = decltype(&TDerived::Bootstrap);
             TDerived& self = static_cast<TDerived&>(*this);
             if constexpr (std::is_invocable_v<T, TDerived, const TActorContext&>) {

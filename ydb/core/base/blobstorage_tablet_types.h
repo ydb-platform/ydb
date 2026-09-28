@@ -229,6 +229,7 @@ struct TTabletChannelInfo {
             str << "{FromGeneration# " << FromGeneration;
             str << " GroupID# " << GroupID;
             str << " Timestamp# " << Timestamp.ToString();
+            str << " Version# " << Version;
             str << "}";
             return str.Str();
         }

@@ -114,7 +114,7 @@ ui32 TLeaderTabletInfo::GetBlockStorageGeneration() const {
     ui32 firstUnconfirmedGeneration = KnownGeneration + 1;
     for (const TTabletChannelInfo& channel : TabletStorageInfo->Channels) {
         auto unconfirmedIt = std::ranges::upper_bound(channel.History, ConfirmedStorageVersion, std::less<ui32>(), [] (auto&& entry) { return entry.Version; });
-        if (unconfirmedIt != channel.History.end()) {
+        if (unconfirmedIt != channel.History.end() && unconfirmedIt->FromGeneration > 0) {
             firstUnconfirmedGeneration = std::min(firstUnconfirmedGeneration, unconfirmedIt->FromGeneration);
         }
     }

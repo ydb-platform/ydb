@@ -35,11 +35,17 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument._yql_RowNumber0"
+                                                "TopSortBy": "row.row_number"
                                             },
                                             {
                                                 "Inputs": [
@@ -57,7 +63,7 @@
                                                     }
                                                 ],
                                                 "Name": "Sort",
-                                                "SortBy": "[0,item.depname]"
+                                                "SortBy": "row.depname"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -77,7 +83,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Sort",
-                                                                "SortBy": "[0,item.depname]"
+                                                                "SortBy": "row.depname"
                                                             }
                                                         ],
                                                         "PlanNodeId": 6,

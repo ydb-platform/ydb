@@ -133,6 +133,24 @@ def get_pr_commit_shas(pull: Any, logger) -> List[str]:
     return commit_shas
 
 
+def get_merged_commit_shas(pull: Any, repo, merge_commit) -> List[str]:
+    """Returns commits a single-parent merge brought to the base branch, in apply order.
+
+    Squash merge brings only merge_commit_sha, rebase merge brings a series of
+    commits ending with it. The series is found by walking back the first-parent
+    chain while commits are still linked to the same PR.
+    """
+    commit_shas = [merge_commit.sha]
+    commit = merge_commit
+    while len(commit_shas) < pull.commits and len(commit.parents) == 1:
+        parent = repo.get_commit(commit.parents[0].sha)
+        if len(parent.parents) != 1 or not any(p.number == pull.number for p in parent.get_pulls()):
+            break
+        commit_shas.append(parent.sha)
+        commit = parent
+    return list(reversed(commit_shas))
+
+
 def create_pr_source(pull: Any, repo, logger) -> Source:
     """Creates source from PR"""
     if not pull.merged:
@@ -141,12 +159,17 @@ def create_pr_source(pull: Any, repo, logger) -> Source:
     elif not pull.merge_commit_sha:
         commit_shas = get_pr_commit_shas(pull, logger)
         logger.info(f"PR #{pull.number} has no merge commit, using {len(commit_shas)} commits from PR")
-    elif len(repo.get_commit(pull.merge_commit_sha).parents) > 1:
-        commit_shas = get_pr_commit_shas(pull, logger)
-        logger.info(f"PR #{pull.number} was merged as merge commit, using {len(commit_shas)} individual commits")
     else:
-        commit_shas = [pull.merge_commit_sha]
-        logger.info(f"PR #{pull.number} was merged as squash/rebase, using merge_commit_sha")
+        merge_commit = repo.get_commit(pull.merge_commit_sha)
+        if len(merge_commit.parents) > 1:
+            commit_shas = get_pr_commit_shas(pull, logger)
+            logger.info(f"PR #{pull.number} was merged as merge commit, using {len(commit_shas)} individual commits")
+        else:
+            commit_shas = get_merged_commit_shas(pull, repo, merge_commit)
+            if len(commit_shas) > 1:
+                logger.info(f"PR #{pull.number} was merged as rebase, using {len(commit_shas)} rebased commits")
+            else:
+                logger.info(f"PR #{pull.number} was merged as squash, using merge_commit_sha")
 
     return Source(
         type='pr',
@@ -716,6 +739,9 @@ def main():
                 source = create_pr_source(pull, repo, logger)
             except ValueError as e:
                 logger.error(f"VALIDATION_ERROR: {e}")
+                sys.exit(1)
+            except GithubException as e:
+                logger.error(f"VALIDATION_ERROR: Failed to get commits of PR #{pr_num}: {e}")
                 sys.exit(1)
             sources.append(source)
             continue

@@ -802,6 +802,8 @@ message TDDiskTabletListResponse {
 enum EDDiskDiskSortBy {
     DDISK_DISK_SORT_BY_DISK_ID = 0;
     DDISK_DISK_SORT_BY_TABLETS_COUNT = 1;
+    DDISK_DISK_SORT_BY_DDISK_OCCUPANCY = 2;
+    DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY = 3;
 }
 
 message TDDiskDiskListRequest {
@@ -829,6 +831,10 @@ message TDDiskDiskListResponse {
         // states, or "Unknown" if it was never reported to CMS). This is a more
         // detailed status than Available, which is only a coarse up/down flag.
         optional string State = 5;
+        // Fractions, absent when the role is unused or monitoring is unavailable.
+        optional double DDiskOccupancy = 6; // underlying PDisk owner occupancy
+        optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
+
     }
 
     reserved 2;

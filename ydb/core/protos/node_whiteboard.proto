@@ -161,15 +161,26 @@ message TPDiskStateInfo {
     optional bool HasWhiteboardData = 32; // filled by viewer
 }
 
+// One DDisk slot and its PB share a PDisk owner. Reported by the PB every 5s.
+message TDDiskStateInfo {
+    optional uint32 PDiskId = 1;
+    optional uint32 DDiskSlotId = 2;
+    optional double DDiskOccupancy = 3; // normalized PDisk owner occupancy
+    optional double PersistentBufferOccupancy = 4; // used / configured capacity
+    optional uint64 ChangeTime = 5; // last sample received by whiteboard, milliseconds
+}
+
 message TEvPDiskStateRequest {
     optional uint64 ChangedSince = 1;
     repeated int32 FieldsRequired = 2 [packed = true];
+    optional bool IncludeDDiskState = 3 [default = false];
 }
 
 message TEvPDiskStateResponse {
     repeated TPDiskStateInfo PDiskStateInfo = 1;
     optional uint64 ResponseTime = 2;
     optional uint32 ResponseDuration = 3; // filled during collect
+    repeated TDDiskStateInfo DDiskStateInfo = 4;
 }
 
 // The structure reports VDisk compaction satisfaction rank, i.e.

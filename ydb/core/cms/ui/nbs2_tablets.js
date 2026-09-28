@@ -105,6 +105,15 @@ const Nbs2Tablets = {
     },
 
     load: function() {
+        const diskView = this.isDDisksView();
+        const sort = $('#nbs2-tablets-sort');
+        sort.find('option').each(function() {
+            const diskOption = ['disk', 'tablets_count', 'ddisk_occupancy', 'persistent_buffer_occupancy'].includes(this.value);
+            $(this).prop('disabled', diskOption !== diskView).prop('hidden', diskOption !== diskView);
+        });
+        if (sort.find('option:selected').prop('disabled')) {
+            sort.val(diskView ? 'disk' : 'degrade');
+        }
         $('#nbs2-tablets-error').text('Loading...');
         this.snapshots = {};
         if (this.isDDisksView()) {
@@ -156,7 +165,7 @@ const Nbs2Tablets = {
     loadDisksPage: function() {
         const token = ++this.requestToken;
         const sort = $('#nbs2-tablets-sort').val();
-        const sortBy = sort === 'tablets_count' ? 'tablets_count' : 'disk';
+        const sortBy = ['tablets_count', 'ddisk_occupancy', 'persistent_buffer_occupancy'].includes(sort) ? sort : 'disk';
         const params = Object.assign(this.commonParams(), {
             filter: $('#nbs2-tablets-filter').val() || '',
             sort_by: sortBy,
@@ -343,6 +352,12 @@ const Nbs2Tablets = {
         });
     },
 
+    formatOccupancy: function(value) {
+        if (value === undefined || value === null || value === '') return '—';
+        const occupancy = Number(value);
+        return Number.isFinite(occupancy) && occupancy >= 0 ? (occupancy * 100).toFixed(1) + '%' : '—';
+    },
+
     renderDDisks: function() {
         $('#nbs2-tablets-table').hide();
         const body = $('#nbs2-ddisks-body').empty();
@@ -376,8 +391,10 @@ const Nbs2Tablets = {
                 '<td>' + this.formatDisk(diskIdObj, ddiskTabletIds.length ? 'DDisk' : 'PersistentBuffer', unavailable) + '</td><td>' + (this.field(diskIdObj, 'NodeId', 'nodeId') || '—') +
                 '</td><td>' + (this.field(diskIdObj, 'PDiskId', 'pdiskId') || '—') + '</td><td class="' +
                 (unavailable ? 'nbs2-count-unavailable' : '') + '">' + status +
-                '</td><td>' + tabletIds.size + '</td></tr>' +
-                '<tr id="nbs2-ddisk-details-' + this.escapeHtml(detailsId) + '" style="display: none"><td colspan="5">' +
+                '</td><td>' + tabletIds.size + '</td><td>' +
+                this.formatOccupancy(this.field(disk, 'DDiskOccupancy', 'dDiskOccupancy', 'ddiskOccupancy')) + '</td><td>' +
+                this.formatOccupancy(this.field(disk, 'PersistentBufferOccupancy', 'persistentBufferOccupancy')) + '</td></tr>' +
+                '<tr id="nbs2-ddisk-details-' + this.escapeHtml(detailsId) + '" style="display: none"><td colspan="7">' +
                 (roles.join('') || '—') + '</td></tr>');
         });
     },

@@ -1001,13 +1001,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         std::optional<TActorId> disk2PdiskEdge;
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
-            // Drop all PDisk-bound events from disk1's actor.
+            // Both the old and restored buffer periodically refresh free space.
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
+                ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0, ev->Cookie), NodeId);
+                return false;
+            }
             if (ev->Sender == disk1ActorId) {
-                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
-                    ctx.Runtime.Send(new IEventHandle(ev->Sender, disk1.PDiskEdge,
-                        new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
-                        0, ev->Cookie), NodeId);
-                }
                 return false;
             }
             // Auto-respond to TEvChunkReadRaw from disk2 with the captured chunk slice.
@@ -1235,13 +1236,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         std::optional<TActorId> disk2PdiskEdge;
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
-            // Drop all PDisk-bound events from disk1's actor.
+            // Both the old and restored buffer periodically refresh free space.
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
+                ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0, ev->Cookie), NodeId);
+                return false;
+            }
             if (ev->Sender == disk1ActorId) {
-                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
-                    ctx.Runtime.Send(new IEventHandle(ev->Sender, disk1.PDiskEdge,
-                        new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
-                        0, ev->Cookie), NodeId);
-                }
                 return false;
             }
             // Auto-respond to TEvChunkReadRaw from disk2 with the captured chunk slice.

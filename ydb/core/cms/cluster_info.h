@@ -952,6 +952,19 @@ public:
         return BSGroups;
     }
 
+    void UpdateDDiskState(ui32 nodeId, const NKikimrWhiteboard::TDDiskStateInfo& info) {
+        DDiskStateInfo[nodeId][(ui64(info.GetPDiskId()) << 32) | info.GetDDiskSlotId()] = info;
+    }
+
+    const NKikimrWhiteboard::TDDiskStateInfo* FindDDiskState(ui32 nodeId, ui32 pdiskId, ui32 slotId) const {
+        const auto node = DDiskStateInfo.find(nodeId);
+        if (node == DDiskStateInfo.end()) {
+            return nullptr;
+        }
+        const auto disk = node->second.find((ui64(pdiskId) << 32) | slotId);
+        return disk == node->second.end() ? nullptr : &disk->second;
+    }
+
     TInstant GetTimestamp() const {
         return Timestamp;
     }
@@ -1110,6 +1123,7 @@ private:
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;
+    THashMap<ui32, THashMap<ui64, NKikimrWhiteboard::TDDiskStateInfo>> DDiskStateInfo;
     TInstant Timestamp;
     ui64 RollbackPoint = 0;
     bool HasTenantsInfo = false;

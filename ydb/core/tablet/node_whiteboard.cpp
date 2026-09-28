@@ -83,6 +83,14 @@ protected:
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
 
+    struct TDDiskState {
+        NKikimrWhiteboard::TDDiskStateInfo Info;
+        TActorId Publisher;
+        TInstant UpdatedAt;
+    };
+    std::unordered_map<ui64, TDDiskState> DDiskStateInfo;
+    static constexpr TDuration DDiskStateLifetime = TDuration::Seconds(15);
+
     i64 MaxClockSkewWithPeerUs = 0;
     ui32 MaxClockSkewPeerId = 0;
     ui64 SumNetworkWriteThroughput = 0;
@@ -549,6 +557,8 @@ protected:
             hFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskStateDelete, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
@@ -633,6 +643,25 @@ protected:
             pDiskStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
         SetRole("Storage");
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskStateUpdate::TPtr& ev) {
+        auto& info = ev->Get()->Record;
+        const ui64 key = (ui64(info.GetPDiskId()) << 32) | info.GetDDiskSlotId();
+        auto& state = DDiskStateInfo[key];
+        state.Info = std::move(info);
+        state.Publisher = ev->Sender;
+        state.UpdatedAt = TActivationContext::Now();
+        state.Info.SetChangeTime(state.UpdatedAt.MilliSeconds());
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskStateDelete::TPtr& ev) {
+        const ui64 key = (ui64(ev->Get()->PDiskId) << 32) | ev->Get()->DDiskSlotId;
+        const auto it = DDiskStateInfo.find(key);
+        // A delayed shutdown of an old incarnation must not remove a new sample.
+        if (it != DDiskStateInfo.end() && it->second.Publisher == ev->Sender) {
+            DDiskStateInfo.erase(it);
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr& ev) {
@@ -980,6 +1009,19 @@ protected:
                 Copy(pDiskStateInfo, pr.second, request);
             }
         }
+        if (request.GetIncludeDDiskState()) {
+            const auto now = TActivationContext::Now();
+            for (auto it = DDiskStateInfo.begin(); it != DDiskStateInfo.end();) {
+                if (it->second.UpdatedAt + DDiskStateLifetime < now) {
+                    it = DDiskStateInfo.erase(it);
+                } else {
+                    if (it->second.Info.GetChangeTime() >= changedSince) {
+                        record.AddDDiskStateInfo()->CopyFrom(it->second.Info);
+                    }
+                    ++it;
+                }
+            }
+        }
         response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
         Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
@@ -1230,6 +1272,14 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr&) {
+        const auto ddiskNow = TActivationContext::Now();
+        for (auto it = DDiskStateInfo.begin(); it != DDiskStateInfo.end();) {
+            if (it->second.UpdatedAt + DDiskStateLifetime < ddiskNow) {
+                it = DDiskStateInfo.erase(it);
+            } else {
+                ++it;
+            }
+        }
         auto it = TabletStateInfo.begin();
         auto now(TActivationContext::Now());
         ui64 deadDeadline = (now - TDuration::Minutes(10)).MilliSeconds();

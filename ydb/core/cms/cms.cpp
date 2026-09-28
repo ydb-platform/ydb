@@ -1,5 +1,6 @@
 #include "cms_impl.h"
 #include "erasure_checkers.h"
+#include "ddisk_usage.h"
 #include "info_collector.h"
 #include "node_checkers.h"
 #include "scheme.h"
@@ -36,6 +37,7 @@
 #include <util/system/hostname.h>
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
@@ -2443,8 +2445,9 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     response->Record.SetTotalCount(items.size());
 
-    const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
-    const ui32 limit = request.GetLimit();
+    const bool occupancySort = IsDDiskOccupancySort(sortBy);
+    const ui32 offset = occupancySort ? 0 : Min<ui32>(request.GetOffset(), items.size());
+    const ui32 limit = occupancySort ? 0 : request.GetLimit();
     // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
     // the ui32 range (e.g. both close to Max<ui32>()).
     const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
@@ -2460,8 +2463,23 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         }
         disk->SetAvailable(IsDDiskAvailable(usage->DiskId));
         disk->SetState(GetDDiskStateName(usage->DiskId));
+        const auto& id = usage->DiskId;
+        const auto* space = ClusterInfo->FindDDiskState(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
+        if (disk->GetAvailable() && space) {
+            const double ddiskOccupancy = space->GetDDiskOccupancy();
+            if (!usage->DDiskTabletIds.empty() && space->HasDDiskOccupancy()
+                    && std::isfinite(ddiskOccupancy) && ddiskOccupancy >= 0) {
+                disk->SetDDiskOccupancy(ddiskOccupancy);
+            }
+            const double bufferOccupancy = space->GetPersistentBufferOccupancy();
+            if (!usage->PersistentBufferTabletIds.empty() && space->HasPersistentBufferOccupancy()
+                    && std::isfinite(bufferOccupancy) && bufferOccupancy >= 0 && bufferOccupancy <= 1) {
+                disk->SetPersistentBufferOccupancy(bufferOccupancy);
+            }
+        }
     }
 
+    SortAndPageDDiskOccupancy(response->Record, request);
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 

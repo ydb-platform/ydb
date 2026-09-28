@@ -29,6 +29,8 @@ class CountReportTests(unittest.TestCase):
                             {"status": "SKIPPED"},
                             {"status": "MUTE"},
                             {"status": "MUTE"},
+                            {"status": "NOT_LAUNCHED"},
+                            {"status": "SKIPPED", "error_type": "NOT_LAUNCHED"},
                             {"status": "CONFIGURE"},
                         ]
                     }
@@ -43,7 +45,9 @@ class CountReportTests(unittest.TestCase):
                     "errors": 1,
                     "skipped": 1,
                     "muted": 2,
-                    "total": 7,
+                    "not_launched": 2,
+                    "other": 1,
+                    "total": 10,
                 },
             )
 

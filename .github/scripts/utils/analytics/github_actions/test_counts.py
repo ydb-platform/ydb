@@ -1,11 +1,11 @@
-"""Count pass/fail/skip/muted from a ya build-results report (after mute transform)."""
+"""Count test results from a ya build-results report (after mute transform)."""
 
 from __future__ import annotations
 
 import json
 from typing import Dict
 
-COUNT_NAMES = ("passed", "failed", "errors", "skipped", "muted", "total")
+COUNT_NAMES = ("passed", "failed", "errors", "skipped", "muted", "not_launched", "other", "total")
 
 
 def count_report_tests(path: str) -> Dict[str, int]:
@@ -16,18 +16,24 @@ def count_report_tests(path: str) -> Dict[str, int]:
         if not isinstance(result, dict):
             continue
         status = str(result.get("status") or "").upper()
-        if status in ("PASSED", "OK"):
-            counts["passed"] += 1
-        elif status == "FAILED":
-            counts["failed"] += 1
-        elif status == "ERROR":
-            counts["errors"] += 1
-        elif status == "SKIPPED":
-            counts["skipped"] += 1
-        elif status == "MUTE":
-            counts["muted"] += 1
-        else:
+        error_type = str(result.get("error_type") or "").upper()
+        if not status:
             continue
+        if status in ("PASSED", "OK"):
+            bucket = "passed"
+        elif status == "FAILED":
+            bucket = "failed"
+        elif status == "ERROR":
+            bucket = "errors"
+        elif status == "NOT_LAUNCHED" or error_type == "NOT_LAUNCHED":
+            bucket = "not_launched"
+        elif status == "SKIPPED":
+            bucket = "skipped"
+        elif status == "MUTE":
+            bucket = "muted"
+        else:
+            bucket = "other"
+        counts[bucket] += 1
         counts["total"] += 1
     return counts
 

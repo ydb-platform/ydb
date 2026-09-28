@@ -1,6 +1,4 @@
 #include <ydb/core/cms/ddisk_usage.h>
-#include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/cms/cluster_info.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -77,48 +75,22 @@ namespace NKikimr::NCms {
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
         }
 
-        Y_UNIT_TEST(SortBothRolesBeforePaging) {
-            for (const auto sort : {NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY,
-                                    NKikimrCms::DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY}) {
-                for (bool descending : {false, true}) {
-                    NKikimrCms::TDDiskDiskListResponse response;
-                    response.SetTotalCount(5);
-                    for (ui32 i = 0; i < 5; ++i) {
-                        auto* disk = response.AddDisks();
-                        disk->MutableDiskId()->SetNodeId(i + 1);
-                        if (i != 0) {
-                            // Includes zero, equal values, and missing measurements.
-                            const double value = i == 4 ? 0 : i == 3 ? 0.8
-                                                                     : 0.2;
-                            if (sort == NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY) {
-                                disk->SetDDiskOccupancy(value);
-                            } else {
-                                disk->SetPersistentBufferOccupancy(value);
-                            }
-                        }
-                    }
-                    NKikimrCms::TDDiskDiskListRequest request;
-                    request.SetSortBy(sort);
-                    request.SetSortDescending(descending);
-                    request.SetLimit(0);
-                    SortAndPageDDiskOccupancy(response, request);
-                    const TVector<ui32> expected = descending
-                                                       ? TVector<ui32>{4, 2, 3, 5, 1}
-                                                       : TVector<ui32>{5, 2, 3, 4, 1};
-                    for (ui32 i = 0; i < expected.size(); ++i) {
-                        UNIT_ASSERT_VALUES_EQUAL(response.GetDisks(i).GetDiskId().GetNodeId(), expected[i]);
-                    }
-                    request.SetOffset(1);
-                    request.SetLimit(2);
-                    SortAndPageDDiskOccupancy(response, request);
-                    UNIT_ASSERT_VALUES_EQUAL(response.GetTotalCount(), 5);
-                    UNIT_ASSERT_VALUES_EQUAL(response.DisksSize(), 2);
-                    UNIT_ASSERT_VALUES_EQUAL(response.GetDisks(0).GetDiskId().GetNodeId(), 2);
-                    UNIT_ASSERT_VALUES_EQUAL(response.GetDisks(1).GetDiskId().GetNodeId(), 3);
-                    request.SetOffset(Max<ui32>());
-                    SortAndPageDDiskOccupancy(response, request);
-                    UNIT_ASSERT_VALUES_EQUAL(response.DisksSize(), 0);
-                }
+        Y_UNIT_TEST(SortOccupancyBeforePaging) {
+            const TVector<TDDiskOccupancySortKey> keys{
+                {1, 1, 1, std::nullopt},
+                {2, 1, 1, 0.2},
+                {2, 1, 2, 0.2},
+                {3, 1, 1, 0.8},
+                {4, 1, 1, 0.0},
+            };
+            for (bool descending : {false, true}) {
+                const TVector<ui32> expected = descending
+                    ? TVector<ui32>{3, 1, 2, 4, 0} : TVector<ui32>{4, 1, 2, 3, 0};
+                UNIT_ASSERT_VALUES_EQUAL(SortAndPageDDiskOccupancy(keys, descending, 0, 0), expected);
+                UNIT_ASSERT_VALUES_EQUAL(SortAndPageDDiskOccupancy(keys, descending, 1, 2), (TVector<ui32>{1, 2}));
+                UNIT_ASSERT_VALUES_EQUAL(SortAndPageDDiskOccupancy(keys, descending, 4, Max<ui32>()), (TVector<ui32>{0}));
+                UNIT_ASSERT(SortAndPageDDiskOccupancy(keys, descending, Max<ui32>(), 2).empty());
+                UNIT_ASSERT(SortAndPageDDiskOccupancy({}, descending, 0, 0).empty());
             }
         }
     } // Y_UNIT_TEST_SUITE(TDDiskUsageTest)

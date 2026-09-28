@@ -768,6 +768,32 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT_VALUES_EQUAL(disk.HasPersistentBufferOccupancy(), nodeId == env.GetNodeId(0) || nodeId == env.GetNodeId(2));
             UNIT_ASSERT_VALUES_EQUAL(disk.GetAvailable(), nodeId != env.GetNodeId(3));
         }
+        for (const auto sort : {NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY,
+                                NKikimrCms::DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY}) {
+            for (bool descending : {false, true}) {
+                auto sortedRequest = request;
+                sortedRequest.SetSortBy(sort);
+                sortedRequest.SetSortDescending(descending);
+                const auto sorted = env.RequestDDiskDiskList(sortedRequest);
+                UNIT_ASSERT_VALUES_EQUAL(sorted.GetTotalCount(), 8);
+                UNIT_ASSERT_VALUES_EQUAL(sorted.DisksSize(), 8);
+                const bool ddisk = sort == NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY;
+                UNIT_ASSERT_VALUES_EQUAL(sorted.GetDisks(0).GetDiskId().GetNodeId(), env.GetNodeId(ddisk && !descending ? 1 : 0));
+                UNIT_ASSERT_VALUES_EQUAL(sorted.GetDisks(1).GetDiskId().GetNodeId(), env.GetNodeId(ddisk ? (descending ? 1 : 0) : 2));
+                for (ui32 i = 2; i < 8; ++i) {
+                    const auto& disk = sorted.GetDisks(i);
+                    UNIT_ASSERT(!(ddisk ? disk.HasDDiskOccupancy() : disk.HasPersistentBufferOccupancy()));
+                }
+                sortedRequest.SetOffset(1);
+                sortedRequest.SetLimit(2);
+                const auto page = env.RequestDDiskDiskList(sortedRequest);
+                UNIT_ASSERT_VALUES_EQUAL(page.GetTotalCount(), 8);
+                UNIT_ASSERT_VALUES_EQUAL(page.DisksSize(), 2);
+                for (ui32 i = 0; i < 2; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(page.GetDisks(i).SerializeAsString(), sorted.GetDisks(i + 1).SerializeAsString());
+                }
+            }
+        }
         // Each collection builds a new snapshot: absent whiteboard samples must vanish.
         {
             TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);

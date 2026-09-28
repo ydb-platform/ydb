@@ -441,6 +441,23 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
             R'predicate: ((IF((CAST(`data` AS Utf8?) IS NOT NULL), CAST(CAST(`data` AS Utf8?) AS String), NULL) REGEXP \".*hello2.*\") IS NOT DISTINCT FROM TRUE)')  # YQ-5727
+        filter = ' CAST(`time` AS Date) > Date("1970-04-12")'
+        self.run_and_check(
+            kikimr, client, sql + filter, data, expected,
+            R'predicate: (CAST(`time` AS Date?) > Date(\"1970-04-12\"))')
+        filter = ' CAST(`time` AS Timestamp) > Timestamp("1970-01-01T00:00:00.000101Z")'
+        self.run_and_check(
+            kikimr, client, sql + filter, data, expected,
+            R'predicate: (CAST(`time` AS Timestamp?) > Timestamp(\"1970-01-01T00:00:00.000101Z\"))')  # YQ-5738
+
+        filter = ' MIN_OF(`time`, `time` + 5) >= 102 AND MAX_OF(`time`, `time` - 5) < 103'
+        self.run_and_check(
+            kikimr, client, sql + filter, data, expected,
+            R'predicate: ')
+        filter = ' `time` IN (102, 103, 104)'
+        self.run_and_check(
+            kikimr, client, sql + filter, data, expected,
+            R'predicate: (`time` IN (102, 103, 104))')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):

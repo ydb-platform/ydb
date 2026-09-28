@@ -28,6 +28,7 @@ SRCS(
     cms_tx_update_config.cpp
     cms_tx_update_downtimes.cpp
     defs.h
+    ddisk_usage.cpp
     ddisk_usage.h
     downtime.cpp
     downtime.h

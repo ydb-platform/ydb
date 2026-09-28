@@ -1002,7 +1002,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
             // Both the old and restored buffer periodically refresh free space.
-            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType
+                    && (ev->Sender == disk1ActorId
+                        || (disk2PdiskEdge && ev->GetRecipientRewrite() == *disk2PdiskEdge))) {
                 ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
                     new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
                     0, ev->Cookie), NodeId);
@@ -1237,7 +1239,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
             // Both the old and restored buffer periodically refresh free space.
-            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType
+                    && (ev->Sender == disk1ActorId
+                        || (disk2PdiskEdge && ev->GetRecipientRewrite() == *disk2PdiskEdge))) {
                 ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
                     new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
                     0, ev->Cookie), NodeId);

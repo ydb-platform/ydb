@@ -169,8 +169,12 @@ namespace NKikimr::NDDisk {
         if (ev->Get()->Status == NKikimrProto::EReplyStatus::OK) {
             NormalizedOccupancy = ev->Get()->NormalizedOccupancy;
         }
-        if (IsPersistentBufferActor && PersistentBufferReady && !Stopping && !IsBroken()) {
+        // A failed check must not replace a still-fresh successful sample.
+        if (ev->Get()->Status == NKikimrProto::OK
+                && IsPersistentBufferActor && PersistentBufferReady && !Stopping && !IsBroken()) {
             auto update = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>();
+            update->OwnerRound = BaseInfo.InitOwnerRound;
+            update->Lifetime = TDuration::MilliSeconds(ui64(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds) * 3);
             update->Record.SetPDiskId(BaseInfo.PDiskId);
             update->Record.SetDDiskSlotId(BaseInfo.VDiskSlotId);
             if (ev->Get()->Status == NKikimrProto::OK && NormalizedOccupancy >= 0) {

@@ -194,15 +194,19 @@ struct TEvWhiteboard {
     // Local publications only; requests never fan out to DDisk/PB actors.
     struct TEvDDiskStateUpdate : TEventLocal<TEvDDiskStateUpdate, EvDDiskStateUpdate> {
         NKikimrWhiteboard::TDDiskStateInfo Record;
+        ui64 OwnerRound = 0;
+        TDuration Lifetime;
     };
 
     struct TEvDDiskStateDelete : TEventLocal<TEvDDiskStateDelete, EvDDiskStateDelete> {
         ui32 PDiskId;
         ui32 DDiskSlotId;
+        ui64 OwnerRound;
 
-        TEvDDiskStateDelete(ui32 pdiskId, ui32 slotId)
+        TEvDDiskStateDelete(ui32 pdiskId, ui32 slotId, ui64 ownerRound)
             : PDiskId(pdiskId)
             , DDiskSlotId(slotId)
+            , OwnerRound(ownerRound)
         {}
     };
 

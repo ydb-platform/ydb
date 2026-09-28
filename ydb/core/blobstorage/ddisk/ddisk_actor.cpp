@@ -954,7 +954,7 @@ namespace {
         CountersBase->RemoveSubgroupChain(CountersChain);
         if (IsPersistentBufferActor) {
             Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
-                new NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateDelete(BaseInfo.PDiskId, BaseInfo.VDiskSlotId));
+                new NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateDelete(BaseInfo.PDiskId, BaseInfo.VDiskSlotId, BaseInfo.InitOwnerRound));
             if (ParentDDiskId) {
                 Send(ParentDDiskId, new TEvents::TEvGone());
             }

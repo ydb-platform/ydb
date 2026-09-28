@@ -86,10 +86,13 @@ protected:
     struct TDDiskState {
         NKikimrWhiteboard::TDDiskStateInfo Info;
         TActorId Publisher;
-        TInstant UpdatedAt;
+        TInstant ExpiresAt;
+        ui64 OwnerRound = 0;
+        bool Deleted = false;
     };
+    // Keep the last owner round even after expiry/deletion to fence delayed publications.
+    // NodeWarden assigns increasing rounds for slot incarnations within this process.
     std::unordered_map<ui64, TDDiskState> DDiskStateInfo;
-    static constexpr TDuration DDiskStateLifetime = TDuration::Seconds(15);
 
     i64 MaxClockSkewWithPeerUs = 0;
     ui32 MaxClockSkewPeerId = 0;
@@ -649,19 +652,33 @@ protected:
         auto& info = ev->Get()->Record;
         const ui64 key = (ui64(info.GetPDiskId()) << 32) | info.GetDDiskSlotId();
         auto& state = DDiskStateInfo[key];
+        const auto& update = *ev->Get();
+        if (update.OwnerRound < state.OwnerRound
+                || (update.OwnerRound == state.OwnerRound
+                    && (state.Deleted || (state.Publisher && state.Publisher != ev->Sender)))) {
+            return;
+        }
         state.Info = std::move(info);
         state.Publisher = ev->Sender;
-        state.UpdatedAt = TActivationContext::Now();
-        state.Info.SetChangeTime(state.UpdatedAt.MilliSeconds());
+        state.OwnerRound = update.OwnerRound;
+        state.Deleted = false;
+        const auto now = TActivationContext::Now();
+        state.ExpiresAt = now + update.Lifetime;
+        state.Info.SetChangeTime(now.MilliSeconds());
     }
 
     void Handle(TEvWhiteboard::TEvDDiskStateDelete::TPtr& ev) {
         const ui64 key = (ui64(ev->Get()->PDiskId) << 32) | ev->Get()->DDiskSlotId;
-        const auto it = DDiskStateInfo.find(key);
-        // A delayed shutdown of an old incarnation must not remove a new sample.
-        if (it != DDiskStateInfo.end() && it->second.Publisher == ev->Sender) {
-            DDiskStateInfo.erase(it);
+        auto& state = DDiskStateInfo[key];
+        if (ev->Get()->OwnerRound < state.OwnerRound
+                || (ev->Get()->OwnerRound == state.OwnerRound
+                    && state.Publisher && state.Publisher != ev->Sender)) {
+            return;
         }
+        state.Info.Clear();
+        state.OwnerRound = ev->Get()->OwnerRound;
+        state.Publisher = ev->Sender;
+        state.Deleted = true;
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr& ev) {
@@ -1011,14 +1028,11 @@ protected:
         }
         if (request.GetIncludeDDiskState()) {
             const auto now = TActivationContext::Now();
-            for (auto it = DDiskStateInfo.begin(); it != DDiskStateInfo.end();) {
-                if (it->second.UpdatedAt + DDiskStateLifetime < now) {
-                    it = DDiskStateInfo.erase(it);
-                } else {
-                    if (it->second.Info.GetChangeTime() >= changedSince) {
-                        record.AddDDiskStateInfo()->CopyFrom(it->second.Info);
-                    }
-                    ++it;
+            for (auto& [key, state] : DDiskStateInfo) {
+                if (state.ExpiresAt < now) {
+                    state.Info.Clear();
+                } else if (state.Info.HasPDiskId() && state.Info.GetChangeTime() >= changedSince) {
+                    record.AddDDiskStateInfo()->CopyFrom(state.Info);
                 }
             }
         }
@@ -1273,11 +1287,9 @@ protected:
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr&) {
         const auto ddiskNow = TActivationContext::Now();
-        for (auto it = DDiskStateInfo.begin(); it != DDiskStateInfo.end();) {
-            if (it->second.UpdatedAt + DDiskStateLifetime < ddiskNow) {
-                it = DDiskStateInfo.erase(it);
-            } else {
-                ++it;
+        for (auto& [key, state] : DDiskStateInfo) {
+            if (state.ExpiresAt < ddiskNow) {
+                state.Info.Clear();
             }
         }
         auto it = TabletStateInfo.begin();

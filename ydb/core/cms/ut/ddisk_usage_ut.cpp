@@ -1,4 +1,6 @@
 #include <ydb/core/cms/ddisk_usage.h>
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/cms/cluster_info.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -17,6 +19,8 @@ namespace NKikimr::NCms {
             const auto publisher = runtime.AllocateEdgeActor();
             auto publish = [&](ui32 slot, TActorId source, double occupancy) {
                 auto* update = new TEvWhiteboard::TEvDDiskStateUpdate;
+                update->OwnerRound = source == oldPublisher ? 1 : 2;
+                update->Lifetime = TDuration::Seconds(slot == 2 ? 90 : 15);
                 update->Record.SetPDiskId(1);
                 update->Record.SetDDiskSlotId(slot);
                 update->Record.SetDDiskOccupancy(occupancy);
@@ -47,12 +51,30 @@ namespace NKikimr::NCms {
             UNIT_ASSERT(!cluster.FindDDiskState(runtime.GetNodeId(0), 1, 3));
             cluster.ClearNode(runtime.GetNodeId(0));
             UNIT_ASSERT(!cluster.FindDDiskState(runtime.GetNodeId(0), 1, 1));
-            runtime.Send(new IEventHandle(board, oldPublisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1)));
+            runtime.Send(new IEventHandle(board, oldPublisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1, 1)));
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 2);
-            runtime.Send(new IEventHandle(board, publisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1)));
+            publish(1, oldPublisher, 0.1);
+            auto current = query(true);
+            for (const auto& info : current.GetDDiskStateInfo()) {
+                if (info.GetDDiskSlotId() == 1) {
+                    UNIT_ASSERT_VALUES_EQUAL(info.GetDDiskOccupancy(), 0.8);
+                }
+            }
+            runtime.Send(new IEventHandle(board, publisher, new TEvWhiteboard::TEvDDiskStateDelete(1, 1, 2)));
+            UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
+            // Delayed updates cannot resurrect a deleted incarnation.
+            publish(1, oldPublisher, 0.1);
+            publish(1, publisher, 0.8);
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
             runtime.AdvanceCurrentTime(TDuration::Seconds(16));
+            UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
+            runtime.AdvanceCurrentTime(TDuration::Seconds(75));
             UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 0);
+            publish(2, oldPublisher, 0.1);
+            UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 0);
+            // Expiry still permits a current actor to recover after missed checks.
+            publish(2, publisher, 0.5);
+            UNIT_ASSERT_VALUES_EQUAL(query(true).DDiskStateInfoSize(), 1);
         }
 
         Y_UNIT_TEST(SortBothRolesBeforePaging) {

@@ -2466,6 +2466,8 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         const auto& id = usage->DiskId;
         const auto* space = ClusterInfo->FindDDiskState(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
         if (disk->GetAvailable() && space) {
+            // PDisk quota reductions can make normalized occupancy exceed 100%.
+            // Preserve that information instead of hiding an overfull owner.
             const double ddiskOccupancy = space->GetDDiskOccupancy();
             if (!usage->DDiskTabletIds.empty() && space->HasDDiskOccupancy()
                     && std::isfinite(ddiskOccupancy) && ddiskOccupancy >= 0) {

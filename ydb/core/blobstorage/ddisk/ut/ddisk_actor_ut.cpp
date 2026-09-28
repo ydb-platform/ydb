@@ -1189,7 +1189,7 @@ void AssertActorDies(TTestContext& ctx, const TActorId& actorId) {
 Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PublishesSpaceToWhiteboard) {
         TTestContext ctx;
-        const auto disk = ctx.CreateDDisk(121, 1);
+        const auto disk = ctx.CreateDDisk(121, 1, NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 30000, 512 * 1024});
         const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
         auto* space = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
@@ -1197,6 +1197,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         SendToDDisk(ctx, disk.PBServiceId, space);
         for (;;) {
             const auto update = ctx.Runtime.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>(board, false);
+            UNIT_ASSERT_VALUES_EQUAL(update->Get()->OwnerRound, 1);
+            UNIT_ASSERT_VALUES_EQUAL(update->Get()->Lifetime, TDuration::Seconds(90));
             const auto& record = update->Get()->Record;
             if (record.GetDDiskOccupancy() != 0.4) {
                 continue;
@@ -1207,6 +1209,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferOccupancy(), 0);
             break;
         }
+        SendToDDisk(ctx, disk.PBServiceId,
+            new NPDisk::TEvCheckSpaceResult(NKikimrProto::ERROR, 0, 0, 0, 0, 0, 0, 0, "failed", 0));
+        auto* recovered = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+        recovered->NormalizedOccupancy = 0.6;
+        SendToDDisk(ctx, disk.PBServiceId, recovered);
+        const auto update = ctx.Runtime.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>(board, false);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Record.GetDDiskOccupancy(), 0.6);
     }
 
     Y_UNIT_TEST(ShutdownReleasesOnlyNeverCommittedReservations) {

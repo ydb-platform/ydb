@@ -34,16 +34,39 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
+    Y_UNIT_TEST(CreateUnknownSysViewType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TVector<i32> invalidTypes = {
+            0,
+            -1,
+            static_cast<i32>(NKikimrSysView::ESysViewType_MAX) + 1,
+            Max<i32>(),
+        };
+
+        for (const i32 type : invalidTypes) {
+            TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
+                              Sprintf(R"(
+                                 Name: "unknown_sys_view"
+                                 Type: %d
+                                )", type),
+                              {{NKikimrScheme::StatusSchemeError, "unsupported system view type"}});
+            TestLs(runtime, "/MyRoot/.sys/unknown_sys_view", false, NLs::PathNotExist);
+        }
+    }
+
     Y_UNIT_TEST(CreateSysView) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -72,10 +95,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)));
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathExist);
 
@@ -94,18 +117,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)));
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathExist);
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: ENodes
-                            )",
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::ENodes)),
                           {EStatus::StatusSchemeError, EStatus::StatusAlreadyExists});
         env.TestWaitNotification(runtime, txId);
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
@@ -121,15 +144,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         ui64 txId = 100;
 
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                           R"(
+                           Sprintf(R"(
                               Name: "sys_view_1"
-                              Type: EPartitionStats
-                             )");
+                              Type: %d
+                             )", static_cast<i32>(ESysViewType::EPartitionStats)));
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                           R"(
+                           Sprintf(R"(
                               Name: "sys_view_2"
-                              Type: ENodes
-                             )");
+                              Type: %d
+                             )", static_cast<i32>(ESysViewType::ENodes)));
 
         TestModificationResult(runtime, txId - 1);
         TestModificationResult(runtime, txId);
@@ -162,10 +185,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".sys");
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                           R"(
+                           Sprintf(R"(
                               Name: "new_sys_view"
-                              Type: EPartitionStats
-                             )");
+                              Type: %d
+                             )", static_cast<i32>(ESysViewType::EPartitionStats)));
 
         TestModificationResult(runtime, txId - 1);
         TestModificationResult(runtime, txId);
@@ -186,15 +209,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         ui64 txId = 100;
 
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                           R"(
+                           Sprintf(R"(
                               Name: "new_sys_view"
-                              Type: EPartitionStats
-                             )");
+                              Type: %d
+                             )", static_cast<i32>(ESysViewType::EPartitionStats)));
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                           R"(
+                           Sprintf(R"(
                               Name: "new_sys_view"
-                              Type: EPartitionStats
-                             )");
+                              Type: %d
+                             )", static_cast<i32>(ESysViewType::EPartitionStats)));
         const TVector<TExpectedResult> expectedResults = {EStatus::StatusAccepted,
                                                           EStatus::StatusMultipleModifications,
                                                           EStatus::StatusAlreadyExists};
@@ -215,10 +238,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)));
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathExist);
 
@@ -244,10 +267,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
-                            )",
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)),
                           {{EStatus::StatusReadOnly}});
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathNotExist);
@@ -257,10 +280,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)));
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathExist);
     }
@@ -271,10 +294,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: ""
-                             Type: EPartitionStats
-                            )",
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)),
                           {{EStatus::StatusSchemeError, "error: path part shouldn't be empty"}});
         env.TestWaitNotification(runtime, txId);
     }
@@ -353,10 +376,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
 
         TestLs(runtime, "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_sys_view"
-                             Type: EShowCreate
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EShowCreate)));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -368,10 +391,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         }
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_ds_pdisks"
-                             Type: EPDisks
-                            )",
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPDisks)),
                           NACLib::TSystemUsers::Metadata().SerializeAsString(),
                           "metadata@system");
         env.TestWaitNotification(runtime, txId);
@@ -385,10 +408,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         }
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
-                          R"(
+                          Sprintf(R"(
                              Name: "new_partition_stats"
-                             Type: EPartitionStats
-                            )");
+                             Type: %d
+                            )", static_cast<i32>(ESysViewType::EPartitionStats)));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -429,5 +452,60 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
             ExpectEqualSysViewDescription(describeResult, "new_partition_stats", ESysViewType::EPartitionStats,
                                           describedPathId);
         }
+    }
+
+    Y_UNIT_TEST(UnknownSysViewType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSysView(runtime, ++txId, "/MyRoot/.sys", Sprintf(R"(
+            Name: "new_sys_view"
+            Type: %d
+        )", static_cast<i32>(ESysViewType::EPartitionStats)));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto pathId = DescribePath(runtime, "/MyRoot/.sys/new_sys_view")
+            .GetPathDescription().GetSelf().GetPathId();
+        const ui32 unknownType = static_cast<ui32>(NKikimrSysView::ESysViewType_MAX) + 1;
+        UNIT_ASSERT(!NKikimrSysView::ESysViewType_IsValid(unknownType));
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let update '('('SysViewType (Uint32 '%u))))
+                (return (AsList (UpdateRow 'SysView key update)))
+            )
+        )", pathId, unknownType));
+
+        // Keep the unknown view around to test describe and listing before cleanup.
+        runtime.GetAppData().FeatureFlags.SetEnableRealSystemViewPaths(false);
+        const auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SysView", "PathId", pathId));
+        const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetSysViewDescription().GetType(), unknownType);
+        TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::IsSysView);
+
+        TVector<TString> children;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys"), {NLs::Finished, NLs::ExtractChildren(&children)});
+        UNIT_ASSERT(Find(children, "new_sys_view") != children.end());
+
+        // Reboot with roster updates enabled to remove the view with an unknown type.
+        runtime.GetAppData().FeatureFlags.SetEnableRealSystemViewPaths(true);
+        env.AddSysViewsRosterUpdateObserver(runtime);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        env.WaitForSysViewsRosterUpdate(runtime);
+
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SysView", "PathId", pathId));
+        const auto describeAfterCleanup = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        UNIT_ASSERT_VALUES_EQUAL(describeAfterCleanup.GetStatus(), NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT(!describeAfterCleanup.GetPathDescription().HasSysViewDescription());
+        TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathNotExist);
+
+        children.clear();
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys"), {NLs::Finished, NLs::ExtractChildren(&children)});
+        UNIT_ASSERT(Find(children, "new_sys_view") == children.end());
     }
 }

@@ -12,7 +12,6 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
@@ -2596,7 +2595,8 @@ message TExportMetadata {
 
 message TSysViewDescription {
     optional string Name = 1;
-    optional NKikimrSysView.ESysViewType Type = 2;
+    // Numeric ESysViewType
+    optional int32 Type = 2 [default = 1];
     optional NKikimrProto.TPathID SourceObject = 3;
 }
 

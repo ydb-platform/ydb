@@ -215,7 +215,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         *sysViewDescription.MutableSourceObject() = tableId.PathId.ToProto();
     }
 
-    switch (sysViewDescription.GetType()) {
+    const auto sysViewType = sysViewDescription.GetType();
+    switch (sysViewType) {
     case ESysViewType::EPartitionStats:
         return CreatePartitionStatsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ENodes:
@@ -269,7 +270,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return NAuth::CreateOwnersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EAuthPermissions:
     case ESysViewType::EAuthEffectivePermissions:
-        return NAuth::CreatePermissionsScan(sysViewDescription.GetType() == ESysViewType::EAuthEffectivePermissions,
+        return NAuth::CreatePermissionsScan(sysViewType == ESysViewType::EAuthEffectivePermissions,
                                             ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EShowCreate:
         return CreateShowCreate(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));

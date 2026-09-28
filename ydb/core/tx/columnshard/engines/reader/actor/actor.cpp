@@ -191,7 +191,8 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
 }
 
 void TColumnShardScan::HandleScan(NActors::TEvents::TEvPoison::TPtr& /*ev*/) noexcept {
-    PassAway();
+    AbortReason = "poisoned";
+    Finish(NColumnShard::TScanCounters::EStatusFinish::Poisoned);
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept {
@@ -308,7 +309,6 @@ bool TColumnShardScan::ProduceResults() noexcept {
     // detected while the scan runs, so this has to be re-checked as results come, not only once.
     if (ReadMetadataRange->HasWritesAndBroken()) {
         SendScanAborted();
-        ScanIterator.reset();
         Finish(NColumnShard::TScanCounters::EStatusFinish::BrokenLock);
         return false;
     }
@@ -335,8 +335,6 @@ bool TColumnShardScan::ProduceResults() noexcept {
             {"iterator", ScanIterator->DebugString()},
             {"message", resultConclusion.GetErrorMessage()});
         SendScanError(resultConclusion.GetErrorMessage());
-
-        ScanIterator.reset();
         Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorResult);
         return false;
     }
@@ -437,9 +435,8 @@ void TColumnShardScan::ContinueProcessing() {
             if (ChunksLimiter.HasMore()) {
                 auto g = Stats->MakeGuard("Finish");
                 MakeResult();
-                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
                 SendResult(false, true);
-                ScanIterator.reset();
+                Finish(NColumnShard::TScanCounters::EStatusFinish::Success);
             }
         } else {
             while (true) {
@@ -448,7 +445,6 @@ void TColumnShardScan::ContinueProcessing() {
                     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                         {"event", "ContinueProcessing"},
                         {"error", hasMoreData.GetErrorMessage()});
-                    ScanIterator.reset();
                     SendScanError("iterator_error:" + hasMoreData.GetErrorMessage());
                     return Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorScan);
                 } else if (!*hasMoreData) {
@@ -619,19 +615,34 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }
+<<<<<<< HEAD
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
         {"scanActorId", ScanActorId},
+=======
+    const TString iteratorDebugString = ScanIterator ? ScanIterator->DebugString(false) : "NO";
+    ScanIterator.reset();
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
+        {"scanActorId", ScanActorId},
+>>>>>>> 9e7e52a8a33 (Fix deleting portions under scans (again) (#53938))
         {"tabletId", TabletId});
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
     FinishInstant = TMonotonic::Now();
     ScanCountersPool.OnScanFinished(status, *FinishInstant - *StartInstant);
     ReportStats();
+<<<<<<< HEAD
     YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "scan_finish"},
         {"computeActorId", ScanComputeActorId},
         {"stats", Stats->ToJson()},
         {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
+=======
+    YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "scan_finish"},
+        {"computeActorId", ScanComputeActorId},
+        {"stats", Stats->ToJson()},
+        {"iterator", iteratorDebugString});
+>>>>>>> 9e7e52a8a33 (Fix deleting portions under scans (again) (#53938))
     PassAway();
 }
 

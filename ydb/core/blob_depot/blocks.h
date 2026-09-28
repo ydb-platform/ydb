@@ -32,11 +32,7 @@ namespace NKikimr::NBlobDepot {
 
     private:
         class TTxUpdateBlock;
-<<<<<<< HEAD
-=======
         class TTxQueryBlocks;
-        class TTxDeleteTabletData;
->>>>>>> f492bd1aef5 (Fix blob depot block race (#54167))
         class TBlockProcessorActor;
 
     public:

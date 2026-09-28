@@ -53,10 +53,7 @@ namespace NKikimr::NBlobDepot {
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else {
-<<<<<<< HEAD
                 Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, std::move(Response));
-=======
-                TActivationContext::Send(Response.release());
             }
         }
     };
@@ -97,44 +94,6 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             if (Response) {
                 TActivationContext::Send(Response.release());
-            }
-        }
-    };
-
-    // Drops the data of a tablet that has been deleted for good (Max<ui32>() block). This is what the
-    // hard barrier issued by Hive right after the block would have done, but that barrier may never
-    // arrive -- in particular, a VDisk that has seen the block is allowed to drop the barrier records
-    // for this tablet, so decommission may bring us the block without any barriers.
-    class TBlobDepot::TBlocksManager::TTxDeleteTabletData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        const ui64 TabletId;
-        bool Finished = false;
-
-    public:
-        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DELETE_TABLET_DATA; }
-
-        TTxDeleteTabletData(TBlobDepot *self, ui64 tabletId)
-            : TTransactionBase(self)
-            , TabletId(tabletId)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            ui32 maxItems = 10'000;
-            Finished = Self->Data->OnTabletDeleted(TabletId, maxItems, txc, this);
-            if (Finished) {
-                // the data is gone, so the barriers that used to guard it are not needed either
-                Self->BarrierServer->OnTabletDeleted(TabletId, txc);
-            }
-            return true;
-        }
-
-        void Complete(const TActorContext&) override {
-            Self->Data->CommitTrash(this);
-            if (Finished) {
-                Self->BlocksManager->DeleteTabletDataInFlight = false;
-                Self->BlocksManager->ProcessTabletsToDelete();
-            } else {
-                Self->Execute(std::make_unique<TTxDeleteTabletData>(Self, TabletId));
->>>>>>> f492bd1aef5 (Fix blob depot block race (#54167))
             }
         }
     };

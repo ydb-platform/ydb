@@ -45,16 +45,18 @@ controller cache allocation; cold or rebuilding caches can affect performance.
 The HNSW creation options apply only to `distributed_hnsw`. Recreate the index
 with different options to compare HNSW configurations.
 
-With `--hnsw-full-range --stale-ro`, unprefixed, non-overlapping `distributed_hnsw` selects search all posting-table partitions and
-merge their HNSW candidates. This bypasses k-means cluster-range filtering and
-uses the stored HNSW settings; `--kmeans-tree-clusters` applies to k-means and
-prefixed index views, not this full-partition search. `--non-indexed` still
-searches the base table. Prefixed searches retain their index view and prefix
-predicate. Overlapping indexes retain the index view to deduplicate postings.
+Unprefixed `distributed_hnsw` searches use the named index `VIEW`. The server
+searches every posting partition's HNSW graph in parallel and merges the top-K
+results, using the stored HNSW settings. K-means cluster pruning does not apply
+to these searches. Prefix indexes retain their prefix filter and cluster traversal;
+overlapping postings are deduplicated by the server.
 
-The default search continues to use the named index view and
-`--kmeans-tree-clusters`. Full-range mode searches more data and can have
-different recall and throughput; report the mode when comparing results.
+Use `--stale-ro` to distribute reads across configured read replicas, or omit it
+for snapshot-consistent reads. Warm the graphs before measuring steady-state
+throughput. The existing index can be reused after upgrading the server.
 
-Full-range mode requires explicit stale reads because it reads implementation
-tables directly. Use the default index view for snapshot-consistent reads.
+`--hnsw-full-range --stale-ro` remains available to read the internal posting table
+directly for comparisons with older servers. It is no longer needed for fast
+`distributed_hnsw` index views. This diagnostic mode applies only to unprefixed,
+non-overlapping indexes and requires explicit stale reads. `--non-indexed` still
+searches the base table.

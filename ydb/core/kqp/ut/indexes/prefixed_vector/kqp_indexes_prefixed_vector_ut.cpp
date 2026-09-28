@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         result = session.ExecuteSchemeQuery(Q_(R"(
             ALTER TABLE `/Root/HnswPrefix`
                 ADD INDEX index
-                GLOBAL USING vector_kmeans_tree
+                GLOBAL USING distributed_hnsw
                 ON (user, emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
                       levels=1, clusters=2, hnsw_min_rows=1);

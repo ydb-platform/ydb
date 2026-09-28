@@ -1205,6 +1205,7 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
     settings->SetLevelTop(vectorSearch.GetLevelTop());
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
+    settings->SetFullRangeHnsw(vectorSearch.GetFullRangeHnsw());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;

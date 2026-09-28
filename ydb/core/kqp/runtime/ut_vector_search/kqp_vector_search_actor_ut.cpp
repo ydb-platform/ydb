@@ -216,6 +216,11 @@ namespace NKikimr::NKqp {
                 return *this;
             }
 
+            TSettingsBuilder& FullRangeHnsw() {
+                Settings.SetFullRangeHnsw(true);
+                return *this;
+            }
+
             TSettingsBuilder& Prefixed() {
                 Settings.SetHasPrefix(true);
                 return *this;
@@ -1109,6 +1114,76 @@ namespace NKikimr::NKqp {
 
             UNIT_ASSERT_VALUES_EQUAL(env.Errors().size(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(env.Observed().size(), 0u);
+        }
+
+        Y_UNIT_TEST(FullRangeHnswPreservesReadConsistency) {
+            for (const bool followers : {false, true}) {
+                auto builder = TSettingsBuilder().FullRangeHnsw().Covered().TopK(1);
+                if (followers) {
+                    builder.Followers();
+                }
+                TSearchEnv env(builder.Build());
+                env.Poll();
+
+                UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Level), 0u);
+                const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+                UNIT_ASSERT(settings.HasFullRange());
+                UNIT_ASSERT(!settings.HasRanges());
+                const TSerializedTableRange range(settings.GetFullRange());
+                UNIT_ASSERT(range.ToTableRange().IsFullRange(settings.KeyColumnTypesSize()));
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().GetLimit(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetUseFollowers(), followers);
+                UNIT_ASSERT_VALUES_EQUAL(settings.HasSnapshot(), !followers);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetAllowInconsistentReads(), followers);
+
+                auto& posting = env.Read(EReadKind::Posting);
+                posting.Push({{ui64(7), FarVec}, {ui64(8), NearVec}}, true);
+                env.Wake(posting);
+                UNIT_ASSERT(env.Finished());
+                UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Main), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"8"}));
+            }
+        }
+
+        Y_UNIT_TEST(FullRangeHnswDeduplicatesOverlappingPostings) {
+            TSearchEnv env(TSettingsBuilder().FullRangeHnsw().Covered().Overlap(3).TopK(2).Build());
+            env.Poll();
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Level), 0u);
+            const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+            UNIT_ASSERT(settings.HasFullRange());
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), 1u);
+
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}, {ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT(env.Finished());
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"7", "8"}));
+        }
+
+        Y_UNIT_TEST(FullRangeHnswLooksUpUncoveredColumns) {
+            TSearchEnv env(TSettingsBuilder().FullRangeHnsw().PostingEmbedding().Followers().Lock(555).Build());
+            env.Poll();
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Level), 0u);
+            const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+            UNIT_ASSERT(settings.HasFullRange());
+            UNIT_ASSERT(settings.HasVectorTopK());
+            UNIT_ASSERT(!settings.GetUseFollowers());
+            UNIT_ASSERT(settings.HasSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetLockTxId(), 555u);
+
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Main), 1u);
+            const auto& mainSettings = env.ObservedRead(EReadKind::Main)->Settings;
+            UNIT_ASSERT(mainSettings.HasSnapshot());
+            UNIT_ASSERT_VALUES_EQUAL(mainSettings.GetLockTxId(), 555u);
+            auto& main = env.Read(EReadKind::Main);
+            main.Push({{ui64(7), NearVec}}, true);
+            env.Wake(main);
+            UNIT_ASSERT(env.Finished());
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"7"}));
         }
 
         // ---- level traversal ----

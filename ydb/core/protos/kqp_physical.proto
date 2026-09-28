@@ -364,6 +364,8 @@ message TKqpPhyCnVectorSearch {
     // Prefixed index: the transform input carries, per prefix group, the root
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
+    // Unprefixed distributed_hnsw searches every partition-local graph.
+    bool FullRangeHnsw = 14;
 }
 
 message TKqpPhyCnSequencer {

@@ -345,6 +345,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
+    // Returns a requested group that is still a channel's latest entry, i.e. still taking writes.
+    std::optional<ui32> FindLiveMoveDataGroup(const THashSet<ui32>& groups) const;
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
     // Split out of MoveDataCompleted so the wakeup can drive it without claiming vacuum finished.
     void CheckMoveDataGate(const TActorContext& ctx);

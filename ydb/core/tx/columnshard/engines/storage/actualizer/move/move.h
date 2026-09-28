@@ -21,9 +21,9 @@ class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
-    // Extended until AdmissionDeadline: new portions still land in the doomed group; unbounded, it never converges.
+    // Fixed at Refresh: Handle(TEvMoveData) rejects a request naming a live group, so a portion
+    // created afterwards cannot hold a target blob and is never adopted.
     THashSet<ui64> InitialPortionIds;
-    TInstant AdmissionDeadline;
     // Portions waiting for accessor-load so we can check their DsGroup.
     THashSet<ui64> PendingPortionIds;
     // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
@@ -92,7 +92,6 @@ public:
 
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
-    static constexpr TDuration AdmissionWindow = TDuration::Minutes(10);
     static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 
     void Refresh(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);

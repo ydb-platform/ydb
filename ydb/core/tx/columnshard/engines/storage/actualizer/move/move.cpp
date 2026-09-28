@@ -84,7 +84,7 @@ void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
     PortionAddress.erase(it);
 }
 
-void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) {
+void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& /*context*/) {
     const ui64 portionId = info.GetPortionId();
     // A seeded uncommitted portion has committed, so from here on it moves like any other.
     UncommittedPortionIds.erase(portionId);
@@ -92,10 +92,8 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     // An aborted task returns the portion here; leaving it in flight past any check below freezes the gate.
     InFlightPortionIds.erase(portionId);
     if (!InitialPortionIds.contains(portionId)) {
-        if (context.GetNow() >= AdmissionDeadline) {
-            return;
-        }
-        InitialPortionIds.emplace(portionId);
+        // Not ours: the session set is fixed at Refresh and a later portion cannot hold a target blob.
+        return;
     }
     if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
         return;
@@ -107,7 +105,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
 }
 
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
-    // InitialPortionIds is kept: a level move removes and re-adds the same portion, which must still pass admission.
+    // InitialPortionIds is kept: a level move removes and re-adds the same portion, which stays ours.
     PendingPortionIds.erase(portionId);
     RequestedAt.erase(portionId);
     InFlightPortionIds.erase(portionId);
@@ -265,8 +263,6 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
 
 void TMoveDataActualizer::Refresh(
     const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
-    AdmissionDeadline =
-        externalContext.GetNow() + NYDBTest::TControllers::GetColumnShardController()->GetMoveDataAdmissionWindow(AdmissionWindow);
     InitialPortionIds.clear();
     PendingPortionIds.clear();
     PortionsToMove.clear();

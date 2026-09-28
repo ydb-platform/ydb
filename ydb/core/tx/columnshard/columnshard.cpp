@@ -657,13 +657,39 @@ void TColumnShard::ScheduleExecutorStatistics() {
     }
 }
 
-void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&) {
+std::optional<ui32> TColumnShard::FindLiveMoveDataGroup(const THashSet<ui32>& groups) const {
+    if (groups.empty() || !Info()) {
+        return std::nullopt;
+    }
+    for (const auto& channel : Info()->Channels) {
+        const auto* latest = channel.LatestEntry();
+        if (latest && groups.contains(latest->GroupID)) {
+            return latest->GroupID;
+        }
+    }
+    return std::nullopt;
+}
+
+void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx) {
     if (!HasAppData() || !AppData()->FeatureFlags.GetEnableColumnshardMoveData()) {
         TTabletExecutedFlat::Handle(ev);
         return;
     }
 
     const auto& record = ev->Get()->Record;
+    THashSet<ui32> requested;
+    for (const auto groupId : record.GetGroups()) {
+        requested.emplace(groupId);
+    }
+    // Same contract as keyvalue and blob_depot: the caller reassigns channel history first, so a
+    // group that is still the latest entry would keep taking writes and the move could never converge.
+    if (const auto liveGroup = FindLiveMoveDataGroup(requested)) {
+        const TString reason = TStringBuilder() << "group " << *liveGroup << " is still the latest history entry at tablet " << TabletID();
+        LOG_S_WARN("TColumnShard::Handle TEvMoveData: " << reason);
+        ctx.Send(
+            ev->Sender, new TEvTablet::TEvMoveDataResponse(TabletID(), NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch, reason));
+        return;
+    }
     MoveDataState.HiveSender = ev->Sender;
 
     if (MoveDataState.Active) {

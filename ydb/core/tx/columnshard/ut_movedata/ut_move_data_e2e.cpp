@@ -227,6 +227,23 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
 
+    // Hive reassigns channel history first; a group still holding the latest entry keeps taking
+    // writes and could never converge, so refuse it the way keyvalue and blob_depot do.
+    Y_UNIT_TEST(MoveDataRejectsAGroupStillTakingWrites) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+
+        // Deliberately no ReassignPastWrittenData: OldGroup is still the channel's latest entry.
+        f.StartMove();
+        const auto response = f.DriveGate(20);
+        UNIT_ASSERT_C(response, "a request naming a live group must be answered, not left pending");
+        UNIT_ASSERT_VALUES_EQUAL_C((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch,
+            "expected ErrorGroupIdMismatch");
+        UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "a refused move must not touch the data");
+    }
+
     // An uncommitted write cannot be rewritten, yet its blobs sit in the old group until it commits and moves.
     Y_UNIT_TEST(SuccessWaitsForUncommittedWriteToCommit) {
         TMoveDataFixture f;
@@ -391,7 +408,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
         // No portion written after the move starts is adopted, so the watermark stays frozen once the queues drain.
-        f.Controller->SetOverrideMoveDataAdmissionWindow(TDuration::Zero());
         f.Write(1, 0, 1000);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
         f.ReassignPastWrittenData();

@@ -324,8 +324,10 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(TInstant::Zero(), std::nullopt), TInstant::Zero());
     }
 
-    // Portions created mid-session still land in the doomed group; the deadline bounds adoption.
-    Y_UNIT_TEST(AdoptsPortionsCreatedDuringTheSessionUntilTheDeadline) {
+    // The handler rejects a request naming a live group, so a portion created after the session
+    // started cannot hold a target blob: adopting it would only buy a metadata request and a
+    // rejection, and under write load it would keep Pending non-zero and starve the gate.
+    Y_UNIT_TEST(PortionCreatedAfterTheSessionStartedIsNeverAdopted) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, schema.Index);
         const TInstant start = TInstant::Seconds(1000);
@@ -333,14 +335,15 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(MakeDefaultTierPortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
-        UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(1), "a portion created inside the window must be adopted");
+        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(1), "a portion the session did not start with must not be adopted");
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0, "adopting it would hold the response back");
 
         actualizer.AddPortion(MakeDefaultTierPortion(2), NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
-        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "past the deadline the session must stop adopting");
+        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "time must not change the answer: the session set is fixed at Refresh");
     }
 
-    // A compaction-level move removes and re-adds the same portion; past the deadline it must still be moved.
-    Y_UNIT_TEST(PortionChangedAfterTheDeadlineIsStillMoved) {
+    // A compaction-level move removes and re-adds the same portion; it stays ours however late it returns.
+    Y_UNIT_TEST(PortionReaddedAfterALevelMoveIsStillMoved) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, schema.Index);
         const TInstant start = TInstant::Seconds(1000);

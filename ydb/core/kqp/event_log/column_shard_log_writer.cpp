@@ -28,14 +28,14 @@ TColumnShardLogWriter::TColumnShardLogWriter(
     TLogMessageFilter filter,
     TDatabaseSettings settings,
     TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
-    : TBaseSchematizedLogWriter(std::move(filter), std::move(columns))
+    : TBaseEventLogWriter(std::move(filter), std::move(columns))
     , Settings(std::move(settings))
     , Runner(runner)
 {
 }
 
 bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    if (!TBaseSchematizedLogWriter::Write(message)) {
+    if (!TBaseEventLogWriter::Write(message)) {
         return false;
     }
     CurrentBatchSize++;
@@ -46,7 +46,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
 }
 
 void TColumnShardLogWriter::Flush() {
-    TBaseSchematizedLogWriter::Flush();
+    TBaseEventLogWriter::Flush();
     CurrentBatchSize = 0;
 }
 

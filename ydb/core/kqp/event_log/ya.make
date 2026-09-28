@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    base_schematized_log_writer.cpp
+    base_event_log_writer.cpp
     column_shard_log_writer.cpp
 )
 

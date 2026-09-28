@@ -11,11 +11,11 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
-class TBaseSchematizedLogWriter : public NActors::NStructuredLog::ILogSink {
+class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink {
 public:
     using TLogMessageFilter = std::function<bool(NActors::NStructuredLog::TLogMessage)>;
 
-    TBaseSchematizedLogWriter(TLogMessageFilter filter, TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
+    TBaseEventLogWriter(TLogMessageFilter filter, TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
 
     const TVector<std::shared_ptr<TSchematizedLogColumn>>& GetColumns() const {
         return Columns;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "base_schematized_log_writer.h"
+#include "base_event_log_writer.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -12,7 +12,7 @@ class TKikimrRunner;
 
 namespace NSchematizedLog {
 
-class TColumnShardLogWriter : public TBaseSchematizedLogWriter {
+class TColumnShardLogWriter : public TBaseEventLogWriter {
 public:
     struct TDatabaseSettings {
         TString OptionalStorageId = "__MEMORY";

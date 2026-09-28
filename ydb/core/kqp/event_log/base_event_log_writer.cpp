@@ -1,4 +1,4 @@
-#include "base_schematized_log_writer.h"
+#include "base_event_log_writer.h"
 
 #include <ydb/library/actors/struct_log/text_writer.h>
 
@@ -7,7 +7,7 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
-TBaseSchematizedLogWriter::TBaseSchematizedLogWriter(
+TBaseEventLogWriter::TBaseEventLogWriter(
     TLogMessageFilter filter,
     TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
     : Filter(std::move(filter))
@@ -22,7 +22,7 @@ TBaseSchematizedLogWriter::TBaseSchematizedLogWriter(
     }
 }
 
-bool TBaseSchematizedLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
     if (Filter && !Filter(message)) {
         return false;
     }
@@ -77,7 +77,7 @@ bool TBaseSchematizedLogWriter::Write(const NActors::NStructuredLog::TLogMessage
     return true;
 }
 
-void TBaseSchematizedLogWriter::Flush() {
+void TBaseEventLogWriter::Flush() {
     if (WrittenRecordCount == 0) {
         return;
     }
@@ -89,7 +89,7 @@ void TBaseSchematizedLogWriter::Flush() {
     WrittenRecordCount = 0;
 }
 
-std::shared_ptr<arrow::Schema> TBaseSchematizedLogWriter::GetArrowSchema() const {
+std::shared_ptr<arrow::Schema> TBaseEventLogWriter::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(Columns.size());
     for (const auto& column : Columns) {
@@ -98,7 +98,7 @@ std::shared_ptr<arrow::Schema> TBaseSchematizedLogWriter::GetArrowSchema() const
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> TBaseSchematizedLogWriter::CreateCurrentBatch() {
+std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
     std::vector<std::shared_ptr<arrow::Array>> arrays;
     for (auto& column : Columns) {
         arrays.push_back(column->MakeArray());

@@ -10,6 +10,8 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_memory.h>
+
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
 #include <atomic>
@@ -272,6 +274,26 @@ NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(NYql::NDq::IMemor
     return std::make_shared<TChannelQuotaManager>(std::move(queryQuotaManager), initialMemoryLimit, allocationStep);
 }
 
+struct TTxMemoryTracker : public NRm::ITxMemoryTracker {
+    explicit TTxMemoryTracker(const NScheduler::NHdrf::NDynamic::TQueryPtr& query)
+        : Memory(query)
+    {}
+
+    void IncreaseUsage(ui64 bytes) override {
+        Memory.IncreaseUsage(bytes);
+    }
+
+    void DecreaseUsage(ui64 bytes) override {
+        Memory.DecreaseUsage(bytes);
+    }
+
+    NScheduler::TSchedulableMemory Memory;
+};
+
+std::shared_ptr<NRm::ITxMemoryTracker> CreateTxMemoryTracker(const NScheduler::NHdrf::NDynamic::TQueryPtr& query) {
+    return query ? std::make_shared<TTxMemoryTracker>(query) : nullptr;
+}
+
 template <class TTasksCollection>
 TString TasksIdsStr(const TTasksCollection& tasks) {
     TVector<ui64> ids;
@@ -444,7 +466,7 @@ public:
             }
             QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
-                msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException()));
+                msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException(), CreateTxMemoryTracker(query)));
         }
 
         // the tasks and the channels start with their part of it; a task returns its part when its compute actor

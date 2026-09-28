@@ -579,7 +579,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
 
         QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
-            CaFactory_->GetVerboseMemoryLimitException()));
+            CaFactory_->GetVerboseMemoryLimitException(), CreateTxMemoryTracker(Query)));
     }
 
     if (ArrayBufferMinFillPercentage) {

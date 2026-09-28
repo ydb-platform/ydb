@@ -17,6 +17,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
 using namespace NKikimr;
@@ -165,6 +167,7 @@ public:
         };
 
         SetCpuAttributes(ev->Get()->Params, attrs);
+        SetMemoryAttributes(ev->Get()->Params, attrs);
 
         Y_ASSERT(!poolId.empty());
 
@@ -194,6 +197,7 @@ public:
 
             NHdrf::TStaticAttributes attrs;
             SetCpuAttributes(*ev->Get()->Config, attrs);
+            SetMemoryAttributes(*ev->Get()->Config, attrs);
             ApplyPoolConfig(databaseId, poolId, attrs);
 
             YDB_LOG_DEBUG("Update",
@@ -287,6 +291,16 @@ private:
         attrs.CpuGuarantee = static_cast<ui64>(std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100);
     }
 
+    // A limit percent of -1 means that the setting is not configured, so the previous value is kept.
+    void SetMemoryAttributes(const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) const {
+        if (const auto& memoryLimitPercent = config.TotalMemoryLimitPercentPerNode; memoryLimitPercent >= 0) {
+            const auto totalMemoryLimit = Scheduler->GetTotalMemoryLimit();
+            attrs.MemoryLimit = totalMemoryLimit == NHdrf::Infinity()
+                ? NHdrf::Infinity()
+                : static_cast<ui64>(std::clamp(memoryLimitPercent, 0.0, 100.0) / 100 * totalMemoryLimit);
+        }
+    }
+
     // TODO: handle invalid configuration on DDL level.
     // TODO: retry the rejected configuration once the sibling pools release their guarantees.
     //       Every pool is watched by its own handler actor, so there is no ordering between the
@@ -342,6 +356,14 @@ void TComputeScheduler::SetTotalCpuLimit(ui64 cpu) {
 
 ui64 TComputeScheduler::GetTotalCpuLimit() const {
     return Root->TotalLimit.load();
+}
+
+void TComputeScheduler::SetTotalMemoryLimit(ui64 bytes) {
+    Root->MemoryTotalLimit = bytes;
+}
+
+ui64 TComputeScheduler::GetTotalMemoryLimit() const {
+    return Root->MemoryTotalLimit;
 }
 
 void TComputeScheduler::SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const {
@@ -488,7 +510,7 @@ THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() 
     auto visitPool = [&](auto self, const NHdrf::TDatabaseId& databaseId, const auto* pool) -> void {
         if (pool->IsLeaf()) {
             NHdrf::TFullPoolId fullPoolId{databaseId, std::get<NHdrf::TPoolId>(pool->GetId())};
-            result[fullPoolId] = double(pool->FairShare) / totalCpu;
+            result[fullPoolId] = double(pool->CpuFairShare) / totalCpu;
         } else {
             pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
                 self(self, databaseId, child);

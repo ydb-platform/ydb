@@ -33,7 +33,7 @@ bool TSchedulableTask::TryIncreaseUsage() {
     NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
     if (const auto snapshot = Query->GetSnapshot()) {
-        fairShare = snapshot->FairShare;
+        fairShare = snapshot->CpuFairShare;
         poolOrQuery = Query->GetParent();
 
         // Special case for zero max demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
@@ -94,7 +94,7 @@ void TSchedulableTask::DecreaseUsage(TDuration burstUsage, EUsageType usageType)
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
         auto usage = Query->GetParent()->CpuUsage.load(std::memory_order_relaxed);
-        auto fairShare = snapshot->FairShare;
+        auto fairShare = snapshot->CpuFairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }
 

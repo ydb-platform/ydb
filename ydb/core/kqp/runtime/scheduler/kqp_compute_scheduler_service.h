@@ -24,6 +24,9 @@ public:
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
 
+    void SetTotalMemoryLimit(ui64 bytes);
+    ui64 GetTotalMemoryLimit() const;
+
     void AddOrUpdateDatabase(const NHdrf::TDatabaseId& databaseId, const NHdrf::TStaticAttributes& attrs);
 
     void AddOrUpdatePool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs);
@@ -34,7 +37,7 @@ public:
 
     void UpdateFairShare();
 
-    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1].
+    // Returns per-leaf-pool CpuFairShare / TotalCpu, normalized to [0..1].
     THashMap<NHdrf::TFullPoolId, double> GetLeafPoolFairShares() const;
 
 private:

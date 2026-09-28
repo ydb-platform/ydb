@@ -46,6 +46,8 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     newQuery->CpuUsage = CpuUsage.load();
     newQuery->CpuThrottle = CpuThrottle.load();
 
+    newQuery->MemoryDemand = MemoryDemand.load();
+
     return newQuery;
 }
 
@@ -152,6 +154,11 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 
     Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
+
+    Counters->MemoryLimit     = group->GetCounter("MemoryLimit",     false);
+    Counters->MemoryUsage     = group->GetCounter("MemoryUsage",     false);
+    Counters->MemoryDemand    = group->GetCounter("MemoryDemand",    false); // snapshot
+    Counters->MemoryFairShare = group->GetCounter("MemoryFairShare", false); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {
@@ -166,6 +173,8 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
         Counters->UsageResume->Set(CpuBurstUsageResume);
         Counters->Read->Set(ReadBurstUsage);
         Counters->Throttle->Set(CpuBurstThrottle);
+        Counters->MemoryLimit->Set(GetMemoryLimit());
+        Counters->MemoryUsage->Set(MemoryUsage.load());
     }
 
     if (IsLeaf()) {
@@ -213,6 +222,7 @@ TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
     Y_ASSERT(counters);
     auto group = counters->GetKqpCounters();
     Counters.TotalLimit = group->GetCounter("scheduler/TotalLimit", false);
+    Counters.MemoryTotalLimit = group->GetCounter("scheduler/MemoryTotalLimit", false);
 }
 
 void TRoot::AddDatabase(const TDatabasePtr& database) {
@@ -233,8 +243,10 @@ NSnapshot::TRoot* TRoot::TakeSnapshot() {
     const ui64 totalLimit = TotalLimit.load();
 
     Counters.TotalLimit->Set(totalLimit * 1'000'000);
+    Counters.MemoryTotalLimit->Set(MemoryTotalLimit);
 
     newRoot->TotalLimit = totalLimit;
+    newRoot->MemoryTotalLimit = MemoryTotalLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

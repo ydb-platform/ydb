@@ -482,6 +482,11 @@ public:
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
 
+        if (auto scheduler = AppData()->KqpComputeScheduler) {
+            // TODO: follow the changes of total memory limit - for now it's the initial limit of the resource manager.
+            scheduler->SetTotalMemoryLimit(TableServiceConfig.GetResourceManager().GetQueryMemoryLimit());
+        }
+
         auto updateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs());
         KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(updateFairSharePeriod));
         TActivationContext::ActorSystem()->RegisterLocalService(

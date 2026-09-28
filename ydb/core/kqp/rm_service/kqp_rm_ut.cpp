@@ -471,6 +471,7 @@ public:
         UNIT_TEST(ArenaBurstGrowsOnAllocation);
         UNIT_TEST(ArenaDefaultsAgainstASmallQueue);
         UNIT_TEST(ArenaLifetimeIsNotAQueryDuration);
+        UNIT_TEST(TxMemoryTracker);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -545,6 +546,7 @@ public:
     void ArenaBurstGrowsOnAllocation();
     void ArenaDefaultsAgainstASmallQueue();
     void ArenaLifetimeIsNotAQueryDuration();
+    void TxMemoryTracker();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -3320,6 +3322,48 @@ void KqpRm::ArenaDoesNotChargePools() {
     TickArenaAdjust();
     UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 800);
     UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), 400);
+}
+
+void KqpRm::TxMemoryTracker() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    struct TFakeMemoryTracker : public NRm::ITxMemoryTracker {
+        void IncreaseUsage(ui64 bytes) override {
+            Usage += bytes;
+        }
+
+        void DecreaseUsage(ui64 bytes) override {
+            Usage -= bytes;
+        }
+
+        std::atomic<i64> Usage = 0;
+    };
+
+    auto tracker = std::make_shared<TFakeMemoryTracker>();
+
+    {
+        auto tx = MakeIntrusive<NRm::TTxState>(rm, 1, TInstant::Now(), "", 100, "", false, tracker);
+
+        // the initial memory isn't limited, but is tracked as well
+        UNIT_ASSERT(rm->AllocateResources(*tx, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 50}));
+        UNIT_ASSERT_VALUES_EQUAL(tracker->Usage.load(), 50);
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        UNIT_ASSERT_VALUES_EQUAL(tracker->Usage.load(), 150);
+
+        // the failed allocation isn't tracked
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 10'000}));
+        UNIT_ASSERT_VALUES_EQUAL(tracker->Usage.load(), 150);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
+        UNIT_ASSERT_VALUES_EQUAL(tracker->Usage.load(), 50);
+    }
+
+    // the rest is released together with the tx
+    UNIT_ASSERT_VALUES_EQUAL(tracker->Usage.load(), 0);
 }
 
 } // namespace NKqp

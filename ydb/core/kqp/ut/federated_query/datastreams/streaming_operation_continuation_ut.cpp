@@ -1,17 +1,18 @@
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/object.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/table_creator/table_creator.h>
@@ -19,11 +20,10 @@
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/events.h>
-#include <ydb/services/metadata/abstract/service.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <library/cpp/json/json_reader.h>
 #include <util/system/env.h>
 
 namespace NKikimr::NKqp {
@@ -45,7 +45,8 @@ THolder<TEvTrackOperationCompletion> CopyTracking(const TEvTrackOperationComplet
     result->SetRequestGeneration(request.GetRequestGeneration());
     result->SetObjectGeneration(request.GetObjectGeneration());
     result->SetOperationOwner(request.GetOperationOwner());
-    result->SetUserToken(request.GetUserToken());
+    result->SetProperties(request.GetProperties());
+    result->SetSchemeTxId(request.GetSchemeTxId());
     return result;
 }
 
@@ -123,6 +124,15 @@ struct TContinuationTest {
                 "INSERT INTO Source.output SELECT value FROM Source.input WITH (FORMAT = 'raw', SCHEMA (value String NOT NULL)); END DO;");
             Exec("DROP STREAMING QUERY Warmup;");
         }
+    }
+
+    ~TContinuationTest() {
+        // Owner-crash tests leave SDK requests pending. Finish their callbacks
+        // while Client and MetadataClient still own their metric collectors.
+        Runner->RunCall([&] {
+            Runner->GetDriverMut()->Stop(true);
+            return false;
+        });
     }
 
     auto Start(const TString& query) {
@@ -211,6 +221,7 @@ struct TContinuationTest {
         const auto& info = entry.StreamingQueryInfo->Description;
         UNIT_ASSERT(!ActorIdFromProto(info.GetOperationOwnerActorId()));
         UNIT_ASSERT(!info.GetProperties().GetProperties().contains(TStreamingQueryMeta::TProperties::InflightOperation));
+        UNIT_ASSERT(!info.GetProperties().GetProperties().contains(TStreamingQueryMeta::TProperties::OperationOwnerUserToken));
     }
 
     void CheckSettled() {
@@ -886,7 +897,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         context.SetDatabase("/Root");
         context.SetDatabaseId(f.Tracking.back()->GetDatabaseId());
         context.SetActorSystem(f.Runtime.GetActorSystem(0));
-        NACLib::TUserToken token(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{});
+        const TString group(256, 'g');
+        NACLib::TUserToken token(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{group});
         if constexpr (Serialized) {
             token.SaveSerializationInfo();
         }
@@ -903,6 +915,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             if (query.HasOperationOwnerActorId()) {
                 ++begins;
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetUserToken(), token.GetSerializedToken());
+                const NACLib::TUserToken persisted(query.GetProperties().GetProperties().at(TStreamingQueryMeta::TProperties::OperationOwnerUserToken));
+                UNIT_ASSERT_VALUES_EQUAL(persisted.GetUserSID(), token.GetUserSID());
+                UNIT_ASSERT(persisted.IsExist(group));
             } else {
                 ++finalizations;
                 UNIT_ASSERT_VALUES_EQUAL(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(), BUILTIN_ACL_METADATA);
@@ -979,6 +994,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
 
         auto expectedProperties = f.Describe()->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties();
         expectedProperties.erase(TStreamingQueryMeta::TProperties::InflightOperation);
+        expectedProperties.erase(TStreamingQueryMeta::TProperties::OperationOwnerUserToken);
         bool failDescribe = !RepeatDescribe;
         ui64 describeFailures = 0;
         auto descriptions = f.Runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
@@ -1028,7 +1044,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SchemeShardTracksAfterPublication, Alter, Reboot) {
+    Y_UNIT_TEST_QUAD(TrackerWaitsForPublication, Alter, Reboot) {
         TContinuationTest f;
         if constexpr (Alter) {
             f.Exec(TContinuationTest::CreateQuery());
@@ -1050,12 +1066,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         f.Start(Alter ? TString("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);") : TContinuationTest::CreateQuery());
         f.WaitFor("operation waiting for publication", [&] { return owner && !publications.empty(); });
         f.CrashOwner(owner);
-        locking.Stop().clear();
+        locking.clear();
         if constexpr (Reboot) {
             RebootTablet(f.Runtime, Tests::SchemeRoot, f.Runtime.AllocateEdgeActor());
         }
         f.Runtime.SimulateSleep(TDuration::Seconds(2));
         const bool trackedBeforePublication = !tracking.empty();
+        if constexpr (Reboot) {
+            UNIT_ASSERT(!tracking.empty());
+            UNIT_ASSERT(tracking.front()->Get()->GetSchemeTxId());
+            tracking.Unblock().Stop();
+            f.Runtime.SimulateSleep(TDuration::Seconds(2));
+            UNIT_ASSERT_VALUES_EQUAL(f.Finished, finished);
+        }
         {
             // CREATE is still absent; ALTER still exposes the previous published version.
             const auto description = f.Describe();
@@ -1068,15 +1091,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             }
         }
         publications.Unblock().Stop();
-        f.WaitFor("tracker announced after publication", [&] { return !tracking.empty(); });
+        if constexpr (Reboot) {
+            f.WaitFor("tracker resumed after publication", [&] { return !locking.empty(); });
+        } else {
+            f.WaitFor("tracker announced after publication", [&] { return !tracking.empty(); });
+        }
         const auto description = f.Describe();
         const auto& entry = description->ResultSet.at(0);
         UNIT_ASSERT(entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
-        UNIT_ASSERT_VALUES_EQUAL(entry.Self->Info.GetVersion().GetStreamingQueryVersion(), tracking.front()->Get()->GetObjectGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(entry.Self->Info.GetVersion().GetStreamingQueryVersion(), Alter ? 3 : 1);
         tracking.Unblock().Stop();
+        locking.Unblock().Stop();
         f.WaitFinished(finished + 1);
         f.CheckSettled();
-        UNIT_ASSERT_C(!trackedBeforePublication, "SchemeShard announced continuation before publishing the query metadata");
+        UNIT_ASSERT_VALUES_EQUAL(trackedBeforePublication, Reboot);
     }
 
     Y_UNIT_TEST_TWIN(PublishedOperationResumesWithoutRepublicationWait, Alter) {
@@ -1243,6 +1271,28 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         f.WaitFor("operation durable before plan", [&] { return owner && !planning.empty(); });
         f.CrashOwner(owner);
         RebootTablet(f.Runtime, Tests::SchemeRoot, f.Runtime.AllocateEdgeActor());
+        f.Runtime.SimulateSleep(TDuration::Seconds(15));
+        UNIT_ASSERT_VALUES_EQUAL(f.Finished, finished);
+        planning.Unblock().Stop();
+        f.WaitFinished(finished + 1);
+        f.CheckSettled();
+    }
+
+    Y_UNIT_TEST_TWIN(SchemeShardRestartInterruptsWaitingOwner, Alter) {
+        TContinuationTest f;
+        if constexpr (Alter) {
+            f.Exec(TContinuationTest::CreateQuery());
+            f.WaitFinished(1);
+        }
+        const auto finished = f.Finished;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> planning(f.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTabletID() == Tests::SchemeRoot;
+        });
+        auto result = f.Start(Alter ? TString("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);") : TContinuationTest::CreateQuery());
+        f.WaitFor("operation waiting for plan", [&] { return !planning.empty(); });
+        RebootTablet(f.Runtime, Tests::SchemeRoot, f.Runtime.AllocateEdgeActor());
+        const auto response = f.Runtime.WaitFuture(result, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), EStatus::UNAVAILABLE, response.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(f.Finished, finished);
         planning.Unblock().Stop();
         f.WaitFinished(finished + 1);

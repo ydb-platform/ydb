@@ -2,8 +2,8 @@
 
 #include <yql/essentials/sql/v1/translation/node.h>
 
-#include <util/generic/string.h>
 #include <util/datetime/base.h>
+#include <util/generic/string.h>
 
 namespace NKikimrSchemeOp {
 
@@ -49,6 +49,7 @@ public:
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
+        static inline constexpr char OperationOwnerUserToken[] = "__operation_owner_user_token";
         static inline constexpr char InflightOperation[] = "__inflight_operation";
     };
 

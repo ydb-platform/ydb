@@ -1,14 +1,13 @@
-#include "queries.h"
 #include "manager.h"
+#include "queries.h"
 
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/retry/retry_policy.h>
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -24,6 +23,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <yql/essentials/core/sql_types/hopping.h>
@@ -636,6 +636,21 @@ public:
         : TBase(__func__, database, queryPath, userToken)
         , SchemeTx(schemeTx)
     {}
+
+    TExecuteTransactionSchemeActor(const TString& database, const TString& queryPath, ui64 schemeShardId, ui64 txId)
+        : TBase("WaitSchemeTransaction", database, queryPath, std::nullopt)
+        , SchemeShardTabletId(schemeShardId)
+        , TxId(txId)
+    {}
+
+    void Bootstrap() {
+        if (TxId) {
+            Become(&TThis::StateFuncWaitCompletion);
+            OpenPipeClientAndWaitCompletion();
+        } else {
+            TBase::Bootstrap();
+        }
+    }
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -2657,8 +2672,14 @@ private:
                 schemeTx->SetReplaceIfExists(true);
                 create.ClearOperationOwnerActorId();
                 create.MutableProperties()->MutableProperties()->erase(TStreamingQueryConfig::TProperties::InflightOperation);
+                create.MutableProperties()->MutableProperties()->erase(TStreamingQueryConfig::TProperties::OperationOwnerUserToken);
             } else {
                 ActorIdToProto(TBase::SelfId(), create.MutableOperationOwnerActorId());
+                auto& properties = *create.MutableProperties()->MutableProperties();
+                properties.erase(TStreamingQueryConfig::TProperties::OperationOwnerUserToken);
+                if (const auto& token = Context.GetUserToken()) {
+                    properties[TStreamingQueryConfig::TProperties::OperationOwnerUserToken] = NACLib::TUserToken(token->GetUserSID(), token->GetGroupSIDs()).SerializeAsString();
+                }
             }
         }
 
@@ -2946,6 +2967,7 @@ public:
 
     struct TSettings {
         ui64 SchemeShardGeneration = 0;
+        ui64 SchemeTxId = 0;
         TPathId PathId;
         ui64 AlterVersion = 0;
         TActorId OperationOwner;
@@ -2963,7 +2985,12 @@ public:
             {"logPrefix", LogPrefix()});
 
         Become(&TThis::StateFunc);
-        PingOperationOwner();
+
+        if (Settings.SchemeTxId) {
+            WaitSchemeTransaction();
+        } else {
+            PingOperationOwner();
+        }
     }
 
     STFUNC(StateFunc) {
@@ -2972,13 +2999,27 @@ public:
             hFunc(TEvPrivate::TEvPingOperationOwnerResult, Handle);
             hFunc(TEvPrivate::TEvLockStreamingQueryResult, Handle);
             hFunc(TEvPrivate::TEvUnlockStreamingQueryResult, HandleRetry);
-            hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, HandleRetry);
+            hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, HandleSchemeTransaction);
             default:
                 StateFuncBase(ev);
         }
     }
 
 private:
+    void HandleSchemeTransaction(TEvPrivate::TEvExecuteSchemeTransactionResult::TPtr& ev) {
+        if (Settings.SchemeTxId) {
+            if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+                Settings.SchemeTxId = 0;
+                PingOperationOwner();
+            } else {
+                ScheduleSchemeRetry(ev->Get()->Status, ev->Get()->Issues);
+            }
+            return;
+        }
+
+        HandleRetry(ev);
+    }
+
     void Handle(TEvPrivate::TEvPingOperationOwnerResult::TPtr& ev) {
         const auto status = ev->Get()->Status;
         YDB_LOG_DEBUG("[StreamingQueries] Check-alive request finished",
@@ -3062,7 +3103,16 @@ private:
         return schemeTx;
     }
 
+    void WaitSchemeTransaction() {
+        Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, Settings.PathId.OwnerId, Settings.SchemeTxId));
+    }
+
     void PingOperationOwner() {
+        if (Settings.SchemeTxId) {
+            WaitSchemeTransaction();
+            return;
+        }
+
         const auto& checkerId = Register(new TPingStreamingQueryTableActor(QueryPath, Settings.OperationOwner));
         YDB_LOG_INFO("[StreamingQueries] Starting check-alive request to owner",
             {"logPrefix", LogPrefix()},
@@ -3109,9 +3159,15 @@ void DoDropStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStrea
 }
 
 void DoTrackStreamingQueryOperation(const TString& queryName, IStreamingQueryOperationController::TPtr controller, const NMetadata::NModifications::IOperationsManager::TOperationTrackContext& context) {
-    const auto& externalContext = context.GetExternalData();
+    auto externalContext = context.GetExternalData();
+
+    if (const auto it = context.GetProperties().find(TStreamingQueryConfig::TProperties::OperationOwnerUserToken); it != context.GetProperties().end()) {
+        externalContext.SetUserToken(NACLib::TUserToken(it->second));
+    }
+
     externalContext.GetActorSystem()->Register(new TStreamingOperationTrackerActor(queryName, externalContext, std::move(controller), {
         .SchemeShardGeneration = context.GetRequestGeneration(),
+        .SchemeTxId = context.GetSchemeTxId(),
         .PathId = context.GetPathId(),
         .AlterVersion = context.GetObjectGeneration(),
         .OperationOwner = context.GetOperationOwner(),

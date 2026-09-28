@@ -7,8 +7,8 @@
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -108,7 +108,6 @@ private:
 };
 
 
-TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
 TString DatabaseIdToDatabase(TStringBuf databaseId);
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);

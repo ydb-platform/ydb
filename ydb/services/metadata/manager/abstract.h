@@ -1,7 +1,9 @@
 #pragma once
+
 #include "common.h"
 #include "table_record.h"
 
+#include <ydb/core/base/metadata.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/accessor/accessor.h>
@@ -103,6 +105,8 @@ public:
         YDB_ACCESSOR_DEF(ui64, RequestGeneration);
         YDB_ACCESSOR_DEF(ui64, ObjectGeneration);
         YDB_ACCESSOR_DEF(NActors::TActorId, OperationOwner);
+        YDB_ACCESSOR_DEF(NProvider::TOperationProperties, Properties);
+        YDB_ACCESSOR_DEF(ui64, SchemeTxId);
 
     public:
         explicit TOperationTrackContext(TExternalModificationContext externalData)

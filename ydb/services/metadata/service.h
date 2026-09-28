@@ -1,8 +1,8 @@
 #pragma once
 
+#include <ydb/core/base/metadata.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/services/metadata/abstract/common.h>
-#include <ydb/services/metadata/abstract/service.h>
 
 #include <shared_mutex>
 

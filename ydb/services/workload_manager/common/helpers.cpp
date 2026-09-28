@@ -6,19 +6,6 @@
 
 namespace NKikimr::NWorkloadManager {
 
-TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId) {
-    TString databasePath = CanonizePath(database);
-    TString tennantPath = CanonizePath(AppData()->TenantName);
-    if (databasePath.empty() || databasePath == tennantPath) {
-        return tennantPath;
-    }
-
-    if (serverless) {
-        databasePath = TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" << databasePath;
-    }
-    return databasePath;
-}
-
 TString DatabaseIdToDatabase(TStringBuf databaseId) {
     TStringBuf id;
     TStringBuf database;

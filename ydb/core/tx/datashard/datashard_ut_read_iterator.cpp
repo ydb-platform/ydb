@@ -6209,6 +6209,80 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
 
+    Y_UNIT_TEST(HnswFollowerBuildSurvivesReadEdgeAdvance) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(settings, 1, true);
+        helper.CreateCustomTable("hnsw-follower-edge", {
+            {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
+            {"emb", "String", false, false}});
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/hnsw-follower-edge` (parent, key, emb) VALUES
+                (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        ui64 readId = 0;
+        auto read = [&](bool advanceEdge) {
+            auto request = helper.GetBaseReadRequest("hnsw-follower-edge", ++readId,
+                NKikimrDataEvents::FORMAT_CELLVEC, advanceEdge ? TRowVersion{} : TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(2);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            auto* vectorSettings = top->MutableSettings();
+            vectorSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vectorSettings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vectorSettings->set_vector_dimension(2);
+            vectorSettings->set_hnsw_min_rows(1);
+            if (advanceEdge) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            return helper.SendRead("hnsw-follower-edge", request.release());
+        };
+        TVector<TAutoPtr<IEventHandle>> pending;
+        TDataShard* follower = nullptr;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == buildResult) {
+                follower = dynamic_cast<TDataShard*>(runtime.FindActor(ev->Recipient));
+                pending.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        for (ui32 attempt = 0; attempt < 20 && pending.empty(); ++attempt) {
+            read(false);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT(!pending.empty());
+        UNIT_ASSERT(follower && follower->IsFollower());
+        const auto tid = follower->GetUserTables().begin()->second->LocalTid;
+        const auto oldEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
+        read(true);
+        const auto newEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
+        UNIT_ASSERT_GT(newEdge, oldEdge);
+        UNIT_ASSERT_C(!follower->IsHnswIndexBuildObsolete(tid),
+            "Advancing a read edge without changing vectors discarded the in-flight graph");
+        runtime.SetObserverFunc(observer);
+        for (auto& ev : pending) {
+            runtime.Send(ev.Release());
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        auto result = read(false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsValue<ui32>(), 1);
+    }
+
     Y_UNIT_TEST_QUAD(HnswPrefixRangeUsesLegacyBorders, Followers, Distinct) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

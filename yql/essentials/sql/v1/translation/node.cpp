@@ -3778,15 +3778,50 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
-    if (!Value) {
-        ctx.Error(stmBeginPos) << "Parameter VALUE must be set";
-        return false;
-    }
     if (mode == EOperationMode::Alter) {
         if (InheritPermissions) {
             ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
             return false;
         }
+    }
+
+    // SOURCE names where the value of an external secret comes from; without it the secret stores the value
+    TString source;
+    if (Source) {
+        source = to_upper(Source->GetLiteral() ? *Source->GetLiteral() : TString());
+        if (source != "IAM_DELEGATION") {
+            ctx.Error(stmBeginPos) << "Unknown secret SOURCE: " << source << ". Expected IAM_DELEGATION";
+            return false;
+        }
+    }
+
+    // a SOURCE (validated above), or on ALTER the delegation parameters alone
+    const bool hasDelegationParams = ServiceAccountId || CloudId;
+    const bool isDelegation = Source.Defined() || (mode == EOperationMode::Alter && hasDelegationParams && !Value);
+
+    if (isDelegation) {
+        if (Value) {
+            ctx.Error(stmBeginPos) << "Parameter VALUE is not allowed for secrets with SOURCE IAM_DELEGATION";
+            return false;
+        }
+        if (mode == EOperationMode::Create && !ServiceAccountId) {
+            ctx.Error(stmBeginPos) << "Parameter SERVICE_ACCOUNT_ID must be set for secrets with SOURCE IAM_DELEGATION";
+            return false;
+        }
+        if (mode == EOperationMode::Alter && !hasDelegationParams) {
+            ctx.Error(stmBeginPos) << "Parameter SERVICE_ACCOUNT_ID or RESOURCE must be set to alter a secret with SOURCE IAM_DELEGATION";
+            return false;
+        }
+        return true;
+    }
+
+    if (hasDelegationParams) {
+        ctx.Error(stmBeginPos) << "Parameters SERVICE_ACCOUNT_ID and RESOURCE are allowed only for secrets with SOURCE IAM_DELEGATION";
+        return false;
+    }
+    if (!Value) {
+        ctx.Error(stmBeginPos) << "Parameter VALUE must be set";
+        return false;
     }
 
     return true;

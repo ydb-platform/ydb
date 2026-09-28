@@ -1276,7 +1276,7 @@ create_secret_stmt: CREATE (OR REPLACE)? SECRET (IF NOT EXISTS)? object_ref
     with_secret_settings
 ;
 with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* COMMA? RPAREN;
-secret_setting_entry: an_id EQUALS secret_setting_value;
+secret_setting_entry: an_id_or_type EQUALS secret_setting_value;
 secret_setting_value: expr;
 
 alter_secret_stmt: ALTER SECRET (IF EXISTS)? object_ref

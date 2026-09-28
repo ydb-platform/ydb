@@ -1998,14 +1998,28 @@ FROM `{table_name}`"""
                     SCHEMA=(
                         str1 String,
                         str2 String,
+                        d Date, -- YQ-5737
+                        ts Timestamp, -- YQ-5738
+                        i Interval,
                         ev String
                     )
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
+                  AND (d = Date("1984-01-01"))
+                  AND (ts = Timestamp("1991-08-19T05:00:00.123456Z"))
+                  AND (str1??"x" <= MAX_OF(str1??"x", str2??"x"))
+                  AND (str2??"y" >= MIN_OF(str2??"y", str1??"y"))
+                  AND (str1??"y" IN ("xop","xep","y"))
+                  AND (str1??"tep" LIKE "%p")
+                  AND (str1??"xar" LIKE "x%")
+                  AND (str1??"pat" LIKE "%p%")
+                  AND (str1??"xyp" LIKE "x%p")
+                  AND (str1??"xtp" LIKE "%x%p")
                   AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
                     OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
                 ;
+                $in = SELECT * WITHOUT d, ts, i FROM $in;
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''
 
@@ -2018,11 +2032,11 @@ FROM `{table_name}`"""
         self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         data = [
-            '{"str1":null,"str2":"DONE","ev":"skipped"}',
-            '{"str1":"xop","str2":"DONE","ev":"xep"}',
-            '{"str1":"foobar","str2":"DONE","ev":"xin"}',
-            '{"str1":null,"str2":null,"ev":"xap"}',
-            '{"str1":"xep","str2":"xip","ev":"xup"}',
+            '{"str1":null,"str2":"DONE","ev":"skipped","d":"1990-01-01","ts":"2012-01-01T12:13:14Z"}',
+            '{"str1":"xop","str2":"DONE","ev":"xep","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
+            '{"str1":"foobar","str2":"DONE","ev":"xin","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
+            '{"str1":null,"str2":null,"ev":"xap","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
+            '{"str1":"xep","str2":"xip","ev":"xup","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
         ]
         expected_data = [
             '{"ev":"xep","str1":"xop","str2":"DONE"}',
@@ -2057,6 +2071,19 @@ FROM `{table_name}`"""
                     assert "`str1`" in filter
                     assert "`str2`" in filter
                     assert " REGEXP " in filter
+                    assert " IN (" in filter
+                    assert ">= MIN_OF(" in filter
+                    assert "<= MAX_OF(" in filter
+                    # valiadate simplified LIKE
+                    assert "EndsWith(" in filter
+                    assert "StartsWith(" in filter
+                    assert "Contains(" in filter
+                    assert '"tep"' in filter
+                    assert '"xar"' in filter
+                    assert '"pat"' in filter
+                    assert '"xyp"' in filter
+                    # complex LIKE pattern is not supported yet, YQ-4054
+                    assert '"xtp"' not in filter
                     sources += 1
         assert sources > 0
 

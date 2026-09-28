@@ -1363,17 +1363,13 @@ void TConfigsDispatcher::UpdateYamlConfigVersionMetrics()
         try {
             mainVersion = NYamlConfig::GetMainMetadata(MainYamlConfig).Version.value_or(0);
         } catch (const yexception& ex) {
-            YDB_LOG_WARN("Failed to read main YAML config version",
-                {"error", ex.what()},
-            );
+            BLOG_W("Failed to read main YAML config version: " << ex.what());
         }
         if (DatabaseYamlConfig) {
             try {
                 databaseVersion = NYamlConfig::GetDatabaseMetadata(*DatabaseYamlConfig).Version.value_or(0);
             } catch (const yexception& ex) {
-                YDB_LOG_WARN("Failed to read database YAML config version",
-                    {"error", ex.what()},
-                );
+                BLOG_W("Failed to read database YAML config version: " << ex.what());
             }
         }
     }

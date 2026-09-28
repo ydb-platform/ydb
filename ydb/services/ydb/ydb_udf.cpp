@@ -24,9 +24,6 @@ void TGRpcYdbUdfService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 #undef SETUP_UDF_METHOD
 
-    // UploadModule cannot go through TGRpcRequestProxy: the proxy dispatches on
-    // a request enum that is closed to new entries. The stream actor is
-    // registered straight from here and authenticates the caller itself.
     {
         using TUploadRequest = NGRpcServer::TGRpcStreamingRequest<
             UploadModuleChunk,
@@ -41,7 +38,10 @@ void TGRpcYdbUdfService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             &Ydb::Udf::V1::UdfService::AsyncService::RequestUploadModule,
             [this](TIntrusivePtr<TUploadRequest::IContext> context) {
                 ReportGrpcReqToMon(*ActorSystem_, context->GetPeerName());
-                ActorSystem_->Register(CreateUploadModuleStreamActor(std::move(context), GRpcRequestProxyId_));
+                ActorSystem_->Send(GRpcRequestProxyId_, new TEvUploadModuleRequest(std::move(context), {
+                    .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin),
+                    .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden,
+                }));
             },
             *ActorSystem_,
             "UploadModule",

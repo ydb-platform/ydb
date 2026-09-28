@@ -60,9 +60,8 @@ void ExecuteYqlAsSystem(
 
 bool IsDatabaseServedHere(const TString& databaseName, TString& error) {
     if (databaseName.empty()) {
-        // No database header at all: the caller gets the tenant of the node it
-        // reached, which is the only store this node has anyway.
-        return true;
+        error = "database name must not be empty";
+        return false;
     }
     const TString requested = CanonizePath(databaseName);
     const TString served = CanonizePath(AppData()->TenantName);

@@ -646,9 +646,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"error", error});
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
             CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
-            auto request = Aws::S3::Model::HeadObjectRequest()
-                .WithKey(CurrentObjectKey);
-            this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+            auto request = Aws::S3::Model::ListObjectsRequest()
+                .WithPrefix(CurrentObjectKey)
+                .WithMaxKeys(1);
+            this->Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
             return this->Become(&TThis::StateCheckUploadedData);
         }
 
@@ -664,18 +665,30 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
     }
 
-    void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+    void Handle(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvHeadObjectResponse",
+        YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvListObjectsResponse",
             {"result", result});
 
         if (result.IsSuccess()) {
+            for (const auto& object : result.GetResult().GetContents()) {
+                const auto& key = object.GetKey();
+                if (TStringBuf(key.data(), key.size()) == CurrentObjectKey) {
+                    return PassAway();
+                }
+            }
+
+            Error = TStringBuilder() << "Cannot confirm multipart upload completion after NoSuchUpload: object '"
+                << CurrentObjectKey << "' was not found";
+            YDB_LOG_ERROR("[Export] Uploaded object not found",
+                {"key", CurrentObjectKey},
+                {"error", *Error});
             return PassAway();
         }
 
         const auto& error = result.GetError();
-        YDB_LOG_ERROR("[Export] HeadObject request failed",
+        YDB_LOG_ERROR("[Export] ListObjects request failed",
             {"key", CurrentObjectKey},
             {"error", error});
         if (CanRetry(error)) {
@@ -992,7 +1005,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix(),
             {"actorState", "StateCheckUploadedData"});
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvListObjectsResponse, Handle);
         default:
             return StateBase(ev);
         }

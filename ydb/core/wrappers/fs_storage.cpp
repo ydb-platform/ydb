@@ -11,6 +11,7 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 
 #include <optional>
@@ -432,12 +433,9 @@ public:
 
     static constexpr int DefaultMaxListKeys = 1000;
 
-    bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
+    bool ListFiles(const TFsPath& dir, TVector<TString> children, const TString& marker, int maxKeys,
         Aws::S3::Model::ListObjectsResult& result)
     {
-        TVector<TString> children;
-        dir.ListNames(children);
-
         THashSet<TString> directories;
         for (const auto& name : children) {
             TFsPath child = dir / name;
@@ -477,6 +475,27 @@ public:
         return false;
     }
 
+    bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
+        Aws::S3::Model::ListObjectsResult& result)
+    {
+        TVector<TString> children;
+        dir.ListNames(children);
+        return ListFiles(dir, std::move(children), marker, maxKeys, result);
+    }
+
+    bool ListFilesByPrefix(const TFsPath& prefixPath, const TString& marker, int maxKeys,
+        Aws::S3::Model::ListObjectsResult& result)
+    {
+        const TFsPath dir = prefixPath.Parent();
+        const TString namePrefix = prefixPath.GetName();
+        TVector<TString> children;
+        dir.ListNames(children);
+        EraseIf(children, [&namePrefix](const TString& name) {
+            return !name.StartsWith(namePrefix);
+        });
+        return ListFiles(dir, std::move(children), marker, maxKeys, result);
+    }
+
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString requestPrefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
@@ -492,8 +511,10 @@ public:
             {"maxKeys", maxKeys});
 
         try {
-            TFsPath dirPath(prefix);
+            TFsPath prefixPath(prefix);
             TFsPath basePath(BasePath);
+            const bool listByPrefix = !prefixPath.IsDirectory() && !prefix.EndsWith('/') && prefixPath != basePath;
+            TFsPath dirPath = listByPrefix ? prefixPath.Parent() : prefixPath;
 
             Aws::S3::Model::ListObjectsResult awsResult;
             bool truncated = false;
@@ -516,7 +537,9 @@ public:
                 }
 
                 if (dirPath.IsDirectory()) {
-                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                    truncated = listByPrefix
+                        ? ListFilesByPrefix(prefixPath, marker, maxKeys, awsResult)
+                        : ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
                 }
             }
 

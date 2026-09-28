@@ -213,7 +213,9 @@ class TestSysViewsRegistry(BaseSystemViews):
     """
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
+        cls.cluster = KiKiMR(KikimrConfigGenerator(
+            extra_feature_flags=['enable_udf_modules_system_view'],
+        ))
         cls.cluster.start()
 
     def collect_sysviews(self, driver, database):

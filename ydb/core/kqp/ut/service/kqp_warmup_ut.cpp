@@ -685,6 +685,13 @@ namespace {
                             {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"})))
                     .ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+                result = kikimr.GetSchemeClient().ModifyPermissions("/Root/.sys/compile_cache_queries",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                        NYdb::NScheme::TPermissions("user0@builtin",
+                            {"ydb.granular.describe_schema", "ydb.granular.select_row"})))
+                    .ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 return true;
             });
 

@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/flat_boot_cookie.h>
@@ -8978,6 +8979,95 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::HasOwner("user1@builtin"),
             NLs::HasRight("+R:user2@builtin"),
             NLs::HasRight("+L:user2@builtin"),
+        });
+    }
+
+    Y_UNIT_TEST(ShouldRejectImportIntoUnknownSystemView) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+        const TString path = "/MyRoot/.sys/partition_stats";
+        const auto original = DescribePath(runtime, path);
+        const auto pathId = original.GetPathDescription().GetSelf().GetPathId();
+        constexpr ui32 futureType = 1000000;
+        UNIT_ASSERT(!NKikimrSysView::ESysViewType_IsValid(futureType));
+
+        auto writeType = [&](ui32 type) {
+            NKikimrMiniKQL::TResult result;
+            TString error;
+            const auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"((
+                (let key '('('PathId (Uint64 '%lu))))
+                (let row '('('SysViewType (Uint32 '%u))))
+                (return (AsList (UpdateRow 'SysView key row)))
+            ))", pathId, type), result, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        };
+
+        writeType(futureType);
+        UNIT_ASSERT(!DescribePath(runtime, path).GetPathDescription().GetSysViewDescription().HasType());
+
+        const auto data = GenerateTestData(
+            {
+                EPathTypeSysView,
+                R"(
+                    sys_view_id: 1
+                    sys_view_name: "partition_stats"
+                )"
+            },
+            {},
+            R"(
+                actions {
+                    change_owner: "user1@builtin"
+                }
+                actions {
+                    grant {
+                        subject: "user2@builtin"
+                        permission_names: "ydb.generic.read"
+                    }
+                }
+            )"
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const auto importRequest = Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: ""
+                    destination_path: "/MyRoot/.sys/partition_stats"
+                }
+            }
+        )", port);
+
+        ui64 txId = 100;
+        TestImport(runtime, ++txId, "/MyRoot", importRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+        const auto unchanged = DescribePath(runtime, path);
+        UNIT_ASSERT(!unchanged.GetPathDescription().GetSysViewDescription().HasType());
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.GetPathDescription().GetSelf().GetOwner(),
+            original.GetPathDescription().GetSelf().GetOwner());
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.GetPathDescription().GetSelf().GetACL(),
+            original.GetPathDescription().GetSelf().GetACL());
+
+        // The same backup can restore the ACL after upgrading to a version that knows the type.
+        writeType(NKikimrSysView::ESysViewType::EPartitionStats);
+        TestImport(runtime, ++txId, "/MyRoot", importRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+        TestDescribeResult(DescribePath(runtime, path), {
+            NLs::PathExist,
+            NLs::IsSysView,
+            NLs::HasOwner("user1@builtin"),
+            NLs::HasRight("+R:user2@builtin"),
         });
     }
 

@@ -155,6 +155,12 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     // create absent system views only if there's no '.sys' entry or '.sys' is a directory
     if (needToMakeSysViewDir || sysViewDirExists) {
         for (const auto& [name, type] : sysViewsRegistry) {
+            // Keep the type in the registry for existing views, but do not persist
+            // it on databases that still need to support rollback to older binaries.
+            if (type == NKikimrSysView::EUdfModules &&
+                !AppData()->FeatureFlags.GetEnableUdfModulesSystemView()) {
+                continue;
+            }
             if (!sysViewDirContents.contains(name)) {
                 TModifySysViewRequestInfo createSysViewRequest;
                 createSysViewRequest.OperationType = NKikimrSchemeOp::ESchemeOpCreateSysView;
@@ -175,6 +181,11 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     // drop obsolete system views
     for (const auto& [name, dirEntry] : sysViewDirContents) {
         if (dirEntry.Type == NKikimrSchemeOp::EPathTypeSysView) {
+            // An unknown enum value may belong to a newer binary. Preserve the
+            // object and its permissions so it works again after re-upgrading.
+            if (dirEntry.SysViewType && !NKikimrSysView::ESysViewType_IsValid(*dirEntry.SysViewType)) {
+                continue;
+            }
             if (!dirEntry.SysViewType || !availableSysViewTypes.contains(*dirEntry.SysViewType) ||
                 (dirEntry.Owner == BUILTIN_ACL_METADATA && !sysViewsRegistry.contains(name))) {
                 TModifySysViewRequestInfo dropSysViewRequest;

@@ -3133,10 +3133,17 @@ bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKi
         return false;
     }
 
+    const auto& sysViewDescription = in.GetSysViewDescription();
+    if (!sysViewDescription.HasType()) {
+        error = "Unknown system view type";
+        status = Ydb::StatusIds::SCHEME_ERROR;
+        return false;
+    }
+
     Ydb::Scheme::Entry* selfEntry = out.mutable_self();
     ConvertDirectoryEntry(in.GetSelf(), selfEntry, true);
 
-    const auto sysViewType = in.GetSysViewDescription().GetType();
+    const auto sysViewType = sysViewDescription.GetType();
     out.set_sys_view_id(sysViewType);
     TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
     NProtobufJson::ToSnakeCase(&sysViewTypeName);

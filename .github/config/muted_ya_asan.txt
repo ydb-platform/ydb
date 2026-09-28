@@ -84,6 +84,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.Limit+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Limit-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL
+ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL_CBO4_ColumnLineageMapping
 ydb/core/kqp/ut/rbo KqpRboYql.WindowFunctions-ColumnStore
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
@@ -134,6 +135,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnsWithParameterizedAndPg
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualExpressionReturningNull
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadWindowAndSubquery
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningAfterSchemaChanges-EnableStreamWrite
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningDmlMatrix+EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningDmlMatrix-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningNoMatchDoesNotSynthesizeVirtualRows
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionDuplicateKeys
@@ -162,6 +164,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTim
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert-EnableCompileTimeDefaults

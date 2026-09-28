@@ -293,7 +293,9 @@ struct TPersistentBufferTest : public TPDiskTest<ChunkSize> {
             ddiskConfig.EnableChecksums = !TBase::Cfg.DisableDDiskChecksums;
             ddiskConfig.ForcePDiskFallback = TBase::Cfg.ForcePDiskFallback;
             ddiskConfig.IntegrityChecksumCacheBytes = TBase::Cfg.DDiskChecksumsCacheBytes;
+            ddiskConfig.DevNullMode = TBase::Cfg.DDiskDevNullMode;
             TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
+            TBase::Printer->AddGlobalParam("DDiskDevNull", ddiskConfig.DevNullMode ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, PersistentBufferSlotId);

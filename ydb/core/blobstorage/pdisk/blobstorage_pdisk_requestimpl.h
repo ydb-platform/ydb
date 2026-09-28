@@ -139,6 +139,7 @@ public:
     ui32 GroupSizeInUnits;
     bool GetUringRouterClient;
     ui32 UringIdleSpinUs;
+    bool UringDevNullMode;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -150,6 +151,7 @@ public:
         , GroupSizeInUnits(ev.GroupSizeInUnits)
         , GetUringRouterClient(ev.GetUringRouterClient)
         , UringIdleSpinUs(ev.UringIdleSpinUs)
+        , UringDevNullMode(ev.UringDevNullMode)
     {}
 
     ERequestType GetType() const override {
@@ -171,6 +173,7 @@ public:
         str << " GroupSizeInUnits# " << GroupSizeInUnits;
         str << " GetUringRouterClient# " << GetUringRouterClient;
         str << " UringIdleSpinUs# " << UringIdleSpinUs;
+        str << " UringDevNullMode# " << UringDevNullMode;
         str << "}";
         return str.Str();
     }

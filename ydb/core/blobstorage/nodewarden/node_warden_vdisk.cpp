@@ -240,6 +240,9 @@ namespace NKikimr::NStorage {
                     ddiskConfig.IntegrityChecksumCacheBytes =
                         Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
                 }
+                if (Cfg->DDiskConfig->HasDevNullMode()) {
+                    ddiskConfig.DevNullMode = Cfg->DDiskConfig->GetDevNullMode();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {

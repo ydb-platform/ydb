@@ -20,6 +20,10 @@ message TDDiskConfig
     // Maximum memory used by the integrity checksum cache, in bytes.
     // Defaults to 64 MiB per DDisk.
     optional uint64 IntegrityChecksumCacheBytes = 8;
+
+    // Complete DDisk data I/O without touching the device. Reads return zeroes.
+    // All DDisk slots on one PDisk must use the same mode; not for persistence.
+    optional bool DevNullMode = 9;
 }
 
 message TPBufferConfig

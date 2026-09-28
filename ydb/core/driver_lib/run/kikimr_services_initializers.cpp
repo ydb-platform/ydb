@@ -1275,6 +1275,12 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
                 storageConfig.GetIntegrityChecksumCacheBytes());
         }
+        if (storageConfig.HasDevNullMode()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetDevNullMode(storageConfig.GetDevNullMode());
+        }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
         }

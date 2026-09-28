@@ -59,7 +59,8 @@ namespace NKikimr::NDDisk {
             {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
-            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/, Config.IdleSpinUs));
+            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/,
+            Config.IdleSpinUs, Config.DevNullMode));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
@@ -80,6 +81,11 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         if (!Config.ForcePDiskFallback) {
             UringRouter = std::move(msg.UringRouter);
+        }
+        if ((Config.DevNullMode && !UringRouter)
+                || (UringRouter && UringRouter->GetConfig().DevNullMode != Config.DevNullMode)) {
+            BeginStopping("DDisk requires a shared io_uring router with matching DevNullMode");
+            return;
         }
         if (!UringRouter) {
             YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "

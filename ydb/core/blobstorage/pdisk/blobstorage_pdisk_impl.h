@@ -431,7 +431,7 @@ public:
     ui32 ReleaseUncommittedChunks(TOwner owner);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
-    void EnsureSharedUringRouter(ui32 idleSpinUs);
+    void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);
 #if defined(__linux__)
     TDeviceIoSampleSink MakeUringSampleSink() const;
 #endif

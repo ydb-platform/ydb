@@ -2260,7 +2260,7 @@ TOwner TPDisk::FindNextOwnerId() {
     return LastOwnerId;
 }
 
-void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
+void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode) {
     if (SharedUringCreateAttempted) {
         return;
     }
@@ -2269,6 +2269,7 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
 #if defined(__linux__)
     TUringRouterConfig config;
     config.IdleSpinUs = idleSpinUs;
+    config.DevNullMode = devNullMode;
 
     TFileHandle fd = BlockDevice->DuplicateFd();
     if (!fd.IsOpen()) {
@@ -2331,6 +2332,7 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
     SharedUringRouter = std::move(router);
 #else
     Y_UNUSED(idleSpinUs);
+    Y_UNUSED(devNullMode);
     Mon.FallbackPDiskCount->Inc();
 #endif
 }
@@ -2365,7 +2367,7 @@ void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitRes
         return;
     }
 
-    EnsureSharedUringRouter(evYardInit.UringIdleSpinUs);
+    EnsureSharedUringRouter(evYardInit.UringIdleSpinUs, evYardInit.UringDevNullMode);
 #if defined(__linux__)
     result.UringRouter = SharedUringRouter;
 #else
@@ -2535,6 +2537,14 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
 
     TGuard<TMutex> guard(StateMutex);
+    // StateMutex is not held while an error travels back to the requester.
+    auto reject = [&](const TString& reason,
+            NKikimrProto::EReplyStatus status = NKikimrProto::ERROR) {
+        guard.Release();
+        ReplyErrorYardInitResult(evYardInit, reason, status);
+        return false;
+    };
+
     auto it = VDiskOwners.find(vDiskId);
     if (it != VDiskOwners.end()) {
         // Owner is already known, but use next ownerRound to decrease probability of errors
@@ -2554,13 +2564,41 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     TOwnerData &ownerData = OwnerData[owner];
     ui64 prevOwnerRound = ownerData.OwnerRound;
     if (prevOwnerRound >= evYardInit.OwnerRound) {
-        guard.Release();
         TStringStream str;
         str << "requested OwnerRound# " << evYardInit.OwnerRound
             << " <= prevoiuslyUsedOwnerRound# " << prevOwnerRound
             << " OwnerRound may never decrease and can only be used once for YardInit. Marker# BPD13";
-        ReplyErrorYardInitResult(evYardInit, str.Str());
-        return false;
+        return reject(str.Str());
+    }
+
+    // A new owner cannot be installed on a read-only PDisk. Reject it before
+    // selecting the shared router's semantic mode, while known owners may
+    // still reconnect for read-only access.
+    if (it == VDiskOwners.end() && Cfg->ReadOnly) {
+        return reject("PDisk is in ReadOnly mode. Marker# BPD47", NKikimrProto::CORRUPTED);
+    }
+
+    // A rejected stale owner round must not choose the shared router's mode.
+    // Resolve the mode before changing the accepted owner's state so another
+    // slot can still choose its intended mode after a rejected initialization.
+    if (evYardInit.UringDevNullMode && !evYardInit.GetUringRouterClient) {
+        return reject("DevNullMode cannot be combined with ForcePDiskFallback");
+    }
+    if (evYardInit.GetUringRouterClient) {
+        EnsureSharedUringRouter(evYardInit.UringIdleSpinUs, evYardInit.UringDevNullMode);
+#if defined(__linux__)
+        if (SharedUringRouter
+                && SharedUringRouter->GetConfig().DevNullMode != evYardInit.UringDevNullMode) {
+            return reject("shared io_uring router DevNullMode conflicts with this DDisk slot");
+        }
+        if (evYardInit.UringDevNullMode && !SharedUringRouter) {
+            return reject("DevNullMode requires an available shared io_uring router");
+        }
+#else
+        if (evYardInit.UringDevNullMode) {
+            return reject("DevNullMode requires Linux io_uring");
+        }
+#endif
     }
 
     YDB_LOG_P_LOG(PRI_INFO, "YardInitStart",
@@ -2590,10 +2628,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
             return;
         }
 
-        if (Cfg->ReadOnly) {
-            ReplyErrorYardInitResult(evYardInit, "PDisk is in ReadOnly mode. Marker# BPD47", NKikimrProto::CORRUPTED);
-            return;
-        }
+        // A new owner on a read-only PDisk was already rejected by YardInitStart.
 
         // Allocate quota for the owner
         Keeper.AddOwner(owner, vDiskId, GetOwnerWeight(evYardInit.GroupSizeInUnits));

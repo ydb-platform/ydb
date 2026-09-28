@@ -97,6 +97,7 @@ struct TUringCounters {
 //
 // Optional device I/O sample sink: if set via SetSampleSink() before Start(),
 // the I/O thread invokes it once per successfully completed Read/Write CQE.
+// DevNull synthetic completions produce no device sample.
 // The sink must be cheap and thread-safe on its own.
 using TDeviceIoSampleSink = std::function<void(const TDeviceIoSample&)>;
 
@@ -175,8 +176,8 @@ public:
     // before this call and restore it only if false is returned. False means
     // the router has not been started or is stopping/stopped and no callback
     // will be delivered. Every accepted operation gets exactly one terminal
-    // callback: OnComplete() after kernel submission, or OnDrop() if shutdown
-    // reaches it first.
+    // callback: OnComplete() after a kernel data result or an I/O-thread
+    // DevNull synthetic result, or OnDrop() if shutdown reaches it first.
     //
     // Concurrent callers must keep the router alive for the entire call.
     // Accepted publishers are fenced through publication and wake by StopSync.

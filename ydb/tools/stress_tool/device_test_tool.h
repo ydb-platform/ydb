@@ -635,6 +635,7 @@ struct TPerfTestConfig {
     bool DisablePDiskDataEncryption;
     bool DisableDDiskChecksums;
     ui64 DDiskChecksumsCacheBytes = NDDisk::TDDiskConfig().IntegrityChecksumCacheBytes;
+    bool DDiskDevNullMode = false;
     bool ForcePDiskFallback;
     // Zero preserves the legacy user-accessible chunk sizing.
     ui32 PhysicalChunkSize = 0;

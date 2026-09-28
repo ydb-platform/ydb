@@ -223,12 +223,20 @@ static int Run(int argc, char **argv) {
         return 1;
     }
 
+    try {
+        ValidateDDiskOptions(res);
+    } catch (const yexception& ex) {
+        Cerr << "Error: " << ex.what() << Endl;
+        return 1;
+    }
+
     auto protoTests = LoadTests(res, ddisk);
 
     NKikimr::TPerfTestConfig config(paths, res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
             res.Get("run-count"), inFlight.From, inFlight.To, cli.DisablePDiskDataEncryption,
             cli.DisableDDiskChecksums, cli.ForcePDiskFallback, logLevel);
+    config.DDiskDevNullMode = cli.DDiskDevNullMode;
     if (ddisk) {
         config.PhysicalChunkSize = DDiskChunkSize;
     }

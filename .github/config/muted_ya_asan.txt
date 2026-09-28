@@ -86,6 +86,7 @@ ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.AlterAddNotNullDefaultColumn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteAllByGeneratedPredicate
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
@@ -671,6 +672,7 @@ ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test
 ydb/tests/tools/kqprun/tests py3test.sole chunk
 ydb/tools/mnc/viewer/ut py3test.sole chunk
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_operations_tab_collects_install_arguments
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_selecting_agents_overview_card_opens_agents_tab
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_arrow_navigation_moves_between_fields_and_deploy_flags
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes

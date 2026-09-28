@@ -1506,6 +1506,138 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL_C(flag.GetBoolean(), expected, NJson::WriteJson(disk, false));
     }
 
+    void CheckNodesPDiskWhiteboardFallback(bool offloadMerge, bool allResponsesLost = false) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(4)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+        }
+        const TNodeId whiteboardNodeId = runtime.GetNodeId(0);
+        const TNodeId fallbackNodeId = runtime.GetNodeId(1);
+        const TNodeId emptyResponseNodeId = runtime.GetNodeId(2);
+        const TNodeId noDataNodeId = runtime.GetNodeId(3);
+        bool receivedControllerResponse = false;
+        std::unordered_set<TNodeId> droppedPDiskResponses;
+        ui32 pdiskViewerResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    SetNodesLocation(x, "dc-1");
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    receivedControllerResponse = true;
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearEntries();
+                    for (TNodeId nodeId : {whiteboardNodeId, fallbackNodeId, emptyResponseNodeId}) {
+                        AddSysViewPDisk(x, nodeId, 1);
+                        auto* info = record.MutableEntries(record.EntriesSize() - 1)->MutableInfo();
+                        info->SetStatusV2("INACTIVE");
+                        info->SetDecommitStatus("DECOMMIT_PENDING");
+                        info->SetMaintenanceStatus("LONG_TERM_MAINTENANCE_PLANNED");
+                    }
+                    break;
+                }
+                case TEvWhiteboard::EvPDiskStateResponse: {
+                    if (allResponsesLost || ev->Cookie == fallbackNodeId || ev->Cookie == noDataNodeId) {
+                        droppedPDiskResponses.insert(ev->Cookie);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearPDiskStateInfo();
+                    if (ev->Cookie == whiteboardNodeId) {
+                        auto* pdisk = record.AddPDiskStateInfo();
+                        pdisk->SetPDiskId(1);
+                        pdisk->SetPath("/dev/whiteboard");
+                        pdisk->SetGuid(1001);
+                        pdisk->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                        pdisk->SetTotalSize(2048);
+                        pdisk->SetAvailableSize(1536);
+                    }
+                    break;
+                }
+                case TEvViewer::EvViewerResponse: {
+                    auto* x = reinterpret_cast<TEvViewer::TEvViewerResponse::TPtr*>(&ev);
+                    pdiskViewerResponses += (*x)->Get()->Record.HasPDiskResponse();
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,PDisks,SystemState"
+            << "&offload_merge=" << (offloadMerge ? "true" : "false")
+            << "&offload_merge_attempts=1&timeout=100 HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+
+        UNIT_ASSERT_C(receivedControllerResponse, result->Response->Body);
+        UNIT_ASSERT(droppedPDiskResponses.contains(fallbackNodeId));
+        UNIT_ASSERT(droppedPDiskResponses.contains(noDataNodeId));
+        UNIT_ASSERT_VALUES_EQUAL(droppedPDiskResponses.size(), allResponsesLost ? 4 : 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(pdiskViewerResponses, offloadMerge && !allResponsesLost ? 1 : 0, result->Response->Body);
+        const auto& nodes = json.GetMap().at("Nodes").GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 4);
+        for (const auto& node : nodes) {
+            const auto& fields = node.GetMap();
+            const TNodeId nodeId = fields.at("NodeId").GetUInteger();
+            UNIT_ASSERT_C(!node["Disconnected"].GetBoolean(), NJson::WriteJson(node, false));
+            if (nodeId == noDataNodeId || (nodeId == emptyResponseNodeId && !allResponsesLost)) {
+                UNIT_ASSERT_C(!fields.contains("PDisks"), NJson::WriteJson(node, false));
+                continue;
+            }
+            UNIT_ASSERT_C(fields.contains("PDisks"), NJson::WriteJson(node, false));
+            const auto& pdisks = fields.at("PDisks").GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(pdisks.size(), 1);
+            const bool hasWhiteboard = nodeId == whiteboardNodeId && !allResponsesLost;
+            AssertHasWhiteboardData(pdisks[0], hasWhiteboard);
+            const auto& pdisk = pdisks[0].GetMap();
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("PDiskId").GetUInteger(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("Path").GetString(),
+                                     hasWhiteboard ? TString("/dev/whiteboard") : Sprintf("/dev/pdisk-%u-1", nodeId));
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("Guid").GetString(), ToString(hasWhiteboard ? 1001 : nodeId * 100 + 1));
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("TotalSize").GetString(), hasWhiteboard ? "2048" : "1024");
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("AvailableSize").GetString(), hasWhiteboard ? "1536" : "512");
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("Status").GetString(), "INACTIVE");
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("DecommitStatus").GetString(), "DECOMMIT_PENDING");
+            UNIT_ASSERT_VALUES_EQUAL(pdisk.at("MaintenanceStatus").GetString(), "LONG_TERM_MAINTENANCE_PLANNED");
+        }
+    }
+
+    Y_UNIT_TEST(NodesPagePDiskWhiteboardFallbackDirect) {
+        CheckNodesPDiskWhiteboardFallback(false);
+    }
+
+    Y_UNIT_TEST(NodesPagePDiskWhiteboardFallbackOffloaded) {
+        CheckNodesPDiskWhiteboardFallback(true);
+    }
+
+    Y_UNIT_TEST(NodesPagePDiskWhiteboardUnavailableDirect) {
+        CheckNodesPDiskWhiteboardFallback(false, true);
+    }
+
+    Y_UNIT_TEST(NodesPagePDiskWhiteboardUnavailableOffloaded) {
+        CheckNodesPDiskWhiteboardFallback(true, true);
+    }
+
     void AssertStorageVDiskWhiteboardData(const NJson::TJsonValue& vdisk, bool hasVDiskWhiteboard, bool hasPDiskWhiteboard) {
         AssertHasWhiteboardData(vdisk, hasVDiskWhiteboard);
         AssertHasWhiteboardData(vdisk["PDisk"], hasPDiskWhiteboard);

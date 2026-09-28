@@ -89,9 +89,9 @@ def create_commit_source(commit, repo, logger) -> Source:
         pulls = commit.get_pulls()
         if pulls.totalCount > 0:
             linked_pr = pulls.get_page(0)[0]
-    except Exception:
-        pass
-    
+    except Exception as e:
+        logger.warning(f"Failed to get PR linked to commit {commit.sha[:7]}, treating it as merged: {e}")
+
     author = linked_pr.user.login if linked_pr else (commit.author.login if commit.author else None)
     body_item = f"* commit {commit.html_url}: {linked_pr.title}" if linked_pr else f"* commit {commit.html_url}"
     
@@ -103,6 +103,8 @@ def create_commit_source(commit, repo, logger) -> Source:
         merged_at = linked_pr.merged_at if linked_pr and linked_pr.merged_at else None
         if merged_at is None:
             merged_at = commit.commit.committer.date if commit.commit.committer else None
+            if merged_at is not None:
+                logger.info(f"No PR merge time for commit {commit.sha[:7]}, using its committer date {merged_at.isoformat()}")
     else:
         merged_at = None
 
@@ -118,19 +120,34 @@ def create_commit_source(commit, repo, logger) -> Source:
     )
 
 
-def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
+def get_pr_commit_shas(pull: Any, logger) -> List[str]:
+    """Returns PR's own commits, skipping merge commits that cherry-pick can't apply"""
+    commit_shas = []
+    for c in pull.get_commits():
+        if len(c.parents) > 1:
+            logger.warning(f"PR #{pull.number}: skipping merge commit {c.sha[:7]}")
+            continue
+        commit_shas.append(c.sha)
+    if not commit_shas:
+        raise ValueError(f"PR #{pull.number} contains no commits to cherry-pick")
+    return commit_shas
+
+
+def create_pr_source(pull: Any, repo, logger) -> Source:
     """Creates source from PR"""
     if not pull.merged:
-        commit_shas = [c.sha for c in pull.get_commits()]
-        if not commit_shas:
-            raise ValueError(f"PR #{pull.number} contains no commits to cherry-pick")
-    elif pull.merge_commit_sha:
-        commit_shas = [pull.merge_commit_sha]
+        commit_shas = get_pr_commit_shas(pull, logger)
+        logger.info(f"PR #{pull.number} is unmerged, using {len(commit_shas)} commits from PR")
+    elif not pull.merge_commit_sha:
+        commit_shas = get_pr_commit_shas(pull, logger)
+        logger.info(f"PR #{pull.number} has no merge commit, using {len(commit_shas)} commits from PR")
+    elif len(repo.get_commit(pull.merge_commit_sha).parents) > 1:
+        commit_shas = get_pr_commit_shas(pull, logger)
+        logger.info(f"PR #{pull.number} was merged as merge commit, using {len(commit_shas)} individual commits")
     else:
-        commit_shas = [c.sha for c in pull.get_commits()]
-        if not commit_shas:
-            raise ValueError(f"PR #{pull.number} contains no commits to cherry-pick")
-    
+        commit_shas = [pull.merge_commit_sha]
+        logger.info(f"PR #{pull.number} was merged as squash/rebase, using merge_commit_sha")
+
     return Source(
         type='pr',
         commit_shas=commit_shas,
@@ -158,8 +175,9 @@ def sort_sources(sources: List[Source], logger) -> List[Source]:
     Commits are cherry-picked sequentially, so the order defines the resulting
     history: merged sources go first in merge-time order (the order they were
     applied to the original branch), unmerged ones go after them in input order.
-    The sort is stable, so sources with equal or unknown merge time keep their
-    relative input order.
+    Merged sources with unknown merge time are placed before all other merged
+    ones. The sort is stable, so sources with equal merge time, as well as those
+    with unknown merge time, keep their relative input order.
     """
     merged = [s for s in sources if s.is_merged]
     unmerged = [s for s in sources if not s.is_merged]
@@ -167,7 +185,7 @@ def sort_sources(sources: List[Source], logger) -> List[Source]:
     unknown_time = [s for s in merged if s.merged_at is None]
     if unknown_time:
         logger.warning(
-            "No merge time for %s, keeping them in input order before the rest",
+            "No merge time for %s, placing them first in input order",
             ', '.join(s.title for s in unknown_time)
         )
 
@@ -679,51 +697,54 @@ def main():
         ref = c.split('/')[-1].strip()
         try:
             pr_num = int(ref)
+        except ValueError:
+            pr_num = None
+
+        if pr_num is not None:
             try:
                 pull = repo.get_pull(pr_num)
             except GithubException as e:
                 logger.error(f"VALIDATION_ERROR: PR #{pr_num} does not exist: {e}")
                 sys.exit(1)
-            
+
             if not pull.merged and not allow_unmerged:
-                raise ValueError(f"PR #{pr_num} is not merged. Use --allow-unmerged to backport unmerged PRs")
+                logger.error(f"VALIDATION_ERROR: PR #{pr_num} is not merged. Use --allow-unmerged to backport unmerged PRs")
+                sys.exit(1)
             if not pull.merged:
                 logger.info(f"PR #{pr_num} is not merged, but --allow-unmerged is set, proceeding with commits from PR")
-            source = create_pr_source(pull, allow_unmerged, logger)
-            sources.append(source)
-            if not pull.merged:
-                logger.info(f"PR #{pr_num} is unmerged, using {len(source.commit_shas)} commits from PR")
-            elif pull.merge_commit_sha:
-                merge_commit = repo.get_commit(pull.merge_commit_sha)
-                if merge_commit.parents and len(merge_commit.parents) > 1:
-                    logger.info(f"PR #{pr_num} was merged as merge commit, using {len(source.commit_shas)} individual commits")
-                else:
-                    logger.info(f"PR #{pr_num} was merged as squash/rebase, using merge_commit_sha")
-        except ValueError:
-            # Not a PR number, treat as commit SHA
             try:
-                expanded_sha = expand_sha(repo, ref, logger)
+                source = create_pr_source(pull, repo, logger)
             except ValueError as e:
-                logger.error(f"VALIDATION_ERROR: Failed to expand SHA {ref}: {e}")
+                logger.error(f"VALIDATION_ERROR: {e}")
                 sys.exit(1)
-            
-            try:
-                commit = repo.get_commit(expanded_sha)
-            except GithubException as e:
-                logger.error(f"VALIDATION_ERROR: Commit {ref} (expanded to {expanded_sha}) does not exist: {e}")
-                sys.exit(1)
-            
-            # Check if commit is linked to PR
-            pulls = commit.get_pulls()
-            if pulls.totalCount > 0:
-                pr = pulls.get_page(0)[0]
-                if not pr.merged and not allow_unmerged:
-                    raise ValueError(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged. Cannot backport unmerged PR. Use --allow-unmerged to allow")
-                if not pr.merged:
-                    logger.info(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged, but --allow-unmerged is set, proceeding")
-            
-            source = create_commit_source(commit, repo, logger)
             sources.append(source)
+            continue
+
+        # Not a PR number, treat as commit SHA
+        try:
+            expanded_sha = expand_sha(repo, ref, logger)
+        except ValueError as e:
+            logger.error(f"VALIDATION_ERROR: Failed to expand SHA {ref}: {e}")
+            sys.exit(1)
+
+        try:
+            commit = repo.get_commit(expanded_sha)
+        except GithubException as e:
+            logger.error(f"VALIDATION_ERROR: Commit {ref} (expanded to {expanded_sha}) does not exist: {e}")
+            sys.exit(1)
+
+        # Check if commit is linked to PR
+        pulls = commit.get_pulls()
+        if pulls.totalCount > 0:
+            pr = pulls.get_page(0)[0]
+            if not pr.merged and not allow_unmerged:
+                logger.error(f"VALIDATION_ERROR: PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged. Cannot backport unmerged PR. Use --allow-unmerged to allow")
+                sys.exit(1)
+            if not pr.merged:
+                logger.info(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged, but --allow-unmerged is set, proceeding")
+
+        source = create_commit_source(commit, repo, logger)
+        sources.append(source)
 
     sources = sort_sources(sources, logger)
 

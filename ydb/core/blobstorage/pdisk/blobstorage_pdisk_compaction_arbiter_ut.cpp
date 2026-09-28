@@ -188,6 +188,25 @@ Y_UNIT_TEST_SUITE(TCompactionArbiterTest) {
         UNIT_ASSERT(env.Leased(1, 0));
     }
 
+    Y_UNIT_TEST(SpaceChangeRetriesAnEmptyBid) {
+        TEnv env;
+        env.Register(1, 0);
+        env.SetColor(TColor::ORANGE);
+        const ui64 round = env.Arbiter.GetRoundId();
+        env.BidNothing(1, 0, round);
+        UNIT_ASSERT(!env.Arbiter.IsRoundOpen());
+
+        // The first selector saw an insufficient (and possibly stale) budget and answered with no candidate.
+        // Once the space changes, ask it again instead of retaining that empty answer forever.
+        env.Clear();
+        env.Space.Free = 999;
+        env.Arbiter.OnSpaceChanged(env.Space, env.Out);
+        UNIT_ASSERT(env.Arbiter.IsRoundOpen());
+        UNIT_ASSERT(env.Arbiter.GetRoundId() > round);
+        env.Bid(1, 0, env.Arbiter.GetRoundId(), 1, 2);
+        UNIT_ASSERT(env.Leased(1, 0));
+    }
+
     Y_UNIT_TEST(DirtyOpensARoundWhenIdle) {
         TEnv env;
         env.Register(1, 0);

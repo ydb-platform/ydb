@@ -481,6 +481,13 @@ namespace NKikimr {
                 if (InPlannedMode() || Planned.Leased) {
                     // level compactions start on calls for bids and leases only; the wakeup keeps Fresh going
                     ServePlanned(ctx);
+                    // A bid can be empty because the last space-headroom observation did not leave enough
+                    // budget.  Headroom is refreshed asynchronously by CheckSpace, so a PDisk space event can
+                    // arrive before the VDisk has learned about the newly available budget.  Keep the regular
+                    // wakeup as a retry point instead of leaving an empty bid cached indefinitely.
+                    if (InPlannedMode()) {
+                        NotifyDirty(ctx);
+                    }
                     ScheduleCompactionWakeup(ctx);
                 } else if (!RunLevelCompactionSelector(ctx)) {
                     ScheduleCompactionWakeup(ctx);
@@ -1176,6 +1183,9 @@ namespace NKikimr {
                     AdvanceCommitInProgress = false;
                     break;
                 case THullCommitFinished::CommitReplSst:
+                    // Replication may add a level-0 SST after the last planned bid. Let the arbiter
+                    // re-evaluate this bidder even when no fresh compaction event follows.
+                    NotifyDirty(ctx);
                     break;
                 case THullCommitFinished::CommitSyncSst:
                     break;

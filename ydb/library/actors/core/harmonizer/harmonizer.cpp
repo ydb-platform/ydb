@@ -587,7 +587,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
     TPoolInfo &poolInfo = *Pools.back();
     poolInfo.Pool = pool;
     poolInfo.Shared = Shared;
-    poolInfo.BasicPool = dynamic_cast<TBasicExecutorPool*>(pool);
+    poolInfo.BasicPool = dynamic_cast<TBasicExecutorPoolBase*>(pool);
     poolInfo.NeedyCpuWindowSeconds = needyCpuWindowSeconds;
 
     poolInfo.DefaultThreadCount = pool->GetDefaultThreadCount();

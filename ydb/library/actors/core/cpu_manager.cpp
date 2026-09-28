@@ -215,12 +215,12 @@ namespace NActors {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
                 if (Shared) {
-                    auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
+                    auto *pool = CreateBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                     Shared->SetBasicPool(pool);
                     pool->SetSharedPool(Shared.get());
                     return pool;
                 } else {
-                    return new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
+                    return CreateBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                 }
             }
         }
@@ -235,7 +235,7 @@ namespace NActors {
     TVector<IExecutorPool*> TCpuManager::GetBasicExecutorPools() const {
         TVector<IExecutorPool*> pools;
         for (ui32 idx = 0; idx < ExecutorPoolCount; ++idx) {
-            if (auto basicPool = dynamic_cast<TBasicExecutorPool*>(Executors[idx].Get()); basicPool != nullptr) {
+            if (auto basicPool = dynamic_cast<TBasicExecutorPoolBase*>(Executors[idx].Get()); basicPool != nullptr) {
                 pools.push_back(basicPool);
             }
         }

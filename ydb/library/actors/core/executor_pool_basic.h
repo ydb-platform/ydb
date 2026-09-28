@@ -127,9 +127,18 @@ namespace NActors {
         }
     };
 
-    class TBasicExecutorPool: public TExecutorPoolBase {
+    namespace NPrivate {
+        class TBasicActivationQueue;
+        class TPriorityActivationQueue;
+    }
+
+    class TBasicExecutorPoolBase: public TExecutorPoolBase {
         friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
+        template<class TQueue>
+        friend class TBasicExecutorPoolImpl;
+        friend class NPrivate::TBasicActivationQueue;
+        friend class NPrivate::TPriorityActivationQueue;
 
         NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
@@ -224,7 +233,7 @@ namespace NActors {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
-        TBasicExecutorPool(ui32 poolId,
+        TBasicExecutorPoolBase(ui32 poolId,
                            ui32 threads,
                            ui64 spinThreshold,
                            const TString& poolName = "",
@@ -240,22 +249,16 @@ namespace NActors {
                            i16 priority = 0,
                            bool hasOwnSharedThread = false,
                            TExecutorPoolJail *jail = nullptr);
-        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
-        ~TBasicExecutorPool();
+        explicit TBasicExecutorPoolBase(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
+        ~TBasicExecutorPoolBase();
 
         void Initialize() override;
-        TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationWaker(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
-        void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExRingQueue(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
-        void ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingWriteCounter);
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
@@ -308,4 +311,48 @@ namespace NActors {
         void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
 
     };
+
+    namespace NPrivate {
+        // Normal stays in TExecutorPoolBase::Activations. Only the priority
+        // specialization owns an additional ring queue.
+        class TBasicActivationQueue {
+        public:
+            explicit TBasicActivationQueue(TBasicExecutorPoolBase& pool);
+            void Push(TBasicExecutorPoolBase& pool, ui32 hint, ui64 counter);
+            ui32 Pop(TBasicExecutorPoolBase& pool, ui64 counter);
+        };
+
+        class TPriorityActivationQueue {
+            alignas(64) TRingActivationQueueV4 HighActivations;
+        public:
+            explicit TPriorityActivationQueue(TBasicExecutorPoolBase& pool);
+            ~TPriorityActivationQueue();
+            void Push(TBasicExecutorPoolBase& pool, ui32 hint, ui64 counter);
+            ui32 Pop(TBasicExecutorPoolBase& pool, ui64 counter);
+        };
+    }
+
+    template<class TQueue>
+    class TBasicExecutorPoolImpl : public TBasicExecutorPoolBase {
+        friend class TBasicExecutorPoolBase;
+
+        [[no_unique_address]] TQueue Queue{*this};
+
+        TMailbox* GetReadyActivationRingQueue(ui64 revolvingCounter);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingCounter);
+        TMailbox* GetReadyActivationSharedImpl(ui64 revolvingCounter);
+        void ScheduleActivationExRingQueue(TMailbox* mailbox, ui64 revolvingCounter, std::optional<TAtomic> initSemaphore);
+        void ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingCounter);
+
+    public:
+        using TBasicExecutorPoolBase::TBasicExecutorPoolBase;
+        TMailbox* GetReadyActivation(ui64 revolvingCounter) override;
+        void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) override;
+    };
+
+    using TBasicExecutorPool = TBasicExecutorPoolImpl<NPrivate::TBasicActivationQueue>;
+    using TPriorityExecutorPool = TBasicExecutorPoolImpl<NPrivate::TPriorityActivationQueue>;
+
+    TBasicExecutorPoolBase* CreateBasicExecutorPool(const TBasicExecutorPoolConfig& cfg,
+        IHarmonizer* harmonizer = nullptr, TExecutorPoolJail* jail = nullptr);
 }

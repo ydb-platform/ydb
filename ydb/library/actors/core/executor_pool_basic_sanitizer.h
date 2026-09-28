@@ -11,13 +11,13 @@ namespace NActors {
 
 class TBasicExecutorPoolSanitizer : public ISimpleThread {
 public:
-    TBasicExecutorPoolSanitizer(TBasicExecutorPool *pool)
+    TBasicExecutorPoolSanitizer(TBasicExecutorPoolBase *pool)
         : Pool(pool)
     {}
 
     void CheckSemaphore() const {
         auto x = AtomicGet(Pool->Semaphore);
-        auto semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(x);
+        auto semaphore = TBasicExecutorPoolBase::TSemaphore::GetSemaphore(x);
         Y_ABORT_UNLESS(semaphore.OldSemaphore <= 0 || semaphore.CurrentThreadCount != semaphore.CurrentSleepThreadCount || Pool->StopFlag.load());
     }
 
@@ -34,7 +34,7 @@ public:
     }
 
 private:
-    TBasicExecutorPool *Pool;
+    TBasicExecutorPoolBase *Pool;
     std::atomic_bool StopFlag = false;
 };
 

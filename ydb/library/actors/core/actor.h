@@ -15,6 +15,11 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NActors {
+    enum class EMailboxPriority : ui8 {
+        Normal,
+        High,
+    };
+
     class TActorSystem;
     class TMailboxTable;
     class TMailbox;
@@ -573,6 +578,8 @@ namespace NActors {
             // its events. Activations of other actors in the same mailbox are
             // not reported.
             MailboxProcessingFinished = 1ull << 0,
+            // Used when registering a new mailbox in a priority executor pool.
+            HighMailboxPriority = 1ull << 1,
         };
 
     private:
@@ -693,6 +700,22 @@ namespace NActors {
 
         virtual ~IActor() {
         } // must not be called for registered actors, see Die method instead
+
+        // Registration metadata for a new mailbox in a priority executor pool.
+        // RegisterWithSameMailbox inherits the existing mailbox's priority.
+        void SetMailboxPriority(EMailboxPriority priority) noexcept {
+            Y_ABORT_UNLESS(!SelfId(), "Mailbox priority must be set before registration");
+            if (priority == EMailboxPriority::High) {
+                SetSystemFlag(ESystemFlag::HighMailboxPriority);
+            } else {
+                ClearSystemFlag(ESystemFlag::HighMailboxPriority);
+            }
+        }
+
+        EMailboxPriority GetMailboxPriority() const noexcept {
+            return HasSystemFlag(ESystemFlag::HighMailboxPriority)
+                ? EMailboxPriority::High : EMailboxPriority::Normal;
+        }
 
     protected:
         void SetSystemFlag(ESystemFlag flag) noexcept {
@@ -1016,6 +1039,7 @@ namespace NActors {
             : IActorCallback(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType())
             , Actor(std::move(actor))
         {
+            SetMailboxPriority(Actor->GetMailboxPriority());
         }
 
         void Registered(TActorSystem* sys, const TActorId& owner) override {

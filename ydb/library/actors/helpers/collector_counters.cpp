@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
+#include <ydb/library/actors/util/datetime.h>
 
 
 namespace NActors {
@@ -237,6 +238,19 @@ void TExecutorPoolCounters::Set(const TExecutorPoolStats& poolStats, const TExec
 
     *SpinningTimeUs = poolStats.SpinningTimeUs;
     *SpinThresholdUs = poolStats.SpinThresholdUs;
+
+    if (poolStats.HasPriorityActivationQueues) {
+        if (!NormalActivationQueueOldestAgeUs) {
+            NormalActivationQueueOldestAgeUs = PoolGroup->GetCounter("NormalActivationQueueOldestAgeUs", false);
+            HighActivationQueueOldestAgeUs = PoolGroup->GetCounter("HighActivationQueueOldestAgeUs", false);
+        }
+        const ui64 now = GetCycleCountFast();
+        const auto age = [now](ui64 oldest) -> ui64 {
+            return oldest && now > oldest ? Ts2Us(now - oldest) : 0;
+        };
+        *NormalActivationQueueOldestAgeUs = age(poolStats.OldestNormalActivationTs);
+        *HighActivationQueueOldestAgeUs = age(poolStats.OldestHighActivationTs);
+    }
 
     LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
     ActivationTimeHistogram->Reset();

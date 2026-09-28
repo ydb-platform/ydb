@@ -23,7 +23,7 @@ namespace NActors {
     class TExecutorPoolJail;
     class TSharedExecutorPoolSanitizer;
 
-    class TBasicExecutorPool;
+    class TBasicExecutorPoolBase;
 
     struct TPoolShortInfo {
         i16 PoolId = 0;
@@ -65,13 +65,15 @@ namespace NActors {
     };
 
     class TSharedExecutorPool: public TExecutorPoolBaseMailboxed, public ISharedPool {
-        friend class TBasicExecutorPool;
+        friend class TBasicExecutorPoolBase;
+        template<class TQueue>
+        friend class TBasicExecutorPoolImpl;
         friend class TSharedExecutorPoolSanitizer;
 
         ui64 PoolId;
         i16 PoolThreads;
         TPoolManager PoolManager;
-        TStackVec<TBasicExecutorPool*> Pools;
+        TStackVec<TBasicExecutorPoolBase*> Pools;
         std::unique_ptr<TSharedExecutorPoolSanitizer> Sanitizer;
 
 
@@ -187,7 +189,7 @@ namespace NActors {
         void FillThreadOwners(std::vector<i16>& threadOwners) const override;
 
 
-        void SetBasicPool(TBasicExecutorPool* pool);
+        void SetBasicPool(TBasicExecutorPoolBase* pool);
 
         void SetForeignThreadSlots(i16 poolId, i16 slots) override;
 

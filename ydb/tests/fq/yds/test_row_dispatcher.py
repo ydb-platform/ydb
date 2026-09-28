@@ -440,7 +440,7 @@ class TestPqRowDispatcher(TestYdsBase):
         filter = ' MIN_OF(`time`, `time` + 5) >= 102 AND MAX_OF(`time`, `time` - 5) < 103'
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
-            R'predicate: ')
+            R'predicate: ((MIN_OF(`time`, (`time` + 5)) >= 102) AND (MAX_OF(`time`, (`time` - 5)) < 103))')
         filter = ' `time` IN (102, 103, 104)'
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,

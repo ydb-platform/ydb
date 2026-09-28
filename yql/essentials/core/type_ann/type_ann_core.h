@@ -14,7 +14,7 @@ IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprN
 TAutoPtr<IGraphTransformer> CreateIntentDeterminationTransformer(const TTypeAnnotationContext& types);
 
 TAutoPtr<IGraphTransformer> CreateExtCallableTypeAnnotationTransformer(TTypeAnnotationContext& types,
-    bool instantOnly = false);
+                                                                       bool instantOnly = false);
 
 const THashSet<TString>& GetBuiltinFunctions();
 

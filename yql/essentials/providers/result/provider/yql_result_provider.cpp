@@ -682,11 +682,11 @@ public:
     {
     }
 
-    void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
+    void GetUsedNodes(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) override {
         usedNodeIds.clear();
-        if (TMaybeNode<TResFill>(&input) || TMaybeNode<TResPull>(&input) || TMaybeNode<TResIf>(&input) || TMaybeNode<TResFor>(&input)) {
-            auto provider = Config_->Types.DataSourceMap.FindPtr(input.Child(5)->Content());
-            Y_ENSURE(provider, "DataSource not exist: " << input.Child(5)->Content());
+        if (TMaybeNode<TResFill>(input) || TMaybeNode<TResPull>(input) || TMaybeNode<TResIf>(input) || TMaybeNode<TResFor>(input)) {
+            auto provider = Config_->Types.DataSourceMap.FindPtr(input->Child(5)->Content());
+            Y_ENSURE(provider, "DataSource not exist: " << input->Child(5)->Content());
             (*provider)->GetTrackableNodeProcessor().GetUsedNodes(input, usedNodeIds);
         }
     }

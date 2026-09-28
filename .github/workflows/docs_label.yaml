@@ -1,29 +1,77 @@
 name: Label documentation PR
 
 # SECURITY: this workflow runs in the privileged `pull_request_target` context
-# but does NOT check out PR-controlled code. It only adds the `documentation`
-# label using the GITHUB_TOKEN. The actual documentation build is intentionally
-# split out into `docs_build.yaml`, which runs in the fork-isolated
-# `pull_request` context.
+# but does NOT check out PR-controlled code. It only reads the PR file list and
+# synchronizes the `documentation` label using the GITHUB_TOKEN. The actual
+# documentation build is intentionally split out into `docs_build.yaml`, which
+# runs in the fork-isolated `pull_request` context.
 
+# The documentation label is fully automated from current ydb/docs/ paths.
+# Manual additions outside that path are removed on the next push or reopen.
+# Run for all PRs so removing the last documentation change also removes the label.
 on:
   pull_request_target:
-    paths:
-      - 'ydb/docs/**'
+    types: [opened, reopened, synchronize]
+
+concurrency:
+  group: docs-label-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  add-label:
+  sync-label:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-      - name: Add documentation label
+      - name: Sync documentation label
         uses: actions/github-script@v8
         with:
           script: |
-            await github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
+            const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              labels: ['documentation']
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
             });
+            const hasDocs = files.some((file) => file.filename.startsWith('ydb/docs/'));
+
+            // listFiles returns at most 3000 files. Missing docs in a capped result
+            // is inconclusive, so preserve the current label state.
+            if (!hasDocs && files.length >= 3000) {
+              core.warning('PR file list may be truncated; leaving documentation label unchanged.');
+              return;
+            }
+
+            // Read current labels: queued events may carry an outdated label set.
+            const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const hasLabel = labels.some((label) => label.name === 'documentation');
+            if (hasDocs === hasLabel) {
+              return;
+            }
+
+            if (hasDocs) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                labels: ['documentation'],
+              });
+            } else {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  name: 'documentation',
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+              }
+            }

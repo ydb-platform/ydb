@@ -1674,10 +1674,75 @@ TJoinTestData LeftOnlyCommonFilterTestDataLeftIsBuild() {
     return td;
 }
 
-void AsCrossJoin(TJoinTestData& td) {
-    td.Kind = EJoinKind::Cross;
+void AsKeylessJoin(TJoinTestData& td, EJoinKind kind) {
+    td.Kind = kind;
     td.LeftKeyColmns = {};
     td.RightKeyColmns = {};
+}
+
+void AsCrossJoin(TJoinTestData& td) {
+    AsKeylessJoin(td, EJoinKind::Cross);
+}
+
+TJoinTestData KeylessJoinCommonFilterTestData(EJoinKind kind) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 100};
+    TVector<ui64> rightKeys = {10, 20};
+    TVector<ui64> rightVals = {10, 50};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    td.JoinSettings.BuildSide = EBuildSide::Right;
+    AsKeylessJoin(td, kind);
+
+    if (kind == EJoinKind::Inner) {
+        TVector<ui64> expLeftKeys = {1, 1, 2};
+        TVector<ui64> expLeftVals = {5, 5, 20};
+        TVector<ui64> expRightKeys = {10, 20, 20};
+        TVector<ui64> expRightVals = {10, 50, 50};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    } else if (kind == EJoinKind::Left) {
+        TVector<ui64> expLeftKeys = {1, 1, 2, 3};
+        TVector<ui64> expLeftVals = {5, 5, 20, 100};
+        TVector<std::optional<ui64>> expRightKeys = {10, 20, 20, std::nullopt};
+        TVector<std::optional<ui64>> expRightVals = {10, 50, 50, std::nullopt};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    } else {
+        td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+        if (kind == EJoinKind::LeftSemi) {
+            TVector<ui64> expLeftKeys = {1, 2};
+            TVector<ui64> expLeftVals = {5, 20};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals);
+        } else {
+            UNIT_ASSERT(kind == EJoinKind::LeftOnly);
+            TVector<ui64> expLeftKeys = {3};
+            TVector<ui64> expLeftVals = {100};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals);
+        }
+    }
+    return td;
+}
+
+TJoinTestData KeylessLeftJoinCommonFilterTestDataLeftIsBuild() {
+    auto td = KeylessJoinCommonFilterTestData(EJoinKind::Left);
+    td.JoinSettings.BuildSide = EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData KeylessLeftJoinEmptyRightTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2};
+    TVector<ui64> leftVals = {5, 20};
+    TVector<ui64> empty;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, empty, empty);
+    TVector<std::optional<ui64>> nulls(2, std::nullopt);
+    td.Result = ConvertVectorsToTuples(setup, leftKeys, leftVals, nulls, nulls);
+    AsKeylessJoin(td, EJoinKind::Left);
+    return td;
 }
 
 TJoinTestData TrueCrossJoinTestData() {
@@ -1698,6 +1763,12 @@ TJoinTestData TrueCrossJoinTestData() {
     td.Result =
         ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
     AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData TrueKeylessInnerJoinTestData() {
+    auto td = TrueCrossJoinTestData();
+    td.Kind = EJoinKind::Inner;
     return td;
 }
 
@@ -1932,6 +2003,72 @@ TJoinTestData MakeCrossJoinSpillingTestData(const TCrossSpillSpec& spec) {
     td.ExpectsSpilling = buildSize > 1;
     td.JoinSettings.BuildSide = spec.BuildSide;
     AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData KeylessPreservedProbeSpillingTestData(EJoinKind kind) {
+    constexpr int rightSize = 20000;
+    auto td = MakeCrossJoinSpillingTestData({
+        .LeftSize = 3,
+        .RightSize = rightSize,
+        .LeftValue = [](int index) {
+            // The first row has exactly one match, while the other two have none.
+            return index == 0 ? rightSize - 2 : rightSize + index;
+        },
+        .AddFilters = [](TJoinTestData& td) {
+            td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+        },
+        .WithExpectedResult = false,
+    });
+
+    auto& setup = *td.Setup;
+    if (kind == EJoinKind::Left) {
+        TVector<ui64> expLeftKeys = {0, 1, 2};
+        TVector<ui64> expLeftValues = {rightSize - 2, rightSize + 1, rightSize + 2};
+        TVector<std::optional<ui64>> expRightKeys = {2 * (rightSize - 1) + 3, std::nullopt, std::nullopt};
+        TVector<std::optional<ui64>> expRightValues = {rightSize - 1, std::nullopt, std::nullopt};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
+    } else {
+        td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+        if (kind == EJoinKind::LeftSemi) {
+            TVector<ui64> expLeftKeys = {0};
+            TVector<ui64> expLeftValues = {rightSize - 2};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues);
+        } else {
+            UNIT_ASSERT(kind == EJoinKind::LeftOnly);
+            TVector<ui64> expLeftKeys = {1, 2};
+            TVector<ui64> expLeftValues = {rightSize + 1, rightSize + 2};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues);
+        }
+    }
+    AsKeylessJoin(td, kind);
+    return td;
+}
+
+TJoinTestData KeylessLeftJoinSpillingLeftIsBuildTestData() {
+    constexpr int leftSize = 5000;
+    auto td = MakeCrossJoinSpillingTestData({
+        .LeftSize = leftSize,
+        .RightSize = 1,
+        .BuildSide = EBuildSide::Left,
+        .LeftValue = [](int index) { return index; },
+        .RightValue = [](int) { return 1; },
+        .AddFilters = [](TJoinTestData& td) {
+            td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+        },
+        .WithExpectedResult = false,
+    });
+
+    TVector<ui64> expLeftKeys(leftSize);
+    TVector<ui64> expLeftValues(leftSize);
+    TVector<std::optional<ui64>> expRightKeys(leftSize, std::nullopt);
+    TVector<std::optional<ui64>> expRightValues(leftSize, std::nullopt);
+    std::iota(expLeftKeys.begin(), expLeftKeys.end(), 0);
+    std::iota(expLeftValues.begin(), expLeftValues.end(), 0);
+    expRightKeys[0] = 3;
+    expRightValues[0] = 1;
+    td.Result = ConvertVectorsToTuples(*td.Setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
+    AsKeylessJoin(td, EJoinKind::Left);
     return td;
 }
 
@@ -2318,6 +2455,8 @@ void RunFinalDumpSpillingIsBatchedTest() {
     auto stream = graph->GetValue();
     i64 outputRows = 0;
     bool stoppedRegularSpilling = false;
+    constexpr size_t MaxWritesPerPage = 2; // tuple page and optional probe match bitmap
+    constexpr size_t MaxPendingPuts = TestStorageSettings.SpillingPagesAtTime * MaxWritesPerPage;
 
     while (true) {
         const auto status = stream.WideFetch(output.data(), tupleWidth);
@@ -2334,10 +2473,10 @@ void RunFinalDumpSpillingIsBatchedTest() {
         if (pendingPuts == 0) {
             continue;
         }
-        UNIT_ASSERT_LE(pendingPuts, static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime));
+        UNIT_ASSERT_LE(pendingPuts, MaxPendingPuts);
         if (!stoppedRegularSpilling) {
             // Leave enough pages in memory for the end-of-input dump. Before the batching fix that dump
-            // submitted all of them at once, exceeding SpillingPagesAtTime.
+            // submitted all of them at once instead of limiting the batch to SpillingPagesAtTime pages.
             descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
             stoppedRegularSpilling = true;
         }
@@ -2347,7 +2486,7 @@ void RunFinalDumpSpillingIsBatchedTest() {
     UNIT_ASSERT(stoppedRegularSpilling);
     UNIT_ASSERT_VALUES_EQUAL(outputRows, 0);
     UNIT_ASSERT_GT(spillerFactory->TotalPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime * 2));
-    UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime));
+    UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), MaxPendingPuts);
 }
 
 // The mock spiller resolves every future at once, so the states that wait for spilling are only
@@ -2665,6 +2804,54 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestHashLeftOnlyJoinCommonFilterLeftIsBuild) {
         Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashKeylessLeftJoinCommonFilterLeftIsBuild) {
+        Test(KeylessLeftJoinCommonFilterTestDataLeftIsBuild(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftSemi), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftOnly), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinEmptyRight, BlockJoin) {
+        Test(KeylessLeftJoinEmptyRightTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingRightIsBuild, BlockJoin) {
+        Test(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinSpillingRightIsBuild, BlockJoin) {
+        Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftSemi), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinSpillingRightIsBuild, BlockJoin) {
+        Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftOnly), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashKeylessLeftJoinSpillingLeftIsBuild) {
+        Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
+        Test(TrueKeylessInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::Inner), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {

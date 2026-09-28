@@ -30,6 +30,8 @@ CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)
     SET(CXX_RT "libcxxabi")
+ELSEIF (OS_ZEPHYR)
+    SET(CXX_RT "libcxxabi")
 ELSEIF (OS_IOS)
     SET(CXX_RT "libcxxabi_dynamic")
     # Yet take builtins library from Arcadia
@@ -87,10 +89,16 @@ IF (CXX_RT == "libcxxrt")
         -DLIBCXXRT
     )
 ELSEIF (CXX_RT == "libcxxabi")
-    PEERDIR(
-        contrib/libs/cxxsupp/builtins
-        contrib/libs/cxxsupp/libcxxabi
-    )
+    IF (OS_ZEPHYR)
+        PEERDIR(
+            contrib/libs/cxxsupp/libcxxabi
+        )
+    ELSE()
+        PEERDIR(
+            contrib/libs/cxxsupp/builtins
+            contrib/libs/cxxsupp/libcxxabi
+        )
+    ENDIF()
     ADDINCL(
         GLOBAL contrib/libs/cxxsupp/libcxxabi/include
     )
@@ -102,8 +110,8 @@ ELSEIF (CXX_RT == "libcxxabi_dynamic")
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )
+# Do nothing, proper runtime will be linked by the means /MT* flags in build/ymake.core.conf
 ELSEIF (CXX_RT == "msvcrt")
-    # Do nothing, proper runtime will be linked by the means /MT* flags in build/ymake.core.conf
 ELSE()
     MESSAGE(FATAL_ERROR "Unexpected CXX_RT value: ${CXX_RT}")
 ENDIF()
@@ -133,12 +141,6 @@ SRCS(
     src/error_category.cpp
     src/exception.cpp
     src/expected.cpp
-    src/filesystem/directory_entry.cpp
-    src/filesystem/directory_iterator.cpp
-    src/filesystem/filesystem_clock.cpp
-    src/filesystem/filesystem_error.cpp
-    src/filesystem/operations.cpp
-    src/filesystem/path.cpp
     src/fstream.cpp
     src/functional.cpp
     src/future.cpp
@@ -172,6 +174,17 @@ SRCS(
     src/vector.cpp
     src/verbose_abort.cpp
 )
+
+IF (NOT OS_ZEPHYR)
+    SRCS(
+        src/filesystem/directory_entry.cpp
+        src/filesystem/directory_iterator.cpp
+        src/filesystem/filesystem_clock.cpp
+        src/filesystem/filesystem_error.cpp
+        src/filesystem/operations.cpp
+        src/filesystem/path.cpp
+    )
+ENDIF()
 
 IF (NOT OS_WINDOWS)
     SRCS(

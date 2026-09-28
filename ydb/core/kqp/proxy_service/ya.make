@@ -21,12 +21,11 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/compile_service
     ydb/core/kqp/counters
-    ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
+    ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration
     ydb/core/kqp/gateway/behaviour/streaming_query
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/kqp/run_script_actor
-    ydb/services/workload_manager
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos
@@ -46,6 +45,8 @@ PEERDIR(
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/params
     ydb/public/sdk/cpp/src/library/operation_id
+    ydb/services/workload_manager
+    ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
     yql/essentials/providers/common/proto
     yql/essentials/public/issue
 )

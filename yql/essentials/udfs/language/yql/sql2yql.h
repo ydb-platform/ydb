@@ -11,6 +11,7 @@ struct TSql2YqlInput {
     TString Query;
     TString LangVersion;
     TString GatewaysCfg;
+    TString GatewaysCfgPatch;
 };
 
 struct TSql2YqlOutput {

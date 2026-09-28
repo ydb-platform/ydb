@@ -819,12 +819,18 @@ message TCompositeConveyorConfig {
         optional double Weight = 2;
     }
 
+    message THeavyLimit {
+        optional uint64 CpuLimitUs = 1;
+        optional uint32 ThreadLimit = 2;
+    }
+
     message TWorkersPool {
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
+        repeated THeavyLimit HeavyLimits = 6;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -2048,6 +2054,13 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -2256,6 +2269,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
+        optional uint64 CompactionAdmissionColor = 10 [(ControlOptions) = {
+            Description: "Space color (TPDiskSpaceColor value) of the shared chunk pool at which PDisk starts to admit "
+                         "level compactions one at a time (EnableVDiskPlannedCompaction). It stops one color below. "
+                         "0 admits them one at a time always",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 20 }];
     }
 
     message TBlobStorageControllerControls {

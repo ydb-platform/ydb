@@ -1,0 +1,13 @@
+use plato;
+PRAGMA RuntimeUserAttrs;
+
+$e1 = ($f, $x) -> { return $f($x); };
+$e2 = ($f, $x) -> { return $e1($f, $e1($f, $x)); };
+$e3 = ($f, $x) -> { return $e2($f, $e2($f, $x)); };
+$e4 = ($f, $x) -> { return $e3($f, $e3($f, $x)); };
+$e5 = ($f, $x) -> { return $e4($f, $e4($f, $x)); };
+$b = $e5(($x) -> { return $x - Math::Tan($x); }, 2+2);
+
+$a = "{NUMBER=" || CAST($b as String) || "}";
+INSERT INTO Output WITH USER_ATTRS=$a SELECT "WORK"||key FROM Input;
+

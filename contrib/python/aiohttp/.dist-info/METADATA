@@ -1,11 +1,10 @@
 Metadata-Version: 2.4
 Name: aiohttp
-Version: 3.12.15
+Version: 3.14.3
 Summary: Async http client/server framework (asyncio)
-Home-page: https://github.com/aio-libs/aiohttp
-Maintainer: aiohttp team <team@aiohttp.org>
-Maintainer-email: team@aiohttp.org
+Maintainer-email: aiohttp team <team@aiohttp.org>
 License: Apache-2.0 AND MIT
+Project-URL: Homepage, https://github.com/aio-libs/aiohttp
 Project-URL: Chat: Matrix, https://matrix.to/#/#aio-libs:matrix.org
 Project-URL: Chat: Matrix Space, https://matrix.to/#/#aio-libs-space:matrix.org
 Project-URL: CI: GitHub Actions, https://github.com/aio-libs/aiohttp/actions?query=workflow%3ACI
@@ -22,13 +21,13 @@ Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Internet :: WWW/HTTP
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
 License-File: vendor/llhttp/LICENSE
@@ -39,11 +38,13 @@ Requires-Dist: attrs>=17.3.0
 Requires-Dist: frozenlist>=1.1.1
 Requires-Dist: multidict<7.0,>=4.5
 Requires-Dist: propcache>=0.2.0
+Requires-Dist: typing_extensions>=4.4; python_version < "3.13"
 Requires-Dist: yarl<2.0,>=1.17.0
 Provides-Extra: speedups
-Requires-Dist: aiodns>=3.3.0; extra == "speedups"
-Requires-Dist: Brotli; platform_python_implementation == "CPython" and extra == "speedups"
-Requires-Dist: brotlicffi; platform_python_implementation != "CPython" and extra == "speedups"
+Requires-Dist: aiodns>=3.3.0; (sys_platform != "android" and sys_platform != "ios") and extra == "speedups"
+Requires-Dist: Brotli>=1.2; (platform_python_implementation == "CPython" and sys_platform != "android" and sys_platform != "ios") and extra == "speedups"
+Requires-Dist: brotlicffi>=1.2; platform_python_implementation != "CPython" and extra == "speedups"
+Requires-Dist: backports.zstd; (platform_python_implementation == "CPython" and python_version < "3.14" and sys_platform != "android" and sys_platform != "ios") and extra == "speedups"
 Dynamic: license-file
 
 ==================================
@@ -65,25 +66,21 @@ Async http client/server framework
    :target: https://codecov.io/gh/aio-libs/aiohttp
    :alt: codecov.io status for master branch
 
-.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
-   :target: https://codspeed.io/aio-libs/aiohttp
-   :alt: Codspeed.io status for aiohttp
-
 .. image:: https://badge.fury.io/py/aiohttp.svg
    :target: https://pypi.org/project/aiohttp
    :alt: Latest PyPI package version
+
+.. image:: https://img.shields.io/pypi/dm/aiohttp
+   :target: https://pypistats.org/packages/aiohttp
+   :alt: Downloads count
 
 .. image:: https://readthedocs.org/projects/aiohttp/badge/?version=latest
    :target: https://docs.aiohttp.org/
    :alt: Latest Read The Docs
 
-.. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
-   :target: https://matrix.to/#/%23aio-libs:matrix.org
-   :alt: Matrix Room — #aio-libs:matrix.org
-
-.. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
-   :target: https://matrix.to/#/%23aio-libs-space:matrix.org
-   :alt: Matrix Space — #aio-libs-space:matrix.org
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/aiohttp
+   :alt: Codspeed.io status for aiohttp
 
 
 Key Features
@@ -111,7 +108,7 @@ To get something from the web:
   async def main():
 
       async with aiohttp.ClientSession() as session:
-          async with session.get('http://python.org') as response:
+          async with session.get('https://python.org') as response:
 
               print("Status:", response.status)
               print("Content-type:", response.headers['content-type'])
@@ -186,11 +183,11 @@ External links
 ==============
 
 * `Third party libraries
-  <http://aiohttp.readthedocs.io/en/latest/third_party.html>`_
+  <https://aiohttp.readthedocs.io/en/latest/third_party.html>`_
 * `Built with aiohttp
-  <http://aiohttp.readthedocs.io/en/latest/built_with.html>`_
+  <https://aiohttp.readthedocs.io/en/latest/built_with.html>`_
 * `Powered by aiohttp
-  <http://aiohttp.readthedocs.io/en/latest/powered_by.html>`_
+  <https://aiohttp.readthedocs.io/en/latest/powered_by.html>`_
 
 Feel free to make a Pull Request for adding your link to these pages!
 
@@ -223,11 +220,6 @@ Optionally you may install the aiodns_ library (highly recommended for sake of s
 .. _yarl: https://pypi.python.org/pypi/yarl
 .. _async-timeout: https://pypi.python.org/pypi/async_timeout
 
-License
-=======
-
-``aiohttp`` is offered under the Apache 2 license.
-
 
 Keepsafe
 ========
@@ -249,3 +241,17 @@ Benchmarks
 If you are interested in efficiency, the AsyncIO community maintains a
 list of benchmarks on the official wiki:
 https://github.com/python/asyncio/wiki/Benchmarks
+
+--------
+
+.. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
+   :target: https://matrix.to/#/%23aio-libs:matrix.org
+   :alt: Matrix Room — #aio-libs:matrix.org
+
+.. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
+   :target: https://matrix.to/#/%23aio-libs-space:matrix.org
+   :alt: Matrix Space — #aio-libs-space:matrix.org
+
+.. image:: https://insights.linuxfoundation.org/api/badge/health-score?project=aiohttp
+   :target: https://insights.linuxfoundation.org/project/aiohttp
+   :alt: LFX Health Score

@@ -14,6 +14,7 @@ struct TServerCredentialsConfig
     : public NCrypto::TSslContextConfig
 {
     TDuration UpdatePeriod;
+    TDuration CertSensorsUpdatePeriod;
 
     REGISTER_YSON_STRUCT(TServerCredentialsConfig);
 

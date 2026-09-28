@@ -125,16 +125,27 @@
 #define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
-#define TRACE_EVENT(component)                                                                                                         \
-    const auto& currentTracer = component;                                                                                             \
-    if (ev->HasEvent()) {                                                                                                              \
-        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s: %s",                                  \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->ToString().substr(0, 1000).data()); \
-    } else {                                                                                                                           \
-        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
+#define TRACE_EVENT(component)                                                              \
+    const auto& currentTracer = component;                                                  \
+    if (ev->HasEvent()) {                                                                   \
+        YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
+            {"function", __FUNCTION__},                                                     \
+            {"eventType", ev->Type},                                                        \
+            {"sender", ev->Sender.ToString()},                                              \
+            {"recipient", SelfId().ToString()},                                             \
+            {"event", ev->ToString().substr(0, 1000)});                                     \
+    } else {                                                                                \
+        YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
+            {"function", __FUNCTION__},                                                     \
+            {"eventType", ev->Type},                                                        \
+            {"sender", ev->Sender.ToString()},                                              \
+            {"recipient", ev->Recipient.ToString()});                                       \
     }
-#define TRACE_EVENT_TYPE(eventType) LOG_TRACE(*TlsActivationContext, currentTracer, "%s, processing event %s", __FUNCTION__, eventType)
+
+#define TRACE_EVENT_TYPE(eventType)                                                         \
+    YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Processing event",        \
+        {"function", __FUNCTION__},                                                         \
+        {"eventType", eventType})
 
 class TLog;
 class TLogBackend;
@@ -707,38 +718,6 @@ namespace NActors {
 #define AFL_CRIT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, component)
 #define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
 #define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
-
-#define DETECT_LOG_MACRO(_1, _2, NAME, ...) NAME
-
-#define BASE_CFL_TRACE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_DEBUG2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_INFO2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_NOTICE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_WARN2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_ERROR2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_CRIT2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_ALERT2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-#define BASE_CFL_EMERG2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
-
-#define BASE_CFL_TRACE1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_DEBUG1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_INFO1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_NOTICE1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_WARN1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_ERROR1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_CRIT1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_ALERT1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-#define BASE_CFL_EMERG1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
-
-#define ACFL_TRACE(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_TRACE2, BASE_CFL_TRACE1)(__VA_ARGS__)
-#define ACFL_DEBUG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_DEBUG2, BASE_CFL_DEBUG1)(__VA_ARGS__)
-#define ACFL_INFO(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_INFO2, BASE_CFL_INFO1)(__VA_ARGS__)
-#define ACFL_NOTICE(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_NOTICE2, BASE_CFL_NOTICE1)(__VA_ARGS__)
-#define ACFL_WARN(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_WARN2, BASE_CFL_WARN1)(__VA_ARGS__)
-#define ACFL_ERROR(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ERROR2, BASE_CFL_ERROR1)(__VA_ARGS__)
-#define ACFL_CRIT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_CRIT2, BASE_CFL_CRIT1)(__VA_ARGS__)
-#define ACFL_ALERT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ALERT2, BASE_CFL_ALERT1)(__VA_ARGS__)
-#define ACFL_EMERG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_EMERG2, BASE_CFL_EMERG1)(__VA_ARGS__)
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \

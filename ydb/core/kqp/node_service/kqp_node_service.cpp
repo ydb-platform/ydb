@@ -352,7 +352,17 @@ private:
         auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
-        ptr->ColumnShardMaxOperationBytes = settings.GetColumnShardMaxOperationBytes();
+
+        ui64 configuredMaxOperationBytes = settings.GetColumnShardMaxOperationBytes();
+        if (configuredMaxOperationBytes < 1_MB || configuredMaxOperationBytes > 1_GB) {
+            auto defaultValue = NKikimrConfig::TTableServiceConfig::TWriteActorSettings::default_instance().GetColumnShardMaxOperationBytes();
+            YDB_LOG_ERROR("ColumnShardMaxOperationBytes is outside the allowed range [1 MB, 1 GB]; using the default",
+                {"marker", "KQPNS"},
+                {"configuredBytes", configuredMaxOperationBytes},
+                {"defaultBytes", defaultValue});
+            configuredMaxOperationBytes = defaultValue;
+        }
+        ptr->ColumnShardMaxOperationBytes = configuredMaxOperationBytes;
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

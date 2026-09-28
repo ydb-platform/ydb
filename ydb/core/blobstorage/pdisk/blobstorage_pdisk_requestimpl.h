@@ -792,6 +792,7 @@ class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
     bool ForHousekeeping;
+    EAllocationPurpose Purpose;
     bool IsDDisk;
     NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor;
 
@@ -799,6 +800,7 @@ public:
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
         , ForHousekeeping(ev.ForHousekeeping)
+        , Purpose(ev.Purpose)
         , IsDDisk(ev.IsDDisk)
         , RefuseAtColor(ev.RefuseAtColor)
     {}

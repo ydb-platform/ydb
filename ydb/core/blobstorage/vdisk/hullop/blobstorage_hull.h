@@ -250,6 +250,9 @@ namespace NKikimr {
         // Hands out `chunks`, one run per hull, sized as `split` says.
         void AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks);
         void AdmitToFresh(const TFreshAdmission& admission);
+        // Unsequenced admitted records (a huge blob about to be logged) have got their LSN, see
+        // TFreshAdmission::Unsequenced; `admission` is sequenced from here on.
+        void SequenceFresh(TFreshAdmission& admission);
         // Called once admitted records are in Fresh, or instead if they never will be. A rotation that was
         // waiting for them to land happens here.
         void LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx);

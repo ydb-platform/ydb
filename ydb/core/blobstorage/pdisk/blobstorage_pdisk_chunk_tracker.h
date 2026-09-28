@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_color_limits.h"
+#include "blobstorage_pdisk_allocation.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_keeper_params.h"
@@ -10,6 +11,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -314,6 +316,9 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     // Sum of the unused reserves, i.e. the free space of the shared quota that is hidden from the other owners
     TAtomic StaticReserveFreeTotal = 0;
     TStackVec<TOwner, 8> StaticOwners; // Can be accessed only from the main thread
+    TStackVec<TOwner, 8> DynamicOwners; // Likewise; used by the compaction arbiter
+    ui64 SystemReserveChunks = 0;
+    ui64 MaintenanceReserveChunks = 0;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     double ColorBorderOccupancy = 0;
@@ -412,6 +417,9 @@ public:
         }
         AtomicSet(StaticReserveFreeTotal, 0);
         StaticOwners.clear();
+        DynamicOwners.clear();
+        SystemReserveChunks = 0;
+        MaintenanceReserveChunks = 0;
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
@@ -454,6 +462,8 @@ public:
         OwnerQuota->AddOwner(owner, vdiskId, weight);
         if (IsStaticGroupVDisk(vdiskId)) {
             StaticOwners.push_back(owner);
+        } else {
+            DynamicOwners.push_back(owner);
         }
         RecomputeCommonStaticLog();
         RecomputeStaticReserve();
@@ -467,6 +477,9 @@ public:
 
     void RemoveOwner(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
+        if (auto it = std::find(DynamicOwners.begin(), DynamicOwners.end(), owner); it != DynamicOwners.end()) {
+            DynamicOwners.erase(it);
+        }
         for (ui64 idx = 0; idx < StaticOwners.size(); ++idx) {
             if (StaticOwners[idx] == owner) {
                 StaticOwners[idx] = StaticOwners.back();
@@ -549,6 +562,75 @@ public:
         return SharedQuota->EstimateSpaceColor(0, &occupancy);
     }
 
+    // Called on the PDisk worker thread. A dynamic owner's usable space can run
+    // out while the shared pool is still green, because of static reserves or
+    // its personal quota. Start coordinating before that owner runs out of room.
+    TColor::E GetCompactionPressureColor() const {
+        const ui64 reserved = SystemReserveChunks ? SystemReserveChunks + MaintenanceReserveChunks : 0;
+        double occupancy;
+        TColor::E color = SharedQuota->EstimateSpaceColor(reserved, &occupancy);
+        for (TOwner owner : DynamicOwners) {
+            color = Max(color, EstimateSpaceColor(owner, reserved, &occupancy));
+        }
+        return color;
+    }
+
+    void SetAllocationReserves(ui64 system, ui64 maintenance) {
+        SystemReserveChunks = system;
+        MaintenanceReserveChunks = maintenance;
+    }
+
+    // Chunks `owner` may still allocate for `purpose` below RED without touching
+    // the reserves that purpose has to leave alone (see EAllocationPurpose). The
+    // room is the owner's own, as GetHeadroomBelow() has it: an owner at its
+    // personal quota does not take the room of its neighbours with it.
+    // Physical reservations consume this headroom immediately, before any I/O.
+    // There is no forecast credit: only releasing actual chunks restores it.
+    // A zero system reserve disables the policy for staged rollout/recovery.
+    // Called on the worker thread, like GetCompactionPressureColor().
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        const ui64 reserve = GetAllocationReserve(purpose);
+        if (!reserve) {
+            return Max<ui64>();
+        }
+        const i64 room = IsOwnerUser(owner)
+            ? GetHeadroomBelow(owner, TColor::RED)
+            : SharedQuota->GetHeadroomBelow(TColor::RED);
+        return ui64(Max<i64>(room, 0)) > reserve ? ui64(room) - reserve : 0;
+    }
+
+    // The least headroom any dynamic owner has for `purpose`, for monitoring.
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        const ui64 reserve = GetAllocationReserve(purpose);
+        if (!reserve) {
+            return Max<ui64>();
+        }
+        i64 room = SharedQuota->GetHeadroomBelow(TColor::RED);
+        for (TOwner owner : DynamicOwners) {
+            room = Min(room, GetHeadroomBelow(owner, TColor::RED));
+        }
+        return ui64(Max<i64>(room, 0)) > reserve ? ui64(room) - reserve : 0;
+    }
+
+    // What an allocation of `purpose` has to leave alone; zero when it is not held back at all.
+    ui64 GetAllocationReserve(EAllocationPurpose purpose) const {
+        if (!SystemReserveChunks) {
+            return 0;
+        }
+        switch (purpose) {
+            case EAllocationPurpose::User:
+                return SystemReserveChunks + MaintenanceReserveChunks;
+            case EAllocationPurpose::Recovery:
+                return SystemReserveChunks;
+            case EAllocationPurpose::System:
+            case EAllocationPurpose::Maintenance:
+                return 0;
+            case EAllocationPurpose::Count:
+                break;
+        }
+        Y_ABORT("invalid allocation purpose");
+    }
+
     TColor::E GetPDiskCapacityAlert() const {
         double occupancy;
         TColor::E sharedColor = SharedQuota->EstimateSpaceColor(0, &occupancy);
@@ -614,6 +696,7 @@ public:
         headroom.ToOrange = GetHeadroomBelow(owner, TColor::ORANGE);
         headroom.ToRed = GetHeadroomBelow(owner, TColor::RED);
         headroom.ToBlack = GetHeadroomBelow(owner, TColor::BLACK);
+        // Housekeeping is Maintenance, which the allocation reserves do not hold back.
         headroom.AllocatableToBlack = GetAllocatableHeadroomBelowBlack(owner);
         return headroom;
     }

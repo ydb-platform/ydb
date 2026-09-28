@@ -727,6 +727,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
+<<<<<<< HEAD
             TTabletId TabletId;
             const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             bool ForceCommittedActive = false;
@@ -737,14 +738,43 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             // it is sorted list of partitions by partition id
             TVector<TPartitionDesc> descriptions; // index is pqId
             descriptions.resize(pqGroupInfo->Partitions.size());
+=======
+                TTabletId TabletId;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
+            };
+
+            // Not indexed by PqId: ids may have gaps, so a vector of size NextPartitionId
+            // would be sparse. Reserve for the partitions we actually store and sort later.
+            TVector<TPartitionDesc> descriptions;
+            descriptions.reserve(pqGroupInfo->Partitions.size());
+>>>>>>> c58682cd0ca (schemeshard: do not abort Describe when a topic partition id is past NextPartitionId (#53980))
 
             for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
                 auto it = Self->ShardInfos.find(shardIdx);
                 Y_VERIFY_S(it != Self->ShardInfos.end(), "No shard with shardIdx: " << shardIdx);
 
                 for (const auto& partition : pqShard->Partitions) {
+<<<<<<< HEAD
                     if (!IsPartitionVisibleInDescribe(*partition, *pqGroupInfo, parentsDeactivatedInFlight)) {
                         continue;
+=======
+                    // Describe the partition set as of the committed topic AlterVersion.
+                    //
+                    // ReassignIds bumps parent AlterVersion (and sets Inactive) before FinishAlter
+                    // bumps topic AlterVersion. Filtering only by partition.AlterVersion would hide
+                    // those parents together with new children and leave no open-ended Active range
+                    // for TBoundaryChooser / writers.
+                    //
+                    // CreateVersion is the topic version when the partition was added:
+                    // - created in the in-flight alter: CreateVersion > committed → hidden
+                    // - existed before: CreateVersion <= committed → visible; if AlterVersion was
+                    //   bumped by the in-flight alter, still report Active until FinishAlter
+                    // - topic create quirk: CreateVersion may be 1 while AlterVersion is still 0 →
+                    //   visible via AlterVersion <= committed
+                    if (partition->CreateVersion <= pqGroupInfo->AlterVersion
+                            || partition->AlterVersion <= pqGroupInfo->AlterVersion) {
+                        descriptions.push_back({it->second.TabletID, partition.Get()});
+>>>>>>> c58682cd0ca (schemeshard: do not abort Describe when a topic partition id is past NextPartitionId (#53980))
                     }
                     Y_VERIFY_S(partition->PqId < pqGroupInfo->NextPartitionId,
                                "Wrong pqId: " << partition->PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
@@ -760,6 +790,10 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 }
             }
 
+            Sort(descriptions, [](const TPartitionDesc& lhs, const TPartitionDesc& rhs) {
+                return lhs.Info->PqId < rhs.Info->PqId;
+            });
+
             for (const auto& desc : descriptions) {
                 if (desc.Info == nullptr || desc.Info->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
                     continue;
@@ -768,7 +802,6 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 auto& partition = *entry->AddPartitions();
 
                 Y_VERIFY_S(desc.TabletId, "Unassigned tabletId for partition: " << pqId);
-                Y_VERIFY_S(desc.Info, "Empty info for partition: " << pqId);
 
                 partition.SetPartitionId(pqId);
                 partition.SetTabletId(ui64(desc.TabletId));

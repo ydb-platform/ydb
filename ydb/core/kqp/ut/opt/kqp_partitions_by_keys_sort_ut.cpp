@@ -132,6 +132,31 @@ void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPa
 
 Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
 
+    Y_UNIT_TEST(ExplainWideSort) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+        TKikimrRunner kikimr(appConfig);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            SELECT Key, Text,
+                row_number() OVER (PARTITION BY Text ORDER BY Key) AS rn
+            FROM `/Root/EightShard`;
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetAst(), "WideSort");
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        const auto wideSort = FindPlanNodeByKv(plan, "Name", "WideSort");
+        UNIT_ASSERT_C(wideSort.IsDefined(), result.GetPlan());
+
+        const auto sortBy = wideSort.GetMapSafe().at("SortBy").GetStringSafe();
+        UNIT_ASSERT_C(sortBy.Contains("Text asc"), result.GetPlan());
+        UNIT_ASSERT_C(sortBy.Contains("Key asc"), result.GetPlan());
+    }
+
     Y_UNIT_TEST_TWIN(WindowFunctionAst, UseSortForPartitionsByKeys) {
         CheckWindowFunctionAst(
             "SELECT Key, Text,\n"

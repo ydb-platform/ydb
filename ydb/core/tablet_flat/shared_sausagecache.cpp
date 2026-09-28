@@ -97,7 +97,7 @@ public:
 };
 
 // One B-tree being walked by the cache itself, one index level at a time in write order.
-struct TInMemoryWalk {
+struct TCacheBTreeWalk {
     TActorId Owner;
     NSharedCache::TEvAttach::TBtreeSeed Seed;
 
@@ -138,14 +138,14 @@ struct TWalkRun {
     ui64 Id = 0;
     ui32 FetchesInFlight = 0;
     EWalkRunState State = EWalkRunState::Walking;
-    TVector<TInMemoryWalk> Walks;
+    TVector<TCacheBTreeWalk> Walks;
     TSet<TLogoBlobID> PendingCollections;
 };
 
 struct TCollection {
     TLogoBlobID Id;
     TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-    TMap<TActorId, TIntrusiveConstPtr<NPageCollection::IPageCollection>> InMemoryOwners;
+    TSet<TActorId> InMemoryOwners;
     TSet<TActorId> Owners;
     TPageSet PageSet;
     ui64 TotalSize;
@@ -415,12 +415,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         PassAway();
     }
 
-    TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
-        TCollection &collection = EnsureCollection(pageCollectionId, pageCollection, owner);
+    TCollection& AttachCollection(const TLogoBlobID& pageCollectionId,
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
+        TCollection& collection = EnsureCollection(pageCollectionId, *pageCollection, owner);
+        collection.PageCollection = std::move(pageCollection);
 
         if (collection.Owners.insert(owner).second) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Add page collection " << pageCollectionId
-                << " owner " << owner);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE,
+                "Add page collection " << pageCollectionId << " owner " << owner);
             auto ownerIt = Owners.find(owner);
             if (ownerIt == Owners.end()) {
                 ownerIt = Owners.emplace(owner, THashMap<TCollection*, TIntrusiveList<TRequest>>()).first;
@@ -579,7 +581,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         run.Id = loadRunId;
         for (const auto& [owner, seeds] : collection.WalkSeedsByOwner) {
             for (const auto& seed : seeds) {
-                run.Walks.push_back(TInMemoryWalk{
+                run.Walks.push_back(TCacheBTreeWalk{
                     .Owner = owner,
                     .Seed = seed,
                 });
@@ -713,10 +715,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " owner " << ev->Sender
             << " cache mode " << msg->CacheMode);
 
-        TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
-        if (!collection.PageCollection) {
-            collection.PageCollection = msg->PageCollection;
-        }
+        TCollection& collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
         switch (msg->CacheMode) {
         case ECacheMode::Regular:
             TryMoveToRegularCache(collection, ev->Sender);
@@ -761,10 +760,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const TLogoBlobID pageCollectionId = pageCollection.Label();
         const bool doTraceLog = DoTraceLog();
 
-        TCollection &collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
-        if (!collection.PageCollection) {
-            collection.PageCollection = msg->PageCollection;
-        }
+        TCollection &collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
         ECacheMode cacheMode = collection.GetCacheMode();
 
         TStackVec<std::pair<TPageOffset, ui32>> pendingPages; // offset, reqIdx
@@ -1215,8 +1211,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             if (loadedPages) {
-                for (const auto& [owner, pageCollection] : collection->InMemoryOwners) {
-                    NotifyInMemOwner(pageCollection, loadedPages, owner);
+                for (const auto& owner : collection->InMemoryOwners) {
+                    NotifyInMemOwner(collection->PageCollection, loadedPages, owner);
                 }
                 ActualizeCacheSizeLimit();
                 Evict(Cache.EnsureLimits());
@@ -1578,9 +1574,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
-            for (const auto& [owner, pageCollection] : collection.InMemoryOwners) {
+            for (const auto& owner : collection.InMemoryOwners) {
                 // InMemoryOwners and Owners will be cleared on TEvUnregister response from tablet
-                NotifyInMemOwnerAboutError(pageCollection, blobStorageError, owner);
+                NotifyInMemOwnerAboutError(collection.PageCollection, blobStorageError, owner);
             }
         }
 
@@ -1621,7 +1617,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
         if (collection.InMemoryOwners) {
-            if (collection.InMemoryOwners.emplace(owner, pageCollection).second) {
+            if (collection.InMemoryOwners.insert(owner).second) {
                 // new owner for already in-memory collection
                 TVector<TPage*> loadedPages;
                 for (const auto& ptr : collection.PageSet) {
@@ -1647,7 +1643,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        Y_ENSURE(collection.InMemoryOwners.emplace(owner, pageCollection).second);
+        Y_ENSURE(collection.InMemoryOwners.insert(owner).second);
 
         RestartWalksForIndexCollection(collection.Id);
 
@@ -1754,7 +1750,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         request.Priority = NBlockIO::EPriority::Bkgr;
         request.WalkLoadId = loadRunId;
         if (collection.InMemoryOwners) {
-            request.Sender = collection.InMemoryOwners.begin()->first;
+            request.Sender = *collection.InMemoryOwners.begin();
         } else if (collection.Owners) {
             request.Sender = *collection.Owners.begin();
         }
@@ -1771,7 +1767,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         request->Priority = NBlockIO::EPriority::Bkgr;
         request->WalkLoadId = loadRunId;
         if (collection.InMemoryOwners) {
-            request->Sender = collection.InMemoryOwners.begin()->first;
+            request->Sender = *collection.InMemoryOwners.begin();
         } else if (collection.Owners) {
             request->Sender = *collection.Owners.begin();
         }
@@ -1812,7 +1808,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     // Fetch index levels breadth-first in bounded, write-ordered batches, then queue each node's
     // leaves for the budget-gated loader without materializing the whole data level.
-    void AdvanceInMemoryWalk(TInMemoryWalk& walk, ui64 loadRunId) {
+    void AdvanceInMemoryWalk(TCacheBTreeWalk& walk, ui64 loadRunId) {
         auto* indexCollection = Collections.FindPtr(walk.Seed.IndexCollectionId);
         auto* dataCollection = Collections.FindPtr(walk.Seed.DataCollectionId);
         if (!indexCollection || !indexCollection->PageCollection || !dataCollection) {
@@ -1935,7 +1931,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     // Every index level of a sticky walk, or of a sticky index collection, is handed over, resident or not.
-    void HandOverIndexLevel(TInMemoryWalk& walk, TArrayRef<const TPageLocation> locations, ui32 level) {
+    void HandOverIndexLevel(TCacheBTreeWalk& walk, TArrayRef<const TPageLocation> locations, ui32 level) {
         if ((!walk.Seed.Sticky && !walk.Seed.IndexCollectionSticky) || level >= walk.Seed.LevelCount) {
             return; // not sticky, or these are the leaves
         }
@@ -1945,7 +1941,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    EWalkBatchResult FlushLeafBatch(TInMemoryWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
+    EWalkBatchResult FlushLeafBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
         if (!walk.LeafBatch) {
             return EWalkBatchResult::Flushed;
         }
@@ -1991,7 +1987,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     // Accumulate complete leaf groups from final-level B-tree nodes. The 8 MiB target is soft for a
     // single oversized node; the loader may still split its physical reads to satisfy hard budgets.
-    bool AddLeafNodeToBatch(TInMemoryWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
+    bool AddLeafNodeToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
         const bool queueLeaves = walk.Seed.QueueLeaves && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
         if (!walk.Seed.Sticky && !queueLeaves) {
             walk.PendingLeaves.clear();
@@ -2024,7 +2020,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         return true;
     }
 
-    void AppendPageToNotify(TInMemoryWalk& walk, const TLogoBlobID& collectionId, const TPageLocation& location) {
+    void AppendPageToNotify(TCacheBTreeWalk& walk, const TLogoBlobID& collectionId, const TPageLocation& location) {
         if (walk.NotifyCollectionId != collectionId) {
             FlushPagesToNotify(walk);
             walk.NotifyCollectionId = collectionId;
@@ -2036,7 +2032,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void FlushPagesToNotify(TInMemoryWalk& walk) {
+    void FlushPagesToNotify(TCacheBTreeWalk& walk) {
         if (walk.PagesToNotify.empty()) {
             return;
         }
@@ -2146,10 +2142,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 continue;
             }
 
-            // any owner (for reporting BIO stats) and any PageCollection are suitable
+            // any owner is suitable for reporting BIO stats
             auto ownersIt = collection->InMemoryOwners.begin();
             Y_DEBUG_ABORT_UNLESS(ownersIt != collection->InMemoryOwners.end());
-            const auto& [owner, pageCollection] = *ownersIt;
+            const auto& owner = *ownersIt;
 
             TVector<TPageLocation> pagesToRequest;
             ui64 pagesToRequestBytes = 0;
@@ -2196,14 +2192,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 pagesToLoad.erase(locationIt);
             }
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Try load in-memory collection " << collection->Id << ", "
-                << "total pages: " << pageCollection->Total() << " (" << HumanReadableBytes(collection->TotalSize) << "), "
-                << "pages to request: " << pagesToRequest.size() << " (" << HumanReadableBytes(pagesToRequestBytes) << ", "
-                << "remain pages in queue: " << pagesToLoad.size());
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE,
+                "Try load in-memory collection " << collection->Id << ", "
+                                                 << "total pages: " << collection->PageCollection->Total() << " ("
+                                                 << HumanReadableBytes(collection->TotalSize) << "), "
+                                                 << "pages to request: " << pagesToRequest.size() << " ("
+                                                 << HumanReadableBytes(pagesToRequestBytes) << ", "
+                                                 << "remain pages in queue: " << pagesToLoad.size());
 
             if (pagesToRequest) {
                 TRequest request;
-                request.PageCollection = pageCollection;
+                request.PageCollection = collection->PageCollection;
                 request.Sender = owner;
                 request.Priority = NBlockIO::EPriority::Bulk;
                 request.WalkLoadId = walkLoadId;

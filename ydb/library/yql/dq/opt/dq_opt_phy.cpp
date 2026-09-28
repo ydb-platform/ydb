@@ -350,33 +350,88 @@ TExprNode::TPtr MaybeAssumeChopped(TPositionHandle pos, TExprNode::TPtr sorted,
         .Build();
 }
 
-template <typename TPartition>
-TExprNode::TPtr PrepareWideSortInput(
-    const TPartition& partition,
-    TExprNode::TPtr input,
+TExprNode::TPtr BuildWideSortForStructFlow(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    const TExprNode::TPtr& sortDirections,
+    const TExprNode::TPtr& sortKeySelector,
+    const TStructExprType& structType,
     TExprContext& ctx)
 {
-    const auto pos = partition.Pos();
     constexpr ui32 wideLimit = 101;
-    const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
-    if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
-        return input;
-    }
-
-    const auto& structType = *itemType->template Cast<TStructExprType>();
     if (structType.GetSize() == 0 || structType.GetSize() > wideLimit) {
-        return input;
+        return {};
     }
 
+    const auto keyExprs = sortKeySelector->Tail().IsList()
+        ? sortKeySelector->Tail().ChildrenList()
+        : TExprNode::TListType{sortKeySelector->TailPtr()};
+    const TExprNode& selectorArg = sortKeySelector->Head().Head();
     TVector<TString> columns;
     columns.reserve(structType.GetSize());
     for (const auto* item : structType.GetItems()) {
         columns.emplace_back(item->GetName());
     }
-    if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
-        input = ctx.NewCallable(pos, "ToFlow", {std::move(input)});
+
+    THashSet<ui32> usedIndexes;
+    TExprNode::TListType wideKeys;
+    TVector<TString> extraColumns;
+    auto row = ctx.NewArgument(pos, "row");
+    TExprNode::TPtr mappedRow = row;
+    for (ui32 i = 0; i < keyExprs.size(); ++i) {
+        const auto& keyExpr = keyExprs[i];
+        TMaybe<ui32> index;
+        if (keyExpr->IsCallable("Member") && &keyExpr->Head() == &selectorArg && keyExpr->Tail().IsAtom()) {
+            index = structType.FindItem(keyExpr->Tail().Content());
+        } else {
+            if (columns.size() >= wideLimit) {
+                return {};
+            }
+            const TString name = TStringBuilder() << "_yql_wide_sort_key_" << i;
+            if (structType.FindItem(name)) {
+                return {};
+            }
+            index = columns.size();
+            columns.push_back(name);
+            extraColumns.push_back(name);
+            mappedRow = ctx.NewCallable(pos, "AddMember", {
+                std::move(mappedRow), ctx.NewAtom(pos, name),
+                ctx.ReplaceNode(TExprNode::TPtr(keyExpr), selectorArg, row)});
+        }
+        if (!index) {
+            return {};
+        }
+        if (!usedIndexes.insert(*index).second) {
+            continue;
+        }
+
+        wideKeys.push_back(ctx.NewList(pos, {
+            ctx.NewAtom(pos, ToString(*index)),
+            sortDirections->IsList() ? sortDirections->ChildPtr(i) : sortDirections}));
     }
-    return MakeNarrowMap(pos, columns, MakeExpandMap(pos, columns, std::move(input), ctx), ctx);
+    if (wideKeys.empty()) {
+        return {};
+    }
+
+    auto flow = input;
+    if (!flow->GetTypeAnn() || flow->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        flow = ctx.NewCallable(pos, "ToFlow", {std::move(flow)});
+    }
+    if (!extraColumns.empty()) {
+        flow = ctx.NewCallable(pos, "OrderedMap", {
+            std::move(flow), ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(mappedRow))});
+    }
+
+    auto sorted = MakeNarrowMap(pos, columns, ctx.NewCallable(pos, "WideSort", {
+        MakeExpandMap(pos, columns, std::move(flow), ctx), ctx.NewList(pos, std::move(wideKeys))}), ctx);
+    if (extraColumns.empty()) {
+        return sorted;
+    }
+
+    row = ctx.NewArgument(pos, "row");
+    return ctx.NewCallable(pos, "OrderedMap", {
+        std::move(sorted),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), RemoveMembers(pos, row, extraColumns, ctx))});
 }
 
 template <typename TPartition>
@@ -398,13 +453,22 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
         sortKeySelector = ctx.DeepCopyLambda(keyExtractor.Ref());
     }
 
-    auto sorted = ctx.Builder(pos)
-        .Callable("Sort")
-            .Add(0, input)
-            .Add(1, std::move(sortDirections))
-            .Add(2, std::move(sortKeySelector))
-        .Seal()
-        .Build();
+    TExprNode::TPtr sorted;
+    if (const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+        itemType && itemType->GetKind() == ETypeAnnotationKind::Struct)
+    {
+        sorted = BuildWideSortForStructFlow(
+            pos, input, sortDirections, sortKeySelector, *itemType->template Cast<TStructExprType>(), ctx);
+    }
+    if (!sorted) {
+        sorted = ctx.Builder(pos)
+            .Callable("Sort")
+                .Add(0, input)
+                .Add(1, std::move(sortDirections))
+                .Add(2, std::move(sortKeySelector))
+            .Seal()
+            .Build();
+    }
 
     return MaybeAssumeChopped(pos, std::move(sorted),
         keyExtractor.Body().Ref(), keyExtractor.Args().Arg(0).Ref(),
@@ -617,8 +681,7 @@ TExprBase DqBuildPartitionsStageStub(
         if (useSortForPartitionsByKeys) {
             // Sort + AssumeChopped, then apply handler via ForwardList/ToFlow
             const auto pos = node.Pos();
-            auto sorted = BuildSortForPartitionsByKeys(
-                partition, PrepareWideSortInput(partition, newPartitionsInput, ctx), ctx);
+            auto sorted = BuildSortForPartitionsByKeys(partition, newPartitionsInput, ctx);
 
             auto handlerResult = ctx.ReplaceNode(handler.Body().Ptr(), handler.Args().Arg(0).Ref(),
                 ctx.NewCallable(pos, "ForwardList", {std::move(sorted)}));

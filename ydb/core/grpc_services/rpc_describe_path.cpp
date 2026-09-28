@@ -145,15 +145,18 @@ private:
                         const TString logicalDatabase = NKikimr::CanonizePath(rawDatabase);
                         const TString logicalName(NKikimr::ExtractBase(logicalDatabase));
                         const TString physicalName(NKikimr::ExtractBase(*database));
-                        const TStringBuf logicalParent = NKikimr::ExtractParent(logicalDatabase);
-                        if (rawDatabase.StartsWith("/") && Path.StartsWith("/")
+                        const TString logicalParent(NKikimr::ExtractParent(logicalDatabase));
+                        const TString physicalParent(NKikimr::ExtractParent(*database));
+                        const bool isActiveDatabaseAlias = rawDatabase.StartsWith("/") && Path.StartsWith("/")
                             && !logicalName.empty() && !physicalName.empty() && logicalName != physicalName
-                            && this->Request_->NormalizePath(logicalDatabase) == *database
-                            && logicalParent == NKikimr::ExtractParent(*database)
-                            && (TStringBuf(requestedPath) == logicalParent || (logicalParent.empty() && requestedPath == "/"))
-                            && NKikimr::CanonizePath(Path) == TString(NKikimr::ExtractParent(*database))
-                            && std::none_of(result.children().begin(), result.children().end(),
-                                [&](const auto& child) { return child.name() == logicalName; })) {
+                            && this->Request_->NormalizePath(logicalDatabase) == *database;
+                        const bool listsSharedParent = logicalParent == physicalParent
+                            && NKikimr::CanonizePath(TString{requestedPath}) == logicalParent
+                            && NKikimr::CanonizePath(Path) == physicalParent;
+                        const bool hasChildNameCollision = isActiveDatabaseAlias && listsSharedParent
+                            && std::any_of(result.children().begin(), result.children().end(),
+                                [&](const auto& child) { return child.name() == logicalName; });
+                        if (isActiveDatabaseAlias && listsSharedParent && !hasChildNameCollision) {
                             for (auto& child : *result.mutable_children()) {
                                 if (child.name() == physicalName) {
                                     child.set_name(logicalName);

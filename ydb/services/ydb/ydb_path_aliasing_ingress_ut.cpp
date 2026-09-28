@@ -48,6 +48,7 @@ namespace NKikimr::NGRpcService {
             AddRule(config, "/discovery-boundary", "/Root/k");
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");
             AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
+            AddRule(config, "/Root/virtual", "/Root/kfront");
             AddRule(config, "/virtual/", "/Root");
             AddRule(config, "/alternate-root", "/");
             AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
@@ -184,6 +185,23 @@ namespace NKikimr::NGRpcService {
             }
             UNIT_ASSERT(alternateChildren.contains("Root"));
             UNIT_ASSERT(!alternateChildren.contains("virtual"));
+        }
+
+        Y_UNIT_TEST(ListDirectoryRenamesChildForTrailingSlashParent) {
+            TFixture fixture;
+            auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+
+            Ydb::Scheme::ListDirectoryRequest list;
+            list.set_path("/Root/");
+            const auto result = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/Root/virtual"));
+
+            std::set<std::string> children;
+            for (const auto& child : result.children()) {
+                children.insert(child.name());
+            }
+            UNIT_ASSERT(children.contains("virtual"));
+            UNIT_ASSERT(!children.contains("kfront"));
         }
 
         Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {

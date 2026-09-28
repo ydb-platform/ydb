@@ -756,6 +756,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             NotNullColumns.clear();
             SetNotNullInProgressColumns.clear();
             Indexes.clear();
+            MultiColumnStatistics.clear();
             Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TPartitioning>();

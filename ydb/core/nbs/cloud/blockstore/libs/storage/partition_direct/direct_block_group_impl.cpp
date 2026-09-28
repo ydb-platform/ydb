@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -56,6 +57,13 @@ NProto::TError MakeSessionError(ui32 nodeId, THostIndex host)
            << " session is not established";
 
     return MakeError(E_REJECTED, result);
+}
+
+bool MatchesBalanceStrategy(
+    const TVChunk& vChunk,
+    EDDiskBalanceStrategy strategy)
+{
+    return strategy == EDDiskBalanceStrategy::Configured || vChunk.IsTouched();
 }
 
 // Converts a PBuffer list result into volume-block ranges using the volume
@@ -273,15 +281,49 @@ THostIndex TDirectBlockGroup::AllocateDDiskForPromote(
     }
 
     if (selected != InvalidHostIndex) {
-        PendingDDiskAllocations.emplace(config.GetVChunkIndex(), selected);
+        AllocateDDiskPromotion(config.GetVChunkIndex(), selected);
     }
     return selected;
+}
+
+void TDirectBlockGroup::AllocateDDiskPromotion(
+    ui32 vChunkId,
+    THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(hostIndex < GetHostCount());
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(vChunkId));
+
+    PendingDDiskAllocations.emplace(vChunkId, hostIndex);
 }
 
 void TDirectBlockGroup::CommitDDiskPromotion(const TVChunkConfig& config)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     PendingDDiskAllocations.erase(config.GetVChunkIndex());
+}
+
+THostMask TDirectBlockGroup::SelectDDiskForDemote(THostMask candidates) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (candidates.Empty()) {
+        return THostMask::MakeEmpty();
+    }
+
+    const auto ddiskCountByHost =
+        CountDDisksByHost(EDDiskBalanceStrategy::Configured, candidates);
+
+    THostIndex selected = InvalidHostIndex;
+    for (THostIndex host: candidates) {
+        if (selected == InvalidHostIndex ||
+            ddiskCountByHost[host] > ddiskCountByHost[selected])
+        {
+            selected = host;
+        }
+    }
+
+    return THostMask::MakeOne(selected);
 }
 
 TExecutorPtr TDirectBlockGroup::GetExecutor()
@@ -1435,24 +1477,38 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
 {
     auto promise = NewPromise<TDbgSnapshot>();
     auto future = promise.GetFuture();
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
          index = DirectBlockGroupIndex,
+         detail,
          promise = std::move(promise)]   //
         () mutable
         {
             if (auto self = weakSelf.lock()) {
-                promise.SetValue(self->DoBuildMonSnapshot());
+                promise.SetValue(self->DoBuildMonSnapshot(detail));
             } else {
                 promise.SetValue({.Index = index});
             }
         });
 
     return future;
+}
+
+void TDirectBlockGroup::BalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), strategy]   //
+        ()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->DoBalanceDDisks(strategy);
+            }
+        });
 }
 
 NThreading::TFuture<TVChunkStatsGatherResult>
@@ -2178,9 +2234,114 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap() const
     return result;
 }
 
-TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
+THostMask TDirectBlockGroup::GetBalancingAllowedHosts() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto allowedForBalancing = THostMask::MakeEmpty();
+    for (THostIndex host = 0; host < GetHostCount(); ++host) {
+        if (!Connections.IsSlotDead(host) &&
+            Oracle.GetHostState(host) == EHostState::Online)
+        {
+            allowedForBalancing.Set(host);
+        }
+    }
+    return allowedForBalancing;
+}
+
+std::array<size_t, MaxHostCount> TDirectBlockGroup::CountDDisksByHost(
+    EDDiskBalanceStrategy strategy,
+    THostMask allowedForBalancing) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    std::array<size_t, MaxHostCount> ddiskCountByHost{};
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk || !MatchesBalanceStrategy(*vChunk, strategy)) {
+            continue;
+        }
+
+        const auto& config = vChunk->GetConfig();
+        for (THostIndex host: config.GetEnabledDDisks()) {
+            if (allowedForBalancing.Get(host)) {
+                ++ddiskCountByHost[host];
+            }
+        }
+
+        if (const auto* pending =
+                PendingDDiskAllocations.FindPtr(config.GetVChunkIndex());
+            pending && !config.GetDisabledHosts().Get(*pending) &&
+            allowedForBalancing.Get(*pending))
+        {
+            ++ddiskCountByHost[*pending];
+        }
+    }
+    return ddiskCountByHost;
+}
+
+bool TDirectBlockGroup::IsBalancingAllowed(
+    const TVChunk& vChunk,
+    EDDiskBalanceStrategy strategy) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return MatchesBalanceStrategy(vChunk, strategy) &&
+           !PendingDDiskAllocations.contains(
+               vChunk.GetConfig().GetVChunkIndex());
+}
+
+void TDirectBlockGroup::DoBalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    const auto allowedForBalancing = GetBalancingAllowedHosts();
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s DDisk balancing requested: %s",
+        LogTitle.GetWithTime().c_str(),
+        ToString(strategy).c_str());
+
+    const auto ddiskCountByHost =
+        CountDDisksByHost(strategy, allowedForBalancing);
+
+    THashMap<ui32, TVChunkPtr> vChunksById;
+    TVector<const TVChunkConfig*> balanceVChunks;
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk || !IsBalancingAllowed(*vChunk, strategy)) {
+            continue;
+        }
+        const auto& config = vChunk->GetConfig();
+        const ui32 vChunkId = config.GetVChunkIndex();
+        balanceVChunks.push_back(&config);
+        vChunksById.emplace(vChunkId, std::move(vChunk));
+    }
+
+    for (
+        const auto& request:
+        PlanDDiskBalance(balanceVChunks, allowedForBalancing, ddiskCountByHost))
+    {
+        vChunksById.at(request.VChunkId)
+            ->BalanceDDisks(request.SourceHost, request.TargetHost);
+    }
+}
+
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto allowedForBalancing = GetBalancingAllowedHosts();
+    const auto configuredImbalance = CalculateDDiskImbalance(
+        CountDDisksByHost(
+            EDDiskBalanceStrategy::Configured,
+            allowedForBalancing),
+        allowedForBalancing);
+    const auto touchedImbalance = CalculateDDiskImbalance(
+        CountDDisksByHost(EDDiskBalanceStrategy::Touched, allowedForBalancing),
+        allowedForBalancing);
 
     TVector<TConnectionSnapshot> connections;
     connections.reserve(Connections.GetSlotCount());
@@ -2192,24 +2353,45 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     TDirtyMapStats dirtyMapStats;
     TCountAndSize pBuffersUsage;
     THashMap<ui32, THostMask> freshDDisks;
+    TVector<TDbgVChunkSnapshot> vChunks;
+    const bool collectVChunkStats = detail == EDbgMonSnapshotDetail::PerVChunk;
+    if (collectVChunkStats) {
+        vChunks.reserve(VChunks.size());
+    }
 
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             THostMask fresh;
+            ui64 freshBytes = 0;
+            ui64 rottenBytes = 0;
+            ui64 pBufferBytes = 0;
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
                 const auto hostStats = vChunk->GetDirtyMapHostStats(host);
                 hostsStat[host].DirtyMapStats.Aggregate(hostStats);
                 pBuffersUsage += hostStats.PBuffersUsage;
+                if (collectVChunkStats) {
+                    freshBytes += hostStats.FreshTotalBytes;
+                    rottenBytes += hostStats.RottenTotalBytes;
+                    pBufferBytes += hostStats.PBuffersUsage.Size;
+                }
                 if (hostStats.FreshTotalBytes != 0 ||
                     hostStats.RottenTotalBytes != 0)
                 {
                     fresh.Set(host);
                 }
             }
+            const auto& config = vChunk->GetConfig();
+            if (collectVChunkStats) {
+                vChunks.push_back(TDbgVChunkSnapshot{
+                    .Config = config,
+                    .Touched = vChunk->IsTouched(),
+                    .FreshBytes = freshBytes,
+                    .RottenBytes = rottenBytes,
+                    .PBufferBytes = pBufferBytes,
+                });
+            }
             if (!fresh.Empty()) {
-                freshDDisks.emplace(
-                    vChunk->GetConfig().GetVChunkIndex(),
-                    fresh);
+                freshDDisks.emplace(config.GetVChunkIndex(), fresh);
             }
             dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
@@ -2217,9 +2399,11 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     return {
         .Index = DirectBlockGroupIndex,
-        .VChunkCount = VChunks.size(),
+        .VChunks = std::move(vChunks),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
+        .ConfiguredDDiskImbalance = configuredImbalance,
+        .TouchedDDiskImbalance = touchedImbalance,
         .FreshDDisks = std::move(freshDDisks),
         .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
         .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),

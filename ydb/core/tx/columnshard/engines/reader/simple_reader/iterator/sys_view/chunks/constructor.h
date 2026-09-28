@@ -43,7 +43,7 @@ class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDat
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
 
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
+    virtual std::unique_ptr<NReader::NCommon::TDataSourceLease> DoExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {

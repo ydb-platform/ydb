@@ -512,6 +512,11 @@ def quote_identifier(identifier: str) -> str:
         quote = identifier[0]
         if quote in ("`", '"') and identifier[-1] == quote and _is_validly_quoted(identifier, quote):
             return identifier
+    return _format_identifier(identifier)
+
+
+def _format_identifier(identifier: str) -> str:
+    """Format a decoded identifier value, including literal boundary quotes."""
     return f"`{escape_str(identifier)}`"
 
 
@@ -751,6 +756,24 @@ def _format_time_of_day(value: time | timedelta) -> str:
 
 def format_str(value: str):
     return f"'{escape_str(value)}'"
+
+
+_CH_STRING_ESCAPES = {"\\": "\\", "'": "'", '"': '"', "`": "`", "n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "0": "\0"}
+
+
+def _decode_ch_string_literal(literal: str) -> str:
+    inner = literal[1:-1].replace("''", "'")
+    out: list[str] = []
+    i = 0
+    while i < len(inner):
+        ch = inner[i]
+        if ch == "\\" and i + 1 < len(inner):
+            out.append(_CH_STRING_ESCAPES.get(inner[i + 1], inner[i + 1]))
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
 
 
 def escape_str(value: str):

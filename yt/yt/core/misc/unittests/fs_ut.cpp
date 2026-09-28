@@ -133,6 +133,11 @@ TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
 
 TEST(TFSTest, TestGetRelativePath)
 {
+    EXPECT_EQ(GetRelativePath("/", "/"), ".");
+    EXPECT_EQ(GetRelativePath("/a", "/"), "..");
+    EXPECT_EQ(GetRelativePath("/a/b", "/"), NormalizePathSeparators("../.."));
+    EXPECT_EQ(GetRelativePath("/", "/a"), "a");
+    EXPECT_EQ(GetRelativePath("/", "/a/b"), NormalizePathSeparators("a/b"));
     EXPECT_EQ(GetRelativePath("/a", "/a/b"), "b");
     EXPECT_EQ(GetRelativePath("/a/b", "/a"), "..");
     EXPECT_EQ(GetRelativePath("/a/b/c", "/d/e"), NormalizePathSeparators("../../../d/e"));

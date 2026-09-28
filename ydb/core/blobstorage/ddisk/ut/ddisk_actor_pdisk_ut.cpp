@@ -11,6 +11,52 @@ enum class EPayloadLayout {
     FragmentedAligned,
 };
 
+void TestShutdownReleasesReservations(NDDisk::TDDiskConfig config, bool abandonReservations = false) {
+    TTestContext ctx(config, NLog::PRI_ERROR, 1, std::nullopt, /*probeReservations=*/true, abandonReservations);
+    for (ui32 cycle = 0; cycle < 3; ++cycle) {
+        const auto creds = Connect(ctx, 701, 1);
+        ctx.WaitForReservationsSettled();
+        // The previous incarnation's unused reserve must not accumulate across restarts.
+        UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), cycle == 0 ? 4 : 0);
+        const auto readBack = [&](ui32 chunk) {
+            AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+                new NDDisk::TEvRead(creds, {chunk, 0, MinBlockSize}, {true})),
+                MakeData('A' + chunk, MinBlockSize), config.EnableChecksums);
+        };
+        for (ui32 chunk = 0; chunk < cycle; ++chunk) {
+            readBack(chunk);
+        }
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(cycle, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('A' + cycle, MinBlockSize)));
+        AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        readBack(cycle);
+        ctx.WaitForReservationsSettled();
+        UNIT_ASSERT_C(ctx.UncommittedChunks() > 0, "test requires unused live PDisk reservations");
+        const auto reserved = ctx.UncommittedChunks();
+        ctx.StopDDisk(0);
+        if (abandonReservations) {
+            UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), reserved);
+        } else {
+            ctx.WaitForReservationsReleased();
+            UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), 0);
+        }
+        ctx.StartDDisk(0);
+    }
+    const auto creds = Connect(ctx, 701, 1);
+    for (ui32 chunk = 0; chunk < 3; ++chunk) {
+        AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {chunk, 0, MinBlockSize}, {true})),
+            MakeData('A' + chunk, MinBlockSize), config.EnableChecksums);
+    }
+    ctx.WaitForReservationsSettled();
+    UNIT_ASSERT_VALUES_EQUAL(ctx.UncommittedChunks(), 0);
+    ctx.StopDDisk(0);
+    if (!abandonReservations) {
+        ctx.WaitForReservationsReleased();
+    }
+}
+
 void TestWriteAndReadPayloadLayout(NDDisk::TDDiskConfig config, EPayloadLayout layout) {
     config.CheckChecksumBeforeWrite = true;
     TTestContext ctx(std::move(config), NLog::PRI_INFO);
@@ -48,6 +94,41 @@ void TestWriteAndReadPayloadLayout(NDDisk::TDDiskConfig config, EPayloadLayout l
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
+    Y_UNIT_TEST(StartupRepairsAbandonedReservations_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true}, true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservationsWithoutChecksums_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true, .EnableChecksums = false}, true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservations_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({}, true);
+    }
+
+    Y_UNIT_TEST(StartupRepairsAbandonedReservationsWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({.EnableChecksums = false}, true);
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservations_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({});
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservations_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservationsWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestShutdownReleasesReservations({.EnableChecksums = false});
+    }
+
+    Y_UNIT_TEST(ShutdownReleasesReservationsWithoutChecksums_PDiskFallback) {
+        TestShutdownReleasesReservations({.ForcePDiskFallback = true, .EnableChecksums = false});
+    }
     Y_UNIT_TEST(WriteAndReadUnalignedPayload_Uring) {
         TestWriteAndReadPayloadLayout({}, EPayloadLayout::Unaligned);
     }

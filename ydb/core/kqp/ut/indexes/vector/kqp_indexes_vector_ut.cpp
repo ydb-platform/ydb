@@ -7,7 +7,9 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1921,6 +1923,63 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
+    }
+
+    Y_UNIT_TEST_QUAD(VectorIndexRebuildAllowsQueries, EnableIndexStreamWrite, Covering) {
+        auto settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, Covering ? F_COVERING : 0); });
+        auto rebuildSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        const TString query = R"(
+            SELECT pk, data FROM `/Root/TestTable` VIEW index1
+            ORDER BY Knn::CosineDistance(emb, "\x03\x30\x02") LIMIT 1;
+        )";
+        TString expected = "[[0;\"0\"]]";
+        auto checkQuery = [&](bool retryOnSchemaChange = false) {
+            auto result = kikimr.RunCall([&] { return ExecuteDataQuery(session, query); });
+            if (retryOnSchemaChange && result.GetStatus() == EStatus::ABORTED) {
+                // Replacing an index invalidates cached query plans, as with a normal index move.
+                result = kikimr.RunCall([&] { return ExecuteDataQuery(session, query); });
+            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+        checkQuery();
+
+        TBlockEvents<TEvDataShard::TEvSampleKRequest> sampleBlocker(runtime);
+        TBlockEvents<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction> moveBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex;
+        });
+        auto rebuild = kikimr.RunInThreadPool([&] {
+            return rebuildSession.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TestTable` REBUILD INDEX index1 WITH (levels=2, clusters=3);
+            )").ExtractValueSync();
+        });
+        runtime.WaitFor("rebuild sampling", [&] { return !sampleBlocker.empty(); });
+        checkQuery(true);
+        kikimr.RunCall([&] { DoOnlyUpsertValuesIntoTable(session); });
+        checkQuery();
+
+        sampleBlocker.Stop().Unblock();
+        runtime.WaitFor("rebuild replacement", [&] { return !moveBlocker.empty(); });
+        checkQuery(true);
+        // Vector builds use a snapshot. Once finalized, both indexes must receive writes
+        // until the replacement transaction switches the public name to the new index.
+        const auto update = kikimr.RunCall([&] {
+            return ExecuteDataQuery(session, "UPDATE `/Root/TestTable` SET data = 'updated' WHERE pk = 0;");
+        });
+        UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+        expected = "[[0;\"updated\"]]";
+        checkQuery();
+
+        moveBlocker.Stop().Unblock();
+        const auto result = runtime.WaitFuture(rebuild);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        checkQuery(true);
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndexBuildCustomParallel, EnableIndexStreamWrite) {

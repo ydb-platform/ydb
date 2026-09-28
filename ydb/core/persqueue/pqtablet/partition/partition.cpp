@@ -5201,16 +5201,6 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
     }
 }
 
-size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
-    if (AppData()->PQConfig.GetQuotingConfig().GetTopicWriteQuotaEntityToLimit() ==
-        NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-        return WriteNewSize;
-    } else {
-        return std::accumulate(request.Record.GetCmdWrite().begin(), request.Record.GetCmdWrite().end(), 0ul,
-                               [](size_t sum, const auto& el) { return sum + el.GetValue().size(); });
-    }
-}
-
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))

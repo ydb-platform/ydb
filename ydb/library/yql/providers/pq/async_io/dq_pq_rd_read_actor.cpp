@@ -1,42 +1,43 @@
 #include "dq_pq_rd_read_actor.h"
 #include "probes.h"
 
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
+#include <ydb/library/yql/providers/pq/common/events.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -355,6 +356,7 @@ public:
         const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDuration checkPartitionCountPeriod,
+        NActors::TActorId controlPlaneActorId,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
 
@@ -410,6 +412,7 @@ public:
         hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
+        hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
     })
 
     STRICT_STFUNC(IgnoreState, {
@@ -441,6 +444,7 @@ public:
         hFunc(TEvPrivate::TEvCheckPartitionTimer, IgnoreEvent);
         hFunc(TEvPrivate::TEvCheckPartitionCount, IgnoreEvent);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, IgnoreEvent);
+        IgnoreFunc(TEvents::TEvInvokeResult);
     })
 
     template <class TEventPtr>
@@ -485,6 +489,7 @@ public:
     void UpdateQueuedSize();
     void StartClusterDiscovery();
     void StartCluster(ui32 clusterIndex);
+    void OnConsumerOffsetsInitialized() override;
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const;
     IFederatedTopicClient& GetFederatedTopicClient();
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
@@ -547,10 +552,11 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDuration checkPartitionCountPeriod,
+        NActors::TActorId controlPlaneActorId,
         TDqPqRdReadActor* parent,
         const TString& cluster)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
-        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
+        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId, controlPlaneActorId)
         , Parent(parent ? parent : this)
         , Cluster(cluster)
         , Token(token)
@@ -757,6 +763,7 @@ void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
 
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
+    StopConsumerOffsetInitialization();
     SRC_LOG_I("PassAway");
     Become(&TDqPqRdReadActor::IgnoreState);
     PrintInternalState();
@@ -765,7 +772,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     }
     for (auto& clusterState : Clusters) {
         auto child = clusterState.Child;
-        if (child == this) {
+        if (!child || child == this) {
             continue;
         }
         // all actors are on same mailbox, safe to call
@@ -1447,10 +1454,22 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
             ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount()
         );
     }
+    if (!SourceParams.GetConsumerName().empty()) {
+        for (auto& cluster : Clusters) {
+            GetTopicClient(cluster);
+            InitConsumerOffsets(SelfId(), cluster.Info, cluster.TopicClient, cluster.PartitionsCount);
+        }
+    }
+    if (ConsumerOffsetsInitialized()) {
+        OnConsumerOffsetsInitialized();
+    }
+    SchedulePartitionCountTimer();
+}
+
+void TDqPqRdReadActor::OnConsumerOffsetsInitialized() {
     for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
         StartCluster(clusterIndex);
     }
-    SchedulePartitionCountTimer();
 }
 
 void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
@@ -1500,6 +1519,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         PqGateway,
         EnableStreamingQueriesCounters,
         CheckPartitionCountPeriod,
+        {}, // Only the parent initializes consumer offsets.
         this,
         TString(Clusters[clusterIndex].Info.Name));
     Clusters[clusterIndex].Child = actor;
@@ -1627,7 +1647,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     i64 bufferSize,
     const IPqStaticGateway::TPtr& pqGateway,
     bool enableStreamingQueriesCounters,
-    TDuration checkPartitionCountPeriod)
+    TDuration checkPartitionCountPeriod,
+    NActors::TActorId controlPlaneActorId)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1651,7 +1672,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         bufferSize,
         pqGateway,
         enableStreamingQueriesCounters,
-        checkPartitionCountPeriod);
+        checkPartitionCountPeriod,
+        controlPlaneActorId);
 
     return {actor, actor};
 }

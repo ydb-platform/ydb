@@ -1106,7 +1106,7 @@ def __subset_classify_context(self):
                     (r.GlyphCount,) = (len(x) + 1 for x in d)
 
                 def ChainSetRuleData(r, d):
-                    (r.Backtrack, r.Input, r.LookAhead) = d
+                    r.Backtrack, r.Input, r.LookAhead = d
                     (
                         r.BacktrackGlyphCount,
                         r.InputGlyphCount,
@@ -1127,7 +1127,7 @@ def __subset_classify_context(self):
                     (r.ClassDef,) = d
 
                 def SetChainContextData(r, d):
-                    (r.BacktrackClassDef, r.InputClassDef, r.LookAheadClassDef) = d
+                    r.BacktrackClassDef, r.InputClassDef, r.LookAheadClassDef = d
 
                 RuleData = lambda r: (r.Class,)
                 ChainRuleData = lambda r: (r.Backtrack, r.Input, r.LookAhead)
@@ -1137,7 +1137,7 @@ def __subset_classify_context(self):
                     (r.GlyphCount,) = (len(x) + 1 for x in d)
 
                 def ChainSetRuleData(r, d):
-                    (r.Backtrack, r.Input, r.LookAhead) = d
+                    r.Backtrack, r.Input, r.LookAhead = d
                     (
                         r.BacktrackGlyphCount,
                         r.InputGlyphCount,
@@ -1161,7 +1161,7 @@ def __subset_classify_context(self):
                     (r.GlyphCount,) = (len(x) for x in d)
 
                 def ChainSetRuleData(r, d):
-                    (r.BacktrackCoverage, r.InputCoverage, r.LookAheadCoverage) = d
+                    r.BacktrackCoverage, r.InputCoverage, r.LookAheadCoverage = d
                     (
                         r.BacktrackGlyphCount,
                         r.InputGlyphCount,
@@ -2101,9 +2101,7 @@ def prune_features(self):
         feature_indices = self.table.ScriptList.collect_features()
     else:
         feature_indices = []
-    (feature_indices, feature_index_map) = self.remap_duplicate_features(
-        feature_indices
-    )
+    feature_indices, feature_index_map = self.remap_duplicate_features(feature_indices)
 
     if self.table.FeatureList:
         self.table.FeatureList.subset_features(feature_indices)
@@ -2842,27 +2840,24 @@ def closure_glyphs(self, s):
 def prune_post_subset(self, font, options):
     table = self.table
 
-    store = table.MultiVarStore
-    if store is not None:
-        usedVarIdxes = set()
-        table.collect_varidxes(usedVarIdxes)
-        varidx_map = store.subset_varidxes(usedVarIdxes)
-        table.remap_varidxes(varidx_map)
-
-    axisIndicesList = table.AxisIndicesList.Item
+    axisIndicesList = table.AxisIndicesList
     if axisIndicesList is not None:
+        items = axisIndicesList.Item
         usedIndices = set()
         for glyph in table.VarCompositeGlyphs.VarCompositeGlyph:
             for comp in glyph.components:
                 if comp.axisIndicesIndex is not None:
                     usedIndices.add(comp.axisIndicesIndex)
         usedIndices = sorted(usedIndices)
-        table.AxisIndicesList.Item = _list_subset(axisIndicesList, usedIndices)
-        mapping = {old: new for new, old in enumerate(usedIndices)}
-        for glyph in table.VarCompositeGlyphs.VarCompositeGlyph:
-            for comp in glyph.components:
-                if comp.axisIndicesIndex is not None:
-                    comp.axisIndicesIndex = mapping[comp.axisIndicesIndex]
+        if usedIndices:
+            axisIndicesList.Item = _list_subset(items, usedIndices)
+            mapping = {old: new for new, old in enumerate(usedIndices)}
+            for glyph in table.VarCompositeGlyphs.VarCompositeGlyph:
+                for comp in glyph.components:
+                    if comp.axisIndicesIndex is not None:
+                        comp.axisIndicesIndex = mapping[comp.axisIndicesIndex]
+        else:
+            table.AxisIndicesList = None
 
     conditionList = table.ConditionList
     if conditionList is not None:
@@ -2873,12 +2868,25 @@ def prune_post_subset(self, font, options):
                 if comp.conditionIndex is not None:
                     usedIndices.add(comp.conditionIndex)
         usedIndices = sorted(usedIndices)
-        conditionList.ConditionTable = _list_subset(conditionTables, usedIndices)
-        mapping = {old: new for new, old in enumerate(usedIndices)}
-        for glyph in table.VarCompositeGlyphs.VarCompositeGlyph:
-            for comp in glyph.components:
-                if comp.conditionIndex is not None:
-                    comp.conditionIndex = mapping[comp.conditionIndex]
+        if usedIndices:
+            conditionList.ConditionTable = _list_subset(conditionTables, usedIndices)
+            mapping = {old: new for new, old in enumerate(usedIndices)}
+            for glyph in table.VarCompositeGlyphs.VarCompositeGlyph:
+                for comp in glyph.components:
+                    if comp.conditionIndex is not None:
+                        comp.conditionIndex = mapping[comp.conditionIndex]
+        else:
+            table.ConditionList = None
+
+    # Conditions can reference the variation store, so subset them first.
+    store = table.MultiVarStore
+    if store is not None:
+        usedVarIdxes = set()
+        table.collect_varidxes(usedVarIdxes)
+        varidx_map = store.subset_varidxes(usedVarIdxes)
+        table.remap_varidxes(varidx_map)
+        if not store:
+            table.MultiVarStore = None
 
     return True
 
@@ -2929,12 +2937,12 @@ def subset_glyphs(self, s):
 @_add_method(otTables.MathVariants)
 def subset_glyphs(self, s):
     if self.VertGlyphCoverage:
-        indices = self.VertGlyphCoverage.subset(s.glyphs)
+        indices = self.VertGlyphCoverage.subset(s.glyphs_wo_math_closure)
         self.VertGlyphConstruction = _list_subset(self.VertGlyphConstruction, indices)
         self.VertGlyphCount = len(self.VertGlyphConstruction)
 
     if self.HorizGlyphCoverage:
-        indices = self.HorizGlyphCoverage.subset(s.glyphs)
+        indices = self.HorizGlyphCoverage.subset(s.glyphs_wo_math_closure)
         self.HorizGlyphConstruction = _list_subset(self.HorizGlyphConstruction, indices)
         self.HorizGlyphCount = len(self.HorizGlyphConstruction)
 
@@ -3356,7 +3364,7 @@ class Options(object):
         "rand": ["rand"],
         "justify": ["jalt"],
         "private": ["Harf", "HARF", "Buzz", "BUZZ"],
-        "east_asian_spacing": ["chws", "vchw", "halt", "vhal"],
+        "east_asian_spacing": ["chws", "vchw", "halt", "vhal", "palt"],
         # Complex shapers
         "arabic": [
             "init",
@@ -3642,6 +3650,7 @@ class Subsetter(object):
                     self.glyphs.add(font.getGlyphName(i))
                 log.info("Added first four glyphs to subset")
 
+        self.glyphs_wo_math_closure = frozenset(self.glyphs)
         if "MATH" in font:
             with timer("close glyph list over 'MATH'"):
                 log.info(

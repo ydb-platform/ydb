@@ -369,8 +369,8 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
 void TUdfStoreService::Handle(TEvCompileController::TEvArtifactReady::TPtr& ev) {
     const auto& key = ev->Get()->Record.GetKey();
     if (key.GetKind() == NKikimrUdfStore::ARTIFACT_KIND_LIBRARY) {
-        // Modules that link against it become loadable once their own artifact
-        // shows up; nothing to do on this node until then.
+        LocallyReadyLibraries[key.GetName()] = key.GetUid();
+        ReportGapsUnblockedByLibrary(key.GetName());
         return;
     }
     if (!CurrentSnapshot) {

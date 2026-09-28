@@ -1,11 +1,11 @@
 #include "client_impl.h"
 
 #include "config.h"
+#include "file_reader.h"
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
-#include "request_annotations.h"
-#include "request_info.h"
+#include "request_tags.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
 #include "row_stream.h"
@@ -915,7 +915,7 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
-    AnnotateWriteTableFragmentRequestInfo(req, cookie);
+    req->Annotate().With(MakeWriteTableFragmentRequestTags(cookie));
 
     auto schema = New<TTableSchema>();
     auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
@@ -955,7 +955,7 @@ IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
-    AnnotateWriteFileFragmentRequestInfo(req, cookie);
+    req->Annotate().With(MakeWriteFileFragmentRequestTags(cookie));
 
     return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
@@ -2017,18 +2017,61 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
 }
 
 TFuture<TFilePartitions> TClient::PartitionFile(
-    const NYPath::TYPath& /*path*/,
-    const std::vector<TFileReadRange>& /*ranges*/,
-    const TPartitionFileOptions& /*options*/)
+    const NYPath::TYPath& path,
+    const std::vector<TFileReadRange>& ranges,
+    const TPartitionFileOptions& options)
 {
-    THROW_ERROR_EXCEPTION("PartitionFile is not implemented yet");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PartitionFile();
+    SetTimeoutOptions(*req, options);
+
+    req->set_path(path);
+    for (const auto& range : ranges) {
+        auto* protoRange = req->add_ranges();
+        protoRange->set_begin(range.Begin);
+        if (range.End) {
+            protoRange->set_end(*range.End);
+        }
+    }
+
+    if (options.FetchChunkSpecConfig) {
+        ToProto(req->mutable_fetch_chunk_spec_config(), options.FetchChunkSpecConfig);
+    }
+    req->set_fetch_cookie_node_descriptors(options.FetchCookieNodeDescriptors);
+
+    ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
+    req->Annotate().With(MakePartitionFileRequestTags(*req));
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionFilePtr& rsp) {
+        return FromProto<TFilePartitions>(*rsp);
+    }));
 }
 
 TFuture<IFileReaderPtr> TClient::CreateFilePartitionReader(
-    const TFilePartitionCookiePtr& /*cookie*/,
-    const TReadFilePartitionOptions& /*options*/)
+    const TFilePartitionCookiePtr& cookie,
+    const TReadFilePartitionOptions& options)
 {
-    THROW_ERROR_EXCEPTION("CreateFilePartitionReader is not implemented yet");
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
+
+    auto req = proxy.ReadFilePartition();
+    InitStreamingRequest(*req);
+
+    req->set_cookie(ToProto(ConvertToYsonString(cookie)));
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+
+    req->Annotate().With(MakeReadFilePartitionRequestTags(*req));
+
+    return NRpcProxy::CreateFilePartitionReader(std::move(req));
 }
 
 TFuture<TClusterMeta> TClient::GetClusterMeta(
@@ -2152,7 +2195,7 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
-    AnnotatePartitionTablesRequestInfo(req, paths, *req);
+    req->Annotate().With(MakePartitionTablesRequestTags(paths, *req));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
@@ -2172,7 +2215,7 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
 
     FillRequest(req.Get(), cookie, /*format*/ std::nullopt, options);
 
-    AnnotateReadTablePartitionRequestInfo(req, *req);
+    req->Annotate().With(MakeReadTablePartitionRequestTags(*req));
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
@@ -2231,7 +2274,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
-    AnnotateReadTableRequestInfo(req, path, *req);
+    req->Annotate().With(MakeReadTableRequestTags(path, *req));
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2261,7 +2304,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
 
     FillRequest(req.Get(), cookie, format, options);
 
-    AnnotateReadTablePartitionRequestInfo(req, *req);
+    req->Annotate().With(MakeReadTablePartitionRequestTags(*req));
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -3347,9 +3390,14 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     if (options.Config) {
         req->set_config(ToProto(*options.Config));
     }
+    if (options.Codec != NCompression::ECodec::None) {
+        req->set_codec(ToProto(options.Codec));
+    }
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
-        return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
+    return req->Invoke().Apply(BIND([codec = options.Codec] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
+        auto signedHandle = ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
+        ValidateShuffleHandleCodec(signedHandle, codec);
+        return signedHandle;
     }));
 }
 

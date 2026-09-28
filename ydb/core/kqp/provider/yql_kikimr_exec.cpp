@@ -1356,6 +1356,14 @@ private:
             return peepHoleStatus;
         }
 
+        if (const auto parameter = FindNode(node, [](const TExprNode::TPtr& node) {
+            return node->IsCallable("Parameter");
+        })) {
+            ctx.AddError(TIssue(ctx.GetPosition(parameter->Pos()), TStringBuilder()
+                << "Cannot evaluate expression that depends on query parameter: " << parameter->Head().Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         auto guard = Guard(*SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
         auto input = Build<TDqPhyStage>(ctx, pos)

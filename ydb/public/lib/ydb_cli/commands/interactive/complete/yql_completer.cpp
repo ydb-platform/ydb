@@ -59,10 +59,7 @@ namespace {
 
     private:
         TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen, bool light) {
-            NSQLComplete::TCompletionInput input = {
-                .Text = text,
-                .CursorPosition = prefix.length(),
-            };
+            NSQLComplete::TCompletionInput input = {{.Text = text, .CursorPosition = prefix.length()}};
 
             auto completion = GetEngine(light)->CompleteAsync(input).ExtractValueSync();
 

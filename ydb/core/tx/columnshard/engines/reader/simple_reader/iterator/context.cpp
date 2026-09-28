@@ -11,10 +11,9 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
-    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
+    const NCommon::IDataSource& sourceExt, const bool isFinalSyncPoint) {
     const bool partialUsageByPK = [&]() {
-        if (sourceExt->GetType() == NCommon::IDataSource::EType::SimplePortion) {
-            const auto source = std::static_pointer_cast<TPortionDataSource>(sourceExt);
+        if (const auto* source = sourceExt.GetOptionalAs<TPortionDataSource>()) {
             switch (source->GetUsageClass()) {
                 case TPKRangeFilter::EUsageClass::PartialUsage:
                     return true;
@@ -27,7 +26,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         return false;
     }();
 
-    const auto* source = sourceExt->GetAs<IDataSource>();
+    const auto* source = sourceExt.GetAs<IDataSource>();
 
     const bool needConflictDetector = source->IsConflicting();
     const bool useIndexes = false;

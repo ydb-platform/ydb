@@ -36,6 +36,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 
 //TODO: move this code to vieiwer
@@ -572,15 +573,30 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
     ++OriginalPartitionsCount;
 }
 
+void TPersQueue::PopTxFromQueue()
+{
+    PQ_ENSURE(!TxQueue.empty());
+
+    const auto top = TxQueue.front();
+    TxQueue.pop_front();
+    SetTxCompleteLagCounter();
+
+    // граница только растёт: после рестарта в TxQueue может оказаться транзакция, которая уже была
+    // выполнена и учтена в границе
+    if (std::make_pair(ExecStep, ExecTxId) < top) {
+        std::tie(ExecStep, ExecTxId) = top;
+        PlanStepChanged = true;
+
+        LOG_I("New ExecStep ExecTxId",
+            {"execStep", ExecStep},
+            {"execTxId", ExecTxId});
+    }
+}
+
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
     PQ_ENSURE(!TxQueue.empty());
-
-    std::tie(ExecStep, ExecTxId) = TxQueue.front();
-    LOG_I("New ExecStep ExecTxId",
-        {"execStep", ExecStep},
-        {"execTxId", ExecTxId});
 
     switch (tx.Kind) {
     case NKikimrPQ::TTransaction::KIND_DATA:
@@ -3738,8 +3754,10 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessWriteTxs() ||
         CanProcessTxWrites() ||
         TxWritesChanged ||
+        PlanStepChanged ||
         !DeleteTxs.empty() ||
-        !PendingDeferredReadSetAcks.empty()
+        !PendingDeferredReadSetAcks.empty() ||
+        HasPlanStepWaitingForWriteTxsCycle()
         ;
     if (!canProcess) {
         return;
@@ -3755,6 +3773,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     MovePendingDeferredReadSetAcks();
 
     WriteTxsInProgress = true;
+    ++WriteTxsCycle;
 
     PendingSupportivePartitions = std::move(NewSupportivePartitions);
     NewSupportivePartitions.clear();
@@ -3791,11 +3810,14 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     }
 
     TxWritesChanged = false;
+    PlanStepChanged = false;
+    CompletedWriteTxsCycle = WriteTxsCycle;
 
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
     SendDeferredReadSetAcks(ctx);
+    SendAcksForCompletedPlanSteps(ctx);
 
     WriteTxsInProgress = false;
 
@@ -3884,83 +3906,162 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 {
     const NKikimrTx::TEvMediatorPlanStep& event = ev->Record;
     const ui64 step = event.GetStep();
-    TMaybe<ui64> lastPlannedTxId;
+    // последняя транзакция шага, которая есть в Txs. шаг без таких транзакций PlanStep не двигает:
+    // MinStep новых пропоузов равен max(PlanStep + 1, часы timecast), и шаг из будущего навсегда
+    // поднял бы этот пол
+    TMaybe<ui64> lastKnownTxId;
+
+    TVector<ui64> txIds;
+    txIds.reserve(event.TransactionsSize());
 
     for (const auto& tx : event.GetTransactions()) {
         PQ_ENSURE(tx.HasTxId());
-        const ui64 txId = tx.GetTxId();
-        PQ_ENSURE(!lastPlannedTxId.Defined() || (*lastPlannedTxId < txId));
+        txIds.push_back(tx.GetTxId());
+    }
 
-        if (auto p = Txs.find(txId); p != Txs.end()) {
-            TDistributedTransaction& tx = p->second;
+    // медиатор склеивает в один шаг транзакции разных координаторов и может прислать их в любом порядке
+    // и с дублями. планируем по возрастанию TxId, чтобы сохранить порядок TxQueue
+    SortUnique(txIds);
 
-            PQ_ENSURE(tx.MaxStep >= step);
+    // максимальный txId, который этот шаг нам ещё должен: пока транзакция не выполнена, шаг подтверждать
+    // нельзя. Max<ui64>() означает, что за шагом наших транзакций нет
+    ui64 maxPendingTxId = Max<ui64>();
 
-            if (tx.Step == Max<ui64>()) {
-                auto span = tx.CreatePlanStepSpan(TabletID(), step);
-                tx.BeginWaitRSSpan(TabletID());
-
-                PQ_ENSURE(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
-
-                TxQueue.emplace_back(step, txId);
-                SetTxCompleteLagCounter();
-
-                tx.OnPlanStep(step);
-                TryExecuteTxs(ctx, tx);
-            } else {
-                LOG_W("Transaction already planned for step",
-                    {"txStep", tx.Step},
-                    {"step", step},
-                    {"txId", txId});
-            }
-
-            lastPlannedTxId = txId;
-        } else {
+    for (ui64 txId : txIds) {
+        auto p = Txs.find(txId);
+        if (p == Txs.end()) {
             LOG_W("Unknown transaction TxId Step",
                 {"txId", txId},
                 {"step", step});
+            continue;
         }
-    }
 
-    if ((step > PlanStep) && lastPlannedTxId.Defined()) {
-        // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
-        PlanStep = step;
-        PlanTxId = *lastPlannedTxId;
-    }
-
-    if (lastPlannedTxId.Defined()) {
-        // эту транзакцию ещё не удалили
-        auto p = Txs.find(*lastPlannedTxId);
         TDistributedTransaction& tx = p->second;
 
-        // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.AddPlanStepSender(sender, std::move(ev));
+        if (tx.Step == step) {
+            // повторная доставка шага. подтверждение отправим, когда транзакция выполнится
+            LOG_W("Transaction already planned for step",
+                {"txStep", tx.Step},
+                {"step", step},
+                {"txId", txId});
 
-        if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
-            // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
-            SendPlanStepAcks(ctx, tx);
+            maxPendingTxId = txId;
+            lastKnownTxId = txId;
+            continue;
         }
-    } else {
-        // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
-        // or a retransmit after the step's txs were already executed and deleted.
-        // Ack immediately so the mediator sees steps in order.
-        SendPlanStepAcks(ctx, sender, *ev);
+
+        if (tx.Step != Max<ui64>()) {
+            // транзакция запланирована на другой шаг. этот шаг нам ничего не должен
+            LOG_W("Transaction already planned for another step",
+                {"txStep", tx.Step},
+                {"step", step},
+                {"txId", txId});
+
+            lastKnownTxId = txId;
+            continue;
+        }
+
+        if (tx.State != NKikimrPQ::TTransaction::PREPARED) {
+            // транзакция уже удаляется. запоздавший шаг её не воскрешает
+            LOG_W("Transaction is not prepared for planning",
+                {"txState", NKikimrPQ::TTransaction_EState_Name(tx.State)},
+                {"step", step},
+                {"txId", txId});
+
+            lastKnownTxId = txId;
+            continue;
+        }
+
+        if (tx.MaxStep < step) {
+            // координатор опоздал: транзакция будет удалена по истечению MaxStep. шаг подтверждаем,
+            // но транзакцию не планируем. PlanStep такой шаг тоже не двигает: иначе MinStep для новых
+            // транзакций уехал бы в то же будущее
+            LOG_W("Transaction planned after MaxStep",
+                {"txId", txId},
+                {"step", step},
+                {"maxStep", tx.MaxStep});
+            continue;
+        }
+
+        auto span = tx.CreatePlanStepSpan(TabletID(), step);
+        tx.BeginWaitRSSpan(TabletID());
+
+        PQ_ENSURE(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
+
+        TxQueue.emplace_back(step, txId);
+        SetTxCompleteLagCounter();
+
+        tx.OnPlanStep(step);
+
+        maxPendingTxId = txId;
+        lastKnownTxId = txId;
+
+        TryExecuteTxs(ctx, tx);
     }
+
+    if ((step > PlanStep) && lastKnownTxId.Defined()) {
+        // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
+        PlanStep = step;
+        PlanTxId = *lastKnownTxId;
+        PlanStepChanged = true;
+    }
+
+    // Подтверждение отправит SendAcksForCompletedPlanSteps, когда за шагом не останется ни наших
+    // транзакций, ни сомнений в том, что мы лидер
+    PlanSteps.push_back({
+        .Sender = sender,
+        .Ev = std::move(ev),
+        .MaxPendingTxId = maxPendingTxId,
+        .CreatedAtWriteTxsCycle = WriteTxsCycle,
+    });
 
     LOG_D("PlanStep PlanTxId",
         {"planStep", PlanStep},
         {"planTxId", PlanTxId});
+
+    SendAcksForCompletedPlanSteps(ctx);
 }
 
-void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
-                                  const TDistributedTransaction& tx)
+bool TPersQueue::CanReleasePlanStep(const TPlanStepEntry& entry) const
 {
-    if (tx.PlanStepSenders.empty()) {
-        return;
+    if (entry.MaxPendingTxId != Max<ui64>()) {
+        // За шагом наша транзакция. TxQueue упорядочена и снимается только с головы, поэтому пара ушла
+        // из очереди тогда и только тогда, когда голова стала больше неё. А уходит пара из состояния
+        // EXECUTED, то есть после того, как все партиции записали свои субтранзакции: это и есть
+        // доказательство того, что транзакция выполнена нами и durable.
+        //
+        // Сравнивать с (ExecStep, ExecTxId) нельзя: ту же пару может занять новая транзакция с тем же
+        // TxId, пропоузенная заново после удаления предыдущей. Граница уже стояла бы на этой паре, и
+        // шаг был бы подтверждён до выполнения новой транзакции
+        const auto pending = std::make_pair(entry.Ev->Record.GetStep(), entry.MaxPendingTxId);
+        return TxQueue.empty() || (pending < TxQueue.front());
     }
 
-    for (const auto& [receiver, event] : tx.PlanStepSenders) {
-        SendPlanStepAcks(ctx, receiver, *event);
+    // за шагом ничего нет и ждать нечего. отпустить запись может только успешно завершённый цикл
+    // записи, начатый после её появления: он нужен как доказательство того, что мы лидер
+    return CompletedWriteTxsCycle > entry.CreatedAtWriteTxsCycle;
+}
+
+bool TPersQueue::HasPlanStepWaitingForWriteTxsCycle() const
+{
+    return !PlanSteps.empty() && (PlanSteps.front().MaxPendingTxId == Max<ui64>());
+}
+
+void TPersQueue::SendAcksForCompletedPlanSteps(const TActorContext& ctx)
+{
+    // порядок подтверждений должен совпадать с порядком доставки, поэтому снимаем только префикс:
+    // ничего, что стоит за головой очереди, отправлять нельзя
+    while (!PlanSteps.empty() && CanReleasePlanStep(PlanSteps.front())) {
+        const TPlanStepEntry entry = std::move(PlanSteps.front());
+        PlanSteps.pop_front();
+
+        SendPlanStepAcks(ctx, entry.Sender, *entry.Ev);
+    }
+
+    if (HasPlanStepWaitingForWriteTxsCycle()) {
+        // голову очереди отпустит только цикл записи. надо его запустить, иначе очередь медиатора
+        // будет стоять до ближайшей записи по другой причине
+        TryWriteTxs(ctx);
     }
 }
 
@@ -4801,10 +4902,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_ENSURE(tx.TxId == TxQueue.front().second)("TxId", tx.TxId)("FrontTxId", TxQueue.front().second);
         PQ_ENSURE(!tx.WriteInProgress)("TxId", tx.TxId);
 
-        TxQueue.pop_front();
-        SetTxCompleteLagCounter();
+        PopTxFromQueue();
 
-        SendPlanStepAcks(ctx, tx);
+        SendAcksForCompletedPlanSteps(ctx);
         SendEvReadSetAckToSenders(ctx, tx);
         TryReturnTabletStateAll(ctx);
 

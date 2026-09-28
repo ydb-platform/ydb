@@ -40,14 +40,11 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 TerminalReplayIssues.AddIssue(NYql::TIssue("ANALYZE SAMPLE rate must be a finite number in (0, 1]"));
                 return true;
             }
-            if (rate < 1 && !Self->EnableColumnStatistics) {
-                TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
-                TerminalReplayIssues.AddIssue(NYql::TIssue("Column statistics are disabled"));
-                return true;
-            }
         }
 
         if (!Self->EnableColumnStatistics) {
+            TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+            TerminalReplayIssues.AddIssue(NYql::TIssue("Column statistics are disabled"));
             return true;
         }
 
@@ -194,7 +191,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             return;
         }
 
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
     }
 };
 

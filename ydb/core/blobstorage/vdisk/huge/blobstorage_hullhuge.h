@@ -6,7 +6,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/base/fresh_space_tracker.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -28,8 +27,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
-        ui64 FreshSpaceAdmission = 0;
-        std::shared_ptr<TFreshSpaceTracker> SpaceTracker;
+        // Carried through to TEvHullLogHugeBlob, see there.
+        std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -92,7 +91,9 @@ namespace NKikimr {
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
         const bool IsStripe;
-        const ui64 FreshSpaceAdmission;
+        // The colour at which reserving Fresh chunks for this blob's index record is refused, as for any put
+        // of its data kind. Unset for writers Fresh admission does not gate, such as replication.
+        const std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -108,7 +109,7 @@ namespace NKikimr {
                            TWriteSource writeSource,
                            bool rewriteBlob = false,
                            bool isStripe = false,
-                           ui64 freshSpaceAdmission = 0)
+                           std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> freshRefuseAtColor = std::nullopt)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -122,7 +123,7 @@ namespace NKikimr {
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
             , IsStripe(isStripe)
-            , FreshSpaceAdmission(freshSpaceAdmission)
+            , FreshRefuseAtColor(freshRefuseAtColor)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);

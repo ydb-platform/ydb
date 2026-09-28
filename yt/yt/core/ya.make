@@ -195,7 +195,6 @@ SRCS(
 
     phoenix/context.cpp
     phoenix/descriptors.cpp
-    phoenix/load.cpp
     phoenix/schemas.cpp
     phoenix/type_def.cpp
     phoenix/type_registry.cpp
@@ -435,6 +434,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         concurrency/benchmarks
         bus/benchmarks
         logging/benchmark
+        phoenix/benchmarks
         rpc/benchmark
         ypath/benchmarks
         yson/benchmark

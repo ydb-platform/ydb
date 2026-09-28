@@ -27,11 +27,11 @@ private:
         return SourcesConstructor->IsFinished();
     }
 
-    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const std::shared_ptr<NCommon::IDataSource>& source) const override {
-        return std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetFirstPK());
+    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const NCommon::IDataSource& source) const override {
+        return std::make_shared<NArrow::TSimpleRow>(source.GetAs<IDataSource>()->GetFirstPK());
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext() override {
         return SourcesConstructor->TryExtractNext(Context, GetMaxInFlight());
     }
 
@@ -39,7 +39,7 @@ private:
         return GetSourcesInFlightCount() < GetMaxInFlight();
     }
 
-    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& /*source*/) override {
+    virtual void DoOnSourceFinished(const NCommon::IDataSource& /*source*/) override {
     }
 
 public:

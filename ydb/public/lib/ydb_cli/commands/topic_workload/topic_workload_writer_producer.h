@@ -29,7 +29,7 @@ namespace NYdb::NConsoleClient {
         void WaitForContinuationToken(const TDuration& timeout) override;
 
         void Send(const TInstant& createTimestamp,
-                    std::optional<NYdb::NTable::TTransaction> transaction) override;
+                    NYdb::NTable::TTransaction* transaction) override;
 
         bool ContinuationTokenDefined() const override;
 

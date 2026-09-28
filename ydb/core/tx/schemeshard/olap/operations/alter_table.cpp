@@ -361,7 +361,16 @@ public:
                     }
                 }
             }
-            result->SetStatus(NKikimrScheme::StatusSuccess);
+            const auto& alter = Transaction.GetAlterColumnTable();
+            const bool statisticsChange = Transaction.HasAlterColumnTable()
+                && (alter.UpsertMultiColumnStatisticsSize() || alter.DropMultiColumnStatisticsSize());
+            if (statisticsChange) {
+                // Statistics-only updates must be published before notifying completion.
+                context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+                context.OnComplete.DoneOperation(OperationId);
+            } else {
+                result->SetStatus(NKikimrScheme::StatusSuccess);
+            }
             SetState(TTxState::Done);
         }
 

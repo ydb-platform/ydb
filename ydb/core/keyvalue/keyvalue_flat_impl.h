@@ -728,6 +728,13 @@ protected:
                 Send(SelfId(), new TEvKeyValue::TEvCheckTrash);
                 break;
 
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::NOT_ENOUGH_SPACE:
+                YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::NOT_ENOUGH_SPACE",
+                    {"keyValue", TabletID()});
+                State.FinishMoveDataNotEnoughSpace(TActivationContext::AsActorContext());
+                ProcessMoveDataQueue();
+                break;
+
             case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::ERROR:
                 YDB_LOG_CRIT_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::ERROR",
                     {"keyValue", TabletID()});
@@ -846,13 +853,7 @@ public:
         Execute(new TTxCompleteVacuum(this, State.GetVacuumResetGeneration(), vacuumGeneration), ctx);
     }
 
-    void MoveDataCompleted(const TActorContext &ctx) override {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "MoveDataCompleted",
-            {"marker", "KV272"},
-            {"tabletId", TabletID()});
-
-        State.FinishMoveData(ctx);
-
+    void ProcessMoveDataQueue() {
         while (!MoveDataRequestsQueue.empty()) {
             TEvTablet::TEvMoveData::TPtr ev = MoveDataRequestsQueue.front();
             TSet<ui32> moveDataGroups;
@@ -868,6 +869,15 @@ public:
             Execute(new TTxAdvanceMoveData(this));
             break;
         }
+    }
+
+    void MoveDataCompleted(const TActorContext &ctx) override {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "MoveDataCompleted",
+            {"marker", "KV272"},
+            {"tabletId", TabletID()});
+
+        State.FinishMoveDataSuccess(ctx);
+        ProcessMoveDataQueue();
     }
 
     STFUNC(StateInit) {

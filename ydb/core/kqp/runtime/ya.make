@@ -48,6 +48,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     contrib/libs/apache/arrow
     contrib/libs/fmt
     library/cpp/regex/pire

@@ -11,17 +11,26 @@ using namespace NSQLv1Generated;
 
 const TString TGroupByClause::AutogenerateNamePrefix = "group";
 
+bool IsCompactGroupBy(TContext& ctx, const TRule_group_by_clause& node) {
+    if (ctx.CompactGroupBy.Defined()) {
+        return *ctx.CompactGroupBy;
+    }
+
+    if (node.HasBlock2()) {
+        return true;
+    }
+
+    return !ctx.PullHintForToken(
+                   ctx.TokenPosition(node.GetToken1()),
+                   [](const NSQLTranslation::TSQLHint& hint) {
+                       return to_lower(hint.Name) == "compact";
+                   })
+                .empty();
+}
+
 bool TGroupByClause::Build(const TRule_group_by_clause& node) {
     // group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list (WITH an_id)?;
-    if (Ctx_.CompactGroupBy.Defined()) {
-        CompactGroupBy_ = *Ctx_.CompactGroupBy;
-    } else {
-        CompactGroupBy_ = node.HasBlock2();
-        if (!CompactGroupBy_) {
-            auto hints = Ctx_.PullHintForToken(Ctx_.TokenPosition(node.GetToken1()));
-            CompactGroupBy_ = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
-        }
-    }
+    CompactGroupBy_ = NSQLTranslationV1::IsCompactGroupBy(Ctx_, node);
     TPosition distinctPos;
     if (IsDistinctOptSet(node.GetRule_opt_set_quantifier4(), distinctPos)) {
         Ctx_.Error(distinctPos) << "DISTINCT is not supported in GROUP BY clause yet!";

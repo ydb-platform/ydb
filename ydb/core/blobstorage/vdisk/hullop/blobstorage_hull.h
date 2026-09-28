@@ -2,10 +2,12 @@
 #include "defs.h"
 #include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 #include <optional>
@@ -67,6 +69,12 @@ namespace NKikimr {
                 ui32 collectStep,
                 const TBarrierIngress& ingress,
                 const TActorContext& ctx);
+
+        // Calls `func(levelIndex, record, type)` for every database the admission has records for.
+        template <typename TFunc>
+        void ForEachFreshRecord(const TFreshAdmission& admission, TFunc&& func) const;
+        // Starts a Fresh compaction of the database, should one be due.
+        void CompactFreshDbIfRequired(EHullDbType type, const TActorContext& ctx);
 
     public:
         THull(
@@ -150,9 +158,10 @@ namespace NKikimr {
         //    collectStep=Max<ui32>(). For this command perGenCounter must also be
         //    set to Max<ui32>()
         //
-        // Once the Max generation block is present, the tablet is treated as fully
-        // deleted: no blob data is needed, and compaction may drop every barrier
-        // record for that tablet. The Max generation block itself is kept.
+        // With EnableCollectByCompleteDeletionBlock, once the Max generation block is
+        // present, the tablet is treated as fully deleted: no blob data is needed, and
+        // compaction may drop every barrier record for that tablet. The Max generation
+        // block itself is kept. Without the flag, the data waits for the barrier.
 
         ////////////////////////////////////////////////////////////////////////
         // Blocks
@@ -229,7 +238,21 @@ namespace NKikimr {
         ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
         ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
 
-        TFreshSpaceDebt GetFreshSpaceDebt() const;
+        ///////////////// FRESH CHUNK RESERVATION /////////////////////////////////
+        // A record is admitted only once the Fresh segment it lands in holds enough reserved chunks to
+        // compact it along with everything already there and in flight; see TFreshData.
+        bool IsFreshRotationPending(const TFreshAdmission& admission) const;
+        // A Fresh segment that the admission would push past one SST is rotated out first when it can be, so that
+        // it compacts into exactly one; otherwise it grows. Returns false while a rotation waits for records in
+        // flight, and the admission has to wait with it.
+        bool PrepareFreshForAdmission(const TFreshAdmission& admission, const TActorContext& ctx);
+        TFreshShortfall GetFreshReservationShortfall(const TFreshAdmission& admission) const;
+        // Hands out `chunks`, one run per hull, sized as `split` says.
+        void AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks);
+        void AdmitToFresh(const TFreshAdmission& admission);
+        // Called once admitted records are in Fresh, or instead if they never will be. A rotation that was
+        // waiting for them to land happens here.
+        void LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx);
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

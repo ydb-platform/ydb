@@ -8,7 +8,7 @@ Troubleshooting performance issues in {{ ydb-short-name }} involves the followin
 
 - [{{ ydb-short-name }} metrics](../../reference/observability/metrics/index.md)
 
-    Diagnistic steps for most performance issues involve analyzing [Grafana dashboards](../../reference/observability/metrics/grafana-dashboards.md) that use {{ ydb-short-name }} metrics collected by Prometheus For information about how to set up Grafana and Prometheus, see [{#T}](../../devops/observability/monitoring.md).
+    Diagnostic steps for most performance issues involve analyzing [Grafana dashboards](../../reference/observability/metrics/grafana-dashboards.md) that use {{ ydb-short-name }} metrics collected by Prometheus For information about how to set up Grafana and Prometheus, see [{#T}](../../devops/observability/monitoring.md).
 
 - [{{ ydb-short-name }} logs](../../devops/observability/logging.md)
 - [Tracing](../../reference/observability/tracing/setup.md)

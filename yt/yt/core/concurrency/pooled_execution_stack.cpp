@@ -28,7 +28,7 @@ std::shared_ptr<NThreading::TExecutionStack> GetPooledExecutionStack(EExecutionS
     switch (kind) {
 #define XX(kind) \
         case EExecutionStackKind::kind: \
-            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::kind>>().Allocate();
+            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::kind>>().AllocateShared();
         XX(Small)
         XX(Large)
         XX(Huge)

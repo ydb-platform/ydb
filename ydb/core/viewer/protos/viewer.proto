@@ -450,6 +450,7 @@ message TStoragePDisk {
     uint64 SlotSize = 11;
     uint64 SlotCount = 12;
     string MaintenanceStatus = 13;
+    optional bool HasWhiteboardData = 14;
     NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
 }
 
@@ -462,6 +463,7 @@ message TStorageVDisk {
     string Status = 6;
     EFlag DiskSpace = 7;
     repeated TStorageVDisk Donors = 8;
+    optional bool HasWhiteboardData = 9;
     TStoragePDisk PDisk = 20;
     NKikimrWhiteboard.TVDiskStateInfo Whiteboard = 50;
 }

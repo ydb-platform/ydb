@@ -88,7 +88,7 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ **Datashard iterator reads via MVCC**
 1. ❌ *(refused)* ㉓ **Switch to TRope** (or don't use TString/std::string directly, provide zero-copy data passing between components)
 1. ㉓ **Avoid Node Broker as SPF** (NBS must work without Node Broker under emergency conditions)
-1. ㉓ **Subscriptions in SchemeBoard** (optimize interaction with SchemeBoard via subsription to updates)
+1. ㉓ **Subscriptions in SchemeBoard** (optimize interaction with SchemeBoard via subscription to updates)
 
 ## Security
 1. ✅ ㉓ Basic LDAP Support
@@ -117,7 +117,7 @@ We use the following symbols as abbreviations:
 1. ㉔ **Backup** for column tables
 1. ㉔ Column tables **autosharding**
 1. ㉓ 🚧 **Log Store** (log friendly column-oriented storage which allows to create 1+ million tables for logs storing)
-1. ㉓ 🚧 **Column-oriented Tables** (introduce a Column-oriented tables in additon to Row-orinted tables)
+1. ㉓ 🚧 **Column-oriented Tables** (introduce a Column-oriented tables in addition to Row-oriented tables)
 1. ㉓ **Tiered Storage for Column-oriented Tables** (with the ability to store the data in S3)
 
 ## Federated Query

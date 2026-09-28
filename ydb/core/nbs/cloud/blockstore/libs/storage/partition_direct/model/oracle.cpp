@@ -354,6 +354,11 @@ const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
     return HostStatistics[hostIndex];
 }
 
+EHostState TOracle::GetHostState(THostIndex hostIndex) const
+{
+    return HostStates[hostIndex].State;
+}
+
 TString TOracle::Dump() const
 {
     TStringBuilder sb;

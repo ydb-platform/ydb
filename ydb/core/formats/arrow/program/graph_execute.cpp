@@ -165,7 +165,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
-    const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
+    IDataSource& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
     TProcessorContext context(source, std::move(resources), std::nullopt, false);
     NMiniKQL::TThrowingBindTerminator bind;
     std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(std::move(context));
@@ -175,7 +175,7 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
             if (conclusion.IsFail()) {
                 return conclusion;
             } else {
-                AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
+                AFL_VERIFY(!conclusion->IsPending());
             }
         }
         if (visitor->MutableContext().GetResources().HasDataAndResultIsEmpty()) {

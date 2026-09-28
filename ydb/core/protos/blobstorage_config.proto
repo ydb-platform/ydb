@@ -744,6 +744,9 @@ message TConfigRequest {
 
     // current TStorageConfig against which we are processing this request
     google.protobuf.Any StorageConfig = 14;
+
+    // allow reassignment to leave a group with an incorrect physical layout
+    bool IgnoreGroupLayoutChecks = 15;
 }
 
 enum ETriStateBool {
@@ -922,6 +925,7 @@ message TConfigResponse {
             kGroupNotFound = 11;
             kReassignNotViable = 12;
             kGroupGenerationMismatch = 13;
+            kGroupLayoutIncorrect = 14;
         }
 
         message TFailParam {

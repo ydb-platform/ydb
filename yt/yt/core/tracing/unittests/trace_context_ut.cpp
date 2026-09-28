@@ -36,6 +36,32 @@ TEST(TTraceContextTest, ParseLegacyTraceParent)
     EXPECT_FALSE(spanContext.Sampled);
 }
 
+TEST(TTraceContextTest, FormatTraceParent)
+{
+    TSpanContext spanContext{
+        .TraceId = TTraceId::FromStringHex32("4bf92f3577b34da6a3ce929d0e0e4736"),
+        .SpanId = 0x00f067aa0ba902b7ULL,
+        .Debug = true,
+    };
+
+    auto check = [&] (bool sampled, const std::string& expectedTraceParent) {
+        spanContext.Sampled = sampled;
+
+        auto traceParent = FormatTraceParent(spanContext);
+        EXPECT_EQ(expectedTraceParent, traceParent);
+
+        TSpanContext parsedSpanContext;
+        ASSERT_TRUE(TryParseTraceParent(traceParent, parsedSpanContext));
+        EXPECT_TRUE(parsedSpanContext.TraceId == spanContext.TraceId);
+        EXPECT_EQ(parsedSpanContext.SpanId, spanContext.SpanId);
+        EXPECT_EQ(parsedSpanContext.Sampled, spanContext.Sampled);
+        EXPECT_FALSE(parsedSpanContext.Debug);
+    };
+
+    check(/*sampled*/ false, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00");
+    check(/*sampled*/ true, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+}
+
 TEST(TTraceContextTest, RejectMalformedTraceParent)
 {
     for (auto traceParent : {

@@ -210,6 +210,8 @@ message TEvNodeConfigInvokeOnRoot {
         bool WithAttentionToReplication = 12;
         bool UseSelfHealLocalPolicy = 13;
         bool TryToRelocateBrokenDisksLocallyFirst = 14;
+        // Allow reassignment to leave the group with an incorrect physical layout.
+        bool IgnoreGroupLayoutChecks = 15;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.

@@ -393,6 +393,7 @@ class TJsonNodes : public TViewerPipeClient {
                 for (const auto& entry : SysViewPDisks) {
                     const auto& pdisk(entry.GetInfo());
                     auto& pDiskState = PDisks.emplace_back();
+                    pDiskState.SetHasWhiteboardData(false);
                     NKikimrBlobStorage::EDriveStatus driveStatus = NKikimrBlobStorage::EDriveStatus::UNKNOWN;
                     if (NKikimrBlobStorage::EDriveStatus_Parse(pdisk.GetStatusV2(), &driveStatus)) {
                         switch (driveStatus) {
@@ -419,6 +420,7 @@ class TJsonNodes : public TViewerPipeClient {
                 for (const auto& entry : SysViewVDisks) {
                     const auto& vdisk(entry.GetInfo());
                     auto& vDiskState = VDisks.emplace_back();
+                    vDiskState.SetHasWhiteboardData(false);
                     vDiskState.MutableVDiskId()->SetGroupID(vdisk.GetGroupId());
                     vDiskState.MutableVDiskId()->SetGroupGeneration(vdisk.GetGroupGeneration());
                     vDiskState.MutableVDiskId()->SetRing(vdisk.GetFailRealm());
@@ -2688,7 +2690,7 @@ public:
                     for (const auto& vDiskState : vDiskResponse.GetVDiskStateInfo()) {
                         TNode* node = FindNode(vDiskState.GetNodeId());
                         if (node) {
-                            node->VDisks.emplace_back(vDiskState);
+                            node->VDisks.emplace_back(vDiskState).SetHasWhiteboardData(true);
                             node->CalcVDisks();
                         }
                     }
@@ -2700,7 +2702,7 @@ public:
                     TNode* node = FindNode(nodeId);
                     if (node) {
                         for (const auto& protoVDiskState : vDiskState.GetVDiskStateInfo()) {
-                            node->VDisks.emplace_back(protoVDiskState);
+                            node->VDisks.emplace_back(protoVDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcVDisks();
                     }
@@ -2715,7 +2717,7 @@ public:
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
                         TNode* node = FindNode(pDiskState.GetNodeId());
                         if (node) {
-                            node->PDisks.emplace_back(pDiskState);
+                            node->PDisks.emplace_back(pDiskState).SetHasWhiteboardData(true);
                             node->CalcPDisks();
                         }
                     }
@@ -2727,7 +2729,7 @@ public:
                     TNode* node = FindNode(nodeId);
                     if (node) {
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {
-                            node->PDisks.emplace_back(protoPDiskState);
+                            node->PDisks.emplace_back(protoPDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcPDisks();
                     }

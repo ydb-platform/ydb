@@ -11,6 +11,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
@@ -63,7 +65,7 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
-    TString FrontendRegistrationId;
+    TPartitionSessionPtr Session;
     // A queued Ready event must not republish metadata after backend shutdown.
     bool FrontendRegistrationClosed = false;
 
@@ -233,6 +235,14 @@ private:
 
     void HandleUpdateVChunkConfig(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Mount/unmount mutate the session only on the partition actor thread.
+    void HandleMountSession(
+        const TEvPartitionSession::TEvMount::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleUnmountSession(
+        const TEvPartitionSession::TEvUnmount::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateDirtyMapState(

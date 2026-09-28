@@ -28,6 +28,12 @@ constexpr ui32 MaxBlockSize = 128_KB;
 // cloud/blockstore/libs/rdma/iface/client.h
 constexpr ui32 MaxSubRequestSize = 4_MB;
 
+// Classic gRPC payload limit, excluding protobuf overhead.
+// GRpcConfig.MaxMessageSize and client limits must allow the serialized
+// request/response; smaller transport limits can fail with RESOURCE_EXHAUSTED
+// instead of an NBS error.
+constexpr ui64 MaxGrpcIoBytes = 32_MB;
+
 // VChunks in a region count.
 constexpr size_t VChunkPerRegionCount = 32;
 

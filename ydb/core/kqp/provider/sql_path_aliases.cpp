@@ -5,15 +5,35 @@
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
+#include <utility>
+
 namespace NYql {
 namespace {
 
 // Keep path-bearing tags below aligned with TKikimrKey::Extract and provider option handling.
 bool IsPathKey(TStringBuf tag) {
-    return tag == "table" || tag == "tablescheme" || tag == "tablelist" || tag == "topic"
-        || tag == "replication" || tag == "transfer" || tag == "sequence" || tag == "backupCollection"
-        || tag == "backup" || tag == "restore" || tag == "databasePath" || tag == "secret"
-        || tag == "objectId" || tag == "pgObject";
+    static constexpr TStringBuf pathTags[] = {
+        "table",
+        "tablescheme",
+        "tablelist",
+        "topic",
+        "replication",
+        "transfer",
+        "sequence",
+        "backupCollection",
+        "backup",
+        "restore",
+        "databasePath",
+        "secret",
+        "objectId",
+        "pgObject",
+    };
+    for (const auto pathTag : pathTags) {
+        if (tag == pathTag) {
+            return true;
+        }
+    }
+    return false;
 }
 
 TString NormalizeSqlPath(TStringBuf path, const std::function<TString(TStringBuf)>& normalizePath) {
@@ -87,11 +107,22 @@ TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx
 }
 
 bool IsPathOption(TStringBuf tag, TStringBuf option) {
-    return (tag == "replication" && option == "local")
-        || (tag == "transfer" && option == "target")
-        || (tag == "permission" && option == "paths")
-        || ((tag == "table" || tag == "tablescheme") && (option == "renameTo" || option == "data_source_path"))
-        || (tag == "backupCollection" && option == "path");
+    static constexpr std::pair<TStringBuf, TStringBuf> pathOptions[] = {
+        {"replication", "local"},
+        {"transfer", "target"},
+        {"permission", "paths"},
+        {"table", "renameTo"},
+        {"table", "data_source_path"},
+        {"tablescheme", "renameTo"},
+        {"tablescheme", "data_source_path"},
+        {"backupCollection", "path"},
+    };
+    for (const auto& [pathTag, pathOption] : pathOptions) {
+        if (tag == pathTag && option == pathOption) {
+            return true;
+        }
+    }
+    return false;
 }
 
 TExprNode::TPtr RewriteOptionPaths(const TExprNode::TPtr& node, TStringBuf tag, TExprContext& ctx,

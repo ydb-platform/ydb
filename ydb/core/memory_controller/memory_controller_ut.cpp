@@ -489,7 +489,10 @@ Y_UNIT_TEST(MemTable) {
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
 
     server->ProcessMemoryInfo->AllocatedMemory = 1000_MB;
-    runtime.SimulateSleep(TDuration::Seconds(2));
+    // Consumption is refreshed on a controller tick after asynchronous compactions finish.
+    runtime.WaitFor("MemTable consumption below limit", [&] {
+        return server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val() <= static_cast<i64>(100_KB);
+    }, TDuration::Seconds(10));
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), static_cast<i64>(100_KB));
     UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(100_KB));
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));

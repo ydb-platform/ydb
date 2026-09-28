@@ -1743,10 +1743,10 @@ message TImmediateControlsConfig {
             MaxValue: 137438953472,
             DefaultValue: 536870912 }];
         optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
-            Description: "Page Cache Release Rate.",
+            Description: "Page Cache Release Rate. A smaller request is served by the huge page cache alone.",
             MinValue: 0,
-            MaxValue: 134217728,
-            DefaultValue: 8388608 }];
+            MaxValue: 1073741824,
+            DefaultValue: 134217728 }];
         optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
             Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
             MinValue: 0,

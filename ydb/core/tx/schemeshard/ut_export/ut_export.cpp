@@ -1580,17 +1580,25 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         WaitTableSqlExport(StartTableSqlExport(txId, "legacy"));
         UNIT_ASSERT(HasS3File("/legacy/scheme.pb"));
         UNIT_ASSERT(!HasS3File("/legacy/create_table.sql"));
+        const auto legacyScheme = GetS3FileContent("/legacy/scheme.pb");
+        const auto legacySchemeChecksum = GetS3FileContent("/legacy/scheme.pb.sha256");
+
         Ydb::Table::CreateTableRequest scheme;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(GetS3FileContent("/legacy/scheme.pb"), &scheme));
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(legacyScheme, &scheme));
         UNIT_ASSERT_VALUES_EQUAL(scheme.columns_size(), 2);
 
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
         WaitTableSqlExport(StartTableSqlExport(txId, "nested/sql"));
         CheckSqlBackup("/nested/sql", expected);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/nested/sql/scheme.pb"), legacyScheme);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/nested/sql/scheme.pb.sha256"), legacySchemeChecksum);
+
         UNIT_ASSERT(HasS3File("/nested/sql/data_00.csv"));
         UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/nested/sql/data_00.csv"), GetS3FileContent("/legacy/data_00.csv"));
         UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/nested/sql/permissions.pb"), GetS3FileContent("/legacy/permissions.pb"));
         const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/nested/sql/metadata.json"));
+
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetVersion(), 1);
         UNIT_ASSERT(metadata.GetEnablePermissions());
     }

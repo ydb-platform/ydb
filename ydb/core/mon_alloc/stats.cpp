@@ -157,14 +157,15 @@ namespace NKikimr {
 
                 return {
                     total - Min(total, free),
-                    free
+                    free,
+                    0
                 };
             }
         };
 
         struct TFakeAllocState: public IAllocState {
             TState Get() const override {
-                return {0, 0};
+                return {0, 0, 0};
             }
         };
 

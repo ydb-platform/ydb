@@ -331,7 +331,7 @@ private:
 
         // Keep the node/tenant locality check separate from database type.
         if (TenantName != AppData()->TenantName) {
-            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache is not available for this database");
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache view is not available for this database");
             return;
         }
 
@@ -491,7 +491,7 @@ private:
     void ReplyUnsupportedDatabase(TStringBuf databaseType) {
         NYql::TIssues issues;
         issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
-            TStringBuilder() << "Compile cache is not available for " << databaseType << " databases"));
+            TStringBuilder() << "Compile cache view and warmup are not supported for " << databaseType << " databases"));
         ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, issues);
     }
 

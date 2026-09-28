@@ -242,8 +242,7 @@ class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {
     enum class EDatabaseType {
         Unknown,
         Dedicated,
-        Shared,
-        Serverless,
+        Unsupported,
     };
 
     struct TEvCheckDatabaseType : TEventLocal<TEvCheckDatabaseType, TEvents::ES_PRIVATE> {};
@@ -323,10 +322,14 @@ private:
 
 private:
     void CheckDatabaseType() {
+        DatabaseTypeCheckScheduled = false;
         if (DatabaseType != EDatabaseType::Unknown) {
             return;
         }
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+        if (!AppData()->FeatureFlags.GetEnableCompileCacheView() || AppData()->TenantName.empty()) {
+            return;
+        }
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
         request->Record.MutableRequest()->set_path(AppData()->TenantName);
         Send(MakePipePerNodeCacheID(false),
@@ -336,6 +339,7 @@ private:
         const auto delayMs = DatabaseTypeRetryDelay.MilliSeconds();
         Schedule(TDuration::MilliSeconds(delayMs + AppData()->RandomProvider->GenRand() % delayMs),
             new TEvCheckDatabaseType());
+        DatabaseTypeCheckScheduled = true;
         DatabaseTypeRetryDelay = Min(DatabaseTypeRetryDelay * 2, TDuration::Seconds(30));
     }
 
@@ -351,10 +355,8 @@ private:
         {
             return;
         }
-        if (status.has_serverless_resources()) {
-            DatabaseType = EDatabaseType::Serverless;
-        } else if (status.has_required_shared_resources()) {
-            DatabaseType = EDatabaseType::Shared;
+        if (status.has_serverless_resources() || status.has_required_shared_resources()) {
+            DatabaseType = EDatabaseType::Unsupported;
         } else if (status.has_required_resources()) {
             DatabaseType = EDatabaseType::Dedicated;
         } else {
@@ -378,31 +380,32 @@ private:
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
 
-        // Check for tenant mismatch (serverless scenario)
+        // Only expose cache entries for the node's tenant.
         if (AppData()->TenantName != tenant) {
             response->Record.SetNodeId(SelfId().NodeId());
             response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
 
             NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue("Compile cache is not available for this database"));
+            issues.AddIssue(NYql::TIssue("Compile cache view is not available for this database"));
             NYql::IssuesToMessage(issues, response->Record.MutableIssues());
 
             Send(ev->Sender, response.release());
             return;
         }
 
-        if (DatabaseType != EDatabaseType::Dedicated) {
+        if (AppData()->FeatureFlags.GetEnableCompileCacheView() && DatabaseType != EDatabaseType::Dedicated) {
             response->Record.SetNodeId(SelfId().NodeId());
             NYql::TIssues issues;
             if (DatabaseType == EDatabaseType::Unknown) {
+                if (!DatabaseTypeCheckScheduled) {
+                    CheckDatabaseType();
+                }
                 response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                issues.AddIssue(NYql::TIssue("Compile cache database resource type is not known yet"));
+                issues.AddIssue(NYql::TIssue("Compile cache view is unavailable until the database resource type is known"));
             } else {
                 response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
-                    TStringBuilder() << "Compile cache is not available for "
-                        << (DatabaseType == EDatabaseType::Shared ? "shared resource (serverless compute)" : "serverless")
-                        << " databases"));
+                    "Compile cache view and warmup are not supported for serverless or shared resource databases"));
             }
             NYql::IssuesToMessage(issues, response->Record.MutableIssues());
             Send(ev->Sender, response.release());
@@ -1124,6 +1127,7 @@ private:
 private:
     TKqpQueryCachePtr QueryCache;
     EDatabaseType DatabaseType = EDatabaseType::Unknown;
+    bool DatabaseTypeCheckScheduled = false;
     TDuration DatabaseTypeRetryDelay = TDuration::Seconds(1);
 
     TTableServiceConfig TableServiceConfig;

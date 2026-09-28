@@ -1375,7 +1375,7 @@ namespace {
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
                     response->Record.SetNodeId(ev->Cookie);
                     response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
-                    NYql::TIssue issue("Compile cache is not available for shared resource (serverless compute) databases");
+                    NYql::TIssue issue("Compile cache view and warmup are not supported for serverless or shared resource databases");
                     issue.SetCode(NKikimrIssues::TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
@@ -1394,7 +1394,7 @@ namespace {
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
             UNIT_ASSERT_C(warmupComplete->Get()->Success, warmupComplete->Get()->Message);
             UNIT_ASSERT_STRING_CONTAINS(warmupComplete->Get()->Message,
-                "Skipped: Compile cache is not available for shared resource (serverless compute) databases");
+                "Skipped: Compile cache view and warmup are not supported for serverless or shared resource databases");
             UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesLoaded, 0);
             UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesFailed, 0);
             env.Runtime.SimulateSleep(TDuration::Seconds(1));

@@ -1005,12 +1005,14 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
-        if (Mode != EMode::COMMIT && !ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
+        if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
             // A late TEvWriteResult for a shard removed by a reroute: its pending
             // batches were re-sent to the covering shards, so a result from the dead
-            // tablet is expected and harmless. COMMIT mode is exempt: its completions
-            // (cookie 0) arrive from every participant shard, including lock-only ones
-            // without a controller record (see the comment below).
+            // tablet is expected and harmless and is dropped in every mode. The guard
+            // is strict, because only shards with a controller record can legitimately
+            // reply to this actor: commit completions come from its own write-set
+            // shards, while completions of lock-only participants are handled by the
+            // buffer write actor and never arrive here.
             // TODO: in future don't ignore non-retryable errors and fail immediately
             YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
                 {"logPrefix", this->LogPrefix},
@@ -1023,11 +1025,13 @@ public:
         // answer echoing the cookie of the shard's last sent message is meaningful:
         // results of superseded messages are ignored (see IsSupersededWriteResult for
         // the safety rationale). Two kinds of results must pass the filter:
-        //  - COMMIT-mode completions: they are not replies to a per-message EvWrite
-        //    (distributed and volatile commit completions carry cookie 0), and every
-        //    participant shard (including lock-only ones without a controller record)
-        //    sends exactly one completion that must be processed, so the whole rule
-        //    does not apply in COMMIT mode.
+        //  - COMMIT-mode completions: they echo the cookie of the shard's last
+        //    PREPARE message (the datashard stores the request cookie in the write
+        //    operation and reuses it on send), but their batches were already
+        //    popped at prepare-ack time, so the shard has no message metadata and
+        //    the cookie never matches. Hence the whole rule does not apply in
+        //    COMMIT mode: without the exemption every commit completion would be
+        //    dropped as superseded and the commit acknowledgement would be lost.
         //  - Cookie-0 results: not tied to a specific message. Current-version shards
         //    echo the request cookie on all per-message replies, including gate
         //    rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard split/offlined
@@ -1051,8 +1055,8 @@ public:
             Counters->WriteActorRemoteShardWrites->Inc();
         }
 
-        // Note: ABORTED EvWriteResult can have Cookie=0 if it was lost at datashard.
-        if (Mode != EMode::COMMIT && IsSupersededWriteResult(ev->Cookie, metadata)
+        if (Mode != EMode::COMMIT
+                && IsSupersededWriteResult(ev->Cookie, metadata)
                 && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
             YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
                 {"logPrefix", this->LogPrefix},

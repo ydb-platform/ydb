@@ -98,8 +98,8 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         // A result for a shard unknown to the controller is dropped.
         UNIT_ASSERT(IsSupersededWriteResult(7, std::nullopt));
         // Zero-cookie results (replies of shards that do not echo cookies, e.g.
-        // 26-3 datashards; distributed/volatile commit completions) are not tied
-        // to a specific message and always pass.
+        // 26-3 datashards during a rolling upgrade) are not tied to a specific
+        // message and always pass.
         UNIT_ASSERT(!IsSupersededWriteResult(0, std::nullopt));
         UNIT_ASSERT(!IsSupersededWriteResult(0, MetadataWithCookie(7)));
     }
@@ -159,11 +159,12 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
     Y_UNIT_TEST_F(MetadataLookupDoesNotCreateShardEntries, TShardedWriteControllerFixture) {
         WriteRound(1, 11, 0);
 
-        // A lookup for an unknown shard (e.g. a COMMIT-mode completion from a
-        // lock-only participant) reports no metadata and must not leak into the
+        // A lookup for an unknown shard must not create a shard entry: the write
+        // actor drops results of shards without a controller record before any
+        // lookup, and unknown-shard lookups are asserted in the controller.
+        // Verify the unknown shard stays unknown and does not leak into the
         // shard set used for external-prepare exclusion.
-        UNIT_ASSERT(!Controller->GetMessageMetadata(UnknownShardId));
-        UNIT_ASSERT(!Controller->OnMessageAcknowledged(UnknownShardId, 1));
+        UNIT_ASSERT(!Controller->HasShard(UnknownShardId));
 
         const auto shardIds = Controller->GetShardsIds();
         UNIT_ASSERT_VALUES_EQUAL(shardIds.size(), 1);

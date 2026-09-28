@@ -2,6 +2,7 @@
 
 #include "detailed_metrics_counter_set.h"
 #include "detailed_metrics_tree.h"
+#include "memory_tags.h"
 #include "ydb_metrics_aggregator.h"
 #include "ydb_metrics_mapper.h"
 
@@ -239,6 +240,7 @@ namespace NKikimr {
                 ui32 nodeId,
                 bool isFollowerRole,
                 const NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& tables) override {
+                NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
                 TContributions contributions;
                 for (const auto& table : tables) {
                     const TString path(MakeRelativeTablePath(DatabasePrefix, table.GetTablePath()));
@@ -259,11 +261,13 @@ namespace NKikimr {
             }
 
             void DropNode(ui32 nodeId) override {
+                NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
                 ReconcileContributions({nodeId, false}, {});
                 ReconcileContributions({nodeId, true}, {});
             }
 
             void RecalculateAllCounters() override {
+                NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
                 for (auto& [_, table] : Tables) {
                     for (auto& [key, bucket] : table.Buckets) {
                         bucket->Publish();
@@ -369,6 +373,7 @@ namespace NKikimr {
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
         THolder<TTabletCountersBase> executorCountersTemplate) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
         return MakeIntrusive<TProcessorDatabaseMetricsAggregatorImpl>(
             rawCounterGroup, targetCounterGroup, databasePath, std::move(executorCountersTemplate));
     }

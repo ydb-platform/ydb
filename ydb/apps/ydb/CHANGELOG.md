@@ -1,4 +1,5 @@
 
+* Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.
 * Fixed `ydb tools restore` failing on `Float` and `Double` NaN/infinity values in local backups, and added file, line, column, and value context to parsing errors.

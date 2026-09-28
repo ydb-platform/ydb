@@ -160,8 +160,11 @@ public:
 
         // PlanJson is a plan for a transaction, we need to reshape it into a query plan
         if (TransformCtx->PlanJson.has_value()) {
+            YQL_CLOG(TRACE, CoreDq) << "Set query plan";
+
             //FIXME: We set the plan for the last transaction in the query
             auto txId = query.Transactions().Size() - 1;
+
             auto & txProto = (*queryProto.MutableTransactions())[txId];
             auto & plan = TransformCtx->PlanJson.value();
 

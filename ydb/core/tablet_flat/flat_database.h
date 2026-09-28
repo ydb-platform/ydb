@@ -275,6 +275,9 @@ public:
      */
     void RollbackChanges();
 
+    // Page environment of the current transaction. Valid between Begin and Commit.
+    IPages* GetPagesEnv() const noexcept { return Env; }
+
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);

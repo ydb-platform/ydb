@@ -2,6 +2,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLi
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadActiveOneDeadInactiveMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit200_B
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestRandomizedPersistent4Plus2Block
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestRandomizedPersistentMirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
@@ -10,6 +11,7 @@ ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk2 VDiskTest.HugeBlobWrite
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
+ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts
@@ -40,6 +42,7 @@ ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploadFinalization
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column+UseStreamIndex+UseChannelsV2
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column+UseStreamIndex-UseChannelsV2
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStreamIndex+UseChannelsV2
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
@@ -80,6 +83,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
 ydb/core/kqp/ut/rbo KqpRboYql.Limit+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Limit-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
+ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.WindowFunctions-ColumnStore
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
@@ -88,6 +92,7 @@ ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddNotNullDefaultColumn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteAllByGeneratedPredicate
+ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedColumnIn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningMultipleRows
@@ -95,26 +100,32 @@ ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.GeneratedInPrimaryKeyRejected
 ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
+ydb/core/kqp/ut/scheme GeneratedStored.InsertReturningMultipleRows
+ydb/core/kqp/ut/scheme GeneratedStored.NonRowDependentRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NotNullFailingCastRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NotNullJsonExistsRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NullableOptionalExprAccepted
 ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
+ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningGeneratedWithDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningGeneratedWithoutDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingRow
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMultipleRows
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnNonDependency
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnViaSelect
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateWhereGeneratedSetSharedDependency
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateWhereGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningAllColumns
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningGeneratedWithDependencies
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.Update
+ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.UpdateOn
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.Upsert
 ydb/core/kqp/ut/scheme GeneratedVirtual.AlterAddGeneratedColumnIsRejected
 ydb/core/kqp/ut/scheme GeneratedVirtual.MetadataPersistsAcrossSchemeShardRestart
@@ -122,12 +133,15 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstr
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnsWithParameterizedAndPgTypes
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualExpressionReturningNull
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadWindowAndSubquery
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningAfterSchemaChanges-EnableStreamWrite
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningDmlMatrix-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningNoMatchDoesNotSynthesizeVirtualRows
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionDuplicateKeys
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionLiteralDefaultDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithGlobalUniqueIndex
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithPlainFulltextIndex
+ydb/core/kqp/ut/scheme GeneratedVirtual.SchemeShardRestartFirstActionReturnsVirtualColumn
 ydb/core/kqp/ut/scheme GeneratedVirtual.SyncAndUniqueIndexBuildsIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
@@ -135,18 +149,23 @@ ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporary+IsOlap
+ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AddSerialColumnForbidden
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefault-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultNoExistingDefault
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnColumnTable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert+EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Replace+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex+EnableIndexStreamWrite
@@ -154,6 +173,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIn
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Replace-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Upsert+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Upsert-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
@@ -205,6 +225,7 @@ ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRW
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
+ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.StrictSerializable_TopicWrite_CommitTimestamp
 ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeInsertsOneShard
 ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeUpsertsMultiShard
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
@@ -440,6 +461,7 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownFormatReje
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ZeroPartitionsRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut unittest.sole chunk
 ydb/services/persqueue_v1/actors/schema/topic/ut SchemaOps_TopicAPI.AlterTopicAddAndDropConsumer
+ydb/services/persqueue_v1/actors/schema/topic/ut SchemaOps_TopicAPI.AlterTopicWriteLimits
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/services/sqs_topic/ut unittest.sole chunk

@@ -299,13 +299,14 @@ struct TTestHelper {
         return WaitReadResult();
     }
 
-    void CheckKeys(size_t keyFrom, size_t expectedRowCount) {
-        Y_UNUSED(keyFrom);
-
+    void CheckKeys(size_t keyFrom, size_t expectedRowCount, ui32 maxRowsInResult = 0) {
         TVector<TString> from = {TString("user")};
         TVector<TString> to = {TString("zzz")};
 
         auto request = GetBaseReadRequest();
+        if (maxRowsInResult) {
+            request->Record.SetMaxRowsInResult(maxRowsInResult);
+        }
         AddRangeQuery(
             *request,
             from,
@@ -314,20 +315,33 @@ struct TTestHelper {
             true
         );
 
+        const auto readId = request->Record.GetReadId();
         auto readResult = SendRead(request.release());
-        UNIT_ASSERT(readResult);
+        size_t rowsRead = 0;
+        for (;;) {
+            UNIT_ASSERT(readResult);
 
-        const auto& record = readResult->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->GetRowsCount(), expectedRowCount);
+            const auto& record = readResult->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetReadId(), readId);
 
-        auto nrows = readResult->GetRowsCount();
-        for (size_t i = 0; i < nrows; ++i) {
-            auto cells = readResult->GetCells(i);
-            const auto& keyCell = cells[0];
-            TString key(keyCell.Data(), keyCell.Size());
-            UNIT_ASSERT_VALUES_EQUAL(key, GetKey(i + keyFrom));
+            auto nrows = readResult->GetRowsCount();
+            for (size_t i = 0; i < nrows; ++i) {
+                auto cells = readResult->GetCells(i);
+                const auto& keyCell = cells[0];
+                TString key(keyCell.Data(), keyCell.Size());
+                UNIT_ASSERT_VALUES_EQUAL(key, GetKey(keyFrom + rowsRead + i));
+            }
+            rowsRead += nrows;
+            if (record.GetFinished()) {
+                break;
+            }
+
+            // An unlimited read may yield partial results before it finishes.
+            UNIT_ASSERT(!record.GetLimitReached());
+            readResult = WaitReadResult();
         }
+        UNIT_ASSERT_VALUES_EQUAL(rowsRead, expectedRowCount);
     }
 
     std::unique_ptr<TEvLoad::TEvLoadTestFinished> RunTestLoad(
@@ -701,6 +715,8 @@ Y_UNIT_TEST_SUITE(ReadLoad) {
 
         // sanity check that there was data in table
         helper.CheckKeys(0, expectedRowCount);
+        // Also check a read that deterministically spans multiple result messages.
+        helper.CheckKeys(0, expectedRowCount, 100);
     }
 
     Y_UNIT_TEST(ShouldReadIterateMoreThanRows) {

@@ -53,6 +53,14 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
 
     CpuActualDemand = Min<ui64>(CeilToCpu(PreciseCpuActualDemand), GetCpuLimit());
     PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuActualDemand * MicroCoresPerCore);
+
+    // The guarantee is configured for the leaves, an intermediate element reserves what its children reserve.
+    if (!IsLeaf()) {
+        CpuGuarantee = GetChildrenCpuGuarantee();
+    }
+
+    // Nothing is reserved beyond CpuActualDemand - an idle guarantee is left to the others.
+    CpuGuarantee = Min<ui64>(GetCpuGuarantee(), CpuActualDemand);
 }
 
 namespace {
@@ -137,18 +145,30 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
 } // namespace
 
 void TTreeElement::DistributeFairShare() {
+    const ui64 totalGuaranteedShare = GetChildrenCpuGuarantee();
+
+    // The guarantees overflow FairShare (e.g. of the databases, which are not validated) - split it by them.
+    if (totalGuaranteedShare >= FairShare) {
+        ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
+            // TODO: distribute the resources lost cause of integer division.
+            child->FairShare = totalGuaranteedShare > 0 ? child->GetCpuGuarantee() * FairShare / totalGuaranteedShare : 0;
+        });
+        return;
+    }
+
     std::vector<TTreeElement*> children(ChildrenSize());
     std::vector<ui64> unsatisfiedDemand(ChildrenSize());
 
-    // 1st pass: split FairShare by CpuActualDemand - the contested CPU goes to those who really want it.
+    // 1st pass: give CpuGuarantee, then split the rest by CpuActualDemand - the contested CPU goes to those who really want it.
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
         Y_ASSERT(child->CpuMaxDemand >= child->CpuActualDemand);
+        Y_ASSERT(child->CpuActualDemand >= child->GetCpuGuarantee());
         children.at(i) = child;
-        child->FairShare = 0;
-        unsatisfiedDemand.at(i) = child->CpuActualDemand;
+        child->FairShare = child->GetCpuGuarantee();
+        unsatisfiedDemand.at(i) = child->CpuActualDemand - child->GetCpuGuarantee();
     });
 
-    const auto leftFairShare = FillDemand(children, unsatisfiedDemand, FairShare);
+    const auto leftFairShare = FillDemand(children, unsatisfiedDemand, FairShare - totalGuaranteedShare);
 
     // 2nd pass: give leftFairShare as a headroom up to CpuMaxDemand - to grow before the next snapshot.
     for (size_t i = 0; i < children.size(); ++i) {
@@ -244,6 +264,7 @@ void TPool::AccountSnapshotDuration(TDuration period) {
         Counters->Demand->Set(CpuMaxDemand * 1'000'000);
         Counters->FairShare->Add(fairShare);
         Counters->ActualDemand->Add(CpuActualDemand * period.MicroSeconds());
+        Counters->EffectiveGuarantee->Add(GetCpuGuarantee() * period.MicroSeconds());
 
         const auto wanted = CpuBurstUsage + CpuBurstThrottle;
         float adjustedSatisfaction = 1.0; // nothing was wanted - so nothing is missing

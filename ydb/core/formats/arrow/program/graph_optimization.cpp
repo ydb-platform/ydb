@@ -263,6 +263,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         nodeReserve->GetProcessor()->AddOutput(0);
         fetchNode->GetProcessor()->AddInput(0);
         AddEdge(nodeReserve.get(), fetchNode, 0);
+        changed = true;
     };
     if (nodeFetch) {
         attachReserveMemory(nodeFetch);

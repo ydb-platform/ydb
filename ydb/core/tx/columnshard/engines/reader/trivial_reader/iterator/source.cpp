@@ -237,6 +237,9 @@ THashMap<IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>>
     return result;
 }
 
+// Re-runs the same resolution as DoStartFetchIndex. They agree only while the stage-data index
+// collection is still empty: reserve runs before the index fetch, FindIndexFor misses, and the schema
+// FindSkipIndexes path decides. A reserve after fetched index data has landed can pick a different meta.
 ui64 TPortionDataSource::GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const {
     THashSet<ui32> indexIds;
     for (auto&& [_, indexContext] : indexes) {

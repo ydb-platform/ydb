@@ -168,13 +168,12 @@ Y_UNIT_TEST_SUITE(TIndexReadMemoryTracking) {
 
         NActors::TTestActorRuntimeBase runtime(1, false);
         runtime.Initialize();
-        // relwithdebinfo aborts on a log component outside the registered mask.
+        // relwithdebinfo aborts when a log check touches a component outside the registered mask.
+        // IDataSource logs COLUMNSHARD_SCAN_EVLOG, which is not covered by TX_COLUMNSHARD_SCAN alone.
         runtime.GetLogSettings(0)->Append(
-            NKikimrServices::TX_COLUMNSHARD_SCAN, NKikimrServices::TX_COLUMNSHARD_SCAN + 1, [](NActors::NLog::EComponent) -> const TString& {
-                static TString name = "TX_COLUMNSHARD_SCAN";
-                return name;
+            NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, [](NActors::NLog::EComponent component) -> const TString& {
+                return NKikimrServices::EServiceKikimr_Name(component);
             });
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_ERROR);
         const auto edge = runtime.AllocateEdgeActor();
         auto readContext = std::make_shared<TReadContext>(TTestStoragesManager::GetInstance(), std::make_shared<TMockDataAccessorsManager>(edge),
             std::make_shared<NColumnFetching::TColumnDataManager>(edge),

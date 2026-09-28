@@ -1235,6 +1235,20 @@ void TPQTabletFixture::WaitForExecStep(ui64 step)
 namespace {
 
 constexpr ui32 WRITE_TX_COOKIE = 5; // TPersQueue::WRITE_TX_COOKIE
+constexpr const char* TX_INFO_KEY = "_txinfo";
+
+NKikimrPQ::TTabletTxInfo ParseTxWritesFromWriteTxRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    for (const auto& cmd : request.GetCmdWrite()) {
+        if (cmd.GetKey() == TX_INFO_KEY) {
+            NKikimrPQ::TTabletTxInfo info;
+            UNIT_ASSERT(info.ParseFromString(cmd.GetValue()));
+            return info;
+        }
+    }
+    UNIT_FAIL("WRITE_TX request has no _txinfo");
+    return {};
+}
 
 }
 

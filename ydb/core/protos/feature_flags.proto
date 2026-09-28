@@ -419,4 +419,6 @@ message TFeatureFlags {
     // Under space pressure, lets PDisk choose which level compaction runs on the disk: one at a time, the one
     // that frees the most chunks, which then reserves exactly the chunks it will write before writing any.
     optional bool EnableVDiskPlannedCompaction = 343 [default = false, (RequireRestart) = true];
+    // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
+    optional bool EnableSavepoints = 344 [default = false];
 }

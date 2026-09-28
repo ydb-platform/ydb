@@ -7,7 +7,7 @@
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT> {
-        ui64 FairShare = 0;
+        ui64 CpuFairShare = 0;
 
         std::atomic<ui64> CpuMaxDemand = 0;
 
@@ -16,6 +16,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
         ui64 CpuBurstUsage = 0;
         ui64 CpuBurstThrottle = 0;
+
+        ui64 MemoryFairShare = 0;
+        ui64 MemoryDemand = 0;
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
@@ -26,6 +29,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         void UpdateTopDown();
 
     private:
+        void UpdateMemoryTopDown();
+        void UpdateCpuTopDown();
         void DistributeFairShare();
     };
 
@@ -78,6 +83,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     public:
         const TMonotonic Timestamp = TMonotonic::Now();
         ui64 TotalLimit = Infinity();
+        ui64 MemoryTotalLimit = Infinity();
     };
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

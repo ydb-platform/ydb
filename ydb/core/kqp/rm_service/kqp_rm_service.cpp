@@ -51,13 +51,13 @@ static bool IsMemoryPoolLimited(const TString& poolId, double memoryPoolPercent)
 }
 
 TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-    const TString& database, bool collectBacktrace)
-    : TTxState(resourceManager, txId, now, poolId, memoryPoolPercent, database, collectBacktrace,
+    const TString& database, bool collectBacktrace, std::shared_ptr<ITxMemoryTracker> memoryTracker)
+    : TTxState(resourceManager, txId, now, poolId, memoryPoolPercent, database, collectBacktrace, std::move(memoryTracker),
         resourceManager->GetMemoryResourceCookies(database, poolId, NormalizePoolPercent(memoryPoolPercent)))
 {}
 
 TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-    const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies)
+    const TString& database, bool collectBacktrace, std::shared_ptr<ITxMemoryTracker> memoryTracker, TMemoryResourceCookies cookies)
     : ResourceManager(resourceManager)
     , Counters(resourceManager->GetCounters())
     , TxId(txId)
@@ -69,6 +69,7 @@ TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 t
     , CollectBacktrace(collectBacktrace)
     , TotalMemoryCookie(std::move(cookies.Total))
     , PoolMemoryCookie(std::move(cookies.Pool))
+    , MemoryTracker(std::move(memoryTracker))
 {}
 
 TTxState::~TTxState() {

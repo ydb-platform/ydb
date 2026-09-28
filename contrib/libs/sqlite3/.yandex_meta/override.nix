@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "3.44.5";
+  version = "3.45.3";
 
   src = fetchFromGitHub {
     owner = "sqlite";
     repo = "sqlite";
     rev = "version-${version}";
-    hash = "sha256-nMNMTUynVtVukui5sYQPoGSbMZImjTyW0aqwGwuki4s=";
+    hash = "sha256-djlZvfQp08hQbrvy+wBQ9UaqOW0LIMqOrlU0tXuK/J0=";
   };
 
   nativeBuildInputs = [ tcl ];

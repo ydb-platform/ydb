@@ -66,16 +66,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        size_t chunksToAccept = msg.ChunkIds.size();
-        if (Y_UNLIKELY(IsBroken())) {
-            const size_t pendingAllocations = CountPendingPersistentBufferChunkAllocations();
-            chunksToAccept = pendingAllocations > ChunkReserve.size()
-                ? Min(chunksToAccept, pendingAllocations - ChunkReserve.size())
-                : 0;
-        }
-
-        for (size_t i = 0; i < chunksToAccept; ++i) {
-            const TChunkIdx chunkIdx = msg.ChunkIds[i];
+        for (const TChunkIdx chunkIdx : msg.ChunkIds) {
             // Broken state retains only PersistentBuffer allocations. PB initializes its own
             // on-disk format, so the checksums-disabled data-chunk zeroing is neither needed nor
             // possible after direct DDisk I/O has been stopped.
@@ -89,6 +80,66 @@ namespace NKikimr::NDDisk {
         }
 
         HandleChunkReserved();
+    }
+
+    void TDDiskActor::HandleStopping(NPDisk::TEvChunkReserveResult::TPtr ev) {
+        Y_ABORT_UNLESS(Stopping && ReserveInFlight);
+        ReserveInFlight = false;
+        if (ev->Get()->Status == NKikimrProto::OK) {
+            for (const TChunkIdx chunkIdx : ev->Get()->ChunkIds) {
+                ChunkReserve.push(chunkIdx);
+            }
+            if (OwnDrainFinishing) {
+                ReleaseUncommittedChunks();
+            }
+        }
+        TryCompleteStop();
+    }
+
+    void TDDiskActor::ReleaseUncommittedChunks() {
+        if (IsPersistentBufferActor || !PDiskParams || !LogReplayComplete) {
+            return;
+        }
+        Y_ABORT_UNLESS(Stopping && !GetDirectIoInflight());
+
+        TVector<TChunkIdx> chunks;
+        while (!ChunkReserve.empty()) {
+            chunks.push_back(ChunkReserve.front());
+            ChunkReserve.pop();
+        }
+        for (const auto& [chunkIdx, _] : FormattingChunks) {
+            chunks.push_back(chunkIdx);
+        }
+        FormattingChunks.clear();
+        chunks.insert(chunks.end(), PendingChunkRelease.begin(), PendingChunkRelease.end());
+        PendingChunkRelease.clear();
+        for (const auto& [_, allocation] : DataChunkAllocationsInFlight) {
+            // A submitted commit can still succeed after this actor stops.
+            if (!allocation.LogIssued) {
+                chunks.push_back(allocation.ChunkIdx);
+            }
+        }
+        if (IntegrityManager) {
+            for (const TChunkIdx chunkIdx : IntegrityManager->GetIntegrityChunkIdxs()) {
+                if (!IsIntegrityChunkCommitted(chunkIdx)) {
+                    chunks.push_back(chunkIdx);
+                }
+            }
+        }
+        std::sort(chunks.begin(), chunks.end());
+        chunks.erase(std::unique(chunks.begin(), chunks.end()), chunks.end());
+        // PDisk validates the entire batch: repeating an already forgotten ID
+        // would reject fresh reservations in the same request as well.
+        std::erase_if(chunks, [this](TChunkIdx chunkIdx) {
+            return !ShutdownChunkReleasesIssued.insert(chunkIdx).second;
+        });
+        if (!chunks.empty()) {
+            YDB_LOG_NOTICE("DDisk releasing uncommitted reservations", {"DDiskId", DDiskId}, {"chunks", chunks});
+            auto request = std::make_unique<NPDisk::TEvChunkForget>(
+                PDiskParams->Owner, PDiskParams->OwnerRound, std::move(chunks));
+            request->IsDDisk = true;
+            Send(BaseInfo.PDiskActorID, request.release());
+        }
     }
 
     void TDDiskActor::IssueNextChunkFormatWrite(TChunkIdx chunkIdx) {
@@ -121,6 +172,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvPrivate::TEvChunkFormatIoResult::TPtr ev) {
         const auto& msg = *ev->Get();
         if (Stopping) {
+            PendingChunkRelease.insert(msg.ChunkIdx);
             FormattingChunks.erase(msg.ChunkIdx);
             return;
         }
@@ -129,6 +181,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(it->second == msg.OffsetInBytes);
 
         if (msg.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            PendingChunkRelease.insert(msg.ChunkIdx);
             FormattingChunks.erase(it);
             EnterBroken(TStringBuilder()
                 << "failed to zero-format newly reserved chunk " << msg.ChunkIdx
@@ -137,6 +190,7 @@ namespace NKikimr::NDDisk {
             return;
         }
         if (Y_UNLIKELY(IsBroken())) {
+            PendingChunkRelease.insert(msg.ChunkIdx);
             FormattingChunks.erase(it);
             HandleChunkReserved();
             return;
@@ -225,10 +279,10 @@ namespace NKikimr::NDDisk {
         if (Y_UNLIKELY(IsBroken())) {
             const size_t pendingAllocations = CountPendingPersistentBufferChunkAllocations();
             if (pendingAllocations > ChunkReserve.size() && !ReserveInFlight) {
-                Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(
-                    PDiskParams->Owner,
-                    PDiskParams->OwnerRound,
-                    pendingAllocations - ChunkReserve.size()));
+                auto request = std::make_unique<NPDisk::TEvChunkReserve>(PDiskParams->Owner,
+                    PDiskParams->OwnerRound, pendingAllocations - ChunkReserve.size());
+                request->IsDDisk = true;
+                Send(BaseInfo.PDiskActorID, request.release(), IEventHandle::FlagTrackDelivery);
                 ReserveInFlight = true;
             }
             return;
@@ -242,8 +296,10 @@ namespace NKikimr::NDDisk {
                 {"minChunksReserved", MinChunksReserved},
                 {"formattingChunks", FormattingChunks.size()},
                 {"requestCount", MinChunksReserved - refillChunks});
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound,
-                MinChunksReserved - refillChunks));
+            auto request = std::make_unique<NPDisk::TEvChunkReserve>(PDiskParams->Owner, PDiskParams->OwnerRound,
+                MinChunksReserved - refillChunks);
+            request->IsDDisk = true;
+            Send(BaseInfo.PDiskActorID, request.release(), IEventHandle::FlagTrackDelivery);
             ReserveInFlight = true;
         }
     }

@@ -213,6 +213,7 @@ void ToOperation(const NKikimrSetColumnConstraint::TSetColumnConstraint& constra
     if (constraint.HasUserSID()) {
         operation->set_created_by(constraint.GetUserSID());
     }
+    operation->mutable_issues()->CopyFrom(constraint.GetIssues());
 
     switch (constraint.GetState()) {
         case Ydb::Table::SetNotNullState::STATE_DONE:

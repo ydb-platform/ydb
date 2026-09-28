@@ -2,7 +2,6 @@
 
 #include <cstdint>
 
-using namespace NYdb::NUdfStore::NAbi;
 
 //! Nested helpers with stable wasm export names for a readable WAVM call stack
 //! when the trap is translated by InvokeUdfExport (describeException → "Call stack:").
@@ -22,7 +21,7 @@ __attribute__((visibility("default"))) void oob_middle() {
 //! Oob::crash() — intentional memory trap to demo stack printing.
 __attribute__((visibility("default"))) void crash(
     TExpressionContext* /*context*/,
-    TUnversionedValue* /*result*/)
+    uint64_t* /*result*/)
 {
     oob_middle();
 }
@@ -31,7 +30,7 @@ __attribute__((visibility("default"))) void crash(
 //! Index is volatile so the compiler cannot fold the access away.
 __attribute__((visibility("default"))) void bad_index(
     TExpressionContext* /*context*/,
-    TUnversionedValue* /*result*/)
+    uint64_t* /*result*/)
 {
     char buf[8] = {};
     volatile int idx = 1 << 28;
@@ -67,7 +66,7 @@ __attribute__((visibility("default"))) void null_middle() {
 //! Oob::null_deref() — null base + field access (trap + stack).
 __attribute__((visibility("default"))) void null_deref(
     TExpressionContext* /*context*/,
-    TUnversionedValue* /*result*/)
+    uint64_t* /*result*/)
 {
     null_middle();
 }
@@ -86,7 +85,7 @@ __attribute__((visibility("default"))) void bad_ref_middle() {
 //! Oob::bad_ref() — use of a poisoned / dangling-style reference (trap + stack).
 __attribute__((visibility("default"))) void bad_ref(
     TExpressionContext* /*context*/,
-    TUnversionedValue* /*result*/)
+    uint64_t* /*result*/)
 {
     bad_ref_middle();
 }

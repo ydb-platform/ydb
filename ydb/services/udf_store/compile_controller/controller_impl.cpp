@@ -69,11 +69,10 @@ TWasmCompileController::TWasmCompileController(
     , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
-        ESimpleCounters_descriptor,
-        ECumulativeCounters_descriptor,
-        EPercentileCounters_descriptor,
-        ETxTypes_descriptor
-    >());
+                            ESimpleCounters_descriptor,
+                            ECumulativeCounters_descriptor,
+                            EPercentileCounters_descriptor,
+                            ETxTypes_descriptor>());
     TabletCounters = TabletCountersPtr.Get();
 }
 
@@ -330,6 +329,16 @@ void TWasmCompileController::Handle(TEvControllerPrivate::TEvReconcileResult::TP
         return;
     }
     ArtifactsByCpuSpec[msg->CpuSpec] = std::move(msg->ArtifactKeys);
+    for (const auto& entry : Modules) {
+        if (HasArtifact(msg->CpuSpec, entry.Name, entry.Kind, entry.Uid)) {
+            BroadcastArtifactReady(TGapKey{
+                .Name = entry.Name,
+                .Kind = entry.Kind,
+                .Uid = entry.Uid,
+                .CpuSpec = msg->CpuSpec,
+            });
+        }
+    }
     RebuildQueue();
     ScheduleAssignments();
 }
@@ -364,8 +373,7 @@ bool TWasmCompileController::HasArtifact(
     const TString& cpuSpec,
     const TString& name,
     const TString& kind,
-    const TString& uid) const
-{
+    const TString& uid) const {
     const auto it = ArtifactsByCpuSpec.find(cpuSpec);
     if (it == ArtifactsByCpuSpec.end()) {
         return false;
@@ -726,11 +734,7 @@ void TWasmCompileController::CollectStaleRows(TStateUpdate& update) {
 }
 
 void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
-    if (update.ErasedAssignments.empty()
-        && update.ErasedAttempts.empty()
-        && update.UpdatedAttempts.empty()
-        && update.ReadyBroadcasts.empty()
-        && update.ErasedWorkers.empty())
+    if (update.ErasedAssignments.empty() && update.ErasedAttempts.empty() && update.UpdatedAttempts.empty() && update.ReadyBroadcasts.empty() && update.ErasedWorkers.empty())
     {
         return;
     }
@@ -759,6 +763,35 @@ void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
     }
 
     RunTxFinish(std::move(update));
+}
+
+void TWasmCompileController::Handle(TEvCompileController::TEvDescribeModule::TPtr& ev) {
+    const auto& request = ev->Get()->Record;
+    THashSet<TString> platforms;
+    for (const auto& [node, worker] : Workers) {
+        platforms.insert(worker.CpuSpec);
+    }
+    for (const auto& [cpuSpec, artifacts] : ArtifactsByCpuSpec) {
+        platforms.insert(cpuSpec);
+    }
+    // Retain a platform's failure even while its worker is disconnected.
+    for (const auto& [key, attempt] : Attempts) {
+        platforms.insert(key.CpuSpec);
+    }
+    auto result = std::make_unique<TEvCompileController::TEvDescribeModuleResult>();
+    for (const auto& cpuSpec : platforms) {
+        const TGapKey key{request.GetName(),
+                          request.GetKind() == NKikimrUdfStore::ARTIFACT_KIND_LIBRARY ? "library" : "module",
+                          request.GetUid(), cpuSpec};
+        auto* platform = result->Record.AddPlatforms();
+        platform->SetCpuSpec(cpuSpec);
+        platform->SetCompiling(Assignments.contains(key));
+        if (const auto it = Attempts.find(key); it != Attempts.end() && it->second.Poisoned) {
+            platform->SetFailed(true);
+            platform->SetError(it->second.LastError);
+        }
+    }
+    Send(ev->Sender, result.release(), 0, ev->Cookie);
 }
 
 void TWasmCompileController::Handle(TEvCompileController::TEvRegister::TPtr& ev) {

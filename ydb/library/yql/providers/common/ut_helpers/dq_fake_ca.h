@@ -185,7 +185,7 @@ private:
 };
 
 struct TFakeCASetup {
-    TFakeCASetup();
+    explicit TFakeCASetup(ui32 nodeCount = 1);
     ~TFakeCASetup();
 
     // Passes away async input / output actors owned by the fake compute actor while the actor
@@ -282,4 +282,3 @@ private:
 };
 
 } // namespace NYql::NDq
-

@@ -31,8 +31,12 @@ struct TEvPrivate {
         EvResolveSecretResult,
         EvResolveResourceIdResult,
         EvAlterDstResult,
+        EvSchemaChangeDstAlterResult,
+        EvSchemaChangeDstAlterTxId,
+        EvSchemaChangeDstAlterTxIdSaved,
         EvRemoveWorker,
         EvCompleteWorkerSet,
+        EvResumeDeferredAlter,
         EvDescribeTargetsResult,
         EvRequestCreateStream,
         EvAllowCreateStream,
@@ -221,6 +225,43 @@ struct TEvPrivate {
     struct TEvAlterDstResult: public TGenericSchemeResult<TEvAlterDstResult, EvAlterDstResult> {
         explicit TEvAlterDstResult(ui64 rid, ui64 tid,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
+    };
+
+    struct TEvSchemaChangeDstAlterResult
+        : public TGenericSchemeResult<TEvSchemaChangeDstAlterResult, EvSchemaChangeDstAlterResult>
+    {
+        const ui64 DstAlterTxId;
+
+        explicit TEvSchemaChangeDstAlterResult(ui64 rid, ui64 tid, ui64 dstAlterTxId,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
+    };
+
+    struct TEvSchemaChangeDstAlterTxId
+        : public TEventLocal<TEvSchemaChangeDstAlterTxId, EvSchemaChangeDstAlterTxId>
+    {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const ui64 TxId;
+
+        TEvSchemaChangeDstAlterTxId(ui64 rid, ui64 tid, ui64 txId);
+        TString ToString() const override;
+    };
+
+    struct TEvSchemaChangeDstAlterTxIdSaved
+        : public TEventLocal<TEvSchemaChangeDstAlterTxIdSaved, EvSchemaChangeDstAlterTxIdSaved>
+    {
+        const ui64 TxId;
+
+        explicit TEvSchemaChangeDstAlterTxIdSaved(ui64 txId);
+        TString ToString() const override;
+    };
+
+    struct TEvResumeDeferredAlter: public TEventLocal<TEvResumeDeferredAlter, EvResumeDeferredAlter> {
+        const ui64 ReplicationId;
+
+        explicit TEvResumeDeferredAlter(ui64 rid);
         TString ToString() const override;
     };
 

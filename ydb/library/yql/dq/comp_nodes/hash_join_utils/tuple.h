@@ -4,6 +4,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_types.h>
 
+#include <util/generic/bitmap.h>
 #include <util/generic/buffer.h>
 #include <util/system/compiler.h>
 
@@ -173,11 +174,18 @@ struct TTupleLayout {
     // Bit i corresponds to packed key column i (Columns[0..KeyColumnsNum)).
     // Set bits use IS NOT DISTINCT FROM (NULL matches NULL). Unset bits keep
     // SQL equality (NULL never matches).
-    ui64 EqualNullsKeyMask = 0;
+    TDynBitMap EqualNullsKeyMask;
+    bool HasEqualNullsKeys = false;
 
     // Input-column indexes (OriginalColumnIndex) that use IS NOT DISTINCT FROM.
     // Join-key slots from settings must be remapped to these indexes first.
     void ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns);
+
+    Y_FORCE_INLINE ui8 GetEqualNullsMaskByte(ui32 byteN) const {
+        ui8 mask = 0;
+        EqualNullsKeyMask.Export(byteN * 8, mask);
+        return mask;
+    }
 
     void NormalizeEqualNullsFixedKeys(ui8* res) const;
     bool HashVariableKey(const ui8* res, ui32 keyColIdx) const;
@@ -330,9 +338,9 @@ ui32 Hash(const ui8* row) {
 }
 
 template <bool EqualNulls>
-Y_FORCE_INLINE bool KeyNullsCompatible(ui8 lhsBits, ui8 rhsBits, ui8 keyNullMask, ui64 equalNullsKeyMask) {
+Y_FORCE_INLINE bool KeyNullsCompatible(ui8 lhsBits, ui8 rhsBits, ui8 keyNullMask, ui8 equalNullsKeyMask) {
     if constexpr (EqualNulls) {
-        const ui8 eqMask = static_cast<ui8>(equalNullsKeyMask) & keyNullMask;
+        const ui8 eqMask = equalNullsKeyMask & keyNullMask;
         const ui8 reqMask = keyNullMask & ~eqMask;
         return (lhsBits & rhsBits & reqMask) == reqMask && (lhsBits & eqMask) == (rhsBits & eqMask);
     } else {
@@ -353,7 +361,7 @@ bool TTupleLayout::KeysEqualImpl(const ui8 *lhsRow, const ui8 *lhsOverflow,
         ReadUnaligned<ui8>(lhsRow + BitmaskOffset),
         ReadUnaligned<ui8>(rhsRow + BitmaskOffset),
         keyNullMask,
-        EqualNullsKeyMask);
+        HasEqualNullsKeys ? GetEqualNullsMaskByte(0) : 0);
 
     switch (KeySizeTag_) {
     case 0:
@@ -390,7 +398,7 @@ bool TTupleLayout::KeysEqualImpl(const ui8 *lhsRow, const ui8 *lhsOverflow,
 Y_FORCE_INLINE
 bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
                              const ui8 *rhsRow, const ui8 *rhsOverflow) const {
-    if (Y_UNLIKELY(EqualNullsKeyMask)) {
+    if (Y_UNLIKELY(HasEqualNullsKeys)) {
         return KeysEqualImpl<true>(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
     }
     return KeysEqualImpl<false>(lhsRow, lhsOverflow, rhsRow, rhsOverflow);

@@ -1336,7 +1336,7 @@ namespace NKikimr::NBsController {
             histo.Clear();
             const auto& ranges = histo.GetRanges(); // a sorted vector of ranges
             for (const auto& [pdiskId, pdisk] : PDisks) {
-               if (pdisk->Status == status && pdisk->NumActiveSlots) {
+               if (pdisk->Status == status && pdisk->NumActiveDynamicSlots) {
                     const ui64 passed = (now - pdisk->StatusTimestamp).Seconds();
                     auto comp = [](const ui64 value, const auto& range) { return value < range.RangeVal; };
                     const size_t idx = std::upper_bound(ranges.begin(), ranges.end(), passed, comp) - ranges.begin() - 1;

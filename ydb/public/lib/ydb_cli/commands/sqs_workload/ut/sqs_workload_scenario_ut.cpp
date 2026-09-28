@@ -130,6 +130,17 @@ namespace NYdb::NConsoleClient {
             UNIT_ASSERT(scenario.StatsCollector);
         }
 
+        Y_UNIT_TEST(InitStatsCollectorUsesDefaultPrintTimestampAndPercentile) {
+            TSqsWorkloadScenario scenario;
+            scenario.Quiet = true;
+            scenario.WindowSec = TDuration::Seconds(1);
+            scenario.TotalSec = TDuration::Seconds(1);
+
+            scenario.InitStatsCollector(/*writerCount=*/1, /*readerCount=*/1);
+
+            UNIT_ASSERT(scenario.StatsCollector);
+        }
+
         Y_UNIT_TEST(InitSqsClientUsesCreatedConfiguration) {
             TAwsSdkGuard awsSdk;
             TSqsWorkloadScenario scenario;
@@ -138,6 +149,7 @@ namespace NYdb::NConsoleClient {
             scenario.WorkersCount = 1;
             scenario.UseXmlAPI = true;
             scenario.Quiet = true;
+            scenario.PrintTimestamp = false;
             scenario.WindowSec = TDuration::Seconds(1);
             scenario.TotalSec = TDuration::Seconds(1);
             scenario.Percentile = 80.0;
@@ -159,6 +171,7 @@ namespace NYdb::NConsoleClient {
             scenario.WorkersCount = 1;
             scenario.UseXmlAPI = false;
             scenario.Quiet = true;
+            scenario.PrintTimestamp = false;
             scenario.WindowSec = TDuration::Seconds(1);
             scenario.TotalSec = TDuration::Seconds(1);
             scenario.Percentile = 80.0;

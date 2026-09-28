@@ -93,6 +93,7 @@ private:
 
             if constexpr (std::is_same_v<T, TFolderName> ||
                           std::is_same_v<T, TTableName> ||
+                          std::is_same_v<T, TViewName> ||
                           std::is_same_v<T, TColumnName>) {
                 return std::numeric_limits<size_t>::max();
             }

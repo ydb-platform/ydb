@@ -540,6 +540,11 @@ void FiberTrampoline()
             RunInFiberContext(currentFiber, std::move(callback));
         } catch (const TFiberCanceledException&) {
             // Just swallow.
+        } catch (const std::exception& ex) {
+            YT_TLOG_ALERT("Unhandled exception in fiber callback")
+                .With(ex);
+        } catch (...) {
+            YT_TLOG_ALERT("Unhandled exception of unknown type in fiber callback");
         }
 
         // Trace context can be restored for resumer fiber, so current trace context and memory tag are

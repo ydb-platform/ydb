@@ -8,6 +8,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/queue.h>
+#include <optional>
 
 
 namespace NKikimr {
@@ -71,7 +72,7 @@ namespace NKikimr {
         // FreshSegment to compact if any
         TIntrusivePtr<TFreshSegment> FreshSegment;
         std::shared_ptr<TFreshSegmentSnapshot> FreshSegmentSnap;
-        TBarriersSnapshot BarriersSnap;
+        std::optional<TBarriersSnapshot> BarriersSnap;
         TLevelIndexSnapshot LevelSnap;
         TActiveActors ActiveActors;
 
@@ -80,6 +81,18 @@ namespace NKikimr {
 
         THullCompactionWorker Worker;
         const ui64 CompactionID;
+
+        // Planned compaction (EnableVDiskPlannedCompaction): a worker of its own goes through the job first, writing
+        // nothing, to find out exactly how many chunks it needs; those are reserved in one go before anything is
+        // written, and the job writes into them only.
+        enum {
+            EvPlanQuantum = EventSpaceBegin(TEvents::ES_PRIVATE),
+        };
+        struct TEvPlanQuantum : TEventLocal<TEvPlanQuantum, EvPlanQuantum> {};
+        static constexpr ui32 PlanQuantumItems = 10000;
+        std::optional<THullCompactionWorker> Planner;
+        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers; // while planning
+        ui32 PlannedChunks = 0;
         TOrderedLevelSegmentsPtr Result;
 
         // messages we have to send to Yard
@@ -100,32 +113,100 @@ namespace NKikimr {
 
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
 
-            // bool debug output of brs
-            int brsDebugLevel = 0;
-            // debug output of brs
-            {
-                ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((ctx).LoggerSettings());
-                ::NActors::NLog::EPriority mPriority = ::NActors::NLog::PRI_INFO;
-                ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)( NKikimrServices::BS_HULLCOMP);
+            TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> brs;
+            if constexpr (!std::is_same_v<TKey, TKeyBlock>) {
+                // Blocks compaction does not consult barriers: records are merged, never dropped
+                // (except that a Max generation block later lets us drop barriers of that tablet).
+                Y_VERIFY_S(BarriersSnap, HullCtx->VCtx->VDiskLogPrefix);
 
-                bool output = mSettings && mSettings->Satisfies(mPriority, mComponent, 0);
-                brsDebugLevel = output ? 1 : 0;
+                // bool debug output of brs
+                int brsDebugLevel = 0;
+                // debug output of brs
+                {
+                    ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((ctx).LoggerSettings());
+                    ::NActors::NLog::EPriority mPriority = ::NActors::NLog::PRI_INFO;
+                    ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)( NKikimrServices::BS_HULLCOMP);
+
+                    bool output = mSettings && mSettings->Satisfies(mPriority, mComponent, 0);
+                    brsDebugLevel = output ? 1 : 0;
+                }
+
+                // build barriers essence
+                brs = BarriersSnap->CreateEssence(HullCtx, 0, Max<ui64>(), brsDebugLevel);
+
+                // free barriers snapshot
+                BarriersSnap->Destroy();
+                BarriersSnap.reset();
             }
-
-            // build barriers essence
-            auto brs = BarriersSnap.CreateEssence(HullCtx, 0, Max<ui64>(), brsDebugLevel);
-
-            // free barriers snapshot
-            BarriersSnap.Destroy();
 
             // build handoff map (use LevelSnap by ref)
             Hmp->BuildMap(LevelSnap, It);
 
-            // enter work state, prepare, and kick worker class
+            if (Planner) {
+                Barriers = std::move(brs);
+                Planner->Prepare(Hmp, Barriers, &LevelSnap);
+                TThis::Become(&TThis::PlanFunc);
+                ctx.Send(ctx.SelfID, new TEvPlanQuantum);
+            } else {
+                StartWork(ctx, std::move(brs));
+            }
+        }
+
+        // enter work state, prepare, and kick worker class
+        void StartWork(const TActorContext& ctx, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> brs) {
             TThis::Become(&TThis::WorkFunc);
-            Worker.Prepare(Hmp, brs, &LevelSnap);
+            Worker.Prepare(Hmp, std::move(brs), &LevelSnap);
             MainCycle(ctx);
         }
+
+        ///////////////////////// PLAN: BEGIN ///////////////////////////////////////////////
+        void Plan(const TActorContext& ctx) {
+            if (!Planner->PlanQuantum(PlanQuantumItems)) {
+                ctx.Send(ctx.SelfID, new TEvPlanQuantum); // let the mailbox breathe
+                return;
+            }
+            PlannedChunks = Planner->GetPlannedChunks();
+            Planner.reset();
+            Hmp->RestartTransform();
+
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Compaction job planned",
+                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                {"signature", PDiskSignatureForHullDbKey<TKey>()},
+                {"compactionID", CompactionID},
+                {"plannedChunks", PlannedChunks});
+
+            if (PlannedChunks) {
+                ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkReserve(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                    PlannedChunks, /*forHousekeeping=*/true));
+            } else {
+                StartWork(ctx, std::move(Barriers)); // it writes nothing
+            }
+        }
+
+        void HandlePlanReserve(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                // Nothing has been written; the arbiter learns from the release that it did not fit after all.
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Planned compaction does not fit",
+                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                    {"compactionID", CompactionID},
+                    {"plannedChunks", PlannedChunks},
+                    {"errorReason", ev->Get()->ErrorReason});
+                IsAborting = true;
+                Finish(ctx, true);
+                return;
+            }
+            CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
+            Y_VERIFY_S(ev->Get()->ChunkIds.size() == PlannedChunks, HullCtx->VCtx->VDiskLogPrefix);
+            Worker.AddPreReservedChunks(ev->Get()->ChunkIds);
+            StartWork(ctx, std::move(Barriers));
+        }
+
+        STRICT_STFUNC(PlanFunc,
+            CFunc(EvPlanQuantum, Plan)
+            HFunc(NPDisk::TEvChunkReserveResult, HandlePlanReserve)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+        )
+        ///////////////////////// PLAN: END /////////////////////////////////////////////////
 
         ///////////////////////// WORK: BEGIN ///////////////////////////////////////////////
         void MainCycle(const TActorContext& ctx) {
@@ -147,6 +228,17 @@ namespace NKikimr {
             // send slots to allocate to huge keeper, if any
             if (slotsToAllocate) {
                 ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate)));
+            }
+            if (Worker.IsPlanExceeded() && !IsAborting) {
+                YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Planned compaction needs more chunks than planned",
+                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                    {"compactionID", CompactionID},
+                    {"plannedChunks", PlannedChunks},
+                    {"marker", "BSHC51"});
+                Y_DEBUG_ABORT("planned compaction needs more chunks than planned");
+                IsAborting = true;
+                FinalizeIfAborting(ctx);
+                return;
             }
             // when done, continue with other state
             if (done) {
@@ -336,7 +428,7 @@ namespace NKikimr {
                         ui32 minHugeBlobInBytes,
                         TIntrusivePtr<TFreshSegment> freshSegment,
                         std::shared_ptr<TFreshSegmentSnapshot> freshSegmentSnap,
-                        TBarriersSnapshot &&barriersSnap,
+                        std::optional<TBarriersSnapshot> &&barriersSnap,
                         TLevelIndexSnapshot &&levelSnap,
                         const TIterator &it,
                         ui64 firstLsn,
@@ -344,7 +436,8 @@ namespace NKikimr {
                         TDuration restoreDeadline,
                         std::optional<TKey> partitionKey,
                         bool allowGarbageCollection,
-                        bool useThrottle)
+                        bool useThrottle,
+                        bool planned = false)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(rtCtx->PDiskCtx)
@@ -355,7 +448,7 @@ namespace NKikimr {
             , LevelSnap(std::move(levelSnap))
             , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->RunHandoff, rtCtx->SkeletonId))
             , It(it)
-            , Worker(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx->LevelIndex, it,
+            , Worker(HullCtx, PDiskCtx, hugeBlobCtx, minHugeBlobInBytes, rtCtx->LevelIndex, it,
                 static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey, allowGarbageCollection)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
@@ -364,6 +457,17 @@ namespace NKikimr {
             if (!(bool)FreshSegment && useThrottle) {
                 Throttler = std::make_shared<TEventsQuoter>();
             }
+            if (planned) {
+                Worker.SetPlanned();
+                Planner.emplace(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx->LevelIndex, it,
+                    false, firstLsn, lastLsn, restoreDeadline, partitionKey, allowGarbageCollection);
+                Planner->SetPlanned();
+            }
+        }
+
+        // Before the actor starts: chunks the Fresh segment reserved for this compaction in advance.
+        void AddPreReservedChunks(const TVector<TChunkIdx>& chunks) {
+            Worker.AddPreReservedChunks(chunks);
         }
     };
 

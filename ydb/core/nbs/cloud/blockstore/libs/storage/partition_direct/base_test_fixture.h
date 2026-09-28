@@ -70,6 +70,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
         CreateArenaAllocatorPool(),
         VChunkConfig,
+        false,
+        DirtyMapStateProto,
         BlockSize,
         VChunkBlockCount);
 
@@ -85,6 +87,12 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TVector<NThreading::TPromise<TDBGEraseResponse>> ErasePromises;
 
     virtual void Init();
+
+    // Joins the direct block group's executor before Runtime is destroyed.
+    // TVChunk::Stop() keeps the chunk alive until the executor drops the stop
+    // task, which is after the stop future is ready. Without this join,
+    // ~TVChunk can log through an already freed TActorSystem.
+    void TearDown(NUnitTest::TTestContext& context) override;
 
     TGuardedSgList MakeSgList() const;
 
@@ -121,15 +129,21 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         return vchunk.DirtyMapReady.HasValue();
     }
 
-    static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+    static bool IsPersisting(TVChunk& vchunk)
     {
-        return vchunk.DirtyMapStatePersisting;
+        return vchunk.Persisting;
     }
 
     // Must be invoked on the vchunk's executor thread.
-    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    static void InvokeStartPersist(TVChunk& vchunk)
     {
-        vchunk.DoPersistDirtyMap();
+        vchunk.StartPersist();
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeFlush(TVChunk& vchunk)
+    {
+        vchunk.DoFlush(false);
     }
 
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)

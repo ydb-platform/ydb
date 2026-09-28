@@ -50,6 +50,8 @@ public:
 
     NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
 
+    NCommon::TConfSetting<bool, Static> KqpDisablePessimisticLocks;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
@@ -126,6 +128,8 @@ public:
     NCommon::TConfSetting<ui64, Static> HybridSearchFactor;
     NCommon::TConfSetting<double, Static> HybridSearchK;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+    NCommon::TConfSetting<bool, Static> EnableStreamingAggregation;
+    NCommon::TConfSetting<TString, Static> StreamingAggregationStateTablePath;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
     NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;

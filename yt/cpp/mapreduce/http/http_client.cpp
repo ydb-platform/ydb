@@ -47,10 +47,10 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
     }
 
     auto logAndSetError = [&] (int code, const TString& rawError) {
-        YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-            requestId,
-            httpCode,
-            rawError.data());
+        YT_TLOG_ERROR("Response carries an HTTP error")
+            .With("RequestId", requestId)
+            .With("HttpCode", httpCode)
+            .With("Error", rawError);
         return TErrorResponse(TYtError(code, rawError), requestId);
     };
 
@@ -91,11 +91,11 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
             }
 
             if (errorResponse && TExpectedErrorGuard::IsErrorExpected(*errorResponse)) {
-                YT_LOG_INFO("%v",
-                    errorString.data());
+                YT_TLOG_INFO("Response carries an expected error")
+                    .With("Error", errorString);
             } else {
-                YT_LOG_ERROR("%v",
-                    errorString.data());
+                YT_TLOG_ERROR("Response carries an error")
+                    .With("Error", errorString);
             }
 
             return errorResponse;
@@ -212,7 +212,7 @@ struct TCoreRequestContext
     TString RequestId;
     bool LogResponse;
     TInstant StartTime;
-    TString LoggedAttributes;
+    NLogging::TLoggingTagList LoggedAttributes;
 };
 
 class TCoreHttpResponse
@@ -259,23 +259,21 @@ public:
     {
         auto result = GetResponseStream()->ReadAll();
 
-        TStringStream loggedAttributes;
-        loggedAttributes
-            << "Time: " << TInstant::Now() - Context_.StartTime << "; "
-            << "HostName: " << Context_.HostName << "; "
-            << Context_.LoggedAttributes;
+        auto tags = NLogging::TLoggingTagList()
+            .With("RequestId", Context_.RequestId)
+            .With("Time", TInstant::Now() - Context_.StartTime)
+            .With("HostName", Context_.HostName);
+        tags.Add(Context_.LoggedAttributes);
 
         if (Context_.LogResponse) {
             constexpr auto sizeLimit = 1 << 7;
-            YT_LOG_DEBUG("RSP %v - received response (Response: '%v'; %v)",
-                Context_.RequestId,
-                TruncateForLogs(result, sizeLimit),
-                loggedAttributes.Str());
+            YT_TLOG_DEBUG("Response received")
+                .With(tags)
+                .With("Response", TruncateForLogs(result, sizeLimit));
         } else {
-            YT_LOG_DEBUG("RSP %v - received response of %v bytes (%v)",
-                Context_.RequestId,
-                result.size(),
-                loggedAttributes.Str());
+            YT_TLOG_DEBUG("Response received")
+                .With(tags)
+                .With("Size", result.size());
         }
         return result;
     }
@@ -331,9 +329,9 @@ private:
         {
             if (auto errorResponse = ParseError(trailers)) {
                 errorResponse->SetIsFromTrailers(true);
-                YT_LOG_ERROR("RSP %v - %v",
-                    RequestId_,
-                    errorResponse.GetRef().what());
+                YT_TLOG_ERROR("Response trailers carry an error")
+                    .With("RequestId", RequestId_)
+                    .With("Error", errorResponse.GetRef().what());
                 ythrow errorResponse.GetRef();
             }
         }
@@ -595,9 +593,9 @@ private:
         } else if (method == "PUT") {
             return Client_->Put(url, body, headers).BlockingGet().ValueOrThrow();
         } else {
-            YT_LOG_FATAL("Unsupported http method (Method: %v, Url: %v)",
-                method,
-                url);
+            YT_TLOG_FATAL("Unsupported http method")
+                .With("Method", method)
+                .With("Url", url);
         }
     }
 
@@ -608,9 +606,9 @@ private:
         } else if (method == "PUT") {
             return Client_->StartPut(url, headers).BlockingGet().ValueOrThrow();
         } else {
-            YT_LOG_FATAL("Unsupported http method (Method: %v, Url: %v)",
-                method,
-                url);
+            YT_TLOG_FATAL("Unsupported http method")
+                .With("Method", method)
+                .With("Url", url);
         }
     }
 

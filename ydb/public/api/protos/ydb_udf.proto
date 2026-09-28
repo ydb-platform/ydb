@@ -1,0 +1,154 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Udf;
+option java_package = "tech.ydb.udf";
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+
+enum ModuleType {
+    MODULE_TYPE_UNSPECIFIED = 0;
+    MODULE = 1;
+    LIBRARY = 2;
+}
+
+enum ModuleKind {
+    MODULE_KIND_UNSPECIFIED = 0;
+    WASM = 1;
+    NATIVE = 2; // Recognized, but not supported yet.
+}
+
+enum CompileStatus {
+    COMPILE_STATUS_UNSPECIFIED = 0;
+    PENDING = 1;
+    COMPILING = 2;
+    READY = 3;
+    FAILED = 4;
+}
+
+enum WriteMode {
+    WRITE_MODE_UNSPECIFIED = 0;  // treated as CREATE_OR_REPLACE
+    CREATE_OR_REPLACE = 1;
+    CREATE_ONLY = 2;
+    REPLACE_ONLY = 3;
+}
+
+message ModuleInfo {
+    reserved 7, 8, 10;
+    reserved "compile_status", "compile_error", "compile_finished_at";
+
+    string name = 1;
+    ModuleType module_type = 2;
+    ModuleKind module_kind = 11;
+    string uid = 3;
+    string md5 = 4;
+    uint64 size = 5;
+    uint64 version = 6;
+    google.protobuf.Timestamp created_at = 9;
+}
+
+message PlatformCompileStatus {
+    string cpu_spec = 1;
+    CompileStatus status = 2;
+    string compile_error = 3;
+    google.protobuf.Timestamp compile_started_at = 4;
+    google.protobuf.Timestamp compile_finished_at = 5;
+}
+
+// Params for upload (no body — bytes go in subsequent stream chunks).
+message UploadModuleParams {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string manifest_json = 4; // Required; sole source of name, type and kind.
+
+    WriteMode write_mode = 5;
+    string expected_uid = 6;
+
+    uint64 version = 7;
+    string expected_md5 = 8;
+}
+
+// Client→server stream messages. Wire form is bidirectional (YDB streaming infra),
+// but the server sends exactly one UploadModuleResponse and finishes.
+message UploadModuleChunk {
+    oneof payload {
+        UploadModuleMetadata metadata = 1;  // must be first message
+        bytes data = 2;                     // subsequent chunks
+    }
+}
+
+message UploadModuleMetadata {
+    UploadModuleParams params = 1;
+    // Required: the transport reports a client half-close and a broken
+    // connection alike, so this is the only thing that tells a whole body from
+    // one cut short. The server refuses the upload unless the bytes it received
+    // add up to exactly this.
+    uint64 total_size = 2;
+}
+
+message UploadModuleResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message UploadModuleResult {
+    reserved 5;
+    reserved "compile_status";
+
+    string name = 1;
+    string uid = 2;
+    string md5 = 3;
+    uint64 size = 4;
+    bool replaced_existing = 6;
+}
+
+message DeleteModuleRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string name = 2 [(required) = true];
+    ModuleType module_type = 3; // optional assert
+    ModuleKind module_kind = 5; // optional assert
+    string expected_uid = 4;
+}
+
+message DeleteModuleResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DeleteModuleResult {
+}
+
+message ListModulesRequest {
+    reserved 3;
+    reserved "status_filter";
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    ModuleType type_filter = 2;
+    ModuleKind kind_filter = 6;
+    uint32 page_size = 4;
+    string page_token = 5;
+}
+
+message ListModulesResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListModulesResult {
+    repeated ModuleInfo modules = 1;
+    string next_page_token = 2;
+}
+
+message DescribeModuleRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string name = 2 [(required) = true];
+}
+
+message DescribeModuleResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeModuleResult {
+    ModuleInfo module = 1;
+    string manifest_json = 2;
+    repeated PlatformCompileStatus platforms = 3;
+}

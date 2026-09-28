@@ -18,6 +18,11 @@ void TBufferedEncoderBase::OnCommonTime(TInstant time) {
     CommonTime_ = time;
 }
 
+void TBufferedEncoderBase::OnCommonStartTimeSeconds(ui32 startTimeSeconds) {
+    State_.Expect(TEncoderState::EState::ROOT);
+    CommonStartTimeSeconds_ = startTimeSeconds;
+}
+
 void TBufferedEncoderBase::OnMetricBegin(EMetricType type) {
     State_.Switch(TEncoderState::EState::ROOT, TEncoderState::EState::METRIC);
     Metrics_.emplace_back();
@@ -148,6 +153,13 @@ void TBufferedEncoderBase::OnMemOnly(bool isMemOnly) {
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
     metric.IsMemOnly = isMemOnly;
+}
+
+void TBufferedEncoderBase::OnStartTimeSeconds(ui32 startTimeSeconds) {
+    State_.Expect(TEncoderState::EState::METRIC);
+    TMetric& metric = Metrics_.back();
+    metric.HasStartTime = true;
+    metric.StartTimeSeconds = startTimeSeconds;
 }
 
 TString TBufferedEncoderBase::FormatLabels(const TPooledLabels& labels) const {

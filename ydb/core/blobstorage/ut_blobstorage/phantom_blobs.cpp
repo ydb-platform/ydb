@@ -1,6 +1,13 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
+#include <util/random/random.h>
+
+#include <algorithm>
+#include <optional>
+#include <random>
+#include <unordered_set>
+
 using namespace NKikimr;
 
 #define Ctest Cnull
@@ -531,6 +538,418 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
     Y_UNIT_TEST(TestBlobSizeLimitBelowLimit) {
         TestBlobSizeLimit(TBlobStorageGroupType::ErasureMirror3dc, 200, false);
+    }
+
+    class TRandomizedPersistentTest : public TTestCtxBase {
+        static constexpr ui32 NumStreams = 3;
+        static constexpr ui32 BlobsPerStream = 24;
+        static constexpr ui32 DeleteBatchSize = 6;
+        static constexpr ui32 FillerBlobsPerIteration = 1000;
+
+        struct TBlob {
+            TLogoBlobID Id;
+            TString Data;
+            bool Deleted = false;
+        };
+
+        struct TStream {
+            ui64 TabletId = 0;
+            ui8 Channel = 0;
+            ui32 Generation = 1;
+            ui32 PerGenerationCounter = 0;
+            std::vector<size_t> BlobIndexes;
+            std::vector<size_t> DeleteOrder;
+            size_t DeleteCursor = 0;
+        };
+
+    public:
+        explicit TRandomizedPersistentTest(TBlobStorageGroupType erasure)
+            : TTestCtxBase(MakeSettings(erasure))
+            , Seed(RandomNumber<ui64>())
+            , Rng(Seed)
+        {}
+
+        void Run(TDuration duration) {
+            UNIT_ASSERT_C(duration > TDuration::Zero(), Context("non-positive test duration"));
+            Cerr << "PersistentPhantomFlagStorage randomized test seed# " << Seed
+                << " erasure# " << Erasure.ToString()
+                << " duration# " << duration << Endl;
+
+            Initialize();
+            GroupInfo = Env->GetGroupInfo(GroupId);
+            UNIT_ASSERT(GroupInfo);
+
+            FindVDiskNodes();
+            WriteInitialBlobs();
+            SetKeepFlags();
+            Env->Sim(TDuration::Minutes(10));
+
+            SelectDeleteOrder();
+            SelectLaggingNode();
+            Env->StopNode(LaggingNodeId);
+            Env->Sim(TDuration::Minutes(10));
+            ReallocateEdgeActor();
+
+            const TInstant deadline = TInstant::Now() + duration;
+            ui32 iteration = 0;
+            do {
+                ApplyDeleteBatch();
+                WriteFiller(iteration);
+                Env->Sim(TDuration::Minutes(5));
+
+                ForceFlagsToPersistentStorage(iteration);
+                CommitPersistentState(iteration);
+
+                const ui32 nodeId = ActiveNodeIds[Random(0, ActiveNodeIds.size())];
+                RestartNode(nodeId, TStringBuilder() << "iteration# " << iteration);
+                ++iteration;
+            } while (TInstant::Now() < deadline);
+
+            Cerr << "PersistentPhantomFlagStorage randomized workload iterations# " << iteration
+                << " seed# " << Seed << Endl;
+
+            // Restart every surviving VDisk. After this point no volatile copy of a phantom flag
+            // from before the partition remains, so the lagging VDisk can only be repaired from
+            // state recovered from PersistentPhantomFlagStorage.
+            std::vector<ui32> restartOrder = ActiveNodeIds;
+            std::shuffle(restartOrder.begin(), restartOrder.end(), Rng);
+            for (ui32 nodeId : restartOrder) {
+                RestartNode(nodeId, "final restart");
+            }
+
+            Env->StartNode(LaggingNodeId);
+            Env->Sim(TDuration::Minutes(30));
+            ReallocateEdgeActor();
+            MoveSoftBarriers();
+            Env->Sim(TDuration::Minutes(30));
+
+            auto status = GetGroupStatus(GroupId);
+            UNIT_ASSERT_VALUES_EQUAL_C(status->Get()->Status, NKikimrProto::OK, Context("group status"));
+            CheckDeletedBlobsOnEveryVDisk();
+            CheckLiveBlobs();
+        }
+
+    private:
+        static TEnvironmentSetup::TSettings MakeSettings(TBlobStorageGroupType erasure) {
+            return {
+                .NodeCount = erasure.BlobSubgroupSize(),
+                .Erasure = erasure,
+                .ControllerNodeId = 1,
+                .PDiskChunkSize = 32_MB,
+                .EnablePhantomFlagStorage = true,
+                .TinySyncLog = true,
+                .EnablePersistentPhantomFlagStorage = true,
+            };
+        }
+
+        ui32 Random(ui32 min, ui32 max) {
+            UNIT_ASSERT_C(min < max, Context("invalid random range"));
+            return std::uniform_int_distribution<ui32>(min, max - 1)(Rng);
+        }
+
+        TString Context(const TString& action, std::optional<ui32> iteration = std::nullopt) const {
+            TStringBuilder str;
+            str << "Seed# " << Seed << " Erasure# " << Erasure.ToString();
+            if (iteration) {
+                str << " Iteration# " << *iteration;
+            }
+            str << " Action# " << action;
+            return str;
+        }
+
+        void FindVDiskNodes() {
+            std::unordered_set<ui32> nodes;
+            for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
+                nodes.insert(GroupInfo->GetActorId(orderNumber).NodeId());
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), Erasure.BlobSubgroupSize(),
+                Context("expected one VDisk per node"));
+            VDiskNodeIds.assign(nodes.begin(), nodes.end());
+            std::sort(VDiskNodeIds.begin(), VDiskNodeIds.end());
+        }
+
+        void WriteInitialBlobs() {
+            Streams.resize(NumStreams);
+            for (ui32 streamIdx = 0; streamIdx < NumStreams; ++streamIdx) {
+                TStream& stream = Streams[streamIdx];
+                stream.TabletId = 5000 + streamIdx;
+                stream.Channel = streamIdx;
+
+                for (ui32 step = 1; step <= BlobsPerStream; ++step) {
+                    const ui32 size = Random(64, 1025);
+                    const ui32 cookie = streamIdx * BlobsPerStream + step;
+                    const TLogoBlobID id(stream.TabletId, 1, step, stream.Channel, size, cookie);
+                    TString data(size, 'a' + (streamIdx + step) % 26);
+                    Env->PutBlob(GroupId, id, data);
+                    stream.BlobIndexes.push_back(Blobs.size());
+                    Blobs.push_back({id, std::move(data)});
+                }
+            }
+        }
+
+        void SetKeepFlags() {
+            for (TStream& stream : Streams) {
+                auto keep = std::make_unique<TVector<TLogoBlobID>>();
+                keep->reserve(stream.BlobIndexes.size());
+                for (size_t index : stream.BlobIndexes) {
+                    keep->push_back(Blobs[index].Id);
+                }
+                CollectGarbage(stream, std::move(keep), nullptr, 1, BlobsPerStream);
+            }
+        }
+
+        void SelectDeleteOrder() {
+            for (TStream& stream : Streams) {
+                stream.DeleteOrder = stream.BlobIndexes;
+                std::shuffle(stream.DeleteOrder.begin(), stream.DeleteOrder.end(), Rng);
+                stream.DeleteOrder.resize(stream.DeleteOrder.size() * 3 / 4);
+                UNIT_ASSERT_C(stream.DeleteOrder.size() >= DeleteBatchSize,
+                    Context("delete order is smaller than a batch"));
+            }
+        }
+
+        void SelectLaggingNode() {
+            std::vector<ui32> candidates;
+            for (ui32 nodeId : VDiskNodeIds) {
+                if (nodeId != Env->Settings.ControllerNodeId) {
+                    candidates.push_back(nodeId);
+                }
+            }
+            UNIT_ASSERT_C(!candidates.empty(), Context("no lagging-node candidate"));
+            LaggingNodeId = candidates[Random(0, candidates.size())];
+
+            for (ui32 nodeId : VDiskNodeIds) {
+                if (nodeId != LaggingNodeId) {
+                    ActiveNodeIds.push_back(nodeId);
+                }
+            }
+        }
+
+        void ApplyDeleteBatch() {
+            for (TStream& stream : Streams) {
+                auto doNotKeep = std::make_unique<TVector<TLogoBlobID>>();
+                doNotKeep->reserve(DeleteBatchSize);
+                for (ui32 i = 0; i < DeleteBatchSize; ++i) {
+                    const size_t blobIndex = stream.DeleteOrder[stream.DeleteCursor % stream.DeleteOrder.size()];
+                    ++stream.DeleteCursor;
+                    TBlob& blob = Blobs[blobIndex];
+                    blob.Deleted = true;
+                    doNotKeep->push_back(blob.Id);
+                }
+                std::sort(doNotKeep->begin(), doNotKeep->end());
+                CollectGarbage(stream, nullptr, std::move(doNotKeep), 1, BlobsPerStream);
+            }
+        }
+
+        void WriteFiller(ui32 iteration) {
+            const ui32 generation = 10 + iteration * 2;
+            WriteCompressedData(TDataProfile{
+                .GroupId = GroupId,
+                .TotalBlobs = FillerBlobsPerIteration,
+                .BlobSize = Random(8, 65),
+                .BatchSize = 250,
+                .TabletId = FillerTabletId,
+                .Channel = FillerChannel,
+                .Generation = generation,
+                .Step = 1,
+            });
+            CollectFiller(generation);
+        }
+
+        void ForceFlagsToPersistentStorage(ui32 iteration) {
+            std::unordered_set<ui32> committedNodes;
+            const std::unordered_set<ui32> expectedNodes(ActiveNodeIds.begin(), ActiveNodeIds.end());
+            Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPhantomFlagStorageCommitData &&
+                        expectedNodes.contains(ev->Sender.NodeId())) {
+                    committedNodes.insert(ev->Sender.NodeId());
+                }
+                return true;
+            };
+
+            BaldActiveSyncLogs(iteration);
+            for (ui32 attempt = 0; attempt < 60 && committedNodes.size() != expectedNodes.size(); ++attempt) {
+                Env->Sim(TDuration::Seconds(30));
+            }
+            Env->Runtime->FilterFunction = {};
+
+            UNIT_ASSERT_VALUES_EQUAL_C(committedNodes.size(), expectedNodes.size(),
+                Context("not every active VDisk committed persistent phantom flags", iteration));
+            for (ui32 nodeId : expectedNodes) {
+                UNIT_ASSERT_C(committedNodes.contains(nodeId),
+                    Context(TStringBuilder() << "missing persistent commit on node# " << nodeId, iteration));
+            }
+        }
+
+        void BaldActiveSyncLogs(ui32 iteration) {
+            for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
+                const TActorId actorId = GroupInfo->GetActorId(orderNumber);
+                if (actorId.NodeId() == LaggingNodeId) {
+                    continue;
+                }
+
+                const TVDiskID vdiskId = GroupInfo->GetVDiskId(orderNumber);
+                const TActorId sender = Env->Runtime->AllocateEdgeActor(actorId.NodeId(), __FILE__, __LINE__);
+                Env->Runtime->WrapInActorContext(sender, [&] {
+                    TActivationContext::Send(new IEventHandle(
+                        actorId, sender, new TEvBlobStorage::TEvVBaldSyncLog(vdiskId, true)));
+                });
+                auto result = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(
+                    sender, false, TInstant::Max());
+                UNIT_ASSERT_C(result, Context("no BaldSyncLog response", iteration));
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrProto::OK,
+                    Context(TStringBuilder() << "BaldSyncLog failed for orderNumber# " << orderNumber, iteration));
+            }
+        }
+
+        void CommitPersistentState(ui32 iteration) {
+            // A following SyncLog commit records the PersistentPhantomFlagStorage chunk map in
+            // the SyncLog entry point before the node is restarted.
+            const ui32 generation = 11 + iteration * 2;
+            CollectFiller(generation);
+            Env->Sim(TDuration::Minutes(5));
+        }
+
+        void CollectFiller(ui32 generation) {
+            TStream filler{
+                .TabletId = FillerTabletId,
+                .Channel = FillerChannel,
+                .Generation = generation,
+                .PerGenerationCounter = 0,
+            };
+            CollectGarbage(filler, nullptr, nullptr, generation, 1);
+        }
+
+        void CollectGarbage(TStream& stream, std::unique_ptr<TVector<TLogoBlobID>> keep,
+                std::unique_ptr<TVector<TLogoBlobID>> doNotKeep, ui32 collectGeneration, ui32 collectStep) {
+            const ui64 tabletId = stream.TabletId;
+            const ui32 generation = stream.Generation;
+            const ui32 perGenerationCounter = ++stream.PerGenerationCounter;
+            const ui8 channel = stream.Channel;
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvCollectGarbage(
+                    tabletId, generation, perGenerationCounter, channel, true,
+                    collectGeneration, collectStep, keep.release(), doNotKeep.release(),
+                    TInstant::Max(), true));
+            });
+            auto result = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(
+                Edge, false, TInstant::Max());
+            UNIT_ASSERT_C(result, Context("no CollectGarbage response"));
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK,
+                Context(TStringBuilder() << "CollectGarbage failed# " << result->Get()->ErrorReason));
+        }
+
+        void RestartNode(ui32 nodeId, const TString& action) {
+            Env->StopNode(nodeId);
+            Env->Sim(TDuration::Minutes(1));
+            Env->StartNode(nodeId);
+            Env->Sim(TDuration::Minutes(5));
+            ReallocateEdgeActor();
+            auto status = GetGroupStatus(GroupId);
+            UNIT_ASSERT_VALUES_EQUAL_C(status->Get()->Status, NKikimrProto::OK,
+                Context(TStringBuilder() << action << " node# " << nodeId));
+        }
+
+        void ReallocateEdgeActor() {
+            UNIT_ASSERT_C(!ActiveNodeIds.empty() || !VDiskNodeIds.empty(), Context("no node for edge actor"));
+            const ui32 nodeId = !ActiveNodeIds.empty() ? ActiveNodeIds.front() : VDiskNodeIds.front();
+            AllocateEdgeActorOnSpecificNode(nodeId);
+        }
+
+        void MoveSoftBarriers() {
+            for (TStream& stream : Streams) {
+                ++stream.Generation;
+                stream.PerGenerationCounter = 0;
+                CollectGarbage(stream, nullptr, nullptr, stream.Generation, Max<ui32>());
+            }
+        }
+
+        void CheckDeletedBlobsOnEveryVDisk() {
+            std::vector<TLogoBlobID> deleted;
+            for (const TBlob& blob : Blobs) {
+                if (blob.Deleted) {
+                    deleted.push_back(blob.Id);
+                }
+            }
+            UNIT_ASSERT_C(!deleted.empty(), Context("randomized workload did not delete blobs"));
+
+            for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
+                const TVDiskID vdiskId = GroupInfo->GetVDiskId(orderNumber);
+                Env->WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead,
+                    [&](TActorId queueId) {
+                        const TActorId sender = Env->Runtime->AllocateEdgeActor(
+                            queueId.NodeId(), __FILE__, __LINE__);
+                        auto query = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
+                            vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
+                        for (const TLogoBlobID& id : deleted) {
+                            query->AddExtremeQuery(id, 0, 0);
+                        }
+                        Env->Runtime->Send(new IEventHandle(queueId, sender, query.release()), sender.NodeId());
+                        auto result = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(
+                            sender, false, TInstant::Max());
+                        UNIT_ASSERT_C(result, Context("no VGet response"));
+                        const auto& record = result->Get()->Record;
+                        UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK,
+                            Context(TStringBuilder() << "VGet failed for orderNumber# " << orderNumber));
+                        UNIT_ASSERT_VALUES_EQUAL_C(record.ResultSize(), deleted.size(),
+                            Context(TStringBuilder() << "wrong VGet result size for orderNumber# " << orderNumber));
+                        for (ui32 i = 0; i < record.ResultSize(); ++i) {
+                            UNIT_ASSERT_VALUES_EQUAL_C(record.GetResult(i).GetStatus(), NKikimrProto::NODATA,
+                                Context(TStringBuilder() << "phantom blob# " << deleted[i]
+                                    << " orderNumber# " << orderNumber));
+                            UNIT_ASSERT_C(!record.GetResult(i).HasIngress(),
+                                Context(TStringBuilder() << "phantom ingress# " << deleted[i]
+                                    << " orderNumber# " << orderNumber));
+                        }
+                    });
+            }
+        }
+
+        void CheckLiveBlobs() {
+            for (const TBlob& blob : Blobs) {
+                if (blob.Deleted) {
+                    continue;
+                }
+
+                Env->Runtime->WrapInActorContext(Edge, [&] {
+                    SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvGet(
+                        blob.Id, 0, 0, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead));
+                });
+                auto result = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(
+                    Edge, false, TInstant::Max());
+                UNIT_ASSERT_C(result, Context("no Get response"));
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK,
+                    Context(TStringBuilder() << "Get failed for live blob# " << blob.Id));
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->ResponseSz, 1,
+                    Context(TStringBuilder() << "wrong Get response size for live blob# " << blob.Id));
+                const auto& response = result->Get()->Responses[0];
+                UNIT_ASSERT_VALUES_EQUAL_C(response.Status, NKikimrProto::OK,
+                    Context(TStringBuilder() << "live blob was collected# " << blob.Id));
+                UNIT_ASSERT_VALUES_EQUAL_C(response.Buffer.ConvertToString(), blob.Data,
+                    Context(TStringBuilder() << "wrong data for live blob# " << blob.Id));
+            }
+        }
+
+    private:
+        static constexpr ui64 FillerTabletId = 9000;
+        static constexpr ui8 FillerChannel = 0;
+
+        const ui64 Seed;
+        std::mt19937_64 Rng;
+        TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+        std::vector<TBlob> Blobs;
+        std::vector<TStream> Streams;
+        std::vector<ui32> VDiskNodeIds;
+        std::vector<ui32> ActiveNodeIds;
+        ui32 LaggingNodeId = 0;
+    };
+
+    Y_UNIT_TEST(TestRandomizedPersistentMirror3dc) {
+        TRandomizedPersistentTest(TBlobStorageGroupType::ErasureMirror3dc).Run(TDuration::Seconds(120));
+    }
+
+    Y_UNIT_TEST(TestRandomizedPersistent4Plus2Block) {
+        TRandomizedPersistentTest(TBlobStorageGroupType::Erasure4Plus2Block).Run(TDuration::Seconds(120));
     }
 
     #undef TEST_PHANTOM_BLOBS

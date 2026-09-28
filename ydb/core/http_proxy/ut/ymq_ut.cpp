@@ -1195,6 +1195,77 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
     }
 
+    void TestSendMessageWithIAMFromDifferentFolder(THttpProxyTestMock& fixture, bool topics) {
+        PrepareConfigs(fixture.KikimrServer.Get());
+        auto& appData = fixture.KikimrServer->GetRuntime()->GetAppData();
+        appData.FeatureFlags.SetEnableSQSMigrationTopicCreation(topics);
+        appData.FeatureFlags.SetEnableSQSMigrationCompatibility(topics);
+
+        const TString queueUrl = CreateQueueForAuthMatrix(fixture, ESqsProtocol::Json, true);
+
+        const auto setupAccessServiceMock = [](auto& mock) {
+            // The service account belongs to folder A, but may send only to folder B (folder4).
+            auto* serviceAccount = mock.AuthenticateData["cross-folder-sa"].Response.mutable_subject()->mutable_service_account();
+            serviceAccount->set_id("cross-folder-sa-id");
+            serviceAccount->set_folder_id("folderA");
+            mock.AuthorizeData["cross-folder-sa-ymq.messages.send-folder4"]
+                .Response.mutable_subject()->mutable_service_account()->set_id("cross-folder-sa-id");
+
+            auto* ownFolderServiceAccount = mock.AuthenticateData["own-folder-sa"].Response.mutable_subject()->mutable_service_account();
+            ownFolderServiceAccount->set_id("own-folder-sa-id");
+            ownFolderServiceAccount->set_folder_id("folderA");
+            mock.AuthorizeData["own-folder-sa-ymq.messages.send-folderA"]
+                .Response.mutable_subject()->mutable_service_account()->set_id("own-folder-sa-id");
+        };
+        setupAccessServiceMock(fixture.AccessServiceMock);
+        setupAccessServiceMock(fixture.AccessServiceMockV2);
+
+        // A nonempty address disables the unconditional authorization mock in the SQS actor.
+        // The folder service actor installed by the fixture still resolves folders to cloud4.
+        appData.SqsConfig.SetYandexCloudFolderServiceAddress("folder-service");
+        appData.EnforceUserTokenRequirement = true;
+
+        NJson::TJsonValue request;
+        request["QueueUrl"] = queueUrl;
+        request["MessageBody"] = "cross-folder message";
+
+        for (const auto protocol : {ESqsProtocol::Json, ESqsProtocol::Xml}) {
+            const auto send = [&](const TString& handler, const TString& token) {
+                const TString auth = TStringBuilder() << "X-YaCloud-SubjectToken: " << token;
+                if (protocol == ESqsProtocol::Json) {
+                    return fixture.SendHttpRequest(handler, "AmazonSQS.SendMessage", request, auth);
+                }
+                const TString body = EncodeSqsXmlRequest("SendMessage", AsJsonMap(request));
+                return fixture.SendHttpRequestXmlRaw(handler, {body.data(), body.size()}, auth);
+            };
+
+            for (const TString& handler : {TString("/Root"), TString("/Root?folderId=folder4")}) {
+                const auto res = send(handler, "cross-folder-sa");
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, ToString(protocol) << " " << handler << "\n" << res.Body);
+                const auto json = ParseSqsResponse(protocol, res.Body);
+                UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+            }
+
+            const auto assertAuthorizationDenied = [&](const THttpResult& res) {
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, ToString(protocol) << "\n" << res.Body);
+                const auto json = ParseSqsResponse(protocol, res.Body);
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AccessDeniedException");
+            };
+            assertAuthorizationDenied(send("/Root?folderId=folderA", "cross-folder-sa"));
+            assertAuthorizationDenied(send("/Root", "own-folder-sa"));
+            assertAuthorizationDenied(send("/Root", "unauthorized-sa"));
+        }
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_DifferentFolder, THttpProxyTestMock) {
+        TestSendMessageWithIAMFromDifferentFolder(*this, true);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_DifferentFolder_TableImplementation, THttpProxyTestMock) {
+        TestSendMessageWithIAMFromDifferentFolder(*this, false);
+    }
+
     Y_UNIT_TEST_F(TestHttpProxySetsAuthSourceAddressFromForwardedFor, THttpProxyTestMock) {
         PrepareConfigs(KikimrServer.Get());
         auto& appData = KikimrServer->GetRuntime()->GetAppData();
@@ -1312,14 +1383,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "SendMessage", std::move(req));
                 const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
 
-                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
-                    AssertAccessDenied(res, label);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
-                    const auto json = ParseSqsResponse(ESqsProtocol::Json, res.Body);
-                    UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
-                    UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
+                const auto json = ParseSqsResponse(ESqsProtocol::Json, res.Body);
+                UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
             }
         }
     }
@@ -1339,14 +1406,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "SendMessage", std::move(req));
                 const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
 
-                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
-                    AssertAccessDenied(res, label);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
-                    const auto json = ParseSqsResponse(ESqsProtocol::Xml, res.Body);
-                    UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
-                    UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
+                const auto json = ParseSqsResponse(ESqsProtocol::Xml, res.Body);
+                UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
             }
         }
     }

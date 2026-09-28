@@ -29,7 +29,7 @@ private:
         return SourcesConstructor->IsFinished();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext() override {
         return SourcesConstructor->TryExtractNext(Context, InFlightLimit);
     }
 
@@ -37,11 +37,11 @@ private:
         return GetSourcesInFlightCount() < InFlightLimit;
     }
 
-    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override {
-        if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
+    virtual void DoOnSourceFinished(const NCommon::IDataSource& source) override {
+        if (!source.GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
             InFlightLimit *= 2;
         }
-        FetchedCount += source->GetAs<IDataSource>()->GetResultRecordsCount();
+        FetchedCount += source.GetAs<IDataSource>()->GetResultRecordsCount();
         if (Limit && *Limit <= FetchedCount) {
             YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "limit_exhausted"},

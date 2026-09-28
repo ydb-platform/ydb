@@ -66,6 +66,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribution) {
         }
 
         ui64 imbalancedObjects = 0;
+        double maxTrueImbalance = 0;
         for (const auto& [object, it] : objectDistributions.Distributions) {
             ui64 maxCnt = 0;
             ui64 minCnt = NUM_OPERATIONS;
@@ -86,10 +87,11 @@ Y_UNIT_TEST_SUITE(ObjectDistribution) {
             }
             double trueImbalance = (std::max<double>(maxCnt - minCnt, 1) - 1) / maxCnt;
             // std::cerr << "imbalance for " << object << " should be " << trueImbalance << std::endl;
-            double imbalance = it->GetImbalance();
+            double imbalance = it->second.GetImbalance();
             UNIT_ASSERT_DOUBLES_EQUAL(trueImbalance, imbalance, 1e-5);
 
             imbalancedObjects += (trueImbalance > 1e-7);
+            maxTrueImbalance = std::max(maxTrueImbalance, trueImbalance);
 
             double mean = (double)total / nonZeroCount;
             double varianceNumerator = 0;
@@ -101,10 +103,14 @@ Y_UNIT_TEST_SUITE(ObjectDistribution) {
                 varianceNumerator += (mean - cnt) * (mean - cnt);
             }
             double trueVariance = varianceNumerator / nonZeroCount;
-            double variance = it->GetVariance();
+            double variance = it->second.GetVariance();
             UNIT_ASSERT_DOUBLES_EQUAL(trueVariance, variance, 1e-5);
         }
         UNIT_ASSERT_VALUES_EQUAL(imbalancedObjects, objectDistributions.GetImbalancedObjectsCount());
+        // The sorted container must be kept in order: the worst object is what the balancer acts on
+        UNIT_ASSERT_DOUBLES_EQUAL(objectDistributions.GetMaxImbalance(), maxTrueImbalance, 1e-5);
+        TFullObjectId worstObject = objectDistributions.GetObjectToBalance().ObjectId;
+        UNIT_ASSERT_DOUBLES_EQUAL(objectDistributions.Distributions.at(worstObject)->second.GetImbalance(), maxTrueImbalance, 1e-5);
     }
 
     Y_UNIT_TEST(TestAllowedDomainsAndDown) {
@@ -219,10 +225,13 @@ Y_UNIT_TEST_SUITE(ObjectDistribution) {
         Ctest << "\n";
 
         auto& distributions = objectDistributions.Distributions;
-        UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[0]->ObjectId)->GetImbalance(), getTrueImbalance(tablets[0]->ObjectId, 0, NUM_NODES / 2), 1e-5);
-        UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[1]->ObjectId)->GetImbalance(), getTrueImbalance(tablets[1]->ObjectId, NUM_NODES / 2, NUM_NODES), 1e-5);
-        UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[2]->ObjectId)->GetImbalance(), getTrueImbalance(tablets[2]->ObjectId, 0, NUM_NODES), 1e-5);
-
+        double trueImbalance0 = getTrueImbalance(tablets[0]->ObjectId, 0, NUM_NODES / 2);
+        double trueImbalance1 = getTrueImbalance(tablets[1]->ObjectId, NUM_NODES / 2, NUM_NODES);
+        double trueImbalance2 = getTrueImbalance(tablets[2]->ObjectId, 0, NUM_NODES);
+        UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[0]->ObjectId)->second.GetImbalance(), trueImbalance0, 1e-5);
+        UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[1]->ObjectId)->second.GetImbalance(), trueImbalance1, 1e-5);
+        UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[2]->ObjectId)->second.GetImbalance(), trueImbalance2, 1e-5);
+        UNIT_ASSERT_DOUBLES_EQUAL(objectDistributions.GetMaxImbalance(), std::max({trueImbalance0, trueImbalance1, trueImbalance2}), 1e-5);
     }
 
     Y_UNIT_TEST(TestAddSameNode) {
@@ -290,6 +299,70 @@ Y_UNIT_TEST_SUITE(ObjectDistribution) {
 #ifndef _san_enabled_
 #ifdef NDEBUG
         UNIT_ASSERT_GE(NUM_NODES / passed, 1000);
+#endif
+#endif
+    }
+
+    Y_UNIT_TEST(TestAddRemoveNodePerformance) {
+        // Models a large cluster where every node is eligible for every object, so each node
+        // is present (mostly with count 0) in every distribution and RemoveNode/AddNode must
+        // visit all of them. This is the path taken by TTxKillNode and TTxStatus.
+        static constexpr size_t NUM_NODES = 2500;
+        static constexpr size_t NUM_OBJECTS = 2000;
+        static constexpr size_t TABLETS_PER_OBJECT = 4;
+        static constexpr size_t NODES_TO_REMOVE = 500;
+        static constexpr TSubDomainKey TEST_DOMAIN = {1, 1};
+
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        THive hive(hiveStorage.Get(), TActorId());
+
+        std::unordered_map<TNodeId, TNodeInfo> nodes;
+        TObjectDistributions objectDistributions(nodes);
+        NKikimrLocal::TTabletAvailability dummyTabletAvailability;
+        dummyTabletAvailability.SetType(TTabletTypes::Dummy);
+        for (TNodeId nodeId = 0; nodeId < NUM_NODES; ++nodeId) {
+            TNodeInfo& node = nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, hive)).first->second;
+            node.ServicedDomains.push_back(TEST_DOMAIN);
+            node.RegisterInDomains();
+            node.LocationAcquired = true;
+            node.TabletAvailability.emplace(std::piecewise_construct,
+                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
+                                            std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
+        }
+
+        std::mt19937 engine(42);
+        std::uniform_int_distribution<TNodeId> pickNode(0, NUM_NODES - 1);
+        for (size_t i = 0; i < NUM_OBJECTS; i++) {
+            TLeaderTabletInfo tablet(0, hive);
+            tablet.AssignDomains(TEST_DOMAIN, {});
+            tablet.ObjectId = {1, i + 1};
+            tablet.SetType(TTabletTypes::Dummy);
+            for (size_t j = 0; j < TABLETS_PER_OBJECT; ++j) {
+                objectDistributions.UpdateCountForTablet(tablet, nodes.at(pickNode(engine)), +1);
+            }
+        }
+
+        TProfileTimer timer;
+        for (TNodeId nodeId = 0; nodeId < NODES_TO_REMOVE; ++nodeId) {
+            objectDistributions.RemoveNode(nodes.at(nodeId));
+        }
+        double removePassed = timer.Get().SecondsFloat();
+        Cerr << "RemoveNode: " << NODES_TO_REMOVE << " nodes x " << NUM_OBJECTS << " objects in " << removePassed
+             << " seconds, " << removePassed / NODES_TO_REMOVE * 1000 << " ms per node" << Endl;
+
+        timer.Reset();
+        for (TNodeId nodeId = 0; nodeId < NODES_TO_REMOVE; ++nodeId) {
+            objectDistributions.AddNode(nodes.at(nodeId));
+        }
+        double addPassed = timer.Get().SecondsFloat();
+        Cerr << "AddNode: " << NODES_TO_REMOVE << " nodes x " << NUM_OBJECTS << " objects in " << addPassed
+             << " seconds, " << addPassed / NODES_TO_REMOVE * 1000 << " ms per node" << Endl;
+
+#ifndef _san_enabled_
+#ifdef NDEBUG
+        UNIT_ASSERT_GE(NODES_TO_REMOVE / removePassed, 100);
+        UNIT_ASSERT_GE(NODES_TO_REMOVE / addPassed, 100);
 #endif
 #endif
     }

@@ -1,5 +1,6 @@
 #include "kqp_compile_service.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -87,12 +88,12 @@ public:
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
-        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
+        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "Compile query")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
+        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
@@ -111,7 +112,8 @@ public:
 
         config->ApplyServiceConfig(tableServiceConfig);
 
-        // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
+        // ANALYZE scans use UDAF factories unsupported by new RBO. Select the
+        // YQL optimizer on their first attempt, as well as on fallback retries.
         config->SetEnableNewRBO(EnableNewRBO);
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
@@ -221,9 +223,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, GetYdbStatus(result));
 
         PassAway();
     }
@@ -369,7 +369,8 @@ private:
         counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
+                CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -386,8 +387,10 @@ private:
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
         prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
-        // For NEW RBO YqlSelect is force.
-        if (EnableNewRBO) {
+        // Internal ANALYZE scans require legacy translation; new RBO forces YqlSelect.
+        if (QueryId.Settings.IsAnalyze) {
+            prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+        } else if (EnableNewRBO) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         }
         prepareSettings.UsePessimisticLocks = UsePessimisticLocks;
@@ -487,9 +490,9 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        CompileActorSpan.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
+        CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(CompileCpuTime.MicroSeconds()));
+        EndQueryTraceSpan(CompileActorSpan, KqpCompileResult->Status);
 
         PassAway();
     }
@@ -560,9 +563,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
 
         PassAway();
     }
@@ -630,6 +631,7 @@ private:
         auto queryType = QueryId.Settings.QueryType;
 
         KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult->UsedNewRbo = EnableNewRBO;
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -681,6 +683,13 @@ private:
             }
         }
         meta["parameters"] = parameters;
+        if (UserToken && !UserToken->GetUserSID().empty()) {
+            NJson::TJsonValue groups(NJson::JSON_ARRAY);
+            for (const auto& sid : UserToken->GetGroupSIDs()) {
+                groups.AppendValue(sid);
+            }
+            meta["user_group_sids"] = std::move(groups);
+        }
         return meta;
     }
 

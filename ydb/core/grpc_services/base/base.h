@@ -23,6 +23,7 @@
 
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/config.pb.h>
@@ -480,6 +481,7 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -507,6 +509,12 @@ public:
 
     // validation
     virtual bool Validate(TString& error) = 0;
+
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return PathNormalizationInitialized_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
+    }
 
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
@@ -543,6 +551,10 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+private:
+    TMaybe<TString> EffectiveDatabaseName_;
+    bool PathNormalizationInitialized_ = false;
 };
 
 // Request context
@@ -657,7 +669,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -899,6 +911,7 @@ public:
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
+        this->EnablePathNormalization();
         if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
@@ -943,7 +956,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1281,6 +1294,7 @@ public:
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
     {
+        this->EnablePathNormalization();
         if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
@@ -1294,7 +1308,7 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1397,6 +1411,10 @@ public:
 
     TString GetPeerName() const override {
         return Ctx_->GetPeer();
+    }
+
+    TString GetAuthority() const override {
+        return Ctx_->GetAuthority();
     }
 
     bool SslServer() const {
@@ -1890,11 +1908,18 @@ public:
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts)
+    TEvRequestAuthAndCheckResult(
+        const TString& database,
+        const TMaybe<TString>& ydbToken,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        const TAuditLogParts& auditLogParts,
+        const EHttpDatabaseAccessVerdict databaseAccessVerdict
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
         , AuditLogParts(auditLogParts)
+        , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1903,6 +1928,7 @@ public:
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAuditLogParts AuditLogParts;
+    EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
 class TEvRequestAuthAndCheck
@@ -1958,7 +1984,8 @@ public:
                     Database,
                     YdbToken,
                     UserToken,
-                    GetAuditLogParts()
+                    GetAuditLogParts(),
+                    DatabaseAccessVerdict
                 )
             );
         } else {
@@ -2054,7 +2081,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 
@@ -2130,6 +2157,7 @@ public:
     TAuditMode AuditMode;
     TString PeerName;
     TString RequestId;
+    EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 
     inline static const TString EmptySerializedTokenMessage;
 };

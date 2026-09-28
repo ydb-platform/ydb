@@ -56,6 +56,10 @@ inline bool IsIdentityRequestParameter(TStringBuf name) {
     return name == "cluster" || name == "database" || name == "node" || name == "host";
 }
 
+inline bool IsRequestControlParameter(TStringBuf name) {
+    return name == "timeout";
+}
+
 TCgiParameters BuildAdditionalRequestParameters(const NHttp::TUrlParameters& urlParameters);
 bool TryBuildRequestIdentities(const NHttp::TUrlParameters& urlParameters, TVector<TEntityIdentity>& identities, TString& errorMessage);
 const TVector<TSupportLinkEntryConfig>& GetEntityLinkConfigs(const TSupportLinksSettings& settings, EEntityType entityType);

@@ -19,6 +19,9 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
     , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)
+    , DetailedGroup(new ::NMonitoring::TDynamicCounters)
+    , DetailedRawGroup(new ::NMonitoring::TDynamicCounters(
+        ::NMonitoring::TCountableBase::EVisibility::Private))
 {
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;
@@ -28,6 +31,7 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
 void TSysViewProcessor::OnDetach(const TActorContext& ctx) {
     DetachExternalCounters();
     DetachInternalCounters();
+    DetachDetailedCounters();
 
     Die(ctx);
 }
@@ -35,6 +39,7 @@ void TSysViewProcessor::OnDetach(const TActorContext& ctx) {
 void TSysViewProcessor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
     DetachExternalCounters();
     DetachInternalCounters();
+    DetachDetailedCounters();
 
     Die(ctx);
 }

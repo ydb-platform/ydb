@@ -116,6 +116,10 @@ struct TPDiskConfig : public TThrRefBase {
     bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
+    // Physical chunk size to format the disk with, instead of deriving it from the user-accessible
+    // ChunkSize. Zero means derive from ChunkSize. Only used when the disk is formatted. Setting it
+    // along with ChunkSize is a misconfiguration: NodeWarden warns and keeps ChunkSize.
+    ui32 PhysicalChunkSize = 0;
     ui32 SectorSize = 4 << 10;
 
     ui64 StatisticsUpdateIntervalMs = 1000;
@@ -322,6 +326,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
+        str << " PhysicalChunkSize# " << PhysicalChunkSize << x;
         str << " SectorSize# " << SectorSize << x;
 
         str << " StatisticsUpdateIntervalMs# " << StatisticsUpdateIntervalMs << x;
@@ -381,6 +386,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasChunkSize()) {
             ChunkSize = cfg->GetChunkSize();
+        }
+        if (cfg->HasPhysicalChunkSize()) {
+            PhysicalChunkSize = cfg->GetPhysicalChunkSize();
         }
         if (cfg->HasSectorSize()) {
             SectorSize = cfg->GetSectorSize();

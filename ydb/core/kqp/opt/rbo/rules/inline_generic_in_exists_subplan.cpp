@@ -116,10 +116,10 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         AddUsedIUs(usedIUs, originalPlanIUs);
 
         TVector<TInfoUnit> markColumns = domain;
-        TVector<std::pair<TInfoUnit, TInfoUnit>> domainJoinKeys;
-        TVector<std::pair<TInfoUnit, TInfoUnit>> tupleJoinKeys;
+        TVector<TJoinKey> domainJoinKeys;
+        TVector<TJoinKey> tupleJoinKeys;
         for (const auto& iu : domain) {
-            domainJoinKeys.push_back(std::make_pair(iu, iu));
+            domainJoinKeys.emplace_back(iu, iu);
         }
 
         TIntrusivePtr<IOperator> statsSource;
@@ -132,7 +132,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
             for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
                 AddDomainColumn(markColumns, originalPlanIUs[i]);
-                tupleJoinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], originalPlanIUs[i]));
+                tupleJoinKeys.emplace_back(subplanEntry.Tuple[i], originalPlanIUs[i]);
             }
 
             statsKeys = domain;
@@ -146,10 +146,10 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
                 rightInput = MakeMapFromRenames(rightInput, rightRenamings, filter->Pos, ctx.ExprCtx, props);
             }
 
-            TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+            TVector<TJoinKey> joinKeys;
             auto planIUs = rightInput->GetOutputIUs();
             for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
-                joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
+                joinKeys.emplace_back(subplanEntry.Tuple[i], planIUs[i]);
             }
             matchSource = MakeIntrusive<TOpJoin>(MakeDomainProjection(leftInput, domain, filter->Pos), rightInput, input->Pos, "Inner", joinKeys);
 
@@ -219,9 +219,9 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
             }
             auto statsMap = MakeIntrusive<TOpMap>(statsAggregate, filter->Pos, statsElements);
 
-            TVector<std::pair<TInfoUnit, TInfoUnit>> statsJoinKeys;
+            TVector<TJoinKey> statsJoinKeys;
             for (const auto& iu : statsKeys) {
-                statsJoinKeys.push_back(std::make_pair(iu, iu));
+                statsJoinKeys.emplace_back(iu, iu);
             }
             const auto statsRenamings = MakeRenameMap(statsKeys, props.InternalVarIdx, usedIUs);
 
@@ -277,7 +277,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
         auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         newFilterInput = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
     }
 

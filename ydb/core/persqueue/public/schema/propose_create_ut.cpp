@@ -72,7 +72,14 @@ Y_UNIT_TEST(RejectsNegativeAndHugePartitionCount) {
         {
             auto request = BaseRequest();
             request.mutable_partitioning_settings()->set_min_active_partitions(
-                static_cast<i64>(Max<ui32>()));
+                MAX_TOPIC_PARTITIONS);
+            auto r = Propose(std::move(request));
+            UNIT_ASSERT_C(r, r.GetErrorMessage());
+        }
+        {
+            auto request = BaseRequest();
+            request.mutable_partitioning_settings()->set_min_active_partitions(
+                static_cast<i64>(Max<ui32>()) + 1);
             auto r = Propose(std::move(request));
             UNIT_ASSERT(!r);
             UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
@@ -87,7 +94,14 @@ Y_UNIT_TEST(RejectsNegativeAndHugePartitionCount) {
         {
             auto request = BaseRequest();
             request.mutable_partitioning_settings()->set_max_active_partitions(
-                static_cast<i64>(Max<ui32>()));
+                MAX_TOPIC_PARTITIONS);
+            auto r = Propose(std::move(request));
+            UNIT_ASSERT_C(r, r.GetErrorMessage());
+        }
+        {
+            auto request = BaseRequest();
+            request.mutable_partitioning_settings()->set_max_active_partitions(
+                static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
             auto r = Propose(std::move(request));
             UNIT_ASSERT(!r);
             UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
@@ -95,7 +109,14 @@ Y_UNIT_TEST(RejectsNegativeAndHugePartitionCount) {
         {
             auto request = BaseRequest();
             request.mutable_partitioning_settings()->set_max_active_partitions(
-                static_cast<i64>(Max<ui32>()) + 1);
+                static_cast<i64>(Max<ui32>()));
+            auto r = Propose(std::move(request));
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
+        }
+        {
+            auto request = BaseRequest();
+            request.mutable_partitioning_settings()->set_max_active_partitions(Max<i64>());
             auto r = Propose(std::move(request));
             UNIT_ASSERT(!r);
             UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");

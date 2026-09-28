@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/http/io
     library/cpp/monlib/metrics
 )
 

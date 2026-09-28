@@ -1121,6 +1121,19 @@ public:
             }
         }
 
+        // Guard against a bug in id allocation. A new partition id must not already
+        // belong to this topic, and must not be handed out twice in one alter.
+        // In a correct run NextPartitionId stays ahead of stored ids, so this does not fire.
+        absl::flat_hash_set<ui32> addedPartitionIds;
+        addedPartitionIds.reserve(alterData->PartitionsToAdd.size());
+        for (const auto& partition : alterData->PartitionsToAdd) {
+            if (topic->Partitions.contains(partition.PartitionId) || !addedPartitionIds.insert(partition.PartitionId).second) {
+                errStr = TStringBuilder() << "Partition already exists: " << partition.PartitionId;
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
+        }
+
         ComputeAlterPartitionCounts(topic, alterData);
 
         if (!(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount)) {

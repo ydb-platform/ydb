@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -27,8 +28,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(LoadState, __VA_ARGS__)                                                \
     xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
     xxx(StorePartitionIds, __VA_ARGS__)                                        \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
-    xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(UpdateVChunkState, __VA_ARGS__)                                        \
+    xxx(SetVChunkTouched, __VA_ARGS__)                                         \
     xxx(StartAddHost, __VA_ARGS__)                                             \
     xxx(AddHostToDBG, __VA_ARGS__)                                             \
     xxx(StartRemoveHost, __VA_ARGS__)                                          \
@@ -68,6 +69,7 @@ struct TTxPartition
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVChunkConfigs VChunkConfigs;
         TDirtyMapStateProtos DirtyMapStates;
+        TTouchedVChunks TouchedVChunks;
         TMaybe<TAddHostInProgress> AddHostInProgress;
         TMaybe<TRemoveHostInProgress> RemoveHostInProgress;
 
@@ -77,6 +79,7 @@ struct TTxPartition
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
             DirtyMapStates.clear();
+            TouchedVChunks = {};
             AddHostInProgress.Clear();
             RemoveHostInProgress.Clear();
         }
@@ -121,22 +124,24 @@ struct TTxPartition
     };
 
     //
-    // TUpdateVChunkConfig
+    // TUpdateVChunkState
     //
-    struct TUpdateVChunkConfig
+    struct TUpdateVChunkState
     {
-        struct TUpdateConfigRequest
+        struct TUpdateStateRequest
         {
+            ui32 VChunkIndex;
             TVChunkConfig VChunkConfig;
+            TDirtyMapStateProto DirtyMapState;
             TPersistResultPromise UpdateCompleted;
         };
 
-        using TUpdateConfigRequests = TVector<TUpdateConfigRequest>;
+        using TUpdateStateRequests = TVector<TUpdateStateRequest>;
 
-        TUpdateConfigRequests UpdateConfigRequests;
+        TUpdateStateRequests UpdateStateRequests;
 
-        explicit TUpdateVChunkConfig(TUpdateConfigRequests updateConfigRequests)
-            : UpdateConfigRequests(std::move(updateConfigRequests))
+        explicit TUpdateVChunkState(TUpdateStateRequests updateStateRequests)
+            : UpdateStateRequests(std::move(updateStateRequests))
         {}
 
         void Clear()
@@ -146,23 +151,14 @@ struct TTxPartition
     };
 
     //
-    // TUpdateDirtyMapState
+    // SetVChunkTouched
     //
-    struct TUpdateDirtyMapState
+    struct TSetVChunkTouched
     {
-        struct TUpdateStateRequest
-        {
-            ui32 VChunkIndex;
-            TDirtyMapStateProto State;
-            TPersistResultPromise UpdateCompleted;
-        };
+        TVector<TTouchedVChunks::TChunk> Chunks;
 
-        using TUpdateStateRequests = TVector<TUpdateStateRequest>;
-
-        TUpdateStateRequests UpdateStateRequests;
-
-        explicit TUpdateDirtyMapState(TUpdateStateRequests updateStateRequests)
-            : UpdateStateRequests(std::move(updateStateRequests))
+        explicit TSetVChunkTouched(TVector<TTouchedVChunks::TChunk> chunks)
+            : Chunks(std::move(chunks))
         {}
 
         void Clear()
@@ -259,7 +255,6 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TMaybe<TAddHostInProgress> AddHostInProgress;
-        TVChunkConfigs VChunkConfigs;
 
         explicit TMonitoring(NActors::TActorId requester)
             : Requester(requester)
@@ -270,7 +265,6 @@ struct TTxPartition
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             AddHostInProgress.Clear();
-            VChunkConfigs.clear();
         }
     };
 };

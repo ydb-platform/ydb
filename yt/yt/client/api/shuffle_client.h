@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/table_client/schema.h>
 
+#include <yt/yt/core/compression/public.h>
+
 #include <yt/yt/core/yson/string.h>
 
 namespace NYT::NApi {
@@ -25,6 +27,9 @@ struct TShuffleHandle
     //! pull-based it may be null (schemaless) for backward compatibility, but a
     //! schema will eventually be required there too.
     NTableClient::TTableSchemaPtr Schema;
+    //! Writers compress with it; push-based readers decompress with it, while pull-based
+    //! readers take it from the chunk meta.
+    NCompression::ECodec Codec;
 
     //! YSON-serialized TShuffleConfig.
     // COMPAT(apollo1321): Make this field required in 26.3; a 26.1 coordinator mints handles
@@ -42,6 +47,13 @@ YT_DEFINE_STRONG_TYPEDEF(TSignedShuffleHandlePtr, NSignature::TSignaturePtr);
 
 void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHandle, TStringBuf spec);
 
+//! Throws when #signedHandle does not carry #requestedCodec, which is what a coordinator or
+//! proxy predating the codec option returns; the caller would otherwise get uncompressed data
+//! back without being told.
+void ValidateShuffleHandleCodec(
+    const TSignedShuffleHandlePtr& signedHandle,
+    NCompression::ECodec requestedCodec);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TStartShuffleOptions
@@ -52,6 +64,7 @@ struct TStartShuffleOptions
     bool UsePushBasedShuffle = false;
     //! Required when UsePushBasedShuffle is set.
     NTableClient::TTableSchemaPtr Schema;
+    NCompression::ECodec Codec = NCompression::ECodec::None;
     //! YSON-serialized TShuffleConfig.
     std::optional<NYson::TYsonString> Config;
 };

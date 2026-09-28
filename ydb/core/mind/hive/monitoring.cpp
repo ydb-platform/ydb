@@ -1796,6 +1796,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ShrinkPool\";' style='width:138px'>Shrink Pool</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:50px'>";
@@ -4910,6 +4913,87 @@ public:
     }
 };
 
+// Read-only view of what a shrink is still waiting for: which tablets hold history in the pool being removed.
+class TTxMonEvent_ShrinkPool : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ShrinkPool(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SHRINK_POOL; }
+
+    bool Execute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
+        TStringStream str;
+        RenderHTMLPage(str);
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext& /*ctx*/) override {
+    }
+
+    void RenderHTMLPage(IOutputStream& out) {
+        out << "<body>";
+        out << "<h3>Storage pools being shrunk</h3>";
+        bool anyPool = false;
+        for (const auto& [name, pool] : Self->StoragePools) {
+            if (pool.RemainingHistory.empty() && pool.InactiveGroups.empty() && !pool.NeedShrinkFromTenant) {
+                continue;
+            }
+            anyPool = true;
+            std::map<TTabletId, std::vector<const TStoragePoolInfo::THistoryEntry*>> byTablet;
+            for (const auto& entry : pool.RemainingHistory) {
+                byTablet[entry.Tablet].push_back(&entry);
+            }
+            out << "<h4>" << name << "</h4>";
+            out << "<p>inactive groups: " << pool.InactiveGroups.size();
+            for (size_t i = 0; i < pool.InactiveGroups.size(); ++i) {
+                out << (i ? ", " : " (") << pool.InactiveGroups[i];
+            }
+            out << (pool.InactiveGroups.empty() ? "" : ")")
+                << " &middot; remaining entries: " << pool.RemainingHistory.size()
+                << " &middot; tablets: " << byTablet.size() << " &middot; waiting for tenant: " << (pool.NeedShrinkFromTenant ? "yes" : "no")
+                << "</p>";
+            out << "<table class='table simple-table'>";
+            out << "<thead><tr><th>Tablet</th><th>Type</th><th>Entries (channel:fromGeneration)</th></tr></thead><tbody>";
+            for (const auto& [tabletId, entries] : byTablet) {
+                const TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+                out << "<tr><td>" << tabletId << "</td><td>";
+                out << (tablet ? TTabletTypes::TypeToStr(tablet->Type) : "?");
+                out << "</td><td>";
+                for (size_t i = 0; i < entries.size(); ++i) {
+                    out << (i ? ", " : "") << entries[i]->Channel << ":" << entries[i]->Generation;
+                }
+                out << "</td></tr>";
+            }
+            out << "</tbody></table>";
+        }
+        if (!anyPool) {
+            out << "<p>no pool is being shrunk</p>";
+        }
+        out << "<h3>MoveData in flight</h3>";
+        bool anyActor = false;
+        for (const auto* subActor : Self->SubActors) {
+            const TString description = subActor->GetDescription();
+            if (!description.StartsWith("MoveData(")) {
+                continue;
+            }
+            anyActor = true;
+            out << "<p>" << description << " &middot; started at " << subActor->StartTime << "</p>";
+        }
+        if (!anyActor) {
+            out << "<p>no MoveData actor is running</p>";
+        }
+        out << "</body>";
+    }
+};
+
 class TTxMonEvent_OperationsLog : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -5254,6 +5338,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Groups") {
         return Execute(new TTxMonEvent_Groups(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ShrinkPool") {
+        return Execute(new TTxMonEvent_ShrinkPool(ev->Sender, ev, this), ctx);
     }
     if (page == "UpdateResources") {
         TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);

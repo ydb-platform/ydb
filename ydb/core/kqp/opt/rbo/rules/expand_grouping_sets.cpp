@@ -55,6 +55,20 @@ TMapElement BuildOptionalColumn(const TInfoUnit& column, const TInfoUnit& source
     return TMapElement(column, TExpression(optionalColumn, &ctx, &props));
 }
 
+TMapElement BuildGroupingIndicatorColumn(const TInfoUnit& column, bool aggregatedAway, TPositionHandle pos, TExprContext& ctx,
+                                         TPlanProps& props) {
+    // clang-format off
+    auto indicatorColumn = Build<TCoLambda>(ctx, pos)
+        .Args({"grouping_indicator_arg"})
+        .Body<TCoUint64>()
+            .Literal().Build(aggregatedAway ? "1" : "0")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    return TMapElement(column, TExpression(indicatorColumn, &ctx, &props));
+}
+
 } // anonymous namespace
 
 bool TExpandGroupingSetsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
@@ -139,6 +153,12 @@ TIntrusivePtr<IOperator> TExpandGroupingSetsRule::SimpleMatchAndApply(const TInt
                                                            rboCtx.ExprCtx, props));
             }
         }
+
+        for (const auto& [key, indicator] : groupingSetsOp->GetGroupingIndicators()) {
+            originalNames.emplace_back(
+                BuildGroupingIndicatorColumn(indicator, /*aggregatedAway=*/!keySet.contains(key), aggregate->Pos, rboCtx.ExprCtx, props));
+        }
+
         if (!originalNames.empty()) {
             logicalBranch = MakeIntrusive<TOpMap>(logicalBranch, aggregate->Pos, originalNames);
         }
@@ -150,7 +170,7 @@ TIntrusivePtr<IOperator> TExpandGroupingSetsRule::SimpleMatchAndApply(const TInt
         return logicalBranches.front();
     }
 
-    return MakeIntrusive<TOpUnionAll>(std::move(logicalBranches), groupingSetsOp->Pos, aggregate->GetOutputIUs());
+    return MakeIntrusive<TOpUnionAll>(std::move(logicalBranches), groupingSetsOp->Pos, groupingSetsOp->GetOutputIUs());
 }
 
 } // namespace NKikimr::NKqp

@@ -61,6 +61,10 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     bool IsScanQuery() const;
 
     bool IsGenericQuery() const;
+
+    // Pessimistic locks (EvLock) are taken only under ReadCommittedRW isolation and
+    // can be disabled for the current query with PRAGMA kikimr.KqpDisablePessimisticLocks="true".
+    bool NeedPessimisticLocks() const;
 };
 
 struct TKqpBuildQueryContext : TThrRefBase {

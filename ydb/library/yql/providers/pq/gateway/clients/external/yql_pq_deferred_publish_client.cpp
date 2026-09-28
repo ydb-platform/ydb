@@ -21,6 +21,14 @@ public:
         return Client.Publish(publication, settings);
     }
 
+    TAsyncCancelPublicationResult CancelPublication(const TDeferredPublication& publication, const TCancelPublicationSettings& settings) final {
+        return Client.CancelPublication(publication, settings);
+    }
+
+    TAsyncListPublicationsResult ListPublications(const TListPublicationsSettings& settings) final {
+        return Client.ListPublications(settings);
+    }
+
 private:
     TDeferredPublishClient Client;
 };

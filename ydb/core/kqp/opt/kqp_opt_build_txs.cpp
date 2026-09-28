@@ -10,9 +10,10 @@
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
-#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -55,8 +56,9 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(
 
 class TKqpBuildTxTransformer : public TSyncTransformerBase {
 public:
-    TKqpBuildTxTransformer()
-        : QueryType(EKikimrQueryType::Unspecified)
+    explicit TKqpBuildTxTransformer(const TKikimrConfiguration::TPtr& config)
+        : Config(config)
+        , QueryType(EKikimrQueryType::Unspecified)
         , IsPrecompute(false)
         , MergeOutputAndEffect(false)
     {
@@ -242,9 +244,28 @@ private:
         return stages;
     }
 
-    static bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) {
+    bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) const {
+        const bool useStateTable = Config->EnableStreamingAggregation.Get().GetOrElse(false)
+            && !Config->StreamingAggregationStateTablePath.Get().GetOrElse("").empty();
         // TODO: Avoid lambda analysis here, use sources/sinks for table interaction.
-        return std::all_of(stages.begin(), stages.end(), [](const auto& x) { return IsKqpPureLambda(x.Program()) && IsKqpPureInputs(x.Inputs()); });
+        return std::all_of(stages.begin(), stages.end(), [useStateTable](const auto& stage) {
+            if (!IsKqpPureLambda(stage.Program()) || !IsKqpPureInputs(stage.Inputs())) {
+                return false;
+            }
+
+            if (!useStateTable) {
+                return true;
+            }
+
+            // State table queries yield and require a compute actor, unlike literal execution.
+            return !FindNode(stage.Program().Ptr(), [](const TExprNode::TPtr& node) {
+                if (const auto aggregation = TMaybeNode<TKqpStreamingAggregation>(node)) {
+                    const auto stateTablePath = GetSetting(aggregation.Cast().Settings().Ref(), "state_table_path");
+                    return stateTablePath && !stateTablePath->Tail().Content().empty();
+                }
+                return false;
+            });
+        });
     }
 
     TMaybeNode<TExprList> BuildTxResults(TExprNode::TPtr inputExpr, TVector<TDqPhyStage>& stages,
@@ -511,6 +532,7 @@ private:
     }
 
 private:
+    const TKikimrConfiguration::TPtr Config;
     EKikimrQueryType QueryType;
     bool IsPrecompute;
     bool MergeOutputAndEffect;
@@ -597,7 +619,7 @@ public:
         : KqpCtx(kqpCtx)
         , BuildCtx(buildCtx)
     {
-        BuildTxTransformer = new TKqpBuildTxTransformer();
+        BuildTxTransformer = new TKqpBuildTxTransformer(config);
 
         bool enableSpilling = config->GetEnableQueryServiceSpilling() && (kqpCtx->IsGenericQuery() || kqpCtx->IsScanQuery()) && config->SpillingEnabled();
 

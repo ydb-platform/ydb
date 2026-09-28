@@ -2,16 +2,17 @@
   "module_type": "module",
   "module_kind": "wasm",
   "module_name": "Md5",
-  "calling_convention": "bridge",
   "module_extension": "wasm",
-  "required_libraries": ["sdk"],
+  "required_libraries": [
+    "sdk"
+  ],
   "functions": [
     {
       "name": "md5",
       "argument_types": [
-        {"value": "string", "tag": "concrete_type"}
+        "Optional<String>"
       ],
-      "result_type": {"value": "string", "tag": "concrete_type"}
+      "result_type": "Optional<String>"
     }
   ]
 }

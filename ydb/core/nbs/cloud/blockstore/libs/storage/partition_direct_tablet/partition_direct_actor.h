@@ -11,6 +11,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -62,7 +65,7 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
-    TString FrontendRegistrationId;
+    TPartitionSessionPtr Session;
     // A queued Ready event must not republish metadata after backend shutdown.
     bool FrontendRegistrationClosed = false;
 
@@ -99,17 +102,18 @@ private:
     // AddHostInFlight.
     std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
-    // Batch persisting of vchunk configs.
-    bool ExecutingUpdateVChunkConfig = false;
-    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
-    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
-        PendingUpdateVChunkConfigRequests;
+    // Batch persisting of vChunk configs and behind fields. Both kinds of
+    // updates share one queue so a combined update cannot overwrite a newer
+    // dirty-map state.
+    bool ExecutingUpdateVChunkState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkStatePromises;
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequests
+        PendingUpdateVChunkStateRequests;
+    // Persisted vchunk config overrides, keyed by vchunk index.
+    TVChunkConfigs VChunkConfigs;
 
-    // Batch persisting of ahead and behind fields.
-    bool ExecutingUpdateDirtyMapState = false;
-    TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
-    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
-        PendingUpdateDirtyMapStateRequests;
+    // A bit is set after its vchunk is touched and is never cleared.
+    TTouchedVChunks TouchedVChunks;
 
 public:
     TPartitionActor(
@@ -233,12 +237,32 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // Mount/unmount mutate the session only on the partition actor thread.
+    void HandleMountSession(
+        const TEvPartitionSession::TEvMount::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleUnmountSession(
+        const TEvPartitionSession::TEvUnmount::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleUpdateDirtyMapState(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void EnqueueUpdateVChunkState(
+        TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouched(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRenderMonPage(
+        const TEvPartitionDirectPrivate::TEvRenderMonPage::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdown(
@@ -295,6 +319,10 @@ private:
 
     void HandleUpdateDirtyMapStateDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouchedDuringDelete(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdownDuringDelete(

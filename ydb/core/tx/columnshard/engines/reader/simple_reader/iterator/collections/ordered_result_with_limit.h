@@ -17,17 +17,17 @@ private:
         YDB_READONLY(ui32, SourceIdx, 0);
 
     public:
-        TFinishedDataSource(const std::shared_ptr<IDataSource>& source)
-            : RecordsCount(source->GetResultRecordsCount())
-            , SourceIdx(source->GetSourceIdx())
+        TFinishedDataSource(const IDataSource& source)
+            : RecordsCount(source.GetResultRecordsCount())
+            , SourceIdx(source.GetSourceIdx())
         {
         }
 
-        TFinishedDataSource(const std::shared_ptr<IDataSource>& source, const ui32 partSize)
+        TFinishedDataSource(const IDataSource& source, const ui32 partSize)
             : RecordsCount(partSize)
-            , SourceIdx(source->GetSourceIdx())
+            , SourceIdx(source.GetSourceIdx())
         {
-            AFL_VERIFY(partSize < source->GetResultRecordsCount());
+            AFL_VERIFY(partSize < source.GetResultRecordsCount());
         }
     };
 
@@ -35,7 +35,7 @@ private:
         return !SourcesConstructor->IsFinished() || !!NextSource;
     }
 
-    std::shared_ptr<NCommon::IDataSource> NextSource;
+    std::unique_ptr<NCommon::TDataSourceLease> NextSource;
     ui64 Limit = 0;
 
     ui64 InFlightLimit = 16;
@@ -81,13 +81,13 @@ private:
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override;
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext() override;
 
     virtual bool DoCheckInFlightLimits() const override {
         return GetSourcesInFlightCount() < InFlightLimit;
     }
 
-    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;
+    virtual void DoOnSourceFinished(const NCommon::IDataSource& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:
@@ -95,7 +95,7 @@ public:
         return "ORDERED_RESULT_WITH_LIMIT";
     }
 
-    const std::shared_ptr<NCommon::IDataSource>& GetNextSource() const {
+    const std::unique_ptr<NCommon::TDataSourceLease>& GetNextSource() const {
         return NextSource;
     }
 

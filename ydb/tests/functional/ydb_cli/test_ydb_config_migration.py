@@ -89,13 +89,13 @@ def make_config(*, one_node_per_realm=False, geometry="rack", erasure="mirror-3-
     return {"config": config}
 
 
-def run_toggle_self_management(tmp_path, config, *options):
+def run_migration_toggle(tmp_path, config, command, *options):
     input_path = tmp_path / "config.yaml"
     input_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     execution = yatest.common.execute(
         [
             ydb_bin(),
-            "admin", "cluster", "config", "migration", "toggle-self-management",
+            "admin", "cluster", "config", "migration", command,
             "--input", str(input_path),
             *options,
         ],
@@ -108,8 +108,33 @@ def run_toggle_self_management(tmp_path, config, *options):
     )
 
 
+def run_toggle_self_management(tmp_path, config, *options):
+    return run_migration_toggle(tmp_path, config, "toggle-self-management", *options)
+
+
 def output_config(result):
     return yaml.safe_load(result.stdout)["config"]
+
+
+@pytest.mark.parametrize("command", ["toggle-config-v2-feature-flag", "toggle-self-management"])
+def test_config_service_required_before_migration(tmp_path, command):
+    config = make_config()
+    config["config"]["grpc_config"] = {
+        "port": 2135,
+        "services": ["cms"],
+        "services_enabled": ["monitoring"],
+        "services_disabled": ["config", "topic"],
+    }
+    rejected = run_migration_toggle(tmp_path, config, command, "--enable")
+    assert rejected.exit_code != 0
+    assert "requires the 'config' gRPC service" in rejected.stderr
+    assert not rejected.stdout
+
+    config["config"]["grpc_config"]["services_enabled"].append("config")
+    config["config"]["grpc_config"]["services_disabled"].remove("config")
+    accepted = run_migration_toggle(tmp_path, config, command, "--enable")
+    assert accepted.exit_code == 0, accepted.stderr
+    assert output_config(accepted)["grpc_config"] == config["config"]["grpc_config"]
 
 
 def test_three_node_mirror_requires_explicit_layout(tmp_path):

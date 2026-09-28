@@ -1,4 +1,5 @@
 #include "hulldb_recovery.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h>
 #include <google/protobuf/messagext.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLRECS
@@ -85,11 +86,19 @@ namespace NKikimr {
         for (const auto &addition : essence.LogoBlobsAdditions) {
             HullDs->LogoBlobs->InsertSstAtLevel0(addition.Sst, HullDs->HullCtx);
         }
+        // Unlike LogoBlobs, the Blocks and Barriers databases have in-memory state derived from them
+        // (TBlocksCache and NBarriers::TMemView) that is only built at startup and then kept up to
+        // date record by record. An SST inserted straight into level 0 goes around both of them, so
+        // feed its records in explicitly. (Nothing currently writes such SSTs -- repl only ever adds
+        // LogoBlobs -- but silently losing the blocks would mean serving unblocked writes and never
+        // learning that a tablet was deleted.)
         for (const auto &addition : essence.BlocksAdditions) {
             HullDs->Blocks->InsertSstAtLevel0(addition.Sst, HullDs->HullCtx);
+            UpdateBlocksCache(*addition.Sst);
         }
         for (const auto &addition : essence.BarriersAdditions) {
             HullDs->Barriers->InsertSstAtLevel0(addition.Sst, HullDs->HullCtx);
+            HullDs->Barriers->UpdateMemView(*addition.Sst);
         }
     }
 
@@ -118,6 +127,28 @@ namespace NKikimr {
                 // cache only with SST's
                 BlocksCache.UpdatePersistent(tabletId, {gen, issuerGuid});
                 break;
+        }
+        if (NGc::CompleteDelBlock(gen) && HullDs->Barriers) {
+            HullDs->Barriers->MarkTabletDeleted(tabletId);
+        }
+    }
+
+    void THullDbRecovery::UpdateBlocksCache(const TBlocksSst &sst) {
+        Y_VERIFY_S(sst.IsLoaded(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
+
+        THashSet<ui64> deletedTablets;
+        TBlocksSst::TMemIterator it(&sst);
+        for (it.SeekToFirst(); it.Valid(); it.Next()) {
+            const ui64 tabletId = it.GetCurKey().TabletId;
+            const ui32 gen = it.GetMemRec().BlockedGeneration;
+            BlocksCache.UpdatePersistent(tabletId, {gen, 0});
+            if (NGc::CompleteDelBlock(gen)) {
+                deletedTablets.insert(tabletId);
+            }
+        }
+
+        if (!deletedTablets.empty() && HullDs->Barriers) {
+            HullDs->Barriers->MarkTabletsDeleted(deletedTablets);
         }
     }
 
@@ -418,6 +449,17 @@ namespace NKikimr {
     void THullDbRecovery::BuildBlocksCache()
     {
         BlocksCache.Build(HullDs.Get());
+        if (HullDs && HullDs->Barriers) {
+            // Mark them in one go: the set covers every tablet ever completely deleted on this
+            // group, so a per-tablet purge of the barriers index would grow without bound.
+            THashSet<ui64> deletedTablets;
+            BlocksCache.ForEachDeletedTablet([&deletedTablets](ui64 tabletId) {
+                deletedTablets.insert(tabletId);
+            });
+            if (!deletedTablets.empty()) {
+                HullDs->Barriers->MarkTabletsDeleted(deletedTablets);
+            }
+        }
     }
 
     TSatisfactionRank THullDbRecovery::GetSatisfactionRank(EHullDbType t, ESatisfactionRankType s) const

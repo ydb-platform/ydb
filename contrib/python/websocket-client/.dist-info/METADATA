@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: websocket-client
-Version: 1.9.1
+Version: 1.9.2
 Summary: WebSocket client for Python with low level API options
 Home-page: https://github.com/websocket-client/websocket-client
 Download-URL: https://github.com/websocket-client/websocket-client/releases

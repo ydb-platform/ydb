@@ -136,7 +136,13 @@ kikimr_key_file="${kikimr_config}/key.txt"
 #Custom config
 [ -s /etc/default/kikimr.custom ] && . /etc/default/kikimr.custom
 
-kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_config}/config.yaml --tenant ${kikimr_tenant}"
+if [ -n "${tenant_main_dir}" ] && [ -f "${tenant_main_dir}/config.yaml" ]; then
+  kikimr_yaml_config="${tenant_main_dir}/config.yaml"
+else
+  kikimr_yaml_config="${kikimr_config}/config.yaml"
+fi
+
+kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_yaml_config} --tenant ${kikimr_tenant}"
 kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"

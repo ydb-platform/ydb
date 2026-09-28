@@ -229,7 +229,9 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
         }
     }
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         AddInfoUnit(leftLive, leftKey);
         AddInfoUnit(rightLive, rightKey);
     }
@@ -339,7 +341,9 @@ void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
                 AddInfoUnit(inputLive, iu);
             }
         }
-        for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+        for (const auto& joinKey : ResidualJoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             Y_UNUSED(rightKey);
             AddInfoUnit(inputLive, leftKey);
         }

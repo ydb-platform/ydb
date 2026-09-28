@@ -1,5 +1,6 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/erase_request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/flush_request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/read_request_executor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/restore_request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_request_test_fixture.h>
@@ -180,6 +181,8 @@ static void BM_ReadSingleLocationRequestExecutorCreation(
     auto cleanDirtyMap = std::make_shared<TBlocksDirtyMap>(
         CreateArenaAllocatorPool(),
         fixture.VChunkConfig,
+        true,
+        TDirtyMapStateProto{},
         fixture.BlockSize,
         fixture.VChunkBlockCount);
 

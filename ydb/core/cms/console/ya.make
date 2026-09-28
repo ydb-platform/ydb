@@ -67,6 +67,8 @@ SRCS(
     http.h
     immediate_controls_configurator.cpp
     immediate_controls_configurator.h
+    interconnect_configurator.cpp
+    interconnect_configurator.h
     jaeger_tracing_configurator.cpp
     jaeger_tracing_configurator.h
     log_settings_configurator.cpp
@@ -85,6 +87,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/actors/interconnect
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage

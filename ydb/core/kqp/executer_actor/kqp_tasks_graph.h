@@ -229,6 +229,7 @@ struct TGraphMeta {
     ui32 LockNodeId = 0;
     NKqpProto::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
+    bool DisablePessimisticLocks = false;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
@@ -283,6 +284,10 @@ struct TGraphMeta {
 
     void SetLockMode(NKikimrDataEvents::ELockMode lockMode) {
         LockMode = lockMode;
+    }
+
+    void SetDisablePessimisticLocks(bool disablePessimisticLocks) {
+        DisablePessimisticLocks = disablePessimisticLocks;
     }
 
     void SetQuerySpanId(ui64 querySpanId) {

@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
@@ -157,6 +158,7 @@
 #include <ydb/services/ydb/ydb_secret.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
@@ -239,7 +241,13 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
         server->Stop();
     }
 
-    wrapper->Servers.clear();
+    // Do not destroy TGRpcServer objects here.
+    // KikimrStop() calls StopGRpcServers() before ActorSystem->Stop(), so destroying the
+    // servers here would leave dangling TServer* pointers in any
+    // TGRpcStreamingRequest objects that are still alive when the actor system
+    // destroys their holding actors. The servers are destroyed later when
+    // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
+    // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
 }
 
 } // anonymous namespace
@@ -902,6 +910,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 #endif
         TServiceCfg hasSecretService = services.empty();
         names["secret"] = &hasSecretService;
+        TServiceCfg hasUdfService = services.empty();
+        names["udf"] = &hasUdfService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1062,6 +1072,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasSecretService) {
             server.AddService(new NGRpcService::TGRpcYdbSecretService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasSecretService.IsRlAllowed()));
+        }
+
+        if (hasUdfService) {
+            server.AddService(new NGRpcService::TGRpcYdbUdfService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasUdfService.IsRlAllowed()));
         }
 
         if (hasOperationService) {
@@ -1494,7 +1509,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const auto& cfg = runConfig.AppConfig;
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || NeedToUseAutoConfig(cfg.GetActorSystemConfig());
-    bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
+    bool useSharedThreads = useAutoConfig && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
 
@@ -1515,6 +1530,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
 
+    AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(runConfig.AppConfig.GetResourcePathPrefixMapping());
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {
@@ -1716,6 +1732,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasLongTxServiceConfig()) {
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
+    }
+
+    if (runConfig.AppConfig.HasUdfStoreConfig()) {
+        AppData->UdfStoreConfig.CopyFrom(runConfig.AppConfig.GetUdfStoreConfig());
     }
 
     AppData->KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(Counters, runConfig.AppConfig);
@@ -2485,6 +2505,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (ActorSystem) {
         ActorSystem->Cleanup();
     }
+
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+    // Disconnect tasks posted during actor shutdown have run on the NBS
+    // executors. Join those threads before ~TKikimrRunner frees TActorSystem.
+    NYdb::NBS::NBlockStore::StopNbsExecutors();
+#endif
 
     if (YdbDriver) {
         YdbDriver->Stop(true);

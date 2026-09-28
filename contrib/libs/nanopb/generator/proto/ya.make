@@ -11,6 +11,13 @@ SUBSCRIBER(
     g:quasar-sys
 )
 
+PROTO_NAMESPACE(
+    GLOBAL
+    contrib/libs/nanopb/generator/proto
+)
+
+PY_NAMESPACE(.)
+
 SRCS(
     nanopb.proto
 )

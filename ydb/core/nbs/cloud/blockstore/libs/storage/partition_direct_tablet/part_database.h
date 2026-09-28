@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -53,6 +54,9 @@ public:
 
     bool ReadAllDirtyMapStates(TDirtyMapStateProtos& out);
     void StoreDirtyMapState(ui32 vChunkIndex, const TDirtyMapStateProto& state);
+
+    bool ReadAllTouchedVChunks(TTouchedVChunks& out);
+    void StoreTouchedVChunkMask(const TTouchedVChunks::TChunk& chunk);
 
     bool ReadAddHostInProgress(TMaybe<TAddHostInProgress>& addHostInProgress);
     void StoreAddHostInProgress(const TAddHostInProgress& addHostInProgress);

@@ -466,9 +466,9 @@ TAddressCache::TAddressPtr TAddressCache::Resolve(const TString& hostName)
             break;
         }
         retryPolicy->NotifyNewAttempt();
-        YT_LOG_DEBUG("Failed to resolve address of required version for host %v, retrying: %v",
-            hostName,
-            retryPolicy->GetAttemptDescription());
+        YT_TLOG_DEBUG("Failed to resolve address of required version; retrying")
+            .With("HostName", hostName)
+            .With("Attempt", retryPolicy->GetAttemptDescription());
         if (auto backoffDuration = retryPolicy->OnGenericError(error)) {
             NDetail::TWaitProxy::Get()->Sleep(*backoffDuration);
         } else {
@@ -493,14 +493,14 @@ TAddressCache::TAddressPtr TAddressCache::FindAddress(const TString& hostName) c
     }
 
     if (TInstant::Now() > entry.ExpirationTime) {
-        YT_LOG_DEBUG("Address resolution cache entry for host %v is expired, will retry resolution",
-            hostName);
+        YT_TLOG_DEBUG("Address resolution cache entry is expired; will retry resolution")
+            .With("HostName", hostName);
         return nullptr;
     }
 
     if (!ContainsAddressOfRequiredVersion(entry.Address)) {
-        YT_LOG_DEBUG("Address of required version not found for host %v, will retry resolution",
-            hostName);
+        YT_TLOG_DEBUG("Address of required version not found; will retry resolution")
+            .With("HostName", hostName);
         return nullptr;
     }
 
@@ -574,9 +574,9 @@ TConnectionPtr TConnectionPool::Connect(
         Connections_.insert({hostName, connection});
     }
 
-    YT_LOG_DEBUG("New connection to %v #%v opened",
-        hostName,
-        connection->Id);
+    YT_TLOG_DEBUG("New connection opened")
+        .With("HostName", hostName)
+        .With("ConnectionId", connection->Id);
 
     return connection;
 }
@@ -605,8 +605,8 @@ void TConnectionPool::Invalidate(
     auto range = Connections_.equal_range(hostName);
     for (auto it = range.first; it != range.second; ++it) {
         if (it->second == connection) {
-            YT_LOG_DEBUG("Closing connection #%v",
-                connection->Id);
+            YT_TLOG_DEBUG("Closing connection")
+                .With("ConnectionId", connection->Id);
             Connections_.erase(it);
             return;
         }
@@ -643,16 +643,16 @@ void TConnectionPool::Refresh()
 
         if (removeCount > 0) {
             Connections_.erase(mapIterator);
-            YT_LOG_DEBUG("Closing connection #%v (too many opened connections)",
-                connection->Id);
+            YT_TLOG_DEBUG("Closing connection; too many opened connections")
+                .With("ConnectionId", connection->Id);
             --removeCount;
             continue;
         }
 
         if (connection->DeadLine < now) {
             Connections_.erase(mapIterator);
-            YT_LOG_DEBUG("Closing connection #%v (timeout)",
-                connection->Id);
+            YT_TLOG_DEBUG("Closing connection; timed out")
+                .With("ConnectionId", connection->Id);
         }
     }
 }
@@ -790,10 +790,10 @@ THttpResponse::THttpResponse(
     }
 
     auto logAndSetError = [&] (int code, const TString& rawError) {
-        YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-            Context_.RequestId,
-            HttpCode_,
-            rawError.data());
+        YT_TLOG_ERROR("Response carries an HTTP error")
+            .With("RequestId", Context_.RequestId)
+            .With("HttpCode", HttpCode_)
+            .With("Error", rawError);
         ErrorResponse_ = TErrorResponse(TYtError(code, rawError), Context_.RequestId);
     };
 
@@ -830,11 +830,11 @@ THttpResponse::THttpResponse(
             }
 
             if (ErrorResponse_ && TExpectedErrorGuard::IsErrorExpected(*ErrorResponse_)) {
-                YT_LOG_INFO("%v",
-                    errorString.data());
+                YT_TLOG_INFO("Response carries an expected error")
+                    .With("Error", errorString);
             } else {
-                YT_LOG_ERROR("%v",
-                    errorString.data());
+                YT_TLOG_ERROR("Response carries an error")
+                    .With("Error", errorString);
             }
             break;
         }
@@ -934,9 +934,9 @@ void THttpResponse::CheckTrailers(const THttpHeaders& trailers)
 {
     if (auto errorResponse = ParseError(trailers)) {
         errorResponse->SetIsFromTrailers(true);
-        YT_LOG_ERROR("RSP %v - %v",
-            Context_.RequestId,
-            errorResponse.GetRef().what());
+        YT_TLOG_ERROR("Response trailers carry an error")
+            .With("RequestId", Context_.RequestId)
+            .With("Error", errorResponse.GetRef().what());
         ythrow errorResponse.GetRef();
     }
 }
@@ -1029,9 +1029,9 @@ TString THttpRequest::GetRequestId() const
 
 IOutputStream* THttpRequest::StartRequestImpl(bool includeParameters)
 {
-    YT_LOG_DEBUG("REQ %v - requesting connection to %v from connection pool",
-        Context_.RequestId,
-        Context_.HostName);
+    YT_TLOG_DEBUG("Requesting connection from the pool")
+        .With("RequestId", Context_.RequestId)
+        .With("HostName", Context_.HostName);
 
     StartTime_ = TInstant::Now();
 
@@ -1042,15 +1042,15 @@ IOutputStream* THttpRequest::StartRequestImpl(bool includeParameters)
         std::rethrow_exception(wrapped);
     }
 
-    YT_LOG_DEBUG("REQ %v - connection #%v",
-        Context_.RequestId,
-        Connection_->Id);
+    YT_TLOG_DEBUG("Connection assigned to request")
+        .With("RequestId", Context_.RequestId)
+        .With("ConnectionId", Connection_->Id);
 
     auto strHeader = Header_.GetHeaderAsString(Context_.HostName, Context_.RequestId, includeParameters);
 
     LogRequest(Header_, Url_, includeParameters, Context_.RequestId, Context_.HostName);
 
-    LoggedAttributes_ = GetLoggedAttributes(Header_, Url_, includeParameters, 128);
+    IncludeParameters_ = includeParameters;
 
     auto outputFormat = Header_.GetOutputFormat();
     if (outputFormat && outputFormat->IsTextYson()) {
@@ -1110,23 +1110,21 @@ TString THttpRequest::GetResponse()
 {
     TString result = GetResponseStream()->ReadAll();
 
-    TStringStream loggedAttributes;
-    loggedAttributes
-        << "Time: " << TInstant::Now() - StartTime_ << "; "
-        << "HostName: " << GetResponseStream()->GetHostName() << "; "
-        << LoggedAttributes_;
+    auto tags = NLogging::TLoggingTagList()
+        .With("RequestId", Context_.RequestId)
+        .With("Time", TInstant::Now() - StartTime_)
+        .With("HostName", GetResponseStream()->GetHostName());
+    tags.Add(GetLoggedAttributes(Header_, Url_, IncludeParameters_, /*sizeLimit*/ 128));
 
     if (LogResponse_) {
         constexpr auto sizeLimit = 1 << 7;
-        YT_LOG_DEBUG("RSP %v - received response (Response: '%v'; %v)",
-            Context_.RequestId,
-            TruncateForLogs(result, sizeLimit),
-            loggedAttributes.Str());
+        YT_TLOG_DEBUG("Response received")
+            .With(tags)
+            .With("Response", TruncateForLogs(result, sizeLimit));
     } else {
-        YT_LOG_DEBUG("RSP %v - received response of %v bytes (%v)",
-            Context_.RequestId,
-            result.size(),
-            loggedAttributes.Str());
+        YT_TLOG_DEBUG("Response received")
+            .With(tags)
+            .With("Size", result.size());
     }
     return result;
 }

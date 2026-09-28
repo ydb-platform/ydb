@@ -142,6 +142,18 @@ void ResetMaxCounters(NKikimrSysView::TDbCounters* dst) {
     }
 }
 
+void ResetHistogramBuckets(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices) {
+    for (ui32 i : indices) {
+        if (i >= (ui32)dst->HistogramSize()) {
+            continue;
+        }
+        auto* values = dst->MutableHistogram(i)->MutableBuckets();
+        for (auto& v : *values) {
+            v = 0;
+        }
+    }
+}
+
 void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
     const NKikimrSysView::TDbCounters& current,
     NKikimrSysView::TDbCounters* prev)

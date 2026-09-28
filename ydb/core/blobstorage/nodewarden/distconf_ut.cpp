@@ -1156,6 +1156,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         command.MutablePDiskId()->SetPDiskId(4);
         command.SetConvertToDonor(true);
         command.SetAllowUnusableDisks(true);
+        command.SetIgnoreGroupLayoutChecks(true);
         command.SetIsSelfHealReasonDecommit(true);
         command.SetWithAttentionToReplication(true);
         command.SetTryToRelocateBrokenDisksLocallyFirst(true);
@@ -1174,6 +1175,8 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT(params.ForbiddenPDisks.contains(NBsController::TPDiskId(9, 3)));
         UNIT_ASSERT(params.ConvertToDonor);
         UNIT_ASSERT(!params.IgnoreVSlotQuotaCheck);
+        UNIT_ASSERT(params.LayoutPolicy.AllowsRelaxedPlacement());
+        UNIT_ASSERT(params.LayoutPolicy.Accepts(false));
         UNIT_ASSERT(params.AllowUnusableDisks);
         UNIT_ASSERT(!params.SettleOnlyOnOperationalDisks);
         UNIT_ASSERT(params.IsSelfHealReasonDecommit);
@@ -1183,6 +1186,19 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT(params.TryToRelocateBrokenDisksLocallyFirst);
         UNIT_ASSERT(params.ApplySelfHealNodeAllowList);
         UNIT_ASSERT_VALUES_EQUAL(params.Reassignments, &reassignments);
+
+        command.SetFromSelfHeal(false);
+        command.SetIgnoreGroupLayoutChecks(false);
+        params = NStorage::TDistributedConfigKeeper::BuildStaticGroupReassignParams(&config, &baseConfig, command,
+                                                                                    group, serviceSet, &reassignments);
+        UNIT_ASSERT(!params.LayoutPolicy.AllowsRelaxedPlacement());
+        UNIT_ASSERT(!params.LayoutPolicy.Accepts(false));
+
+        command.SetFromSelfHeal(true);
+        params = NStorage::TDistributedConfigKeeper::BuildStaticGroupReassignParams(&config, &baseConfig, command,
+                                                                                    group, serviceSet, &reassignments);
+        UNIT_ASSERT(!params.LayoutPolicy.AllowsRelaxedPlacement());
+        UNIT_ASSERT(params.LayoutPolicy.Accepts(false));
     }
 
     Y_UNIT_TEST(AllocateStaticGroupTargetSpaceCheck) {
@@ -2086,6 +2102,16 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             return result;
         }
 
+        void SetNodeRack(ui32 nodeId, const TString& rack) {
+            for (auto& node : *Config.MutableAllNodes()) {
+                if (node.GetNodeId() == nodeId) {
+                    node.MutableLocation()->SetRack(rack);
+                    return;
+                }
+            }
+            UNIT_FAIL("Node not found");
+        }
+
         void SetPDiskType(ui32 nodeId, NKikimrBlobStorage::EPDiskType type) {
             for (auto& pdisk : *BaseConfig.MutablePDisk()) {
                 if (pdisk.GetNodeId() == nodeId) {
@@ -2161,6 +2187,8 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         bool WithAttentionToReplication = false;
         bool UseSelfHealLocalPolicy = false;
         bool TryToRelocateBrokenDisksLocallyFirst = false;
+        bool IgnoreGroupLayoutChecks = false;
+        bool RequireCorrectLayout = true;
     };
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
@@ -2183,6 +2211,8 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             .ForbiddenPDisks = std::move(forbid),
             .BaseConfig = &s.BaseConfig,
             .IgnoreVSlotQuotaCheck = true,
+            .LayoutPolicy = NBsController::TGroupLayoutPolicy::FromFlags(options.IgnoreGroupLayoutChecks,
+                                                                         options.RequireCorrectLayout),
             .AllowUnusableDisks = options.AllowUnusableDisks,
             .SettleOnlyOnOperationalDisks = options.SettleOnlyOnOperationalDisks,
             .PreferLessOccupiedRack = options.PreferLessOccupiedRack,
@@ -2220,6 +2250,98 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         }
         s.AddMultiVDiskGroupOn({1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
         return s;
+    }
+
+    Y_UNIT_TEST(IncorrectTargetLayoutRequiresExplicitOverride) {
+        TSetup s = MakeBlock42Setup();
+        s.SetNodeRack(9, "rack-2");
+        TReallocateOptions options{
+            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NumFailDomains = 8,
+            .TargetPDiskId = NBsController::TPDiskId(9, 1),
+        };
+        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, options),
+                              NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes().front(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
+
+        options.IgnoreGroupLayoutChecks = true;
+        Reallocate(s, NodeIds({}), false, options);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes().front(), 9u);
+    }
+
+    Y_UNIT_TEST(AlreadyIncorrectLayoutRequiresRepairOrOverride) {
+        TSetup s = MakeBlock42Setup();
+        s.SetNodeRack(1, "rack-2");
+        TReallocateOptions options{
+            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NumFailDomains = 8,
+            .TargetPDiskId = NBsController::TPDiskId(9, 1),
+            .VDiskId = TVDiskIdShort(0, 2, 0),
+        };
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Reallocate(s, NodeIds({}), false, options),
+                                       NStorage::TDistributedConfigKeeper::TExConfigError,
+                                       "Group layout is incorrect");
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[2], 3u);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
+
+        auto withOverride = s;
+        options.IgnoreGroupLayoutChecks = true;
+        Reallocate(withOverride, NodeIds({}), false, options);
+        UNIT_ASSERT_VALUES_EQUAL(withOverride.GetGroupDomainNodes()[2], 9u);
+
+        options.IgnoreGroupLayoutChecks = false;
+        options.RequireCorrectLayout = false;
+        auto fromSelfHeal = s;
+        Reallocate(fromSelfHeal, NodeIds({}), false, options);
+        UNIT_ASSERT_VALUES_EQUAL(fromSelfHeal.GetGroupDomainNodes()[2], 9u);
+
+        options.RequireCorrectLayout = true;
+        options.VDiskId = TVDiskIdShort(0, 0, 0);
+        Reallocate(s, NodeIds({}), false, options);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes().front(), 9u);
+    }
+
+    Y_UNIT_TEST(AutomaticPlacementCanIgnoreLayout) {
+        for (bool alreadyIncorrect : {false, true}) {
+            TSetup s = MakeBlock42Setup();
+            s.SetNodeRack(9, "rack-2");
+            s.SetPDiskDriveStatus(10, NKikimrBlobStorage::BROKEN);
+            if (alreadyIncorrect) {
+                s.SetNodeRack(3, "rack-2");
+            }
+            TReallocateOptions options{
+                .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+                .NumFailDomains = 8,
+            };
+            UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, options),
+                                  NStorage::TDistributedConfigKeeper::TExConfigError);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes().front(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
+
+            options.RequireCorrectLayout = false;
+            UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, options),
+                                  NStorage::TDistributedConfigKeeper::TExConfigError);
+            options.RequireCorrectLayout = true;
+            options.IgnoreGroupLayoutChecks = true;
+            Reallocate(s, NodeIds({}), false, options);
+            UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes().front(), 9u);
+        }
+    }
+
+    Y_UNIT_TEST(LayoutOverridePreservesTargetEligibilityChecks) {
+        TSetup s = MakeBlock42Setup();
+        s.SetNodeRack(9, "rack-2");
+        s.SetPDiskDriveStatus(9, NKikimrBlobStorage::BROKEN);
+        TReallocateOptions options{
+            .ErasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NumFailDomains = 8,
+            .TargetPDiskId = NBsController::TPDiskId(9, 1),
+            .IgnoreGroupLayoutChecks = true,
+        };
+        UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({}), false, options),
+                              NStorage::TDistributedConfigKeeper::TExConfigError);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
     }
 
     Y_UNIT_TEST(RespectsNodeAllowList) {

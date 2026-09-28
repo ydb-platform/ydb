@@ -7,7 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
@@ -15,6 +15,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -57,7 +59,25 @@ TPartitionActor::TPartitionActor(
         LogTitle.GetWithTime().c_str());
 }
 
-TPartitionActor::~TPartitionActor() = default;
+TPartitionActor::~TPartitionActor()
+{
+    if (!Session) {
+        return;
+    }
+    Session->Stop();
+    // Actor-system cleanup can destroy a partition without PassAway(). Its
+    // blockStoreFacade registration must not retain FastPath beyond the actor
+    // system.
+    if (!FrontendRegistrationClosed) {
+        if (auto service = GetNbsService();
+            service && service->BlockStoreFacade)
+        {
+            service->BlockStoreFacade->UnregisterVolume(
+                VolumeConfig.GetDiskId(),
+                Session->GetRegistrationId());
+        }
+    }
+}
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
@@ -185,20 +205,27 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
 
 void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
 {
-    FrontendRegistrationClosed = true;
-    if (FrontendRegistrationId.empty()) {
+    if (FrontendRegistrationClosed) {
         return;
     }
-    if (auto& frontend = GetNbsService()->Frontend; frontend) {
-        frontend->UnregisterVolume(FrontendRegistrationId);
+    FrontendRegistrationClosed = true;
+    if (!Session) {
+        return;
+    }
+    Session->Stop();
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade;
+        blockStoreFacade)
+    {
+        blockStoreFacade->UnregisterVolume(
+            VolumeConfig.GetDiskId(),
+            Session->GetRegistrationId());
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Frontend unregister requested: registrationId=%s",
             LogTitle.GetWithTime().c_str(),
-            FrontendRegistrationId.c_str());
+            Session->GetRegistrationId().c_str());
     }
-    FrontendRegistrationId.clear();
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
@@ -519,24 +546,36 @@ void TPartitionActor::HandleFastPathServiceReady(
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
-    if (auto& frontend = GetNbsService()->Frontend;
-        frontend && !FrontendRegistrationClosed)
+    // MVP: use either classic gRPC or the local NBS2 vhost endpoint for a disk,
+    // never both concurrently.
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade;
+        blockStoreFacade && !FrontendRegistrationClosed)
     {
-        auto registration = frontend->RegisterVolume(VolumeConfig);
+        auto sessionState = TPartitionSession::Create(
+            VolumeConfig,
+            FastPathService,
+            FastPathService->GetVolumeConfig());
+        Y_ABORT_UNLESS(
+            !HasError(sessionState),
+            "%s",
+            FormatError(sessionState.GetError()).c_str());
+        Session = sessionState.ExtractResult();
+        auto registration = blockStoreFacade->RegisterVolume(
+            Session,
+            CreatePartitionSessionControl(ctx.ActorSystem(), SelfId()));
         Y_ABORT_UNLESS(
             !HasError(registration),
-            "%s Could not publish frontend metadata: %s",
+            "%s Could not publish volume: %s",
             LogTitle.GetWithTime().c_str(),
             FormatError(registration.GetError()).c_str());
 
-        FrontendRegistrationId = registration.ExtractResult();
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Frontend metadata published: registrationId=%s "
+            "%s Frontend backend published: registrationId=%s "
             "blockSize=%u blocksCount=%llu",
             LogTitle.GetWithTime().c_str(),
-            FrontendRegistrationId.c_str(),
+            registration.GetResult().c_str(),
             VolumeConfig.GetBlockSize(),
             static_cast<unsigned long long>(
                 VolumeConfig.GetPartitions(0).GetBlockCount()));
@@ -812,6 +851,35 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
+void TPartitionActor::HandleMountSession(
+    const TEvPartitionSession::TEvMount::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    auto* request = ev->Get();
+    if (!Session || FrontendRegistrationClosed) {
+        request->Result.TrySetValue(
+            MakeError(E_REJECTED, "Partition registration is unavailable"));
+        return;
+    }
+    request->Result.TrySetValue(Session->Mount(request->ClientId));
+}
+
+void TPartitionActor::HandleUnmountSession(
+    const TEvPartitionSession::TEvUnmount::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    auto* request = ev->Get();
+    if (!Session || FrontendRegistrationClosed) {
+        request->Result.TrySetValue(
+            MakeError(E_REJECTED, "Partition registration is unavailable"));
+        return;
+    }
+    request->Result.TrySetValue(
+        Session->Unmount(request->ClientId, request->SessionId));
+}
+
 void TPartitionActor::HandleUpdateVChunkConfig(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -920,6 +988,8 @@ void TPartitionActor::StopBscProxy(const TActorContext& ctx)
 void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 {
     switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPartitionSession::TEvMount, HandleMountSession);
+        HFunc(TEvPartitionSession::TEvUnmount, HandleUnmountSession);
         HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
         HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);

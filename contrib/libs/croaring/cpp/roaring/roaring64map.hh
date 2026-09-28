@@ -880,6 +880,138 @@ class Roaring64Map {
     }
 
     /**
+     * Computes the size of the intersection between two bitmaps.
+     * Throws std::length_error in the special case where the result is 2^64.
+     */
+    uint64_t and_cardinality(const Roaring64Map &r) const {
+        uint64_t card = 0;
+        auto lhs = roarings.cbegin();
+        auto rhs = r.roarings.cbegin();
+        while (lhs != roarings.cend() && rhs != r.roarings.cend()) {
+            if (lhs->first < rhs->first) {
+                ++lhs;
+            } else if (lhs->first > rhs->first) {
+                ++rhs;
+            } else {
+                card = addCardinalities(
+                    card, lhs->second.and_cardinality(rhs->second));
+                ++lhs;
+                ++rhs;
+            }
+        }
+        return card;
+    }
+
+    /**
+     * Check whether the two bitmaps intersect. Stops at the first shared
+     * value rather than computing the whole intersection.
+     */
+    bool intersect(const Roaring64Map &r) const {
+        auto lhs = roarings.cbegin();
+        auto rhs = r.roarings.cbegin();
+        while (lhs != roarings.cend() && rhs != r.roarings.cend()) {
+            if (lhs->first < rhs->first) {
+                ++lhs;
+            } else if (lhs->first > rhs->first) {
+                ++rhs;
+            } else {
+                if (lhs->second.intersect(rhs->second)) {
+                    return true;
+                }
+                ++lhs;
+                ++rhs;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Computes the size of the union between two bitmaps.
+     * Throws std::length_error in the special case where the result is 2^64.
+     */
+    uint64_t or_cardinality(const Roaring64Map &r) const {
+        uint64_t card = 0;
+        auto lhs = roarings.cbegin();
+        auto rhs = r.roarings.cbegin();
+        while (lhs != roarings.cend() && rhs != r.roarings.cend()) {
+            if (lhs->first < rhs->first) {
+                card = addCardinalities(card, lhs->second.cardinality());
+                ++lhs;
+            } else if (lhs->first > rhs->first) {
+                card = addCardinalities(card, rhs->second.cardinality());
+                ++rhs;
+            } else {
+                card = addCardinalities(
+                    card, lhs->second.or_cardinality(rhs->second));
+                ++lhs;
+                ++rhs;
+            }
+        }
+        for (; lhs != roarings.cend(); ++lhs) {
+            card = addCardinalities(card, lhs->second.cardinality());
+        }
+        for (; rhs != r.roarings.cend(); ++rhs) {
+            card = addCardinalities(card, rhs->second.cardinality());
+        }
+        return card;
+    }
+
+    /**
+     * Computes the size of the symmetric difference between two bitmaps.
+     * Throws std::length_error in the special case where the result is 2^64.
+     */
+    uint64_t xor_cardinality(const Roaring64Map &r) const {
+        uint64_t card = 0;
+        auto lhs = roarings.cbegin();
+        auto rhs = r.roarings.cbegin();
+        while (lhs != roarings.cend() && rhs != r.roarings.cend()) {
+            if (lhs->first < rhs->first) {
+                card = addCardinalities(card, lhs->second.cardinality());
+                ++lhs;
+            } else if (lhs->first > rhs->first) {
+                card = addCardinalities(card, rhs->second.cardinality());
+                ++rhs;
+            } else {
+                card = addCardinalities(
+                    card, lhs->second.xor_cardinality(rhs->second));
+                ++lhs;
+                ++rhs;
+            }
+        }
+        for (; lhs != roarings.cend(); ++lhs) {
+            card = addCardinalities(card, lhs->second.cardinality());
+        }
+        for (; rhs != r.roarings.cend(); ++rhs) {
+            card = addCardinalities(card, rhs->second.cardinality());
+        }
+        return card;
+    }
+
+    /**
+     * Computes the size of the difference (andnot) between two bitmaps.
+     * Throws std::length_error in the special case where the result is 2^64.
+     */
+    uint64_t andnot_cardinality(const Roaring64Map &r) const {
+        uint64_t card = 0;
+        auto lhs = roarings.cbegin();
+        auto rhs = r.roarings.cbegin();
+        while (lhs != roarings.cend()) {
+            if (rhs == r.roarings.cend() || lhs->first < rhs->first) {
+                card = addCardinalities(card, lhs->second.cardinality());
+                ++lhs;
+            } else if (lhs->first > rhs->first) {
+                ++rhs;
+            } else {
+                card = addCardinalities(
+                    card, lhs->second.andnot_cardinality(rhs->second));
+                ++lhs;
+                ++rhs;
+            }
+        }
+        return card;
+    }
+
+    /**
      * Returns true if the bitmap is subset of the other.
      */
     bool isSubset(const Roaring64Map &r) const {
@@ -1701,6 +1833,28 @@ class Roaring64Map {
     }
     static constexpr uint32_t lowBytes(const uint64_t in) {
         return uint32_t(in);
+    }
+    /**
+     * Adds two cardinalities. A 64-bit bitmap can hold 2^64 values, which is
+     * not representable in a uint64_t, so this mirrors what cardinality()
+     * does in that case. Each addend is at most 2^32 and there are at most
+     * 2^32 keys, so the true sum never exceeds 2^64 and a wraparound check is
+     * exact.
+     */
+    static uint64_t addCardinalities(uint64_t lhs, uint64_t rhs) {
+        uint64_t sum = lhs + rhs;
+        if (sum < lhs) {
+#if ROARING_EXCEPTIONS
+            throw std::length_error(
+                "cardinality is 2^64, "
+                "unable to represent in a 64-bit integer");
+#else
+            ROARING_TERMINATE(
+                "cardinality is 2^64, "
+                "unable to represent in a 64-bit integer");
+#endif
+        }
+        return sum;
     }
     static constexpr uint64_t uniteBytes(const uint32_t highBytes,
                                          const uint32_t lowBytes) {

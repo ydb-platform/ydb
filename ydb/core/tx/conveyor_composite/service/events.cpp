@@ -13,10 +13,12 @@ TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
     AFL_VERIFY(Results.size());
 }
 
-TWorkerTaskResult::TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish)
+TWorkerTaskResult::TWorkerTaskResult(
+    const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish, std::function<void()> accounted)
     : TBase(context)
     , Start(start)
-    , Finish(finish) {
+    , Finish(finish)
+    , Accounted(std::move(accounted)) {
     AFL_VERIFY(Start <= Finish);
 }
 

@@ -64,7 +64,7 @@ Where `database` is path to shared database. Benchmark will be run over database
 
 - `concurrency` count serverless databases `ydb_cli_bench_serverless_db_[0-concurrency]`
 
-All schema object inside serverless database will be cleaned up before each sample. After benchmark databases wont be dropped, to drop them add flag `--cleanup`.
+All schema object inside serverless database will be cleaned up before each sample. After benchmark databases won't be dropped, to drop them add flag `--cleanup`.
 
 As database can be used tool `ydb/tests/tools/kqprun`:
 

@@ -139,8 +139,13 @@ public:
                         }
                     }
 
-                    // skip if table already has loaded metadata and has only read intents
-                    if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents)) {
+                    const bool hasRequiredLocks = (tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents))
+                        && (tableDesc.HasSymlinkLock || !HasSymlinkIntents(tableDesc.Intents))
+                        && (tableDesc.HasReferenceLock
+                            || !tableDesc.Intents.HasFlags(TYtTableIntent::Referenced)
+                            || !tableDesc.Meta->DoesExist);
+                    // Reuse metadata when all required protection is satisfied.
+                    if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || hasRequiredLocks) {
                         // Intents/views can be updated since evaluation phase
                         if (!tableDesc.FillViews(
                             clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
@@ -231,6 +236,8 @@ public:
             if (LoadCtx->Result.Data[i].WriteLock) {
                 tableDesc.HasWriteLock = true;
             }
+            tableDesc.HasSymlinkLock |= LoadCtx->Result.Data[i].SymlinkLock;
+            tableDesc.HasReferenceLock |= LoadCtx->Result.Data[i].ReferenceLock;
 
             TIssueScopeGuard issueScope(ctx.IssueManager, [tableName]() {
                 return MakeIntrusive<TIssue>(TStringBuilder() << "Table " << tableName);

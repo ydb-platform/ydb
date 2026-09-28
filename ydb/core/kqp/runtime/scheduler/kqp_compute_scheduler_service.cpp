@@ -27,7 +27,7 @@ namespace {
 
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
-    explicit TComputeSchedulerService(const TDuration& updateFairSharePeriod) : UpdateFairSharePeriod(updateFairSharePeriod) {}
+    explicit TComputeSchedulerService(TDuration updateFairSharePeriod) : UpdateFairSharePeriod(updateFairSharePeriod) {}
 
     void Bootstrap() {
         Scheduler = AppData()->KqpComputeScheduler;
@@ -394,14 +394,11 @@ void TComputeScheduler::UpdateFairShare() {
         snapshot = NHdrf::NSnapshot::TRootPtr(Root->TakeSnapshot());
     }
 
-    snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown();
+    snapshot->Update(Root->GetSnapshot());
 
     {
         TWriteGuard lock(Mutex);
-        if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
-            snapshot->AccountPreviousSnapshot(oldSnapshot);
-        }
+        Root->SetSnapshot(snapshot);
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());
@@ -429,7 +426,7 @@ NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(const NMonitoring::TD
     return std::make_shared<NScheduler::TComputeScheduler>(MakeIntrusive<NKqp::TKqpCounters>(counters), options);
 }
 
-IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod) {
+IActor* CreateKqpComputeSchedulerService(TDuration updateFairSharePeriod) {
     Y_ENSURE(updateFairSharePeriod > TDuration::Zero());
     return new TComputeSchedulerService(updateFairSharePeriod);
 }

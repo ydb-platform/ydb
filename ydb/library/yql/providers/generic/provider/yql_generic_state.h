@@ -102,7 +102,7 @@ namespace NYql {
             const NConnector::IClient::TPtr& genericClient,
             const TGenericGatewayConfig& gatewayConfig)
             : Types(types)
-            , Configuration(MakeIntrusive<TGenericConfiguration>())
+            , Configuration(MakeIntrusive<TGenericConfiguration>(types ? types->StrictConfigValidation : false))
             , FunctionRegistry(functionRegistry)
             , DatabaseResolver(databaseResolver)
             , CredentialsFactory(credentialsFactory)
@@ -119,7 +119,7 @@ namespace NYql {
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;
-        TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
+        TGenericConfiguration::TPtr Configuration;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
 
         // key - (database id, database type), value - credentials to access managed APIs

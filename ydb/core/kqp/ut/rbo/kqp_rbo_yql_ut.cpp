@@ -672,9 +672,66 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestMultipleSelects(ColumnStore);
     }
 
+    Y_UNIT_TEST(PGInsertUpdate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE src (
+                _q_000_f_000_type String,
+                _q_000_f_000_rtref String,
+                _q_000_f_000_rrref String,
+                _q_000_f_001_type String,
+                _q_000_f_001_rtref String,
+                _q_000_f_001_rrref String,
+                _q_000_f_002 String,
+                _ydb_pk String NOT NULL,
+                PRIMARY KEY (_ydb_pk)
+            );
+
+            CREATE TABLE dst (
+                _q_000_f_000_type String,
+                _q_000_f_000_rtref String,
+                _q_000_f_000_rrref String,
+                _q_000_f_001_type String,
+                _q_000_f_001_rtref String,
+                _q_000_f_001_rrref String,
+                _q_000_f_002 Decimal(35,4),
+                _ydb_pk Utf8 NOT NULL,
+                PRIMARY KEY (_ydb_pk)
+            );
+        )";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        auto dbSession2 = client.GetSession().GetValueSync().GetSession();
+
+        auto insertSelectRes = dbSession2.ExecuteQuery(R"(
+            INSERT INTO dst (`_q_000_f_000_type`, `_q_000_f_000_rtref`, `_q_000_f_000_rrref`, `_q_000_f_001_type`, `_q_000_f_001_rtref`, `_q_000_f_001_rrref`, `_q_000_f_002`, `_ydb_pk`) 
+SELECT `_q_000_f_000_type` AS `_q_000_f_000_type`, `_q_000_f_000_rtref` AS `_q_000_f_000_rtref`, `_q_000_f_000_rrref` AS `_q_000_f_000_rrref`, `_q_000_f_001_type` AS `_q_000_f_001_type`, `_q_000_f_001_rtref` AS `_q_000_f_001_rtref`, `_q_000_f_001_rrref` AS `_q_000_f_001_rrref`, CAST(`_q_000_f_002` AS Decimal(35,4)) AS `_q_000_f_002`, CAST(RandomUuid(`_ydb_pk`) AS Utf8) AS `_ydb_pk` 
+FROM (
+    SELECT `t3`.`_q_000_f_000_type`, `t3`.`_q_000_f_000_rtref`, `t3`.`_q_000_f_000_rrref`, `t3`.`_q_000_f_001_type`, `t3`.`_q_000_f_001_rtref`, `t3`.`_q_000_f_001_rrref`, `t3`.`_q_000_f_002`, `t3`.`_ydb_pk`
+    FROM src AS `t3`
+) AS `direct_base_source`
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(insertSelectRes.IsSuccess());
+
+    }
+
+    
+
     Y_UNIT_TEST(InsertUpdate) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         
@@ -3511,6 +3568,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 SELECT stddev_samp(t1.a), stddev_samp(t1.b) from `/Root/t1` as t1;
             )",
             R"(
+                select some(t1.a), some(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
                 select sum(distinct t1.a), max(distinct t1.b) from `/Root/t1` as t1;
             )",
             R"(
@@ -3527,6 +3587,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const std::vector<std::string> resultsEmptyColumns = {
             R"([[0u]])",
             R"([[0u;0u]])",
+            R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",
@@ -6157,6 +6218,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 d Int64,
                 e Int64,
                 f Decimal(22,9),
+                g Utf8,
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -6211,6 +6273,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     rows.BeginOptional().Decimal(NYdb::TDecimalValue(TStringBuilder() << *e << ".5", 22, 9)).EndOptional();
                 } else {
                     rows.EmptyOptional(NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(22, 9)).Build());
+                }
+                const THashMap<i64, TString> names = {{10, "ddd"}, {20, "aaa"}, {30, "ccc"}, {40, "bbb"}};
+                rows.AddMember("g");
+                if (c) {
+                    rows.BeginOptional().Utf8(names.at(*c)).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::EPrimitiveType::Utf8);
                 }
                 rows.EndStruct();
             }
@@ -6380,6 +6449,47 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 )
                 ORDER BY a;
             )"},
+            {"range whole partition frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS partition_sum,
+                    Max(e) OVER w AS partition_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range default frame written out", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range default frame implied", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                )
+                ORDER BY a;
+            )"},
             {"range frame with ties", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -6391,6 +6501,149 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     PARTITION BY b
                     ORDER BY c
                     RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"running decimal aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, f,
+                    Sum(f) OVER w AS running_sum,
+                    Avg(f) OVER w AS running_avg,
+                    Min(f) OVER w AS running_min,
+                    Max(f) OVER w AS running_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"whole partition decimal aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, f,
+                    Sum(f) OVER w AS partition_sum,
+                    Avg(f) OVER w AS partition_avg,
+                    Count(f) OVER w AS partition_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range decimal aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, f,
+                    Sum(f) OVER w AS range_sum,
+                    Avg(f) OVER w AS range_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over a decimal order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, f, e,
+                    Sum(e) OVER w AS range_sum,
+                    Count(e) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY f DESC
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g, e,
+                    Sum(e) OVER w AS range_sum,
+                    Count(e) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over a descending string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g DESC
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over two order keys", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, d, e, c,
+                    Sum(c) OVER w AS range_sum,
+                    Count(c) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY d, e
+                )
+                ORDER BY a;
+            )"},
+            {"ranking and range aggregates over two order keys", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, d, e,
+                    Rank() OVER w AS rank_in_group,
+                    DenseRank() OVER w AS dense_rank_in_group,
+                    Sum(c) OVER w AS range_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY d DESC, e
+                )
+                ORDER BY a;
+            )"},
+            {"global range frame over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, g, e,
+                    Sum(e) OVER (ORDER BY g) AS range_sum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"ranking over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g,
+                    Rank() OVER w AS rank_in_group,
+                    DenseRank() OVER w AS dense_rank_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g
+                )
+                ORDER BY a;
+            )"},
+            {"running sum over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g, e,
+                    Sum(e) OVER w AS running_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 )
                 ORDER BY a;
             )"},
@@ -6583,9 +6836,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         "centred frame",
         "forward looking frame",
         "trailing frame",
-        // A RANGE frame runs to the last peer row, which a per-row chain cannot express.
-        "range frame with ties",
-        "named window shared by several functions over aggregates",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
@@ -6611,6 +6861,50 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                                             << JoinSeq("; ", newIssues));
             UNIT_ASSERT_VALUES_EQUAL_C(newResults[i], oldResults[i],
                                        "New RBO returned different rows for '" << name << "' on a " << table << " table");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(WindowSortWithoutBlocksUnderWindowFunctionsV2, WindowFunctionsV2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TString query = TStringBuilder() << R"(
+            PRAGMA YqlSelect = "force";
+            PRAGMA ydb.WindowFunctionsV2 = ")" << (WindowFunctionsV2 ? "true" : "false") << R"(";
+
+            SELECT a, Sum(c) OVER (PARTITION BY b ORDER BY c) AS s
+            FROM `/Root/t1`;
+        )";
+
+        auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetAst(), "AST is not available");
+        const TString ast(*result.GetStats()->GetAst());
+
+        UNIT_ASSERT_C(ast.Contains("WideChopper"), ast);
+        if (WindowFunctionsV2) {
+            UNIT_ASSERT_C(!ast.Contains("WideSortBlocks"), ast);
+            UNIT_ASSERT_C(ast.Contains("(WideSort "), ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("WideSortBlocks"), ast);
         }
     }
 
@@ -12488,6 +12782,91 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
+    }
+
+    void TestBlockHashCombine(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDqHashOperatorsUseBlocks(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            )
+        )";
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (i64 i = 1; i <= 3; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(10)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        const std::vector<std::string> queries = {
+            R"(
+                select sum(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select min(t1.a), max(t1.a), count(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select sum(t1.a), max(t1.b) from `/Root/t1` as t1;
+            )",
+        };
+
+        const std::vector<std::string> results = {
+            R"([[6;[10]]])",
+            R"([[1;3;3u;[10]]])",
+            R"([[[6];[10]]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "DqPhyHashCombine"), 2, ast);
+            // Row tables convert to blocks around each combine, column tables stay in blocks
+            // from the block read up to the result stage.
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "WideToBlocks"), columnTables ? 0 : 2, ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "WideFromBlocks"), columnTables ? 1 : 2, ast);
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(BlockHashCombine, ColumnStore) {
+        TestBlockHashCombine(ColumnStore);
     }
 
     void CreateSimpleTable(TKikimrRunner &kikimr) {

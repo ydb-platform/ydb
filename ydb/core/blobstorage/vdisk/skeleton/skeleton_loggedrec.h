@@ -3,6 +3,7 @@
 #include "skeleton_vmultiput_actor.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
@@ -42,9 +43,10 @@ namespace NKikimr {
 
         const TLsnSeg Seg;
         const bool ConfirmSyncLogAlso;
-        // Bytes this record was admitted against, charged to the Fresh space tracker
-        // until the record reaches Fresh and the segment starts accounting for it.
-        ui64 FreshSpaceAdmission = 0;
+        // The part of its operation's Fresh admission this record accounts for: what replaying it adds to Fresh.
+        // It counts as in flight until the record has been replayed, so an operation writing several records
+        // stays in flight until the last of them is in Fresh.
+        TFreshAdmission FreshAdmission;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -3940,7 +3940,7 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                         rktpar->err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
                         if (query_topics &&
                             !rd_list_find(query_topics, rktpar->topic,
-                                          (void *)strcmp))
+                                          rd_list_cmp_str))
                                 rd_list_add(query_topics,
                                             rd_strdup(rktpar->topic));
                         continue;
@@ -4372,7 +4372,7 @@ int rd_kafka_topic_partition_list_get_topic_names(
                 if (!include_regex && *rktpar->topic == '^')
                         continue;
 
-                if (!rd_list_find(topics, rktpar->topic, (void *)strcmp)) {
+                if (!rd_list_find(topics, rktpar->topic, rd_list_cmp_str)) {
                         rd_list_add(topics, rd_strdup(rktpar->topic));
                         cnt++;
                 }

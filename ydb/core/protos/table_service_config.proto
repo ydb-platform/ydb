@@ -72,6 +72,24 @@ message TTableServiceConfig {
         // Off: the operators use the allocator heuristics only. Takes effect once the operators consult the
         // bound quota (the operator side of the RFC); until then the flag only binds the quota.
         optional bool EnableOperatorMemoryQuota = 34 [default = false];
+
+        // Precise memory tracking (issue #53093): a resource broker task backs the ExternalMemory requests and the
+        // memory of the execution units in use. Off: the demand is only counted, the node total is not charged.
+        // As with every field of this section, a dynamic config item that carries the section without the field
+        // resets it to the default.
+        optional bool EnableMemoryArena = 35 [default = true];
+        // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
+        // which is prepaid as ExternalMemory. A task the node service starts charges MkqlLightProgramMemoryLimit
+        // twice, for its program and its channels, plus this: 3 MiB with the defaults. The kqp queue limit
+        // (QueryExecutionLimitPercent of the hard limit) should hold the expected concurrency times that, plus
+        // MemoryArenaMaxFreeSize and the Memory the tasks acquire as they grow. Past it the demand is a charged
+        // deficit: extra Memory requests are refused and the spilling cookies report the pressure, RM/ArenaDeficit.
+        optional uint64 ExecutionUnitMemory = 36 [default = 1048576];       // 1 MiB
+        // Once a second the arena is resized to Used + (Min + Max) / 2 whenever its free part leaves the band; a max
+        // below the min is raised to it. A usage that overruns the arena by more than the max grows it right away,
+        // RM/ArenaBurstGrows. The free part counts against the kqp queue limit like the usage.
+        optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
+        optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
     }
 
     message TSpillingServiceConfig {

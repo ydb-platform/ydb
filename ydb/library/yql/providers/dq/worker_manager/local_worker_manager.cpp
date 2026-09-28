@@ -53,7 +53,9 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         }
     }
 
-    bool AllocateExtraQuota(ui64 extraSize) override {
+    // TResourceQuoter has no spilling threshold: it refuses an optional request exactly where it refuses a mandatory
+    // one (GetMemoryAvailability() < extraSize)
+    bool AllocateExtraQuota(ui64 extraSize, bool /* isOptional */) override {
         return NodeQuoter->Allocate(TxId, 0, extraSize);
     }
 

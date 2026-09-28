@@ -68,6 +68,12 @@ void TServerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_per_path_request_profiling", &TThis::EnablePerPathRequestProfiling)
         .Default(false);
+
+    registrar.Parameter("enable_content_encoding", &TThis::EnableContentEncoding)
+        .Default(false);
+    registrar.Parameter("compression_thread_count", &TThis::CompressionThreadCount)
+        .Default(1)
+        .GreaterThan(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

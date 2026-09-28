@@ -35,10 +35,20 @@ struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
     ui64 Memory = 0;
     ui64 ExternalMemory = 0;
+    // Read by AllocateResources only and applies to Memory only: the caller can do without it (see
+    // NYql::NDq::IMemoryQuotaManager::AllocateQuota), so it is refused once it would take the node total or the
+    // pool of the tx past the spilling threshold (GetMemoryAvailability() < Memory), even when the memory is there
+    bool Optional = false;
 
     TString ToString() const {
-        return TStringBuilder() << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
-            << ", ExternalMemory: " << ExternalMemory << " }";
+        TStringBuilder res;
+        res << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
+            << ", ExternalMemory: " << ExternalMemory;
+        if (Optional) {
+            res << ", Optional: 1";
+        }
+        res << " }";
+        return res;
     }
 };
 

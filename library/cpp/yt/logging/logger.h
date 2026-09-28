@@ -330,10 +330,23 @@ void LogStructuredEvent(
 #define YT_LOG_ALERT_IF(condition, ...)        if (condition)    YT_LOG_ALERT(__VA_ARGS__)
 #define YT_LOG_ALERT_UNLESS(condition, ...)    if (!(condition)) YT_LOG_ALERT(__VA_ARGS__)
 
-#define YT_LOG_FATAL(...)                                                     \
-    do {                                                                      \
-        YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Fatal, __VA_ARGS__); \
-        Y_UNREACHABLE();                                                      \
+// Not #YT_LOG_EVENT: a fatal event must not be skipped, so it needs no level check nor an
+// anchor to be suppressed by.
+#define YT_LOG_FATAL(...)                                                                \
+    do {                                                                                 \
+         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */  \
+        const auto& logger__ = (Logger)();                                               \
+        auto loggingContext__ = ::NYT::NLogging::GetLoggingContext();                    \
+        auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(                      \
+            loggingContext__,                                                            \
+            logger__,                                                                    \
+            __VA_ARGS__);                                                                \
+        ::NYT::NLogging::NDetail::LogFatalEventAndAbort(                                 \
+            loggingContext__,                                                            \
+            logger__,                                                                    \
+            __LOCATION__,                                                                \
+            std::move(message__.Payload));                                               \
+         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */    \
     } while(false)
 #define YT_LOG_FATAL_IF(condition, ...)        if (Y_UNLIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
 #define YT_LOG_FATAL_UNLESS(condition, ...)    if (!Y_LIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)

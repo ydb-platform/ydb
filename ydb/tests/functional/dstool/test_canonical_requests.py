@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import argparse
 import json
 import sys
 import os
@@ -19,6 +20,7 @@ from ydb.tests.oss.canonical import set_canondata_root
 from ydb.apps.dstool.main import main as dstool_main
 from ydb.apps.dstool.lib import common
 from ydb.apps.dstool.lib import dstool_cmd_group_list
+from ydb.apps.dstool.lib import dstool_cmd_pdisk_set
 from ydb.apps.dstool.lib import dstool_cmd_vdisk_evict
 from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
@@ -68,7 +70,8 @@ def test_group_list_formats_unknown_enum_value():
         (True, [7, 7, 3]),
     ],
 )
-def test_vdisk_evict_uses_single_state_snapshot(dry_run, expected_generations, capsys):
+@pytest.mark.parametrize('ignore_layout', [False, True])
+def test_vdisk_evict_uses_single_state_snapshot(dry_run, expected_generations, ignore_layout, capsys):
     storage = ydb_distributed_storage.StorageStateResult()
 
     def add_vdisk(group_id, group_generation, fail_domain_idx):
@@ -94,6 +97,7 @@ def test_vdisk_evict_uses_single_state_snapshot(dry_run, expected_generations, c
         ignore_vslot_quotas=False,
         ignore_degraded_group_check=False,
         ignore_failure_model_group_check=False,
+        ignore_group_layout_check=ignore_layout,
         format='json',
         quiet=False,
     )
@@ -113,10 +117,45 @@ def test_vdisk_evict_uses_single_state_snapshot(dry_run, expected_generations, c
     assert [
         call.args[0].vdisk_id.group_generation for call in perform_request.call_args_list
     ] == expected_generations
+    for call in perform_request.call_args_list:
+        safety = call.args[0].options.safety
+        assert safety.ignore_group_layout_checks == ignore_layout
+        assert not safety.ignore_group_failure_model
+        assert not safety.ignore_degraded_groups
+    legacy_request = common.create_bsc_request(args)
+    assert legacy_request.IgnoreGroupLayoutChecks == ignore_layout
+    assert not legacy_request.IgnoreGroupFailModelChecks
+    assert not legacy_request.IgnoreDegradedGroupsChecks
+    assert not legacy_request.IgnoreGroupSanityChecks
     if dry_run:
         assert 'dry-run for multiple VDisks is approximate' in captured.err
     else:
         assert not captured.err
+
+
+@pytest.mark.parametrize('ignore_layout', [False, True])
+def test_pdisk_set_broken_passes_layout_override(ignore_layout):
+    parser = argparse.ArgumentParser()
+    dstool_cmd_pdisk_set.add_options(parser)
+    arguments = ['--pdisk-ids', '[1:1]', '--status', 'BROKEN']
+    if ignore_layout:
+        arguments.append('--ignore-group-layout-check')
+    args = parser.parse_args(arguments)
+    args.dry_run = False
+    base_config = BaseConfigBuilder().add_node().add_pdisk().build()['BaseConfig']
+    pdisks = dstool_cmd_pdisk_set.get_pdisks(args.pdisk_ids, base_config)
+    node_id_to_host, _ = common.build_node_fqdn_maps(base_config)
+    request = dstool_cmd_pdisk_set.create_request(args, pdisks, node_id_to_host)
+
+    assert request.IgnoreGroupLayoutChecks == ignore_layout
+    assert not request.IgnoreGroupFailModelChecks
+    assert not request.IgnoreDegradedGroupsChecks
+    assert not request.IgnoreGroupSanityChecks
+    assert len(request.Command) == 1
+    command = request.Command[0].UpdateDriveStatus
+    assert command.HostKey.Fqdn == 'localhost'
+    assert command.PDiskId == 1
+    assert command.Status == dstool_cmd_pdisk_set.kikimr_bs3.BROKEN
 
 
 @pytest.fixture(scope='function')

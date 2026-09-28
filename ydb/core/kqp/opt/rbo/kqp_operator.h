@@ -1096,7 +1096,7 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 
 public:
-    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options);
+    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options, const TVector<TInfoUnit>& usedColumns);
     virtual TString GetExplainName() const override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 

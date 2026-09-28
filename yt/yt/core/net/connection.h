@@ -96,12 +96,15 @@ DEFINE_REFCOUNTED_TYPE(IConnection)
 std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(NConcurrency::IPollerPtr poller);
 
 //! File descriptor must be in nonblocking mode.
+//! Takes ownership of fd even if the function throws.
 IConnectionPtr CreateConnectionFromFD(
     TFileDescriptor fd,
     const TNetworkAddress& localAddress,
     const TNetworkAddress& remoteAddress,
     NConcurrency::IPollerPtr poller);
 
+//! File descriptor must refer to a FIFO and be in nonblocking mode.
+//! Takes ownership of fd even if the function throws.
 IConnectionReaderPtr CreateInputConnectionFromFD(
     TFileDescriptor fd,
     const std::string& pipePath,

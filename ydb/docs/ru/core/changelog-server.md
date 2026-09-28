@@ -65,7 +65,7 @@
 Функциональность присутствует в ядре для возможности отката с будущего релиза 26-3, но не включена по умолчанию. Будет доступна по умолчанию в следующем major-релизе. Также может быть включена на некоторых управляемых сервисах YDB.
 
 * Добавлена поддержка [инкрементальных резервных копий](./concepts/datamodel/backup-collection.md?version=v26.2), которые позволяют сохранять только изменения относительно предыдущей резервной копии в коллекции.
-* Поддерживаются [экспорт и импорт колоночных таблиц](./recipes/backup/import-export-column-tables.md?version=v26.2) через S3-совместимые хранилища.
+* Поддерживаются [экспорт и импорт колоночных таблиц](./concepts/query_execution/federated_query/import_and_export.md?version=v26.2) через S3-совместимые хранилища.
 * Добавлены [экспорт и импорт строковых таблиц](./reference/ydb-cli/export-import/export-nfs.md?version=main) через локальную файловую систему, в том числе через файловые системы, подключённые по NFS.
 * Добавлено удержание snapshot для длительных аналитических запросов к колоночным таблицам, чтобы данные snapshot не удалялись до завершения запроса.
 * QueryService может уведомлять SDK о завершении работы узла или сессии, чтобы клиент перестал направлять туда новые запросы.
@@ -793,13 +793,23 @@
 * Исправлена ошибка `SIGSEGV` в диннодах при импорте `CSV` через `YDB CLI`.
 * Исправлена ошибка с падением при обработке `NGRpcService::TRefreshTokenImpl`.
 * Реализован `gossip` протокол обмена информацией о ресурсах кластера.
-* Исправлена ошибка `DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed`.
+* Исправлена ошибка:
+
+  ```text
+  DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed
+  ```
+
 * Реализованы автоинкрементные колонки.
 * Использовать статус `UNAVAILABLE` вместо `GENERIC_ERROR` при ошибке идентификации шарда.
 * Добавлена поддержка `rope payload` в `TEvVGet`.
 * Добавлено игнорирование устаревших событий.
 * Исправлено падение write-сессий на невалидном имени топика.
-* Исправлена ошибка `CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap`.
+* Исправлена ошибка:
+
+  ```text
+  CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap
+  ```
+
 * Включён `safe heal` по умолчанию.
 
 ## Версия 23.2 {#23-2}

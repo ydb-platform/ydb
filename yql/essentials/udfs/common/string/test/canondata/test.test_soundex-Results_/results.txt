@@ -1,0 +1,41 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "soundex";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "M460"
+                    ];
+                    [
+                        "A261"
+                    ];
+                    [
+                        "P236"
+                    ];
+                    [
+                        "T522"
+                    ];
+                    [
+                        ""
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

@@ -2,7 +2,10 @@ items:
 - { name: Обзор,                        href: index.md }
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
-- { name: Коррелированные подзапросы, EXISTS и NOT EXISTS, href: correlated-subqueries.md }
+- name: Ограничения
+  items:
+  - { name: Коррелированные подзапросы, EXISTS и NOT EXISTS, href: correlated-subqueries.md }
+  - { name: Неподдерживаемые конструкции, href: not_yet_supported.md }
 - { name: ACTION,                       href: action.md }
 - { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md }
 - { name: ALTER DATABASE,                   include: { mode: link, path: alter_database/toc_p.yaml },                                                                                }
@@ -80,4 +83,3 @@ items:
 - { name: UPSERT OBJECT TYPE SECRET,    href: upsert-object-type-secret.md,  when: feature_federated_queries}
 - { name: USE,                          href: use.md,                        when: feature_mapreduce }
 - { name: VALUES,                       href: values.md }
-- { name: Неподдерживаемые конструкции, href: not_yet_supported.md }

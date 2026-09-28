@@ -1,9 +1,6 @@
 # Correlated subqueries, EXISTS, and NOT EXISTS
 
-A correlated subquery refers to a column or table alias from an outer query.
-Each subquery in YQL has its own scope and cannot refer to columns or table
-aliases from an outer query. Therefore, YQL does not support correlated
-subqueries.
+A correlated subquery refers to a column or table alias from an outer query. Each subquery in YQL has its own scope and cannot refer to columns or table aliases from an outer query. Therefore, YQL does not support correlated subqueries. Support for correlated subqueries is planned for future releases.
 
 ## Support matrix {#support-matrix}
 
@@ -18,10 +15,7 @@ subqueries.
 
 ## EXISTS {#exists}
 
-An uncorrelated `EXISTS` checks whether its subquery contains at least one row.
-Its result does not depend on a row from an outer query. For example, the
-following query returns every client if the `orders` table is non-empty and no
-clients otherwise:
+An uncorrelated `EXISTS` checks whether its subquery contains at least one row. Its result does not depend on a row from an outer query. For example, the following query returns every client if the `orders` table is non-empty and no clients otherwise:
 
 ```yql
 SELECT client_id, name
@@ -32,8 +26,7 @@ WHERE EXISTS (
 );
 ```
 
-The following common SQL query is not supported because the inner query refers
-to the outer alias `c`:
+The following common SQL query is not supported because the inner query refers to the outer alias `c`:
 
 ```yql
 -- Not supported in YQL.
@@ -46,8 +39,7 @@ WHERE EXISTS (
 );
 ```
 
-Use `LEFT SEMI JOIN` to return a client only when at least one matching order
-exists:
+Use `LEFT SEMI JOIN` to return a client only when at least one matching order exists:
 
 ```yql
 SELECT c.client_id, c.name
@@ -56,12 +48,9 @@ LEFT SEMI JOIN orders AS o
 ON o.client_id = c.client_id;
 ```
 
-`LEFT SEMI JOIN` returns columns from the left side only. Several matching rows
-on the right side do not duplicate a row from the left side, so this rewrite
-preserves the existence-check semantics.
+`LEFT SEMI JOIN` returns columns from the left side only. Several matching rows on the right side do not duplicate a row from the left side, so this rewrite preserves the existence-check semantics.
 
-Alternatively, use `INNER JOIN` after deduplicating the matching keys on the
-right side:
+Alternatively, use `INNER JOIN` after deduplicating the matching keys on the right side:
 
 ```yql
 $order_clients = (
@@ -76,9 +65,7 @@ INNER JOIN $order_clients AS o
 ON o.client_id = c.client_id;
 ```
 
-The right side contains at most one row for each key, so the join does not
-duplicate rows from the left side. Applying `DISTINCT` to the left-side columns
-is unnecessary and can collapse equal rows from the outer input.
+The right side contains at most one row for each key, so the join does not duplicate rows from the left side. Applying `DISTINCT` to the left-side columns is unnecessary and can collapse equal rows from the outer input.
 
 For a single non-optional key, `IN` is another possible rewrite:
 
@@ -93,9 +80,7 @@ WHERE c.client_id IN (
 
 ## NOT EXISTS {#not-exists}
 
-An uncorrelated `NOT EXISTS` returns the inverse of `EXISTS`: `true` when its
-subquery is empty and `false` when the subquery contains at least one row. Its
-result also does not depend on a row from an outer query.
+An uncorrelated `NOT EXISTS` returns the inverse of `EXISTS`: `true` when its subquery is empty and `false` when the subquery contains at least one row. Its result also does not depend on a row from an outer query.
 
 Use `LEFT ONLY JOIN` to return a client only when no matching order exists:
 

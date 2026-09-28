@@ -311,27 +311,26 @@ void TDataShard::PrepareFollowerHnswIndex(ui32 localTid, const NTable::TDatabase
         const TRowVersion& readVersion) {
     auto& entry = HnswIndexCache[localTid];
     const auto counter = db.Head(localTid);
-    if (entry.FollowerChangeCounter == counter && entry.Index
-            && entry.Index->GetBaseVersion() <= readVersion) {
-        // Advancing the repeatable edge without a table mutation does not
-        // change any vector. Extend coverage instead of rebuilding copies.
-        if (!entry.Index->CanRead(readVersion)) {
+    if (entry.FollowerChangeCounter == counter) {
+        // Read edges may advance during a long build without any vector
+        // changes. Preserve both installed and in-flight graphs in that case.
+        // An older read must not evict a newer graph either.
+        if (entry.Index && entry.Index->GetBaseVersion() <= readVersion
+                && !entry.Index->CanRead(readVersion)) {
             entry.Index->SetSnapshot(entry.Index->GetBaseVersion(), entry.Changes, readVersion);
         }
-        entry.FollowerReadVersion = readVersion;
+        entry.FollowerReadVersion = Max(entry.FollowerReadVersion, readVersion);
         return;
     }
-    if (entry.FollowerChangeCounter != counter || entry.FollowerReadVersion != readVersion) {
-        // Freeze coverage when redo changes the table. Existing generations
-        // remain useful for the snapshots already covered before that change.
-        if (entry.Index) {
-            entry.Retained.push_back(std::move(entry.Index));
-        }
-        entry.BuildObsolete = entry.Building;
-        entry.NextScanAttemptAt = TInstant::Zero();
-        entry.FollowerChangeCounter = counter;
-        entry.FollowerReadVersion = readVersion;
+    // Redo changed the table. Freeze old generations at their last known
+    // read edge and discard any build that missed the change.
+    if (entry.Index) {
+        entry.Retained.push_back(std::move(entry.Index));
     }
+    entry.BuildObsolete = entry.Building;
+    entry.NextScanAttemptAt = TInstant::Zero();
+    entry.FollowerChangeCounter = counter;
+    entry.FollowerReadVersion = readVersion;
     PruneHnswIndexes();
 }
 
@@ -356,7 +355,7 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
         entry.Changes = std::make_shared<THnswIndexChanges>();
     }
     index->SetSnapshot(baseVersion, entry.Changes,
-        IsFollower() ? baseVersion : TRowVersion::Max());
+        IsFollower() ? Max(baseVersion, entry.FollowerReadVersion) : TRowVersion::Max());
     Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
     struct TOwnedIndex {
         std::shared_ptr<void> Reservation;

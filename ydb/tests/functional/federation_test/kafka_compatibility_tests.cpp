@@ -25,11 +25,11 @@ Y_UNIT_TEST_SUITE(LibrdkafkaFederationCompatibilityTests) {
         ProduceAndFlush(*producer, topic, {"message1", "message2", "message3"}, {"key1", "key2", "key3"});
 
         auto consumer = MakeConsumer(UniqueName("group"), kafkaConf);
-        // AssertRdKafkaOk(consumer->Handle->subscribe({std::string(topic)}), "subscribe full");
-        std::vector<RdKafka::TopicPartition*> tps;
-        tps.push_back(RdKafka::TopicPartition::create(std::string(topic), 0, RdKafka::Topic::OFFSET_BEGINNING));
-        AssertRdKafkaOk(consumer->Handle->assign(tps), "assign");
-        RdKafka::TopicPartition::destroy(tps);
+        AssertRdKafkaOk(consumer->Handle->subscribe({std::string(topic)}), "subscribe full");
+        // std::vector<RdKafka::TopicPartition*> tps;
+        // tps.push_back(RdKafka::TopicPartition::create(std::string(topic), 0, RdKafka::Topic::OFFSET_BEGINNING));
+        // AssertRdKafkaOk(consumer->Handle->assign(tps), "assign");
+        // RdKafka::TopicPartition::destroy(tps);
         const auto first = ConsumeMessages(*consumer->Handle, 3);
         for (size_t i = 1; i < 4; i++) {
             UNIT_ASSERT_VALUES_EQUAL(first[i - 1].Payload, "message" + std::to_string(i));

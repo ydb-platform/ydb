@@ -136,7 +136,7 @@ class FederationRecipe(object):
             if account in PRE_INSTALLED_ACCOUNTS:
                 # Kafka metadata initialization requires the node's tenant to match the database.
                 kafka_port = slots[0].kafka_api_port
-                _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
+                # _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
                 logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
 
 

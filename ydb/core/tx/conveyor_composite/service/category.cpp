@@ -26,7 +26,10 @@ void TProcessCategory::RegisterProcess(const ui64 internalProcessId, std::shared
 TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId) {
     auto it = Processes.find(processId);
     AFL_VERIFY(it != Processes.end());
-    Y_ENSURE(it->second->GetTasksCount() == 0, "cannot unregister process with queued tasks");
+    if (const auto tasksCount = it->second->GetTasksCount()) {
+        AFL_WARN(NKikimrServices::TX_CONVEYOR)
+        ("event", "unregister_process_with_queued_tasks")("process_id", processId)("category", ::ToString(Category))("tasks_count", tasksCount);
+    }
     const auto identity = it->second->GetSchedulerQueryIdentity();
     Y_UNUSED(RemoveWeightedProcess(it->second));
     if (it->second->GetScope()->DecProcesses()) {

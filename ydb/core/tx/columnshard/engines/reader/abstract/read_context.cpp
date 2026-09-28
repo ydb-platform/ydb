@@ -29,17 +29,16 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ScanActorId(scanActorId)
     , ResourceSubscribeActorId(resourceSubscribeActorId)
     , ComputeShardingPolicy(computeShardingPolicy)
-    , ConveyorProcessGuard(
-          NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits,
-                txId, schedulerPool,
-              [&]() {
-                  // ANALYZE / UseBatchPool already put the scan actor on Batch; keep that conveyor.
-                  if (HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId) {
-                      return true;
-                  }
-                  return HasAppData() && AppDataVerified().ColumnShardConfig.HasScanDefaultPool() &&
-                         AppDataVerified().ColumnShardConfig.GetScanDefaultPool() == "Batch";
-              }()))
+    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(ScanId,
+          cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits, txId, schedulerPool,
+          [&]() {
+              // ANALYZE / UseBatchPool already put the scan actor on Batch; keep that conveyor.
+              if (HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId) {
+                  return true;
+              }
+              return HasAppData() && AppDataVerified().ColumnShardConfig.HasScanDefaultPool() &&
+                     AppDataVerified().ColumnShardConfig.GetScanDefaultPool() == "Batch";
+          }()))
     , ScanOrbit(scanOrbit)
 {
     Y_ABORT_UNLESS(ReadMetadata);

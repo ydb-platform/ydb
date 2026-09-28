@@ -416,4 +416,7 @@ message TFeatureFlags {
     // safe, but may leave some garbage of already deleted tablets until it is turned on again.
     optional bool EnableCollectByCompleteDeletionBlock = 341 [default = false, (RequireRestart) = true];
     optional bool EnableKqpRuntimeStats = 342 [default = false];
+    // Under space pressure, lets PDisk choose which level compaction runs on the disk: one at a time, the one
+    // that frees the most chunks, which then reserves exactly the chunks it will write before writing any.
+    optional bool EnableVDiskPlannedCompaction = 343 [default = false, (RequireRestart) = true];
 }

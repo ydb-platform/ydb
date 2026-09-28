@@ -36,6 +36,7 @@ ENDIF()
 
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp
+    blobstorage_pdisk_compaction_arbiter_ut.cpp
     blobstorage_pdisk_crypto_ut.cpp
     blobstorage_pdisk_device_overestimation_ut.cpp
     blobstorage_pdisk_log_cache_ut.cpp

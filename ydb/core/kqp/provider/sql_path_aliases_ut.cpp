@@ -101,6 +101,18 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
         UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
         UNIT_ASSERT_STRING_CONTAINS(rewritten, "/alias/remote");
         UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/canonical/remote"), TString::npos);
+
+        const auto relative = RewriteSql("CREATE ASYNC REPLICATION replication FOR `/alias/remote` AS `f/alias` WITH (ENDPOINT = 'localhost:2135', DATABASE = '/Root');");
+        UNIT_ASSERT_STRING_CONTAINS(relative, "f/alias");
+        UNIT_ASSERT_VALUES_EQUAL(relative.find("/canonical"), TString::npos);
+    }
+
+    Y_UNIT_TEST(TransferOnlyRewritesLocalTarget) {
+        const auto rewritten = RewriteSql("CREATE TRANSFER `/alias/transfer` FROM `/alias/remote` TO `/alias/table` USING ($x) -> { RETURN $x; } WITH (ENDPOINT = 'localhost:2135', DATABASE = '/Root');");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/transfer");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
+        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/alias/remote");
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/canonical/remote"), TString::npos);
     }
 
     Y_UNIT_TEST(PathPrefixIsRewritten) {

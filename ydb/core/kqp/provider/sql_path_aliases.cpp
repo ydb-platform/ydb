@@ -18,7 +18,7 @@ bool IsPathKey(TStringBuf tag) {
 
 TString NormalizeSqlPath(TStringBuf path, const std::function<TString(TStringBuf)>& normalizePath) {
     TStringBuf canonicalPath = path;
-    while (canonicalPath.size() > 1 && canonicalPath[1] == '/') {
+    while (canonicalPath.StartsWith("//")) {
         canonicalPath = canonicalPath.SubStr(1);
     }
     TString normalized = normalizePath(canonicalPath);
@@ -88,6 +88,7 @@ TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx
 
 bool IsPathOption(TStringBuf tag, TStringBuf option) {
     return (tag == "replication" && option == "local")
+        || (tag == "transfer" && option == "target")
         || (tag == "permission" && option == "paths")
         || ((tag == "table" || tag == "tablescheme") && (option == "renameTo" || option == "data_source_path"))
         || (tag == "backupCollection" && option == "path");

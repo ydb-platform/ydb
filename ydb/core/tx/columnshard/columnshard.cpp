@@ -1,4 +1,5 @@
 #include "columnshard_impl.h"
+#include "columnshard_move_data_driver.h"
 
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
@@ -335,12 +336,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
         EnqueueBackgroundActivities();
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
-    }
-
-    // Not conditioned on VacuumCompleted: this retry is the fallback for a lost vacuum callback.
-    if (MoveDataState.Active && ctx.Now() - MoveDataState.LastGateCheckAt >= MoveDataGateCheckCadence) {
-        MoveDataState.LastGateCheckAt = ctx.Now();
-        CheckMoveDataGate(ctx);
     }
 }
 
@@ -694,20 +689,9 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
 
     if (MoveDataState.Active) {
         // Hive retry or re-assignment.
-        bool newGroupsAdded = false;
-        for (const auto groupId : record.GetGroups()) {
-            newGroupsAdded |= MoveDataState.TargetGroups.emplace(groupId).second;
-        }
-        LOG_S_INFO("TColumnShard::Handle TEvMoveData: merge resend, newGroups="
-                   << newGroupsAdded << " totalGroups=" << MoveDataState.TargetGroups.size() << " at tablet " << TabletID());
-        if (newGroupsAdded && HasIndex()) {
-            // The vacuum leg is not restarted: local-DB cleanup is independent of the target groups.
-            auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-            index.StopMoveData();
-            index.StartMoveData(MoveDataState.TargetGroups);
-            // The restarted actualizer refills the queues, so the watermark is frozen again once they drain.
-            MoveDataState.CleanupWatermark.reset();
-        }
+        // Reseed rather than re-handle: the driver merges the groups and restarts the actualizer.
+        AFL_VERIFY(!!MoveDataDriverId);
+        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataReseed(std::move(requested), ev->Sender));
         return;
     }
 
@@ -721,6 +705,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         MoveDataState.VacuumCompleted = false;
         Counters.GetCSCounters().OnMoveDataStarted();
         Executor()->StartMoveDataVacuumFromOwner();
+        StartMoveDataDriver(ctx);
         return;
     }
     MoveDataState.Active = true;
@@ -734,8 +719,24 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
     }
-    // Vacuum runs in parallel with rewriting; the response waits on CheckMoveDataGate.
+    // Vacuum runs in parallel with rewriting; the response waits on the driver's gate check.
     Executor()->StartMoveDataVacuumFromOwner();
+    StartMoveDataDriver(ctx);
+}
+
+void TColumnShard::StartMoveDataDriver(const TActorContext& ctx) {
+    if (!!MoveDataDriverId) {
+        return;
+    }
+    MoveDataDriverId = ctx.RegisterWithSameMailbox(new TMoveDataDriver(this));
+}
+
+void TColumnShard::StopMoveDataDriver(const TActorContext& ctx) {
+    if (!MoveDataDriverId) {
+        return;
+    }
+    ctx.Send(MoveDataDriverId, new TEvents::TEvPoison());
+    MoveDataDriverId = {};
 }
 
 void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
@@ -743,7 +744,12 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
         return;
     }
     MoveDataState.VacuumCompleted = true;
-    CheckMoveDataGate(ctx);
+    // The driver owns the gate; hand it the news rather than deciding here.
+    if (!!MoveDataDriverId) {
+        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
+    } else {
+        CheckMoveDataGate(ctx);
+    }
 }
 
 void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
@@ -811,6 +817,7 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     ctx.Send(MoveDataState.HiveSender, new TEvTablet::TEvMoveDataResponse(TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
     Counters.GetCSCounters().OnMoveDataFinished();
     MoveDataState = TMoveDataState{};
+    StopMoveDataDriver(ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

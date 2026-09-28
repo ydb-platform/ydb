@@ -195,6 +195,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TMoveDataDriver;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -350,6 +351,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
     // Split out of MoveDataCompleted so the wakeup can drive it without claiming vacuum finished.
     void CheckMoveDataGate(const TActorContext& ctx);
+    void StartMoveDataDriver(const TActorContext& ctx);
+    void StopMoveDataDriver(const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -550,17 +553,15 @@ private:
         bool Active = false;
         // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
         bool VacuumCompleted = false;
-        // Epoch-initialized so the first check fires; the cadence is a lower bound, not a period.
-        TInstant LastGateCheckAt;
         // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
         ui64 ReportedRejections = 0;
         // Newest pending cleanup when the queues last drained; the gate waits for cleanup to pass it.
         std::optional<TInstant> CleanupWatermark;
     };
 
-    static constexpr TDuration MoveDataGateCheckCadence = TDuration::Seconds(5);
-
     TMoveDataState MoveDataState;
+    // Drives the move on its own cadence; the tablet only starts and reseeds it.
+    TActorId MoveDataDriverId;
 
     // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
     std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();

@@ -521,7 +521,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupCleanupPortions(*snapshotHolders);
     SetupCleanupTables(*snapshotHolders);
     SetupMetadata();
-    SetupMoveDataMetadata();
     SetupTtl();
     SetupGC();
 
@@ -1276,12 +1275,14 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     }
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
+void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
-    // Move only: SetupMetadata() may still be gated by the subscriber that just delivered this.
-    SetupMoveDataMetadata();
+    // The move re-arms on the driver's turn, not the tablet's.
+    if (!!MoveDataDriverId) {
+        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
+    }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

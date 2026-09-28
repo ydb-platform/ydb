@@ -71,6 +71,18 @@ const TEvPrivate::TEvWriteIndex* AsWriteIndex(IEventHandle::TPtr& ev) {
 }
 
 // One shard whose portion data sits in OldGroup, driven through a MoveData session by manual wakeups.
+// The runtime drops scheduled events by default (DefaultScheduledFilterFunc returns true unless the
+// recipient opted in), and the move driver's cadence is a Schedule, so without this it never ticks
+// and nothing ever answers.
+static void DeliverMoveDataWakeups(TTestBasicRuntime& runtime) {
+    runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
+        if (event->GetTypeRewrite() == TEvPrivate::EvMoveDataWakeup) {
+            return false;
+        }
+        return TTestActorRuntime::DefaultScheduledFilterFunc(r, event, delay, deadline);
+    });
+}
+
 class TMoveDataFixture {
 public:
     TTestBasicRuntime Runtime;
@@ -86,6 +98,7 @@ public:
     {
         // Without a real mediator the rewrite plan-step never ages, so set staleness to zero.
         Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
+        DeliverMoveDataWakeups(Runtime);
         Launcher = Runtime.AllocateEdgeActor();
         TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, { { 0, OldGroup } }), Launcher);
         Sender = Runtime.AllocateEdgeActor();
@@ -546,6 +559,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         TTester::Setup(
             runtime, { new NFake::TProxyDS(TGroupId::FromValue(0)), oldProxy, newProxy, new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
         runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(true);
+        DeliverMoveDataWakeups(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId tabletActorId = BootTablet(runtime, MakeTabletInfo(TabletId, { { 0, OldGroup } }));

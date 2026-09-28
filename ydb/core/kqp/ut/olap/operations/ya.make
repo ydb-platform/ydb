@@ -18,7 +18,6 @@ SRCS(
 PEERDIR(
     ydb/core/testlib
     ydb/core/kqp
-    ydb/core/kqp/schematized_log
     ydb/core/kqp/ut/common
     ydb/core/protos
     yql/essentials/sql/pg_dummy

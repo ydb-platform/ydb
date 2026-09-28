@@ -156,8 +156,9 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         if [ -z "${CI_METRICS_FILE:-}" ]; then
-          echo "CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
           CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl
+          export CI_METRICS_FILE
+          echo "CI_METRICS_FILE=$CI_METRICS_FILE" >> $GITHUB_ENV
         fi
         mkdir -p "$(dirname "$CI_METRICS_FILE")"
         touch "$CI_METRICS_FILE"

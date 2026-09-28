@@ -1805,6 +1805,14 @@ namespace NKikimr {
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS42"});
 
+            if (LogoBlobIndexStatActorId) {
+                auto result = std::make_unique<TEvGetLogoBlobIndexStatResponse>(
+                    NKikimrProto::TRYLATER, SelfVDiskId, ctx.Now(), nullptr, nullptr);
+                result->Record.set_has_more(false);
+                SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, VCtx, {});
+                return;
+            }
+
             auto result = std::make_unique<TEvGetLogoBlobIndexStatResponse>(NKikimrProto::OK, SelfVDiskId, ctx.Now(),
                 nullptr, nullptr);
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
@@ -1812,6 +1820,7 @@ namespace NKikimr {
                     ctx.SelfID, ev, std::move(result));
             if (actor) {
                 auto aid = RunInBatchPool(ctx, actor);
+                LogoBlobIndexStatActorId = aid;
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }
@@ -3210,6 +3219,9 @@ namespace NKikimr {
             if (ev->Sender == VDiskSpaceReportManagerId) {
                 VDiskSpaceReportManagerId = {};
             }
+            if (ev->Sender == LogoBlobIndexStatActorId) {
+                LogoBlobIndexStatActorId = {};
+            }
             ActiveActors.Erase(ev->Sender);
         }
 
@@ -3848,6 +3860,10 @@ namespace NKikimr {
         TActorId BalancingId;
         TActorId MetadataActorId;
         TActorId VDiskSpaceReportManagerId;
+        // A LogoBlob index statistics scan may retain a response-sized batch
+        // while it waits for an acknowledgement. Keep at most one such scan
+        // alive on this VDisk; concurrent callers receive TRYLATER.
+        TActorId LogoBlobIndexStatActorId;
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;

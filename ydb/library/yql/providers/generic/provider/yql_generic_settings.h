@@ -26,7 +26,7 @@ namespace NYql {
     struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingDispatcher {
         using TPtr = TIntrusivePtr<TGenericConfiguration>;
 
-        TGenericConfiguration();
+        explicit TGenericConfiguration(bool strictConfigValidation = false);
         TGenericConfiguration(const TGenericConfiguration&) = delete;
 
         void Init(const NYql::TGenericGatewayConfig& gatewayConfig, const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,

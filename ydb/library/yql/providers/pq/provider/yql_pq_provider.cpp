@@ -41,7 +41,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             Y_UNUSED(hiddenAborter);
             Y_UNUSED(qContext);
 
-            auto state = MakeIntrusive<TPqState>(sessionId);
+            auto state = MakeIntrusive<TPqState>(sessionId, typeCtx->StrictConfigValidation);
             state->SupportRtmrMode = supportRtmrMode;
             state->UseActorSystemThreadsInTopicClient = useActorSystemThreadsInTopicClient;
             state->AddTransparentPrefixToTransparentSystemColumns = addTransparentPrefixToTransparentSystemColumns;
@@ -87,9 +87,9 @@ TDataProviderInitializer GetPqDataProviderInitializer(
         };
 }
 
-TPqState::TPqState(const TString& sessionId)
+TPqState::TPqState(const TString& sessionId, bool strictConfigValidation)
     : SessionId(sessionId)
-    , Configuration(MakeIntrusive<TPqConfiguration>())
+    , Configuration(MakeIntrusive<TPqConfiguration>(strictConfigValidation))
 {}
 
 bool TPqState::IsRtmrMode() const {

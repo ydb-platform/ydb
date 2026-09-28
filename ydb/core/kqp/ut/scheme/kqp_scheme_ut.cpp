@@ -5426,7 +5426,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         };
 
         // valid settings:
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10, overlap_clusters=1", "");
 
         // unknown index setting:
         check("XxX=YyY, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
@@ -5518,6 +5518,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1", "");
         // clusters and levels are now optional (auto-selected from row count)
         check("similarity=inner_product, vector_type=float, vector_dimension=1024", "");
+
+        // overlap_clusters
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10, overlap_clusters=11",
+            "overlap_clusters should be less than or equal to clusters");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10, overlap_clusters=XxX",
+            "Invalid overlap_clusters: xxx");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10, overlap_clusters=-1",
+            "Error: extraneous input '-'");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10, overlap_clusters=0",
+            "Invalid overlap_clusters: 0");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10, overlap_clusters=1", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10, overlap_clusters=3", "");
 
         // clusters^levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",

@@ -1253,21 +1253,25 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
 
     sealedUnlockThread.Join();
 
+    // Join writers first: Close and Write on one producer run on different threads.
     pauseWrites.store(true);
+    writeWorkers.Join();
     for (auto& writer : writers) {
         Y_UNUSED(writer->Close(TDuration::Seconds(1)));
     }
+    writers.clear();
+
     commitWorkers.Stop.store(true);
     callbackShared->CommitQueue.CommitAllRandom();
     commitWorkers.Join();
     targetSessions.store(0);
     rewindWorkers.Join();
     readWorkers.Join();
-    writeWorkers.Join();
-    writers.clear();
     sessions.CloseAll();
     // wait=true deadlocks: in-flight session contexts keep CQ from shutting down.
     driver.Stop(false);
+    // Stop the handlers pool before the stack frame that owns it is destroyed.
+    handlersExecutor->Stop();
 
     Cerr << "Stress finished partitions=" << partitionCount
         << " sessionsOpened=" << opened.load()

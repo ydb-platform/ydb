@@ -3,7 +3,6 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
-REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -12,20 +11,13 @@ ELSE()
 ENDIF()
 
 SRCS(
-    GLOBAL blobs_sharing_ut.cpp
-    GLOBAL kqp_olap_ut.cpp
-    aggregations_ut.cpp
-    clickbench_ut.cpp
-    locks_ut.cpp
-    scan_cleanup_ut.cpp
-    optimizer_ut.cpp
-    peephole_ut.cpp
-    sys_view_ut.cpp
-    tiering_ut.cpp
+    write_ut.cpp
 )
 
 PEERDIR(
+    ydb/core/testlib
     ydb/core/kqp
+    ydb/core/kqp/schematized_log
     ydb/core/kqp/ut/common
     ydb/core/protos
     yql/essentials/sql/pg_dummy
@@ -34,22 +26,9 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
-    ydb/core/tx/datashard/ut_common
-    ydb/library/aws_init
-    ydb/public/sdk/cpp/src/client/operation
+    ydb/core/wrappers
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE_FOR_TESTS(
-    indexes
-    types
-    operations
-    statistics
-    storage
-    reading
-    pushdown
-    event_log
-)

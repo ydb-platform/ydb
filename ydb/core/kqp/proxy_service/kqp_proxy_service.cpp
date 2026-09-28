@@ -844,11 +844,11 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            if (sessionInfo->State == TKqpSessionInfo::EXECUTING) {
-                ReplyProcessError(Ydb::StatusIds::SESSION_BUSY, "Session is busy", requestId);
-                return;
+            if (sessionInfo->State != TKqpSessionInfo::EXECUTING) {
+                // A concurrent request must not replace the active query's stats.
+                // The session actor still decides whether to accept the request.
+                LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
             }
-            LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
             if (FeatureFlags.GetEnableKqpRuntimeStats()) {
                 ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
             }

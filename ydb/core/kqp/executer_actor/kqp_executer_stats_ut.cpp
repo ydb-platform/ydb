@@ -3,17 +3,16 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
+
 namespace {
 
-using namespace NYql::NDqProto;
-
-TDqTaskStats TaskStats(ui64 taskId) {
-    TDqTaskStats stats;
+NYql::NDqProto::TDqTaskStats TaskStats(ui64 taskId) {
+    NYql::NDqProto::TDqTaskStats stats;
     stats.SetTaskId(taskId);
     return stats;
 }
 
-void Report(TStageExecutionStats& stage, ui32 nodeId, ui64 taskId, EComputeState state) {
+void Report(TStageExecutionStats& stage, ui32 nodeId, ui64 taskId, NYql::NDqProto::EComputeState state) {
     stage.UpdateStats(nodeId, TaskStats(taskId), state, 0, 0, 0);
 }
 

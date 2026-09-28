@@ -137,9 +137,7 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
                     externalStat.SetWaitOutputTimeUs(stat.WaitOutputTimeUs);
                     externalStat.SetFinished(stat.Finished);
                 }
-            }
 
-            if (RuntimeSettings.WithProgressStats || RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
                 taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
                 taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
             }

@@ -2574,7 +2574,7 @@ public:
         if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
             return;
         }
-        if (auto publish = QueryState->RuntimeStats.Publish(TMonotonic::Now())) {
+        if (auto publish = QueryState->RuntimeStats.Publish(AppData()->MonotonicTimeProvider->Now())) {
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,
                 publish->SequenceNo, std::move(publish->Stats)));
             if (publish->ScheduleNextPublish) {

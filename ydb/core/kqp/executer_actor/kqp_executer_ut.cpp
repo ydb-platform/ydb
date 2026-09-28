@@ -147,9 +147,11 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         }
         NDataShard::NKqpHelpers::SendRequest(runtime, streamSender, std::move(request));
 
-        runtime.SimulateSleep(TDuration::Seconds(35));
-        UNIT_ASSERT_GT(queryStatsReports, 0);
-        UNIT_ASSERT_LE(queryStatsReports, 2);
+        runtime.WaitFor("paused result channel", [&] { return !pausedChannels.empty(); });
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(queryStatsReports, 1);
+        runtime.SimulateSleep(TDuration::Seconds(33));
+        UNIT_ASSERT_VALUES_EQUAL(queryStatsReports, 2);
         UNIT_ASSERT(!pausedChannels.empty());
         UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
             "not all rows should be delivered while every result channel is paused");
@@ -327,17 +329,29 @@ Y_UNIT_TEST_SUITE(KqpCurrentExecutionStats) {
 
 using namespace NYql::NDqProto;
 
-    Y_UNIT_TEST(RuntimeStatsKeepClientProgressInterval) {
-        TUserRequestContext context;
-        context.CurrentQueryStatsInterval = TDuration::Seconds(30);
+    Y_UNIT_TEST(RuntimeStatsPreserveExistingReporting) {
+        for (bool enabled : {false, true}) {
+            for (bool streaming : {false, true}) {
+                for (auto progressPeriod : {TDuration::Zero(), TDuration::MilliSeconds(1), TDuration::Seconds(1)}) {
+                    TUserRequestContext context;
+                    context.CurrentQueryStatsInterval = enabled ? TDuration::Seconds(30) : TDuration::Zero();
+                    context.IsStreamingQuery = streaming;
 
-        const auto settings = MakeStatsReportingSettings(context, TDuration::Seconds(1));
-        UNIT_ASSERT(settings.LocalReportStatsSettings);
-        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MinInterval, TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MaxInterval, TDuration::Seconds(30));
-        UNIT_ASSERT(settings.RemoteReportStatsSettings);
-        UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings->MinInterval, TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings->MaxInterval, TDuration::Seconds(30));
+                    const auto settings = MakeStatsReportingSettings(context, progressPeriod);
+                    UNIT_ASSERT_VALUES_EQUAL(settings.CollectCurrentQueryStats, enabled);
+                    UNIT_ASSERT_VALUES_EQUAL(settings.WithProgressStats, progressPeriod != TDuration::Zero());
+                    UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings.Defined(), enabled);
+                    if (enabled) {
+                        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MinInterval, TDuration::Seconds(30));
+                        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MaxInterval, TDuration::Seconds(30));
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings.Defined(), streaming);
+                    const auto remote = settings.RemoteReportStatsSettings.GetOrElse(ReportStatsSettingsFromProto({}));
+                    UNIT_ASSERT_VALUES_EQUAL(remote.MinInterval, streaming ? TDuration::Seconds(1) : TDuration::MilliSeconds(20));
+                    UNIT_ASSERT_VALUES_EQUAL(remote.MaxInterval, streaming ? TDuration::Seconds(5) : TDuration::Seconds(1));
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(CurrentQueryStatsPublisherReportsRateAndStaleness) {
@@ -426,6 +440,46 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2100);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 400);
+        }
+    }
+
+    Y_UNIT_TEST(ScanIngressUsesExistingStats) {
+        const TVector<IKqpGateway::TPhysicalTxData> transactions;
+        const IKqpGateway::TPhysicalTxData tx(nullptr, nullptr);
+        const NKikimrConfig::TTableServiceConfig::TAggregationConfig aggregation;
+        TKqpTasksGraph graph("/Root", transactions, nullptr, {}, aggregation, nullptr, {}, nullptr, false);
+        const NYql::NDq::TStageId stageId(0, 1);
+        graph.AddStageInfo(TStageInfo(stageId, 0, 0, TStageInfoMeta(tx)));
+        auto& stage = graph.GetStageInfo(stageId);
+        stage.Meta.TablePath = "/Root/Table";
+        auto& task = graph.AddTask(stage);
+
+        for (auto kind : {ETableKind::Datashard, ETableKind::Olap, ETableKind::SysView}) {
+            stage.Meta.TableKind = kind;
+            for (bool scan : {false, true}) {
+                task.Meta.ScanTask = scan;
+                for (auto mode : {Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
+                                  Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC,
+                                  Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL,
+                                  Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE}) {
+                    TQueryExecutionStats stats(mode, &graph, nullptr, 0, true);
+                    Init(stats);
+                    const bool scanActor = scan && kind != ETableKind::SysView;
+                    const ui64 sourceBytes = 700;
+                    const ui64 scanBytes = scanActor ? 1000 : 0;
+                    const auto ingressBytes = sourceBytes + (CollectFullStats(mode) ? scanBytes : 0);
+                    auto report = MakeReport(task.Id, 100, 4096, 1000, ingressBytes);
+                    auto& otherTable = *report.MutableTasks(0)->AddTables();
+                    otherTable.SetTablePath("/Root/Other");
+                    otherTable.SetReadBytes(sourceBytes);
+                    stats.UpdateTaskStats(1, task.Id, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+                    stats.UpdateTaskStats(1, task.Id, report, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
+                    UNIT_ASSERT_VALUES_EQUAL(stats.GetCurrentQueryResources().ReadIngressBytes, sourceBytes + scanBytes);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.GetCurrentQueryResources().ComputeMemoryBytes, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.Tables.at("/Root/Table").ReadBytes.Sum, 1000);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.Tables.at("/Root/Other").ReadBytes.Sum, sourceBytes);
+                }
+            }
         }
     }
 

@@ -97,7 +97,7 @@ bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
 TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod) {
     TKqpStatsReportingSettings settings;
     settings.CollectCurrentQueryStats = context.CurrentQueryStatsInterval != TDuration::Zero();
-    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero() || settings.CollectCurrentQueryStats;
+    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero();
 
     if (context.IsStreamingQuery) {
         settings.RemoteReportStatsSettings = NYql::NDq::TReportStatsSettings{
@@ -105,14 +105,8 @@ TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext&
     }
     if (settings.CollectCurrentQueryStats) {
         const auto interval = context.CurrentQueryStatsInterval;
-        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
-        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
-        if (settings.RemoteReportStatsSettings) {
-            settings.RemoteReportStatsSettings->MinInterval = Min(settings.RemoteReportStatsSettings->MinInterval, interval);
-            settings.RemoteReportStatsSettings->MaxInterval = Min(settings.RemoteReportStatsSettings->MaxInterval, interval);
-        } else {
-            settings.RemoteReportStatsSettings = settings.LocalReportStatsSettings;
-        }
+        // Remote tasks already send periodic stats. Only local tasks need an extra timer.
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{interval, interval};
     }
     return settings;
 }

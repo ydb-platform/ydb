@@ -236,8 +236,8 @@ public:
         if (UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
             return;
         }
-        const auto now = TMonotonic::Now();
-        if (LastCurrentStatsPublish + UserRequestContext->CurrentQueryStatsInterval > now) {
+        const auto now = TActivationContext::Monotonic();
+        if (LastCurrentStatsPublish && *LastCurrentStatsPublish + UserRequestContext->CurrentQueryStatsInterval > now) {
             return;
         }
         if (const auto current = CurrentQueryStats.Get()) {
@@ -1061,7 +1061,7 @@ private:
     TCurrentQueryStats CurrentQueryStats;
     THashMap<TActorId, TCurrentQueryStats::TSourceState> ChildCurrentStats;
     ui64 CurrentStatsSequenceNo = 0;
-    TMonotonic LastCurrentStatsPublish;
+    std::optional<TMonotonic> LastCurrentStatsPublish;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 

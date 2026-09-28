@@ -141,18 +141,38 @@ $grid = (
     CROSS JOIN $branches_builds AS bb
 );
 
+$by_owner = (
+    SELECT
+        g.date_window AS date_window,
+        g.owner_team AS owner_team,
+        g.area AS area,
+        g.branch AS branch,
+        g.build_type AS build_type,
+        COALESCE(a.muted_count, 0) AS muted_count,
+        COALESCE(a.muted_count_more_30_days, 0) AS muted_count_more_30_days
+    FROM $grid AS g
+    LEFT JOIN $agg AS a
+        ON a.date_window = g.date_window
+        AND a.owner_team = g.owner_team
+        AND a.area = g.area
+        AND a.branch = g.branch
+        AND a.build_type = g.build_type
+);
+
+-- Upload PK is (date_window, area, branch, build_type): several owners share one area
+-- (the team that actually has mutes, plus an empty grid cell). Sum counts and keep
+-- the owner of the non-empty cell so a zero placeholder cannot replace the pre-aggregation.
 SELECT
-    g.date_window AS date_window,
-    g.owner_team AS owner_team,
-    g.area AS area,
-    g.branch AS branch,
-    g.build_type AS build_type,
-    COALESCE(a.muted_count, 0) AS muted_count,
-    COALESCE(a.muted_count_more_30_days, 0) AS muted_count_more_30_days
-FROM $grid AS g
-LEFT JOIN $agg AS a
-    ON a.date_window = g.date_window
-    AND a.owner_team = g.owner_team
-    AND a.area = g.area
-    AND a.branch = g.branch
-    AND a.build_type = g.build_type;
+    b.date_window AS date_window,
+    b.area AS area,
+    b.branch AS branch,
+    b.build_type AS build_type,
+    MAX_BY(b.owner_team, b.muted_count) AS owner_team,
+    SUM(b.muted_count) AS muted_count,
+    SUM(b.muted_count_more_30_days) AS muted_count_more_30_days
+FROM $by_owner AS b
+GROUP BY
+    b.date_window,
+    b.area,
+    b.branch,
+    b.build_type;

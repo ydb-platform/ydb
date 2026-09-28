@@ -329,12 +329,12 @@ struct TOwnerLess {
 
 } // namespace
 
-struct TSplitCheckpoint::TState {
+struct TSplitContinuation::TState {
     TString LayoutId;
     double Rate = 1.0;
     ui64 MaxExpectedBytes = 0;
     ui64 MaxIndexPages = 0;
-    TMark Resume;
+    TMark ResumeAt;
     TMark End;
     std::optional<TBounds> Certain;
     ui64 PieceUnits = 0;
@@ -368,7 +368,7 @@ struct TKeyBlockIterator::TState {
         double PieceBytes = 0;
         TPageUseMap PiecePages;
         TPageUseMap UnitPages;
-        // Includes index pages imported from Carry.
+        // Includes index pages imported from Continuation.
         TPageSet IndexPages;
         TVector<TRunCursor> Runs;
     };
@@ -697,46 +697,46 @@ struct TKeyBlockIterator::TState {
         split.Walk.Target = end;
     }
 
-    bool ImportCarry(TSplitWalk& split, const TSplitCheckpoint& carry) const {
-        if (!carry.State || carry.State->LayoutId != Layout->LayoutId
-            || carry.State->Rate != split.Request.Rate
-            || carry.State->MaxExpectedBytes != split.Request.MaxExpectedBytes
-            || carry.State->MaxIndexPages != split.Request.MaxIndexPages
-            || CmpPos(carry.State->Resume, split.Start, KeyDefaults()) != 0
-            || CmpPos(carry.State->End, split.End, KeyDefaults()) != 0
-            || carry.State->Certain.has_value() != bool(split.Request.Certain))
+    bool ImportContinuation(TSplitWalk& split, const TSplitContinuation& continuation) const {
+        if (!continuation.State || continuation.State->LayoutId != Layout->LayoutId
+            || continuation.State->Rate != split.Request.Rate
+            || continuation.State->MaxExpectedBytes != split.Request.MaxExpectedBytes
+            || continuation.State->MaxIndexPages != split.Request.MaxIndexPages
+            || CmpPos(continuation.State->ResumeAt, split.Start, KeyDefaults()) != 0
+            || CmpPos(continuation.State->End, split.End, KeyDefaults()) != 0
+            || continuation.State->Certain.has_value() != bool(split.Request.Certain))
         {
             return false;
         }
         if (split.Request.Certain
-            && (CmpPos(StartOf(*carry.State->Certain), StartOf(*split.Request.Certain), KeyDefaults()) != 0
-                || CmpPos(EndOf(*carry.State->Certain), EndOf(*split.Request.Certain), KeyDefaults()) != 0))
+            && (CmpPos(StartOf(*continuation.State->Certain), StartOf(*split.Request.Certain), KeyDefaults()) != 0
+                || CmpPos(EndOf(*continuation.State->Certain), EndOf(*split.Request.Certain), KeyDefaults()) != 0))
         {
             return false;
         }
-        split.PieceUnits = carry.State->PieceUnits;
-        split.PieceBytes = carry.State->PieceBytes;
-        split.PiecePages = carry.State->PiecePages;
-        split.IndexPages = carry.State->IndexPages;
+        split.PieceUnits = continuation.State->PieceUnits;
+        split.PieceBytes = continuation.State->PieceBytes;
+        split.PiecePages = continuation.State->PiecePages;
+        split.IndexPages = continuation.State->IndexPages;
         return true;
     }
 
-    void FillCarry(TSplitWalk& split) const {
-        auto carry = std::make_shared<TSplitCheckpoint::TState>();
-        carry->LayoutId = Layout->LayoutId;
-        carry->Rate = split.Request.Rate;
-        carry->MaxExpectedBytes = split.Request.MaxExpectedBytes;
-        carry->MaxIndexPages = split.Request.MaxIndexPages;
-        carry->Resume = split.Walk.Target;
-        carry->End = split.End;
+    void FillContinuation(TSplitWalk& split) const {
+        auto continuation = std::make_shared<TSplitContinuation::TState>();
+        continuation->LayoutId = Layout->LayoutId;
+        continuation->Rate = split.Request.Rate;
+        continuation->MaxExpectedBytes = split.Request.MaxExpectedBytes;
+        continuation->MaxIndexPages = split.Request.MaxIndexPages;
+        continuation->ResumeAt = split.Walk.Target;
+        continuation->End = split.End;
         if (split.Request.Certain) {
-            carry->Certain = *split.Request.Certain;
+            continuation->Certain = *split.Request.Certain;
         }
-        carry->PieceUnits = split.PieceUnits;
-        carry->PieceBytes = split.PieceBytes;
-        carry->PiecePages = std::move(split.PiecePages);
-        carry->IndexPages = std::move(split.IndexPages);
-        split.Result.Carry.State = std::move(carry);
+        continuation->PieceUnits = split.PieceUnits;
+        continuation->PieceBytes = split.PieceBytes;
+        continuation->PiecePages = std::move(split.PiecePages);
+        continuation->IndexPages = std::move(split.IndexPages);
+        split.Result.Continuation.State = std::move(continuation);
     }
 
     bool EmitSplit(TSplitWalk& split, const TMark& pos) {
@@ -744,7 +744,7 @@ struct TKeyBlockIterator::TState {
             return false;
         }
         // A carried prefix makes the resume boundary a valid interior cut.
-        if (!split.Request.Carry && CmpPos(split.Start, pos, KeyDefaults()) >= 0) {
+        if (!split.Request.Continuation && CmpPos(split.Start, pos, KeyDefaults()) >= 0) {
             return false;
         }
         split.Result.Keys.push_back(ToBoundary(pos));
@@ -974,12 +974,12 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
     split.End = RangeEndOf(request);
     Y_ENSURE(CmpPos(split.Start, split.End, State->KeyDefaults()) <= 0,
         "SplitPoints end is before the current position");
-    if (request.Carry && !State->ImportCarry(split, *request.Carry)) {
+    if (request.Continuation && !State->ImportContinuation(split, *request.Continuation)) {
         out = {};
         out.Stale = true;
         return EReady::Data;
     }
-    if (!request.Carry && CmpPos(split.End, State->Read.End, State->KeyDefaults()) <= 0) {
+    if (!request.Continuation && CmpPos(split.End, State->Read.End, State->KeyDefaults()) <= 0) {
         // A singleton has no interior boundary and is exempt from both budgets.
         out = {};
         return EReady::Data;
@@ -1003,7 +1003,7 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
             }
             // Only the original range's first unit is exempt. A resumed walk
             // already has a prefix, so its current boundary is a valid cut.
-            State->EmitSplit(split, !request.Carry
+            State->EmitSplit(split, !request.Continuation
                 && CmpPos(split.Walk.Target, split.Start, State->KeyDefaults()) == 0
                 ? State->Read.End : split.Walk.Target);
             split.Result.Truncated = true;
@@ -1028,12 +1028,12 @@ EReady TKeyBlockIterator::SplitPoints(const TSplitRequest& request, TSplitResult
         split.Walk.Target = split.Walk.End;
         State->SkipUnchargedMemtable(split);
         State->RetirePassedPages(split);
-        if (request.MaxUnits && visited >= request.MaxUnits
+        if (request.MaxUnitsPerCall && visited >= request.MaxUnitsPerCall
             && CmpPos(split.Walk.Target, split.End, State->KeyDefaults()) < 0)
         {
-            State->FillCarry(split);
-            split.Result.Stopped = true;
-            split.Result.Resume = ToBoundary(split.Walk.Target);
+            State->FillContinuation(split);
+            split.Result.Paused = true;
+            split.Result.ResumeAt = ToBoundary(split.Walk.Target);
             break;
         }
     }

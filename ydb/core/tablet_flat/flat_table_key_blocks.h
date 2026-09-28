@@ -97,7 +97,7 @@ namespace NTable {
     };
 
     // Unfinished piece and index-page budget.
-    struct TSplitCheckpoint {
+    struct TSplitContinuation {
     private:
         friend class TKeyBlockIterator;
         struct TState;
@@ -115,10 +115,10 @@ namespace NTable {
         // cache hits; Max<ui64>() = unlimited.
         ui64 MaxIndexPages = 0;
         // Maximum units examined per call; 0 = unlimited.
-        ui64 MaxUnits = 0;
-        // From a Stopped result; borrowed for this call.
-        // Only MaxUnits may change on resume.
-        const TSplitCheckpoint* Carry = nullptr;
+        ui64 MaxUnitsPerCall = 0;
+        // From a Paused result; borrowed for this call.
+        // Only MaxUnitsPerCall may change on resume.
+        const TSplitContinuation* Continuation = nullptr;
         // Optional selected interval, clipped and charged at rate 1; valid during the call.
         const TBounds* Certain = nullptr;
     };
@@ -126,11 +126,11 @@ namespace NTable {
     struct TSplitResult {
         TVector<TKeyBoundary> Keys; // sorted interior unit boundaries
         bool Truncated = false; // index budget reached; tail remains unchecked
-        // MaxUnits reached; Resume and Carry are valid.
-        bool Stopped = false;
-        TKeyBoundary Resume;
-        TSplitCheckpoint Carry;
-        // Carry mismatch (layout, request or resume position); Keys is empty.
+        // MaxUnitsPerCall reached; ResumeAt and Continuation are valid.
+        bool Paused = false;
+        TKeyBoundary ResumeAt;
+        TSplitContinuation Continuation;
+        // Continuation no longer matches; Keys is empty.
         bool Stale = false;
     };
 
@@ -177,9 +177,9 @@ namespace NTable {
         // Walks from the last Seek/Next position to EndKey; requires IsValid().
         // Preserves the read cursor. On Page, out is unchanged; the next call starts over.
         // Single units are exempt from both budgets; a truncated tail needs another walk.
-        // On Stopped, Seek(Resume) and call again with Result.Carry. A call without
-        // Carry starts a fresh piece and a fresh index-page budget.
-        // On Stale, drop the carry and walk the original range from its start.
+        // On Paused, Seek(ResumeAt) and pass Continuation to the next call.
+        // Without Continuation, piece and index-page accounting start fresh.
+        // On Stale, restart the original range without Continuation.
         EReady SplitPoints(const TSplitRequest& request, TSplitResult& out);
 
         TKeyBlocksTelemetry Telemetry() const;

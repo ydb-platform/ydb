@@ -236,13 +236,13 @@ TSplitResult SplitInChunks(const TSubset& subset, TSplitRequest request) {
     TSplitResult previous;
     for (ui32 step = 0; step < 100; ++step) {
         // Rebuild the iterator as a new Execute would.
-        const TKeyBoundary resume = previous.Stopped ? previous.Resume
+        const TKeyBoundary resumeAt = previous.Paused ? previous.ResumeAt
             : TKeyBoundary{{}, EBoundarySide::Before};
-        request.Carry = previous.Stopped ? &previous.Carry : nullptr;
-        auto chunk = SplitOnce(subset, request, resume);
+        request.Continuation = previous.Paused ? &previous.Continuation : nullptr;
+        auto chunk = SplitOnce(subset, request, resumeAt);
         UNIT_ASSERT(!chunk.Stale);
         result.Keys.insert(result.Keys.end(), chunk.Keys.begin(), chunk.Keys.end());
-        if (!chunk.Stopped) {
+        if (!chunk.Paused) {
             UNIT_ASSERT_C(step > 0, "walk finished in one chunk");
             result.Truncated = chunk.Truncated;
             return result;
@@ -1798,7 +1798,7 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
 
     // Chunks must preserve repeated page charges and produce the same split keys
     // as an uninterrupted walk.
-    Y_UNIT_TEST(SplitPointsMaxUnitsPreservesPiece) {
+    Y_UNIT_TEST(SplitPointsMaxUnitsPerCallPreservesPiece) {
         auto scheme = Scheme64();
         auto part = CookRows(scheme, Conf(1, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 24);
         part.Slices = TSlices::All();
@@ -1812,10 +1812,10 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         base.MaxIndexPages = Max<ui64>();
         const auto expected = SplitOnce(subset, base);
         UNIT_ASSERT(!expected.Keys.empty());
-        UNIT_ASSERT(!expected.Stopped);
+        UNIT_ASSERT(!expected.Paused);
         UNIT_ASSERT_VALUES_EQUAL(expected.Keys.front().Key.GetBuffer(), Key64(4).GetBuffer());
-        for (ui64 maxUnits : {ui64(1), ui64(3)}) {
-            base.MaxUnits = maxUnits;
+        for (ui64 maxUnitsPerCall : {ui64(1), ui64(3)}) {
+            base.MaxUnitsPerCall = maxUnitsPerCall;
             AssertSameSplits(expected, SplitInChunks(subset, base));
         }
     }
@@ -1830,7 +1830,7 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         request.Rate = 0.05;
         request.MaxExpectedBytes = Max<ui64>();
         request.MaxIndexPages = 2;
-        request.MaxUnits = 1;
+        request.MaxUnitsPerCall = 1;
         const auto result = SplitInChunks(subset, request);
         UNIT_ASSERT(!result.Truncated);
         UNIT_ASSERT(result.Keys.empty());
@@ -1848,7 +1848,7 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         const auto expected = SplitOnce(subset, request);
         UNIT_ASSERT(expected.Truncated);
         UNIT_ASSERT_VALUES_EQUAL(expected.Keys.size(), 1u);
-        request.MaxUnits = 1;
+        request.MaxUnitsPerCall = 1;
         AssertSameSplits(expected, SplitInChunks(subset, request));
     }
 
@@ -1863,21 +1863,21 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         request.Rate = 0.5;
         request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 4;
         request.MaxIndexPages = Max<ui64>();
-        request.MaxUnits = 2;
+        request.MaxUnitsPerCall = 2;
         request.Certain = &certain;
         auto chunk = SplitOnce(subset, request);
-        UNIT_ASSERT(chunk.Stopped);
+        UNIT_ASSERT(chunk.Paused);
         UNIT_ASSERT(chunk.Keys.empty());
-        request.MaxUnits = 0;
-        request.Carry = &chunk.Carry;
+        request.MaxUnitsPerCall = 0;
+        request.Continuation = &chunk.Continuation;
 
         const auto checkChanged = [&](auto change) {
             auto changed = request;
             change(changed);
-            const auto result = SplitOnce(subset, changed, chunk.Resume);
+            const auto result = SplitOnce(subset, changed, chunk.ResumeAt);
             UNIT_ASSERT(result.Stale);
             UNIT_ASSERT(result.Keys.empty());
-            UNIT_ASSERT(!result.Stopped);
+            UNIT_ASSERT(!result.Paused);
             UNIT_ASSERT(!result.Truncated);
         };
         checkChanged([](auto& changed) { changed.Rate = 0.25; });
@@ -1897,81 +1897,81 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
             checkChanged([&](auto& changed) { changed.Certain = &bounds; });
         }
 
-        const ui64 resumeKey = chunk.Resume.Key.GetCells()[0].AsValue<ui64>();
+        const ui64 resumeKey = chunk.ResumeAt.Key.GetCells()[0].AsValue<ui64>();
         const TKeyBoundary wrongPositions[] = {
             {Key64(resumeKey - 1), EBoundarySide::Before},
             {Key64(resumeKey + 1), EBoundarySide::Before},
-            {chunk.Resume.Key, chunk.Resume.Side == EBoundarySide::Before
+            {chunk.ResumeAt.Key, chunk.ResumeAt.Side == EBoundarySide::Before
                 ? EBoundarySide::After : EBoundarySide::Before},
         };
         for (const auto& position : wrongPositions) {
             const auto result = SplitOnce(subset, request, position);
             UNIT_ASSERT(result.Stale);
             UNIT_ASSERT(result.Keys.empty());
-            UNIT_ASSERT(!result.Stopped);
+            UNIT_ASSERT(!result.Paused);
             UNIT_ASSERT(!result.Truncated);
         }
 
-        // Rejection leaves the checkpoint reusable.
-        const auto expected = SplitOnce(subset, request, chunk.Resume);
+        // Rejection leaves the continuation reusable.
+        const auto expected = SplitOnce(subset, request, chunk.ResumeAt);
         UNIT_ASSERT(!expected.Stale);
         UNIT_ASSERT(!expected.Keys.empty());
         const TBounds equivalent{Key64(0), Key64(1), true, false};
         request.Certain = &equivalent;
-        const TKeyBoundary equivalentResume{TSerializedCellVec(chunk.Resume.Key.GetCells()), chunk.Resume.Side};
-        const auto resumed = SplitOnce(subset, request, equivalentResume);
+        const TKeyBoundary equivalentResumeAt{TSerializedCellVec(chunk.ResumeAt.Key.GetCells()), chunk.ResumeAt.Side};
+        const auto resumed = SplitOnce(subset, request, equivalentResumeAt);
         UNIT_ASSERT(!resumed.Stale);
         AssertSameSplits(expected, resumed);
 
-        request.Carry = nullptr;
-        request.MaxUnits = 2;
+        request.Continuation = nullptr;
+        request.MaxUnitsPerCall = 2;
         request.MaxIndexPages = 1;
         request.Certain = nullptr;
         chunk = SplitOnce(subset, request);
-        UNIT_ASSERT(chunk.Stopped);
+        UNIT_ASSERT(chunk.Paused);
         UNIT_ASSERT(!chunk.Truncated);
-        request.Carry = &chunk.Carry;
-        request.MaxUnits = 0;
+        request.Continuation = &chunk.Continuation;
+        request.MaxUnitsPerCall = 0;
         checkChanged([](auto& changed) { changed.MaxIndexPages = Max<ui64>(); });
         checkChanged([&](auto& changed) { changed.Certain = &certain; });
     }
 
-    // Checkpoints survive equivalent part objects, but reject changed layouts.
-    Y_UNIT_TEST(SplitPointsRejectsStaleCarry) {
+    // Continuations survive equivalent part objects, but reject changed layouts.
+    Y_UNIT_TEST(SplitPointsRejectsStaleContinuation) {
         auto scheme = Scheme64();
         auto part = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
         TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
         TSplitRequest request;
         request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 4;
         request.MaxIndexPages = Max<ui64>();
-        request.MaxUnits = 2;
+        request.MaxUnitsPerCall = 2;
         const auto chunk = SplitOnce(subset, request);
-        UNIT_ASSERT(chunk.Stopped);
+        UNIT_ASSERT(chunk.Paused);
         UNIT_ASSERT(!chunk.Stale);
         UNIT_ASSERT(chunk.Keys.empty());
 
-        request.MaxUnits = 0;
-        request.Carry = &chunk.Carry;
-        const auto expected = SplitOnce(subset, request, chunk.Resume);
+        request.MaxUnitsPerCall = 0;
+        request.Continuation = &chunk.Continuation;
+        const auto expected = SplitOnce(subset, request, chunk.ResumeAt);
         UNIT_ASSERT(!expected.Keys.empty());
-        const TSplitCheckpoint empty;
-        const std::pair<ui32, const TSplitCheckpoint*> cases[] = {
-            {1, &chunk.Carry}, {1, &empty}, {2, &chunk.Carry},
+        const TSplitContinuation empty;
+        const std::pair<ui32, const TSplitContinuation*> cases[] = {
+            {1, &chunk.Continuation}, {1, &empty}, {2, &chunk.Continuation},
         };
-        for (const auto& [cookie, carry] : cases) {
+        for (const auto& [cookie, continuation] : cases) {
             auto replacement = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, cookie), TEpoch::FromIndex(1), 16);
             TSubset changed(TEpoch::FromIndex(1), scheme, TVector<TPartView>{replacement});
-            request.Carry = carry;
-            const auto resumed = SplitOnce(changed, request, chunk.Resume);
-            const bool valid = cookie == 1 && carry == &chunk.Carry;
+            request.Continuation = continuation;
+            const auto resumed = SplitOnce(changed, request, chunk.ResumeAt);
+            const bool valid = cookie == 1 && continuation == &chunk.Continuation;
             UNIT_ASSERT_VALUES_EQUAL(resumed.Stale, !valid);
-            UNIT_ASSERT(!resumed.Stopped);
+            UNIT_ASSERT(!resumed.Paused);
             UNIT_ASSERT(!resumed.Truncated);
             if (valid) {
                 AssertSameSplits(expected, resumed);
             } else {
                 UNIT_ASSERT(resumed.Keys.empty());
-                request.Carry = nullptr;
+                request.Continuation = nullptr;
                 const auto restarted = SplitOnce(changed, request);
                 UNIT_ASSERT(!restarted.Stale);
                 UNIT_ASSERT(!restarted.Keys.empty());

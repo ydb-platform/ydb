@@ -57,7 +57,6 @@ struct TPoolSettings : public TSettingsBase {
     bool IsWorkloadServiceRequired() const {
         return IsAdmissionRequired()
             || TotalCpuLimitPercentPerNode > 0
-            || TotalCpuGuaranteePercentPerNode > 0
             || TotalMemoryLimitPercentPerNode > 0
             || QueryCpuLimitPercentPerNode > 0
             || QueryMemoryLimitPercentPerNode > 0
@@ -71,7 +70,6 @@ struct TPoolSettings : public TSettingsBase {
     TPercent TotalMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity for all pool queries combined, -1 = disabled
     TPercent DatabaseLoadCpuThreshold = -1;  // -1 = disabled
     TPercent TotalCpuLimitPercentPerNode = -1;  // -1 = disabled
-    TPercent TotalCpuGuaranteePercentPerNode = -1;  // -1 = disabled
     TPercent QueryCpuLimitPercentPerNode = -1; // -1 = disabled;
     double ResourceWeight = -1;
 };

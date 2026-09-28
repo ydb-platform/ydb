@@ -282,8 +282,9 @@ private:
             }
         }
 
-        const auto cpuGuaranteePercent = std::max(config.TotalCpuGuaranteePercentPerNode, 0.0);
-        attrs.CpuGuarantee = cpuGuaranteePercent * totalCpuLimit / 100;
+        // TODO: take the guarantee from the DDL setting `total_cpu_guarantee_percent_per_node` once it is added:
+        //       attrs.CpuGuarantee = std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100;
+        attrs.CpuGuarantee = 0;
     }
 
     // TODO: handle invalid configuration on DDL level.

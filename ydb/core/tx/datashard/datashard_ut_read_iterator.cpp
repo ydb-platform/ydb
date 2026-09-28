@@ -6209,7 +6209,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
 
-    Y_UNIT_TEST(HnswFollowerBuildSurvivesReadEdgeAdvance) {
+    Y_UNIT_TEST_TWIN(HnswFollowerBuildSurvivesReadEdgeAdvance, ChangeVectors) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
@@ -6267,11 +6267,18 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(follower && follower->IsFollower());
         const auto tid = follower->GetUserTables().begin()->second->LocalTid;
         const auto oldEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
+        if (ChangeVectors) {
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/hnsw-follower-edge` (parent, key, emb) VALUES
+                    (1, 1, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01"),
+                    (1, 2, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            )");
+        }
         read(true);
         const auto newEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
         UNIT_ASSERT_GT(newEdge, oldEdge);
-        UNIT_ASSERT_C(!follower->IsHnswIndexBuildObsolete(tid),
-            "Advancing a read edge without changing vectors discarded the in-flight graph");
+        UNIT_ASSERT_VALUES_EQUAL_C(follower->IsHnswIndexBuildObsolete(tid), ChangeVectors,
+            "In-flight graph invalidation must depend on data changes, not read-edge advancement");
         runtime.SetObserverFunc(observer);
         for (auto& ev : pending) {
             runtime.Send(ev.Release());
@@ -6279,8 +6286,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         runtime.SimulateSleep(TDuration::MilliSeconds(200));
         auto result = read(false);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), ChangeVectors ? 2 : 1);
+        if (ChangeVectors) {
+            for (ui32 attempt = 0; attempt < 20 && result->Record.GetStats().GetRows() != 1; ++attempt) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+                result = read(false);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), 2);
+            }
+        }
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].AsValue<ui32>(), 1);
     }
 
     Y_UNIT_TEST_QUAD(HnswPrefixRangeUsesLegacyBorders, Followers, Distinct) {

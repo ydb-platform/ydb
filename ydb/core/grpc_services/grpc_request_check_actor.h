@@ -11,9 +11,12 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/audit/audit_config/audit_config.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/database_kind.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/security/secure_request.h>
@@ -21,6 +24,8 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
+
+#include <util/generic/serialized_enum.h>
 
 #include <util/string/split.h>
 
@@ -31,6 +36,24 @@ struct TCloudPermissionsSettings {
     bool UseAccessService = false;
     bool NeedClusterAccessResourceCheck = false;
     TString AccessServiceType;
+};
+
+// The outcome of the check of the user's right to connect to the database of the request.
+// What of it counts as a denial is up to the caller: the gRPC API lets a request through
+// unless the user provably has no right, while the HTTP monitoring is stricter than that.
+enum class EConnectRightVerdict {
+    // The user is allowed to connect to the database.
+    Allowed,
+    // There is no SecurityObject of the database to check the connect right against.
+    NoSecurityObject,
+    // The database has denied the connect right to the user.
+    NoConnectRight,
+};
+
+// A connect right verdict along with a human readable explanation of it for logging.
+struct TConnectRightCheckResult {
+    EConnectRightVerdict Verdict = EConnectRightVerdict::Allowed;
+    TStringBuf Reason;
 };
 
 template<typename TCtx>
@@ -216,6 +239,9 @@ public:
         , FacilityProvider_(facilityProvider)
         , CloudPermissionsSettings(cloudPermissionsSettings)
     {
+        if constexpr (IsHttpRequest) {
+            RequestSchemeData_ = schemeData;
+        }
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
             TBase::SetSecurityToken(authToken.GetRef());
@@ -246,6 +272,20 @@ public:
         }
 
         GrpcRequestBaseCtx_->SetCounters(Counters_);
+
+        if constexpr (IsHttpRequest) {
+            if (IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken())) {
+                HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
+                if (HttpDatabaseAccessVerdict_ != EHttpDatabaseAccessVerdict::Ok) {
+                    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "HTTP monitoring database access would deny"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", verdict: " << ToString(HttpDatabaseAccessVerdict_)
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+                }
+            }
+        }
 
         if (!CheckedDatabaseName_.empty()) {
             GrpcRequestBaseCtx_->UseDatabase(CheckedDatabaseName_);
@@ -659,6 +699,8 @@ private:
         // way as for grpc API
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
+        ev->Get()->UseDatabase(CheckedDatabaseName_);
+        ev->Get()->DatabaseAccessVerdict = HttpDatabaseAccessVerdict_;
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         PassAway();
     }
@@ -678,51 +720,27 @@ private:
         PassAway();
     }
 
-    std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
-        if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
-            return {false, std::nullopt};
-        }
-
-        if (SkipCheckConnectRights_) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
-        }
-
+    // Checks whether the user is allowed to connect to the database of the request.
+    TConnectRightCheckResult CheckConnectRightOfUser() const {
         // An empty token at this point means that anonymous access is allowed by the system configuration,
         // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
         // validated earlier in the request processing pipeline.
-        if (!TBase::GetParsedToken()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, anonymous requests allowed",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
+        const auto& parsedToken = TBase::GetParsedToken();
+        if (!parsedToken) {
+            return {EConnectRightVerdict::Allowed, "anonymous requests allowed"};
         }
 
         if (!SecurityObject_) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, no SecurityObject_",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
+            return {EConnectRightVerdict::NoSecurityObject, "no SecurityObject_"};
         }
-
-        const auto& parsedToken = TBase::GetParsedToken();
-        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
 
         // admins can connect to databases without having connect rights:
         // - cluster admin -- to any database
         // - database admin -- to their database
-        const bool isAdmin = TBase::IsUserAdmin() || (parsedToken && IsDatabaseAdministrator(parsedToken.Get(), databaseOwner));
+        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
+        const bool isAdmin = TBase::IsUserAdmin() || IsDatabaseAdministrator(parsedToken.Get(), databaseOwner);
         if (isAdmin) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a admin",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
+            return {EConnectRightVerdict::Allowed, "user is an admin"};
         }
 
         // The user-level connect right cannot limit node registration: registration is a
@@ -730,20 +748,48 @@ private:
         // one. Requiring here the root database as a cluster alias would add no value and
         // introduce technical issues.
         if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a special subject for node registration",
+            return {EConnectRightVerdict::Allowed, "user is a special subject for node registration"};
+        }
+
+        if (!SecurityObject_->CheckAccess(NACLib::ConnectDatabase, *parsedToken)) {
+            return {EConnectRightVerdict::NoConnectRight, "user has no connect right"};
+        }
+
+        return {EConnectRightVerdict::Allowed, "user has connect right"};
+    }
+
+    std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
+        if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
+            return {false, std::nullopt};
+        }
+
+        if (SkipCheckConnectRights_) {
+            YDB_LOG_DEBUG_COMP(
+                NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                TStringBuilder()
+                    << "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, "
+                    << "there is no db provided from user: " << CheckedDatabaseName_,
                 {"database", CheckedDatabaseName_},
                 {"user", TBase::GetUserSID()},
                 {"ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
-        const ui32 access = NACLib::ConnectDatabase;
-        if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
+        // The gRPC API denies a request only when the database has explicitly denied the connect right
+        // to the user: with no SecurityObject there is nothing to check the right against, so such
+        // a request is let through.
+        const auto connectRight = CheckConnectRightOfUser();
+        if (connectRight.Verdict != EConnectRightVerdict::NoConnectRight) {
+            YDB_LOG_DEBUG_COMP(
+                NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                TStringBuilder() << "Skip check permission connect db, " << connectRight.Reason,
+                {"database", CheckedDatabaseName_},
+                {"user", TBase::GetUserSID()},
+                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
         Counters_->IncDatabaseAccessDenyCounter();
-
 
         const TString error = "No permission to connect to the database";
         YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, error,
@@ -752,6 +798,28 @@ private:
             {"ip", GrpcRequestBaseCtx_->GetPeerName()});
 
         return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};;
+    }
+
+    EHttpDatabaseAccessVerdict EvaluateHttpDatabaseAccessVerdict() const {
+        Y_DEBUG_ABORT_UNLESS(RequestSchemeData_.Defined());
+        const auto rawDatabaseName = GrpcRequestBaseCtx_->GetDatabaseName();
+        if (!rawDatabaseName || rawDatabaseName->empty()) {
+            return EHttpDatabaseAccessVerdict::EmptyDatabase;
+        }
+
+        // We expect that object type passed in the request is a database.
+        if (!IsDatabase(*RequestSchemeData_)) {
+            return EHttpDatabaseAccessVerdict::NotADatabase;
+        }
+
+        switch (CheckConnectRightOfUser().Verdict) {
+            case EConnectRightVerdict::Allowed:
+                return EHttpDatabaseAccessVerdict::Ok;
+            case EConnectRightVerdict::NoSecurityObject:
+                return EHttpDatabaseAccessVerdict::NoSecurityObject;
+            case EConnectRightVerdict::NoConnectRight:
+                return EHttpDatabaseAccessVerdict::NoConnectRight;
+        }
     }
 
     const TActorId Owner_;
@@ -770,6 +838,8 @@ private:
     std::unordered_set<TString> DmlAuditExpectedSubjects_;
     NWilson::TSpan Span_;
     TCloudPermissionsSettings CloudPermissionsSettings;
+    EHttpDatabaseAccessVerdict HttpDatabaseAccessVerdict_ = EHttpDatabaseAccessVerdict::Ok;
+    TMaybe<TSchemeBoardEvents::TDescribeSchemeResult> RequestSchemeData_;
 };
 
 // default behavior - attributes in schema

@@ -4,26 +4,23 @@
 
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
 class TDropParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    virtual const char* Name() const override final { return "TDropParts"; }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TDropParts"
-                << " operationId# " << OperationId;
-    }
+    TOperationId OperationId;
 
 public:
     TDropParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -31,10 +28,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -77,10 +71,9 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " Propose modify scheme on shard"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "",
+                {"tabletId", tabletId},
+            );
         }
 
         txState->UpdateShardsInProgress();
@@ -89,32 +82,24 @@ public:
 };
 
 class TPropose: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    virtual const char* Name() const override final { return "TPropose"; }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TPropose"
-                << " operationId# " << OperationId;
-    }
+    TOperationId OperationId;
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << " at schemeshard: " << ssId
-                               << ", stepId: " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -130,11 +115,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << " at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -154,22 +135,16 @@ public:
 };
 
 class TProposedWaitParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    virtual const char* Name() const override final { return "TProposedWaitParts"; }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TProposedWaitParts"
-                << " operationId# " << OperationId;
-    }
+    TOperationId OperationId;
 
 public:
     TProposedWaitParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
+        IgnoreMessages({TEvColumnShard::TEvProposeTransactionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
@@ -197,11 +172,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << " at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -218,10 +189,9 @@ public:
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             txState->ShardsInProgress.insert(shard.Idx);
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " wait for NotifyTxCompletionResult"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "",
+                {"tabletId", tabletId},
+            );
         }
 
         return false;
@@ -229,15 +199,10 @@ public:
 };
 
 class TProposedDeleteParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    virtual const char* Name() const override final { return "TProposedDeleteParts"; }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TProposedDeleteParts"
-                << " operationId# " << OperationId;
-    }
+    TOperationId OperationId;
 
     std::optional<TPathId> FindNewShardOwner(TOperationContext& context, const TTxState& txState) const {
         const auto targetPathId = txState.TargetPathId;
@@ -367,27 +332,24 @@ public:
     TProposedDeleteParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
+        IgnoreMessages({TEvColumnShard::TEvProposeTransactionResult::EventType,
              TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         return Finish(context);
     }
 };
 
 class TDropColumnTable: public TSubOperation {
+    virtual const char* Name() const override final { return "TDropColumnTable"; }
 public:
     using TSubOperation::TSubOperation;
 
@@ -400,12 +362,10 @@ public:
         const TString& name = drop.GetName();
         auto opTxId = OperationId.GetTxId();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropColumnTable Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << drop.GetId()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", drop.GetId()},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(opTxId), ui64(ssId));
 
@@ -565,18 +525,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropColumnTable AbortPropose"
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropColumnTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropColumnTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -639,3 +596,5 @@ ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState st
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

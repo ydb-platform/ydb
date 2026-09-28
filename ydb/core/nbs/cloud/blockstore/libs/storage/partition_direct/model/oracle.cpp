@@ -68,7 +68,8 @@ EHostHealth ToPersistentHealth(const EHostHealth health)
 
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
-    IHostStateController* hostStateController)
+    IHostStateController* hostStateController,
+    const TVector<EHostHealth>& hostHealths)
     : StorageConfig(std::move(storageConfig))
     , OracleConfig(std::make_shared<TOracleConfig>(StorageConfig))
     , HostStateController(hostStateController)
@@ -81,10 +82,13 @@ TOracle::TOracle(
     , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
     , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
-    , HostStatistics(DirectBlockGroupHostCount)
-    , HostStates(DirectBlockGroupHostCount)
+    , MaxInflightWritesForDirectWrite(
+          OracleConfig->GetMaxInflightWritesForDirectWrite())
+    , HostStatistics(hostHealths.size())
+    , HostStates(hostHealths.size())
+    , HostsHealths(hostHealths)
     , HostsReconnectDelays(
-          DirectBlockGroupHostCount,
+          hostHealths.size(),
           TBackoffDelayProvider(MinReconnectDelay, MaxReconnectDelay))
     , TimePredictors(
           OperationCount,
@@ -93,9 +97,8 @@ TOracle::TOracle(
               OracleConfig->GetTimePredictionNthFromEnd()))
     , HealthPolicy(CreateDefaultHostHealthPolicy(OracleConfig))
 {
-    HostsHealths.resize(HostStates.size());
-    for (auto& healths: HostsHealths) {
-        healths = EHostHealth::Online;
+    for (size_t hostIndex = 0; hostIndex < hostHealths.size(); ++hostIndex) {
+        HostStates[hostIndex].State = HealthToState(hostHealths[hostIndex]);
     }
 }
 
@@ -289,7 +292,13 @@ TDuration TOracle::GetReadRequestTimeout() const
 
 EWriteMode TOracle::GetWriteMode() const
 {
-    return DefaultWriteMode;
+    if (!MaxInflightWritesForDirectWrite || !DiskStateProvider) {
+        return DefaultWriteMode;
+    }
+    return DiskStateProvider->GetInflightWriteCount() <=
+                   MaxInflightWritesForDirectWrite
+               ? EWriteMode::DirectWrite
+               : EWriteMode::IndirectWrite;
 }
 
 TDuration TOracle::GetWriteHedgingDelay(THostMask hosts, bool indirect) const
@@ -345,6 +354,11 @@ const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
     return HostStatistics[hostIndex];
 }
 
+EHostState TOracle::GetHostState(THostIndex hostIndex) const
+{
+    return HostStates[hostIndex].State;
+}
+
 TString TOracle::Dump() const
 {
     TStringBuilder sb;
@@ -362,6 +376,11 @@ TString TOracle::Dump() const
         sb << "\n";
     }
     return sb;
+}
+
+void TOracle::SetDiskStateProvider(IDiskStateProvider* diskStateProvider)
+{
+    DiskStateProvider = diskStateProvider;
 }
 
 void TOracle::AddHostIfNeeded(THostIndex hostIndex)

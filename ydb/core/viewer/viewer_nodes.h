@@ -217,6 +217,7 @@ class TJsonNodes : public TViewerPipeClient {
         NKikimrWhiteboard::TNodeStateInfo NetworkStateInfo;
         bool Disconnected = false;
         bool HasDisks = false;
+        bool HasPDiskWhiteboardResponse = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
         bool GotDatabaseFromResourceBoardInfo = false;
         std::optional<int> UptimeSeconds = 0;
@@ -388,11 +389,12 @@ class TJsonNodes : public TViewerPipeClient {
             CalcUptimeSeconds(TInstant::Now());
         }
 
-        void RemapDisks() {
+        void RemapPDisks() {
             if (PDisks.empty() && !SysViewPDisks.empty()) {
                 for (const auto& entry : SysViewPDisks) {
                     const auto& pdisk(entry.GetInfo());
                     auto& pDiskState = PDisks.emplace_back();
+                    pDiskState.SetHasWhiteboardData(false);
                     NKikimrBlobStorage::EDriveStatus driveStatus = NKikimrBlobStorage::EDriveStatus::UNKNOWN;
                     if (NKikimrBlobStorage::EDriveStatus_Parse(pdisk.GetStatusV2(), &driveStatus)) {
                         switch (driveStatus) {
@@ -415,10 +417,15 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
+        }
+
+        void RemapDisks() {
+            RemapPDisks();
             if (VDisks.empty() && !SysViewVDisks.empty()) {
                 for (const auto& entry : SysViewVDisks) {
                     const auto& vdisk(entry.GetInfo());
                     auto& vDiskState = VDisks.emplace_back();
+                    vDiskState.SetHasWhiteboardData(false);
                     vDiskState.MutableVDiskId()->SetGroupID(vdisk.GetGroupId());
                     vDiskState.MutableVDiskId()->SetGroupGeneration(vdisk.GetGroupGeneration());
                     vDiskState.MutableVDiskId()->SetRing(vdisk.GetFailRealm());
@@ -2318,6 +2325,7 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kDetailedReplicationStatusFieldNumber);
         }
     }
 
@@ -2687,7 +2695,7 @@ public:
                     for (const auto& vDiskState : vDiskResponse.GetVDiskStateInfo()) {
                         TNode* node = FindNode(vDiskState.GetNodeId());
                         if (node) {
-                            node->VDisks.emplace_back(vDiskState);
+                            node->VDisks.emplace_back(vDiskState).SetHasWhiteboardData(true);
                             node->CalcVDisks();
                         }
                     }
@@ -2699,7 +2707,7 @@ public:
                     TNode* node = FindNode(nodeId);
                     if (node) {
                         for (const auto& protoVDiskState : vDiskState.GetVDiskStateInfo()) {
-                            node->VDisks.emplace_back(protoVDiskState);
+                            node->VDisks.emplace_back(protoVDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcVDisks();
                     }
@@ -2710,11 +2718,16 @@ public:
         if (FieldsNeeded(FieldsPDisks)) {
             for (auto& [nodeId, response] : PDiskViewerResponse) {
                 if (response.IsOk()) {
+                    for (TNodeId respondedNodeId : response.Get()->Record.GetLocationResponded().GetNodeId()) {
+                        if (TNode* node = FindNode(respondedNodeId)) {
+                            node->HasPDiskWhiteboardResponse = true;
+                        }
+                    }
                     auto& pDiskResponse(*(response.Get()->Record.MutablePDiskResponse()));
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
                         TNode* node = FindNode(pDiskState.GetNodeId());
                         if (node) {
-                            node->PDisks.emplace_back(pDiskState);
+                            node->PDisks.emplace_back(pDiskState).SetHasWhiteboardData(true);
                             node->CalcPDisks();
                         }
                     }
@@ -2725,11 +2738,17 @@ public:
                     const auto& pDiskState(response.Get()->Record);
                     TNode* node = FindNode(nodeId);
                     if (node) {
+                        node->HasPDiskWhiteboardResponse = true;
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {
-                            node->PDisks.emplace_back(protoPDiskState);
+                            node->PDisks.emplace_back(protoPDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcPDisks();
                     }
+                }
+            }
+            for (TNode* node : NodeView) {
+                if (!node->HasPDiskWhiteboardResponse) {
+                    node->RemapPDisks();
                 }
             }
             FieldsAvailable |= FieldsPDisks;
@@ -3436,11 +3455,28 @@ public:
                     }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
+                    std::unordered_map<ui32, const NKikimrSysView::TPDiskInfo*> sysViewPDisks;
+                    for (const auto& entry : node->SysViewPDisks) {
+                        sysViewPDisks.emplace(entry.GetKey().GetPDiskId(), &entry.GetInfo());
+                    }
                     std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
                         return a.path() < b.path();
                     });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
-                        (*jsonNode.AddPDisks()) = std::move(pDisk);
+                        auto& jsonPDisk = *jsonNode.AddPDisks();
+                        jsonPDisk = std::move(pDisk);
+                        if (auto it = sysViewPDisks.find(jsonPDisk.GetPDiskId()); it != sysViewPDisks.end()) {
+                            const auto& info = *it->second;
+                            if (info.HasStatusV2()) {
+                                jsonPDisk.SetStatus(info.GetStatusV2());
+                            }
+                            if (info.HasDecommitStatus()) {
+                                jsonPDisk.SetDecommitStatus(info.GetDecommitStatus());
+                            }
+                            if (info.HasMaintenanceStatus()) {
+                                jsonPDisk.SetMaintenanceStatus(info.GetMaintenanceStatus());
+                            }
+                        }
                     }
                 }
                 if (FieldsAvailable.test(+ENodeFields::VDisks) && FieldsRequested.test(+ENodeFields::VDisks)) {

@@ -11,6 +11,29 @@ namespace {
 
 using namespace NYql;
 
+TExprNode::TPtr ExpandExtractMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto arg = ctx.NewArgument(node->Pos(), "extract_members_arg");
+    TExprNode::TListType fields;
+    fields.reserve(node->Tail().ChildrenSize());
+    for (const auto& member : node->Tail().Children()) {
+        fields.emplace_back(ctx.NewList(node->Pos(), {
+            member,
+            ctx.NewCallable(node->Pos(), "Member", {arg, member})
+        }));
+    }
+
+    auto body = ctx.NewCallable(node->Pos(), "AsStruct", std::move(fields));
+    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {std::move(arg)}), std::move(body));
+    // Preserve ordering when constraints have not been computed for the newly built input yet.
+    return ctx.NewCallable(node->Pos(), "OrderedMap", {node->HeadPtr(), std::move(lambda)});
+}
+
+TExprNode::TPtr ExpandOptionalIf(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto item = ctx.NewCallable(node->Pos(), "Just", {node->TailPtr()});
+    auto empty = ctx.NewCallable(node->Pos(), "EmptyFrom", {item});
+    return ctx.NewCallable(node->Pos(), "If", {node->HeadPtr(), std::move(item), std::move(empty)});
+}
+
 bool IsSqlScalar(const TTypeAnnotationNode* type) {
     return type && (IsDataOrOptionalOfData(type) || type->GetKind() == ETypeAnnotationKind::Null);
 }
@@ -90,36 +113,9 @@ TExprNode::TPtr ExpandTupleComparison(const TExprNode::TPtr& node, TExprContext&
     return result;
 }
 
-bool CanExpandFiniteSqlIn(const TExprNode::TPtr& node) {
-    if (HasSetting(*node->Child(2), "tableSource")) {
-        return false;
-    }
-
-    const auto lookupType = node->Child(1)->GetTypeAnn();
-    const auto collectionType = node->Head().GetTypeAnn();
-    if (!IsSqlScalar(lookupType) || !collectionType) {
-        return false;
-    }
-    if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
-        const auto tupleType = collectionType->Cast<TTupleExprType>();
-        return tupleType->GetSize() && AllOf(tupleType->GetItems(), IsSqlScalar);
-    }
-
-    const auto collection = node->HeadPtr();
-    return collectionType->GetKind() == ETypeAnnotationKind::List &&
-        (collection->IsList() || collection->IsCallable("AsList")) &&
-        collection->ChildrenSize() &&
-        IsSqlScalar(collectionType->Cast<TListExprType>()->GetItemType());
-}
-
-TExprNode::TPtr ExpandFiniteSqlIn(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!CanExpandFiniteSqlIn(node)) {
-        return node;
-    }
-
+TExprNode::TPtr BuildSqlInComparisons(const TExprNode::TPtr& node, bool ansi, TExprContext& ctx) {
     const auto collection = node->HeadPtr();
     const auto lookup = node->ChildPtr(1);
-    const bool ansi = HasSetting(*node->Child(2), "ansi");
     const bool legacyNullable = !ansi && IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(node));
     const bool explicitItems = collection->IsList() || collection->IsCallable("AsList");
     const size_t size = explicitItems
@@ -151,6 +147,134 @@ TExprNode::TPtr ExpandFiniteSqlIn(const TExprNode::TPtr& node, TExprContext& ctx
                 .Add(1, MakeNull(node->Pos(), ctx))
                 .Add(2, std::move(result))
             .Seal().Build();
+    }
+    return result;
+}
+
+TExprNode::TPtr BuildSqlInSet(const TExprNode::TPtr& list, TExprContext& ctx) {
+    return ctx.Builder(list->Pos())
+        .Callable("ToDict")
+            .Add(0, list)
+            .Lambda(1).Param("item").Arg("item").Seal()
+            .Lambda(2).Param("item").Callable("Void").Seal().Seal()
+            .List(3)
+                .Atom(0, "Auto", TNodeFlags::Default)
+                .Atom(1, "One", TNodeFlags::Default)
+                .Atom(2, "Compact", TNodeFlags::Default)
+            .Seal()
+        .Seal().Build();
+}
+
+TExprNode::TPtr BuildSqlInContains(
+    TPositionHandle pos,
+    const TExprNode::TPtr& dict,
+    const TExprNode::TPtr& lookup,
+    const TTypeAnnotationNode* keyType,
+    TExprContext& ctx) {
+    const auto lookupType = lookup->GetTypeAnn();
+    if (IsSameAnnotation(*lookupType, *keyType)) {
+        return ctx.NewCallable(pos, "Contains", {dict, lookup});
+    }
+    const auto castOptions = CastResult<true>(lookupType, keyType);
+    if (castOptions & NUdf::ECastOptions::Impossible) {
+        return MakeBool(pos, false, ctx);
+    }
+    if (!(castOptions & NUdf::ECastOptions::MayFail)) {
+        const auto casted = ctx.NewCallable(pos, "StrictCast", {lookup, ExpandType(pos, *keyType, ctx)});
+        return ctx.NewCallable(pos, "Contains", {dict, casted});
+    }
+
+    // MiniKQL Contains requires an exact key type. Convert the lookup here,
+    // treating failed or lossy conversions as non-matches.
+    const auto castType = ctx.MakeType<TOptionalExprType>(keyType);
+    const auto casted = ctx.NewCallable(pos, "StrictCast", {lookup, ExpandType(pos, *castType, ctx)});
+    return ctx.Builder(pos)
+        .Callable("IfPresent")
+            .Add(0, casted)
+            .Lambda(1)
+                .Param("key")
+                .Callable("Contains")
+                    .Add(0, dict)
+                    .Arg(1, "key")
+                .Seal()
+            .Seal()
+            .Add(2, MakeBool(pos, false, ctx))
+        .Seal().Build();
+}
+
+TExprNode::TPtr ExpandScalarSqlIn(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const auto collection = node->HeadPtr();
+    const auto lookup = node->ChildPtr(1);
+    const auto collectionType = collection->GetTypeAnn();
+    const auto lookupType = lookup->GetTypeAnn();
+    if (HasSetting(*node->Child(2), "tableSource") || !collectionType || !IsSqlScalar(lookupType)) {
+        return node;
+    }
+
+    const bool ansi = HasSetting(*node->Child(2), "ansi");
+    const TTypeAnnotationNode* itemType = nullptr;
+    // Preserve comparison expansion for fixed-size tuples and explicit lists.
+    // Other scalar lists, including parameters, use runtime dictionary lookup.
+    if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
+        const auto tupleType = collectionType->Cast<TTupleExprType>();
+        if (!AllOf(tupleType->GetItems(), IsSqlScalar)) {
+            return node;
+        }
+        if (tupleType->GetSize()) {
+            return BuildSqlInComparisons(node, ansi, ctx);
+        }
+    } else if (collectionType->GetKind() == ETypeAnnotationKind::List) {
+        itemType = collectionType->Cast<TListExprType>()->GetItemType();
+        if (!IsSqlScalar(itemType)) {
+            return node;
+        }
+        if ((collection->IsList() || collection->IsCallable("AsList")) && collection->ChildrenSize()) {
+            return BuildSqlInComparisons(node, ansi, ctx);
+        }
+    } else if (collectionType->GetKind() != ETypeAnnotationKind::EmptyList) {
+        return node;
+    }
+
+    const auto pos = node->Pos();
+    const bool nullableLookup = lookupType->HasOptionalOrNull();
+    const auto falseNode = MakeBool(pos, false, ctx);
+    const auto justFalse = ctx.NewCallable(pos, "Just", {falseNode});
+    const auto nothing = MakeBoolNothing(pos, ctx);
+    const auto legacyFalse = nullableLookup
+        ? ctx.NewCallable(pos, "If", {ctx.NewCallable(pos, "HasNull", {lookup}), nothing, justFalse})
+        : falseNode;
+
+    if (!itemType) { // EmptyList or an empty tuple.
+        return ansi && nullableLookup ? justFalse : legacyFalse;
+    }
+
+    // A list of Null has no possible match. ANSI IN still distinguishes an
+    // empty collection (false) from a nonempty collection (unknown).
+    const auto hasItems = ctx.NewCallable(pos, "HasItems", {collection});
+    const auto emptyResult = ctx.NewCallable(pos, "If", {hasItems, nothing, justFalse});
+    if (itemType->GetKind() == ETypeAnnotationKind::Null) {
+        return ansi ? emptyResult : legacyFalse;
+    }
+
+    const auto dict = BuildSqlInSet(collection, ctx);
+    const auto contains = BuildSqlInContains(pos, dict, lookup, itemType, ctx);
+    auto result = contains;
+    if (ansi && itemType->GetKind() == ETypeAnnotationKind::Optional) {
+        // Preserve null keys: checking membership of Nothing detects nulls
+        // without scanning the collection a second time.
+        const auto nullKey = ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *itemType, ctx)});
+        const auto hasNull = ctx.NewCallable(pos, "Contains", {dict, nullKey});
+        const auto justTrue = ctx.NewCallable(pos, "Just", {MakeBool(pos, true, ctx)});
+        result = ctx.NewCallable(pos, "If", {
+            contains, justTrue, ctx.NewCallable(pos, "If", {hasNull, nothing, justFalse})});
+    } else if (nullableLookup) {
+        result = ctx.NewCallable(pos, "Just", {contains});
+    }
+
+    if (nullableLookup) {
+        // Legacy IN is unknown for a null lookup even when the list is empty.
+        result = ctx.NewCallable(pos, "If", {
+            ctx.NewCallable(pos, "HasNull", {lookup}), ansi ? emptyResult : nothing, result});
     }
     return result;
 }
@@ -208,7 +332,7 @@ TExprNode::TPtr ExpandScalarHasNull(
 
 TExprNode::TPtr FindCompatibilityNode(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
-        return node->IsCallable({"StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
+        return node->IsCallable({"ExtractMembers", "OptionalIf", "StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
             IsComplexComparison(node);
     });
 }
@@ -223,6 +347,12 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
     const NYql::TExprNode::TPtr& node,
     NYql::TExprContext& ctx,
     const NYql::TTypeAnnotationContext& types) {
+    if (node->IsCallable("ExtractMembers")) {
+        return ExpandExtractMembers(node, ctx);
+    }
+    if (node->IsCallable("OptionalIf")) {
+        return ExpandOptionalIf(node, ctx);
+    }
     if (node->IsCallable("StrictCast")) {
         return NPhysicalConvertionUtils::ExpandScalarStrictCast(node, ctx);
     }
@@ -230,7 +360,7 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
         return ExpandScalarHasNull(node, ctx, types);
     }
     if (node->IsCallable("SqlIn")) {
-        return ExpandFiniteSqlIn(node, ctx);
+        return ExpandScalarSqlIn(node, ctx);
     }
     if (IsComplexComparison(node)) {
         if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null ||

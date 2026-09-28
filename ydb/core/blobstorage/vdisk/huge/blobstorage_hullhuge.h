@@ -27,6 +27,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        // Carried through to TEvHullLogHugeBlob, see there.
+        std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -89,6 +91,9 @@ namespace NKikimr {
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
         const bool IsStripe;
+        // The colour at which reserving Fresh chunks for this blob's index record is refused, as for any put
+        // of its data kind. Unset for writers Fresh admission does not gate, such as replication.
+        const std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -103,7 +108,8 @@ namespace NKikimr {
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                            TWriteSource writeSource,
                            bool rewriteBlob = false,
-                           bool isStripe = false)
+                           bool isStripe = false,
+                           std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> freshRefuseAtColor = std::nullopt)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -117,6 +123,7 @@ namespace NKikimr {
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
             , IsStripe(isStripe)
+            , FreshRefuseAtColor(freshRefuseAtColor)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -226,6 +233,16 @@ namespace NKikimr {
     class TEvHugeStatResult : public TEventLocal<TEvHugeStatResult, TEvBlobStorage::EvHugeStatResult> {
     public:
         NHuge::THeapStat Stat;
+    };
+
+    // Compact allocator-only statistics for monitoring. The result never
+    // contains chunk or slot identifiers.
+    struct TEvHugeSpaceStat : TEventLocal<TEvHugeSpaceStat, TEvBlobStorage::EvHugeSpaceStat> {};
+
+    struct TEvHugeSpaceStatResult
+        : TEventLocal<TEvHugeSpaceStatResult, TEvBlobStorage::EvHugeSpaceStatResult>
+    {
+        NHuge::THeapSpaceStat Stat;
     };
 
     struct TEvHugePreCompact : TEventLocal<TEvHugePreCompact, TEvBlobStorage::EvHugePreCompact> {};

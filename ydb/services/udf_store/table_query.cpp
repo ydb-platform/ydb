@@ -93,35 +93,33 @@ bool ReadUint64Column(const Ydb::ResultSet& resultSet, const TString& columnName
     return true;
 }
 
-bool ParseChunksResultSet(const Ydb::ResultSet& resultSet, TVector<TString>& chunks) {
+bool AppendChunksResultSet(const Ydb::ResultSet& resultSet, TVector<TString>& chunks) {
+    if (resultSet.truncated() || static_cast<ui64>(resultSet.rows_size()) > ChunksPerRead) {
+        return false;
+    }
     const i32 chunkIdxCol = FindColumnIndex(resultSet, "chunk_idx");
     const i32 dataCol = FindColumnIndex(resultSet, "data");
     if (chunkIdxCol < 0 || dataCol < 0) {
         return false;
     }
 
-    TMap<ui64, TString> ordered;
+    // Validate the whole page before appending anything. ORDER BY chunk_idx
+    // makes the accumulated count the cursor for the next page.
+    ui64 expectedIdx = chunks.size();
     for (const auto& row : resultSet.rows()) {
         if (chunkIdxCol >= row.items_size() || dataCol >= row.items_size()) {
             return false;
         }
         const auto& idxItem = row.items(chunkIdxCol);
         const auto& dataItem = row.items(dataCol);
-        if (!idxItem.has_uint64_value() || !dataItem.has_bytes_value()) {
+        if (!idxItem.has_uint64_value() || !dataItem.has_bytes_value()
+            || idxItem.uint64_value() != expectedIdx++)
+        {
             return false;
         }
-        ordered[idxItem.uint64_value()] = dataItem.bytes_value();
     }
-
-    chunks.clear();
-    chunks.reserve(ordered.size());
-    ui64 expectedIdx = 0;
-    for (const auto& [idx, data] : ordered) {
-        if (idx != expectedIdx) {
-            return false;
-        }
-        chunks.push_back(data);
-        ++expectedIdx;
+    for (const auto& row : resultSet.rows()) {
+        chunks.push_back(row.items(dataCol).bytes_value());
     }
     return true;
 }
@@ -146,7 +144,7 @@ TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
         << "DECLARE $type AS Utf8; "
-        << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
+        << "SELECT uid, md5, name, type, version, size, chunk_count, manifest FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE name = $name AND type = $type;";
 }
@@ -178,32 +176,31 @@ bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& respo
     ReadUint64Column(resultSet, "version", row.Version);
     ReadUint64Column(resultSet, "size", row.Size);
     ReadUint64Column(resultSet, "chunk_count", row.ChunkCount);
-    TString compileStatus;
-    if (ReadUtf8Column(resultSet, "compile_status", compileStatus)) {
-        TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
-    }
-    ReadUtf8Column(resultSet, "compile_error", row.CompileError);
+    ReadUtf8Column(resultSet, "manifest", row.Manifest);
     return true;
 }
 
 TString BuildSelectSourceChunksQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $owner_key AS Utf8; "
+        << "DECLARE $first_chunk AS Uint64; "
         << "SELECT chunk_idx, data FROM `"
         << EscapeTablePath(tablePath)
-        << "` WHERE owner_key = $owner_key ORDER BY chunk_idx;";
+        << "` WHERE owner_key = $owner_key AND chunk_idx >= $first_chunk "
+        << "ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
 }
 
-void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey) {
+void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 firstChunk) {
     (*request.mutable_parameters())["$owner_key"] = MakeUtf8Param(ownerKey);
+    (*request.mutable_parameters())["$first_chunk"] = MakeUint64Param(firstChunk);
 }
 
-bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
+bool AppendSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
         return false;
     }
-    return ParseChunksResultSet(result.result_sets(0), chunks);
+    return AppendChunksResultSet(result.result_sets(0), chunks);
 }
 
 TString BuildSelectArtifactQuery(const TString& tablePath) {
@@ -215,6 +212,100 @@ TString BuildSelectArtifactQuery(const TString& tablePath) {
         << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+}
+
+TString BuildEnsurePendingArtifactQuery(const TString& tablePath) {
+    const auto path = EscapeTablePath(tablePath);
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "$existing = SELECT id FROM `" << path
+        << "` WHERE id = $id AND kind = $kind AND uid = $uid; "
+        << "$pending = SELECT $id AS id, $kind AS kind, $uid AS uid, CAST('pending' AS Utf8) AS compile_status, "
+        << "CAST('' AS Utf8) AS compile_error; "
+        << "INSERT INTO `" << path << "` (id, kind, uid, compile_status, compile_error) "
+        << "SELECT id, kind, uid, compile_status, compile_error FROM $pending "
+        << "WHERE NOT EXISTS (SELECT id FROM $existing);";
+}
+
+TString BuildMarkArtifactCompilingQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "UPDATE `" << EscapeTablePath(tablePath)
+        << "` SET compile_status = CAST('compiling' AS Utf8), compile_error = CAST('' AS Utf8), "
+        << "compile_started_at = CurrentUtcTimestamp(), compile_finished_at = NULL "
+        << "WHERE id = $id AND kind = $kind AND uid = $uid "
+        << "AND compile_status IN ('pending', 'failed');";
+}
+
+TString BuildMarkArtifactFailedQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "DECLARE $error AS Utf8; "
+        << "UPDATE `" << EscapeTablePath(tablePath)
+        << "` SET compile_status = CAST('failed' AS Utf8), compile_error = $error, "
+        << "compile_finished_at = CurrentUtcTimestamp() "
+        << "WHERE id = $id AND kind = $kind AND uid = $uid AND compile_status = 'compiling';";
+}
+
+void SetMarkArtifactFailedParams(Ydb::Table::ExecuteDataQueryRequest& request,
+    const TString& id, const TString& kind, const TString& uid, const TString& error)
+{
+    SetSelectArtifactParams(request, id, kind, uid);
+    (*request.mutable_parameters())["$error"] = MakeUtf8Param(error);
+}
+
+TString BuildSelectArtifactCompileStateQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+        << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
+        << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+}
+
+bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
+    TMaybe<TArtifactCompileState>& state)
+{
+    Ydb::Table::ExecuteQueryResult result;
+    if (!ExtractQueryResult(response, result)) {
+        return false;
+    }
+    const auto& rows = result.result_sets(0);
+    if (rows.truncated() || rows.rows_size() > 1) {
+        return false;
+    }
+    if (rows.rows().empty()) {
+        state.Clear();
+        return true;
+    }
+    TArtifactCompileState parsed;
+    TString status;
+    if (!ReadUtf8Column(rows, "compile_status", status)
+        || !TUdfModule::CompileStatusFromString(status, parsed.Status)
+        || !ReadUtf8Column(rows, "compile_error", parsed.Error))
+    {
+        return false;
+    }
+    auto readTimestamp = [&](const TString& name, TMaybe<TInstant>& value) {
+        const i32 index = FindColumnIndex(rows, name);
+        if (index < 0 || index >= rows.rows(0).items_size()) {
+            return false;
+        }
+        const auto& item = rows.rows(0).items(index);
+        if (item.has_null_flag_value()) {
+            return true;
+        }
+        if (!item.has_uint64_value()) {
+            return false;
+        }
+        value = TInstant::MicroSeconds(item.uint64_value());
+        return true;
+    };
+    if (!readTimestamp("compile_started_at", parsed.StartedAt)
+        || !readTimestamp("compile_finished_at", parsed.FinishedAt))
+    {
+        return false;
+    }
+    state = std::move(parsed);
+    return true;
 }
 
 void SetSelectArtifactParams(
@@ -251,16 +342,61 @@ bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
     return row.ObjectCodeChunkCount > 0;
 }
 
+TString BuildSelectArtifactKeysQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "SELECT id, kind, uid FROM `"
+        << EscapeTablePath(tablePath)
+        << "` WHERE object_code_chunk_count > 0;";
+}
+
+bool ParseArtifactKeysResponse(
+    const Ydb::Table::ExecuteDataQueryResponse& response,
+    TVector<TArtifactKeyRow>& rows)
+{
+    Ydb::Table::ExecuteQueryResult result;
+    if (!ExtractQueryResult(response, result)) {
+        return false;
+    }
+    const auto& resultSet = result.result_sets(0);
+    const i32 idCol = FindColumnIndex(resultSet, "id");
+    const i32 kindCol = FindColumnIndex(resultSet, "kind");
+    const i32 uidCol = FindColumnIndex(resultSet, "uid");
+    if (idCol < 0 || kindCol < 0 || uidCol < 0) {
+        return false;
+    }
+
+    rows.clear();
+    rows.reserve(resultSet.rows().size());
+    for (const auto& row : resultSet.rows()) {
+        if (idCol >= row.items_size() || kindCol >= row.items_size() || uidCol >= row.items_size()) {
+            return false;
+        }
+        const auto& id = row.items(idCol);
+        const auto& kind = row.items(kindCol);
+        const auto& uid = row.items(uidCol);
+        if (!id.has_text_value() || !kind.has_text_value() || !uid.has_text_value()) {
+            return false;
+        }
+        rows.push_back(TArtifactKeyRow{
+            .Id = id.text_value(),
+            .Kind = kind.text_value(),
+            .Uid = uid.text_value(),
+        });
+    }
+    return true;
+}
+
 TString BuildSelectArtifactChunksQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $id AS Utf8; "
         << "DECLARE $kind AS Utf8; "
         << "DECLARE $uid AS Utf8; "
         << "DECLARE $blob_kind AS Utf8; "
+        << "DECLARE $first_chunk AS Uint64; "
         << "SELECT chunk_idx, data FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE id = $id AND kind = $kind AND uid = $uid AND blob_kind = $blob_kind "
-        << "ORDER BY chunk_idx;";
+        << "AND chunk_idx >= $first_chunk ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
 }
 
 void SetSelectArtifactChunksParams(
@@ -268,20 +404,22 @@ void SetSelectArtifactChunksParams(
     const TString& id,
     const TString& kind,
     const TString& uid,
-    const TString& blobKind)
+    const TString& blobKind,
+    ui64 firstChunk)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
     (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
     (*request.mutable_parameters())["$blob_kind"] = MakeUtf8Param(blobKind);
+    (*request.mutable_parameters())["$first_chunk"] = MakeUint64Param(firstChunk);
 }
 
-bool ParseArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
+bool AppendArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
         return false;
     }
-    return ParseChunksResultSet(result.result_sets(0), chunks);
+    return AppendChunksResultSet(result.result_sets(0), chunks);
 }
 
 TString BuildUpsertArtifactQuery(const TString& tablePath) {
@@ -298,9 +436,11 @@ TString BuildUpsertArtifactQuery(const TString& tablePath) {
         << "UPSERT INTO `"
         << EscapeTablePath(tablePath)
         << "` (id, kind, uid, version, format, "
-        << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count, compiled_at) "
+        << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count, compiled_at, "
+        << "compile_status, compile_error, compile_finished_at) "
         << "VALUES ($id, $kind, $uid, $version, $format, "
-        << "$wasm_data_size, $wasm_data_chunk_count, $object_code_size, $object_code_chunk_count, CurrentUtcTimestamp());";
+        << "$wasm_data_size, $wasm_data_chunk_count, $object_code_size, $object_code_chunk_count, "
+        << "CurrentUtcTimestamp(), CAST('ready' AS Utf8), CAST('' AS Utf8), CurrentUtcTimestamp());";
 }
 
 void SetUpsertArtifactParams(
@@ -418,43 +558,6 @@ void SetUpsertArtifactChunkParams(
     (*request.mutable_parameters())["$blob_kind"] = MakeUtf8Param(blobKind);
     (*request.mutable_parameters())["$chunk_idx"] = MakeUint64Param(chunkIdx);
     (*request.mutable_parameters())["$data"] = MakeStringParam(data);
-}
-
-TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
-    // Compiles run per node against a shared table, so a compile started for
-    // one upload may finish after the module has been re-uploaded over the
-    // same name. The name identifies the module, and uid identifies the upload
-    // behind the row right now: without it in the predicate a stale compile
-    // would publish its verdict over content it never looked at.
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "DECLARE $type AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $compile_status AS Utf8; "
-        << "DECLARE $compile_error AS Utf8; "
-        << "UPDATE `"
-        << EscapeTablePath(tablePath)
-        << "` SET compile_status = $compile_status, "
-        << "compile_error = $compile_error, "
-        << "compile_started_at = IF($compile_status = 'compiling', CurrentUtcTimestamp(), compile_started_at), "
-        << "compile_finished_at = IF($compile_status = 'ready' OR $compile_status = 'failed', "
-        << "CurrentUtcTimestamp(), compile_finished_at) "
-        << "WHERE name = $name AND type = $type AND uid = $uid;";
-}
-
-void SetUpdateCompileStatusParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& type,
-    const TString& uid,
-    const TString& status,
-    const TString& errorMessage)
-{
-    (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
-    (*request.mutable_parameters())["$type"] = MakeUtf8Param(type);
-    (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
-    (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
-    (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
 }
 
 } // namespace NKikimr::NUdfStore::NTableQuery

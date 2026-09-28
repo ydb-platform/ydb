@@ -9,7 +9,6 @@ namespace NKikimr::NPersQueueTests {
 class TRateLimiterTestSetup {
 public:
     explicit TRateLimiterTestSetup(
-        NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity,
         double writeAccountQuota = 1000.0,
         double readAccountQuota = 1000.0,
         bool enableReadQuoting = false
@@ -51,7 +50,6 @@ private:
 private:
     THolder<NPersQueue::TTestServer> Server;
     THolder<TPQDataWriter> PQDataWriter; // For waiting for grpc writer service initialization.
-    const NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity;
     double WriteAccountQuota;
     double ReadAccountQuota;
     const TString QuotersRootPath = "/Root/PersQueue/System/Quoters";

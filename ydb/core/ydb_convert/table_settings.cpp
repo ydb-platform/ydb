@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <ydb/library/conclusion/status.h>
 
@@ -30,6 +31,34 @@ namespace {
             return proto.partition_at_keys().split_points().size() + 1;
         default:
             return defaultMinPartitions;
+        }
+    }
+
+    bool ConvertDetailedMetricsLevel(Ydb::Table::MetricsSettings::MetricsLevel level,
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out,
+        Ydb::StatusIds::StatusCode& code, TString& error)
+    {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED:
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+            // This internal value disables detailed metrics only, preserving
+            // ordinary database metrics and overriding the database default.
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "DISABLED metrics level is not supported; use DATABASE to disable detailed metrics";
+            return false;
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown metrics level: " << static_cast<int>(level);
+            return false;
         }
     }
 }
@@ -238,6 +267,14 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
+    if (proto.has_metrics_settings()) {
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level;
+        if (!ConvertDetailedMetricsLevel(proto.metrics_settings().metrics_level(), level, code, error)) {
+            return false;
+        }
+        tableDesc.MutableDetailedMetricsSettings()->MutableConfigured()->SetMetricsLevel(level);
+    }
+
     tableDesc.SetTemporary(proto.Gettemporary());
 
     return true;
@@ -289,7 +326,13 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& table
         error = "Storage settings are not supported";
         return false;
     }
-    
+
+    if (proto.has_metrics_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Metrics settings are not supported";
+        return false;
+    }
+
     tableDesc.SetTemporary(proto.temporary());
 
     return true;
@@ -440,6 +483,18 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     } else if (proto.has_drop_ttl_settings()) {
         tableDesc.MutableTTLSettings()->MutableDisabled();
+    }
+
+    if (proto.has_set_metrics_settings()) {
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level;
+        if (!ConvertDetailedMetricsLevel(proto.set_metrics_settings().metrics_level(), level, code, error)) {
+            return false;
+        }
+        tableDesc.MutableDetailedMetricsSettings()->MutableConfigured()->SetMetricsLevel(level);
+        changed = true;
+    } else if (proto.has_drop_metrics_settings()) {
+        tableDesc.MutableDetailedMetricsSettings()->MutableNotConfigured();
+        changed = true;
     }
 
     if (!changed && !hadPartitionConfig) {
@@ -660,6 +715,10 @@ bool FillPublicTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
                 outTier.mutable_evict_to_external_storage()->set_storage(inTier.GetEvictToExternalStorage().GetStorage());
+                if (inTier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+                    outTier.mutable_evict_to_external_storage()->set_object_key_prefix(inTier.GetEvictToExternalStorage().GetObjectKeyPrefix());
+                }
+
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                 return bad_request("Undefined tier action");
@@ -786,6 +845,10 @@ bool FillSchemeTtlSettingsImpl(TTtl& out, const Ydb::Table::TtlSettings& in, Ydb
                         break;
                     case Ydb::Table::TtlTier::kEvictToExternalStorage:
                         outTier->MutableEvictToExternalStorage()->SetStorage(inTier.evict_to_external_storage().storage());
+                        if (inTier.evict_to_external_storage().has_object_key_prefix()) {
+                            outTier->MutableEvictToExternalStorage()->SetObjectKeyPrefix(inTier.evict_to_external_storage().object_key_prefix());
+                        }
+
                         break;
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         return bad_request("Tier action is undefined");

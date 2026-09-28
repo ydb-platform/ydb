@@ -13,6 +13,7 @@ class IArenaAllocator;
 using IArenaAllocatorPtr = std::shared_ptr<IArenaAllocator>;
 
 class TArenaAllocatorPool;
+using TArenaAllocatorPoolPtr = std::shared_ptr<TArenaAllocatorPool>;
 class TArenaAllocatorIndexPool;
 
 template <class T>

@@ -27,9 +27,23 @@
 #include <vector>
 #include <thread>
 
-// Keep liburing after project/system headers that may define conflicting macros.
 #include <ydb/library/pdisk_io/uring_router_test_peer.h>
 #include <ydb/library/pdisk_io/uring_test_support.h>
+
+// Keep liburing after project/system headers that may define conflicting macros.
+#include <ydb/library/pdisk_io/liburing_compat.h>
+
+namespace NKikimr::NPDisk {
+
+unsigned TUringRouterTestPeer::Ready(const TUringRouter& router) {
+    return io_uring_sq_ready(router.Ring.get());
+}
+
+unsigned TUringRouterTestPeer::Staged(const TUringRouter& router) {
+    return router.Ring->sq.sqe_tail - router.Ring->sq.sqe_head;
+}
+
+} // namespace NKikimr::NPDisk
 
 using NActors::TActorSystem;
 using namespace NKikimr::NPDisk;

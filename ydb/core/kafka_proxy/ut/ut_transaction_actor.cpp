@@ -25,7 +25,11 @@ namespace {
             }
 
             void SetCommitResponse(bool success) {
-                ReturnSuccessOnCommit = success;
+                CommitStatus = success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED;
+            }
+
+            void SetCommitYdbStatus(Ydb::StatusIds::StatusCode status) {
+                CommitStatus = status;
             }
 
             void SetCreateSessionResponse(bool success) {
@@ -42,7 +46,7 @@ namespace {
 
             void ReleaseHeldCommit(TTestActorRuntime& runtime) {
                 Y_ABORT_UNLESS(HeldCommitSender.Defined());
-                auto response = MakeStatusResponse(ReturnSuccessOnCommit ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED);
+                auto response = MakeStatusResponse(CommitStatus);
                 runtime.Send(new IEventHandle(
                     *HeldCommitSender,
                     SelfId(),
@@ -82,7 +86,7 @@ namespace {
                 THolder<NKqp::TEvKqp::TEvQueryResponse> response;
                 if (ev->Get()->Record.GetRequest().GetTxControl().commit_tx()) {
                     Cout << "Sending response on commit from dummy kqp" << Endl;
-                    response = MakeStatusResponse(ReturnSuccessOnCommit ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED);
+                    response = MakeStatusResponse(CommitStatus);
                 } else if (ev->Get()->Record.GetRequest().HasKafkaApiOperations()) {
                     Cout << "Sending response on add kafka operations from dummy kqp" << Endl;
                     response = MakeStatusResponse(Ydb::StatusIds::SUCCESS);
@@ -193,7 +197,7 @@ namespace {
             i64 ProducerIdToReturn = 0;
             i32 ProducerEpochToReturn = 0;
             TMaybe<std::unordered_map<TString, i32>> ConsumerGenerationsToReturn = Nothing();
-            bool ReturnSuccessOnCommit = true;
+            Ydb::StatusIds::StatusCode CommitStatus = Ydb::StatusIds::SUCCESS;
             bool ReturnSuccessOnCreateSession = true;
             bool HoldCommit = false;
             TMaybe<TActorId> HeldCommitSender;
@@ -279,6 +283,24 @@ namespace {
                     message->Topics.push_back(topic);
                 }
                 auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database, Database);
+
+                Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+                return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            }
+
+            THolder<NKafka::TEvKafka::TEvResponse> SendAddOffsetsToTxnRequest(const TString& groupId, ui64 correlationId = 0) {
+                auto message = std::make_shared<NKafka::TAddOffsetsToTxnRequestData>();
+                message->TransactionalId = TransactionalId;
+                message->ProducerId = ProducerId;
+                message->ProducerEpoch = ProducerEpoch;
+                message->GroupId = groupId;
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddOffsetsToTxnRequest>(
+                    correlationId,
+                    NKafka::TMessagePtr<NKafka::TAddOffsetsToTxnRequestData>({}, message),
+                    Ctx->Edge,
+                    Database,
+                    Database);
 
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
@@ -694,7 +716,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Epoch, ProducerEpoch);
         }
 
-        Y_UNIT_TEST(OnDuplicateEndTxnCommitWhileInFlight_shouldReplyToBoth) {
+        Y_UNIT_TEST(OnDuplicateEndTxnCommitWhileInFlight_shouldReturnCONCURRENT_TRANSACTIONS) {
             ui32 endTxnSeen = 0;
             PrepareHeldCommit(endTxnSeen);
 
@@ -702,63 +724,16 @@ namespace {
             WaitUntilCommitHeld();
 
             SendEndTxnRequestAsync(true, 2);
-            WaitUntilEndTxnSeen(endTxnSeen, 2);
-
-            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
-            auto first = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            auto second = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-
-            UNIT_ASSERT(first != nullptr);
-            UNIT_ASSERT(second != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
-            UNIT_ASSERT_EQUAL(first->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-            UNIT_ASSERT_EQUAL(second->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-            UNIT_ASSERT(first->CorrelationId != second->CorrelationId);
-            UNIT_ASSERT(first->CorrelationId == 1 || second->CorrelationId == 1);
-            UNIT_ASSERT(first->CorrelationId == 2 || second->CorrelationId == 2);
-        }
-
-        Y_UNIT_TEST(OnEndTxnCommitRetriesOverCap_shouldRejectOldestWithCoordinatorNotAvailable) {
-            ui32 endTxnSeen = 0;
-            PrepareHeldCommit(endTxnSeen);
-
-            const ui64 queuedCount = NKafka::TTransactionActor::MaxPendingEndTxnRequests;
-            SendEndTxnRequestAsync(true, 1);
-            WaitUntilCommitHeld();
-
-            for (ui64 correlationId = 2; correlationId <= queuedCount; ++correlationId) {
-                SendEndTxnRequestAsync(true, correlationId);
-            }
-            WaitUntilEndTxnSeen(endTxnSeen, queuedCount);
-
-            SendEndTxnRequestAsync(true, queuedCount + 1);
-            AssertEndTxnResponse(
-                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
-                1,
-                NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
-
-            SendEndTxnRequestAsync(true, queuedCount + 2);
             AssertEndTxnResponse(
                 Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
                 2,
-                NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+                NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
 
             DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
-            THashSet<ui64> okCorrelationIds;
-            for (ui64 i = 0; i < queuedCount; ++i) {
-                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-                UNIT_ASSERT(response != nullptr);
-                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-                okCorrelationIds.insert(response->CorrelationId);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(okCorrelationIds.size(), queuedCount);
-            UNIT_ASSERT(!okCorrelationIds.contains(1));
-            UNIT_ASSERT(!okCorrelationIds.contains(2));
-            for (ui64 correlationId = 3; correlationId <= queuedCount + 2; ++correlationId) {
-                UNIT_ASSERT(okCorrelationIds.contains(correlationId));
-            }
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
         }
 
         Y_UNIT_TEST(OnPoisonDuringInFlightEndTxnCommit_shouldFencePending) {
@@ -767,20 +742,12 @@ namespace {
 
             SendEndTxnRequestAsync(true, 1);
             WaitUntilCommitHeld();
-            SendEndTxnRequestAsync(true, 2);
-            WaitUntilEndTxnSeen(endTxnSeen, 2);
 
             SendPoisonPill();
-            THashSet<ui64> fencedCorrelationIds;
-            for (ui64 i = 0; i < 2; ++i) {
-                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-                UNIT_ASSERT(response != nullptr);
-                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
-                UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-                fencedCorrelationIds.insert(response->CorrelationId);
-            }
-            UNIT_ASSERT(fencedCorrelationIds.contains(1));
-            UNIT_ASSERT(fencedCorrelationIds.contains(2));
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::PRODUCER_FENCED);
 
             auto txnActorDiedEvent = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvTransactionActorDied>();
             UNIT_ASSERT(txnActorDiedEvent != nullptr);
@@ -835,6 +802,108 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(retryResult.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
+        Y_UNIT_TEST(OnEndTxnWithCommitAndOverloadedFromTxn_shouldReturnCONCURRENT_TRANSACTIONS) {
+            ui64 correlationId = 988;
+            DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
+            DummyKqpActor->SetCommitYdbStatus(Ydb::StatusIds::OVERLOADED);
+
+            auto response = SendEndTxnRequest(true, correlationId);
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+            const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+
+            DummyKqpActor->SetCommitYdbStatus(Ydb::StatusIds::SUCCESS);
+            auto retry = SendEndTxnRequest(true, correlationId + 1);
+            UNIT_ASSERT(retry != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            const auto& retryResult = static_cast<const NKafka::TEndTxnResponseData&>(*retry->Response);
+            UNIT_ASSERT_VALUES_EQUAL(retryResult.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnAddPartitionsDuringInFlightEndTxnCommit_shouldReturnCONCURRENT_TRANSACTIONS) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            auto response = SendAddPartitionsToTxnRequest({{"topic2", {0}}}, 2);
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::ADD_PARTITIONS_TO_TXN);
+            const auto& result = static_cast<const NKafka::TAddPartitionsToTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(result.Results[0].Results[0].ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnAddOffsetsDuringInFlightEndTxnCommit_shouldReturnCONCURRENT_TRANSACTIONS) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            auto response = SendAddOffsetsToTxnRequest("my-consumer", 2);
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::ADD_OFFSETS_TO_TXN);
+            const auto& result = static_cast<const NKafka::TAddOffsetsToTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnTxnOffsetCommitDuringInFlightEndTxnCommit_shouldReturnCONCURRENT_TRANSACTIONS) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> offsets;
+            offsets["topic1"] = {{0, 1}};
+            auto response = SendTxnOffsetCommitRequest({"my-consumer", 0, offsets}, 2);
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::TXN_OFFSET_COMMIT);
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnEndTxnAbortDuringInFlightEndTxnCommit_shouldReturnCONCURRENT_TRANSACTIONS) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            auto response = SendEndTxnRequest(false, 2);
+            AssertEndTxnResponse(response, 2, NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
         Y_UNIT_TEST(OnEndTxnWithCommitAndCreateSessionFailure_shouldReturnCOORDINATOR_NOT_AVAILABLE) {
             ui64 correlationId = 654;
             DummyKqpActor->SetCreateSessionResponse(false);
@@ -856,7 +925,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(retryResult.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
-        Y_UNIT_TEST(OnEndTxnWithCommitAndNoConsumerStateFound_shouldReturnINVALID_TXN_STATE) {
+        Y_UNIT_TEST(OnEndTxnWithCommitAndNoConsumerStateFound_shouldReturnPRODUCER_FENCED) {
             std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> partitionOffsetsToCommitByTopic;
             partitionOffsetsToCommitByTopic["topic1"] = {{0, 0}};
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp; // empty

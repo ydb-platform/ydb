@@ -76,14 +76,16 @@ void WriteMessage(TTaggedPayloadWriter* writer, TStringBuf message)
 
 void WriteTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf value)
 {
-    writer->BeginTag(key)->AppendString(value);
-    writer->EndTag();
+    writer->AppendTag(key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
 }
 
 void WriteWellKnownTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf value)
 {
-    writer->BeginWellKnownTag(key)->AppendString(value);
-    writer->EndTag();
+    writer->AppendWellKnownTag(key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

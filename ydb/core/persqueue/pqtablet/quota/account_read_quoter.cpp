@@ -262,7 +262,6 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 ) {
     TQuoterParams params;
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    AFL_ENSURE(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
     auto topicPath = topicConverter->GetFederationPath();
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element

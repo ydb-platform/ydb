@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/monlib/consumers
     library/cpp/monlib/encode/protobuf
 )
 

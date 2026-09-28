@@ -34,7 +34,7 @@ struct TPqState : public TThrRefBase {
     };
 
 public:
-    explicit TPqState(const TString& sessionId);
+    explicit TPqState(const TString& sessionId, bool strictConfigValidation = false);
 
     const TTopicMeta* FindTopicMeta(const TString& cluster, const TString& topicPath) const;
     const TTopicMeta* FindTopicMeta(const NNodes::TPqTopic& topic) const {
@@ -57,6 +57,7 @@ public:
     bool EnableWatermarksAdvanced = false;
     bool EnableStreamingPartitionBalancing = false;
     bool EnableExactlyOnceDeliveryGuaranty = false;
+    bool EnableConsumerRewindForDisposition = false;
     bool EnableSettingsValidation = false;
     TString DeferredPublicationExtIdPrefix;
     const TString SessionId;

@@ -1,5 +1,7 @@
 #include "kqp_table_resolver.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
@@ -24,12 +26,13 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames, NWilson::TTraceId traceId)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , TraceId(std::move(traceId)) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -223,6 +226,7 @@ private:
             }
         }
 
+        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::SUCCESS);
         ResolvingNamesFinished = true;
         ResolveKeys();
     }
@@ -265,6 +269,7 @@ private:
             }
         }
 
+        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::SUCCESS);
         NavigationFinished = true;
         TryFinish();
     }
@@ -333,6 +338,7 @@ private:
         }
 
         timer.reset();
+        EndQueryTraceSpan(PartitioningSpan, Ydb::StatusIds::SUCCESS);
         ResolvingFinished = true;
         TryFinish();
     }
@@ -458,6 +464,16 @@ private:
 
                         TablePathsById.emplace(stageInfo.Meta.TableId, stageInfo.Meta.TablePath);
 
+                        if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                            if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                                auto& navEntry = requestNavigate->ResultSet.emplace_back();
+                                navEntry.TableId = stageInfo.Meta.TableId;
+                                navEntry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                                navEntry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                            }
+                            TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
+                        }
+
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
                         AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
@@ -468,17 +484,44 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, MetadataSpan.GetTraceId());
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, MetadataSpan.GetTraceId());
         } else {
             NavigationFinished = true;
         }
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        PartitioningSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+            NWilson::TTraceId(TraceId), {
+                .Name = "Partitioning",
+                .Phase = "ResolvePartitioning",
+                .ActorType = "TKqpTableResolver",
+                .Component = "KqpExecuter.Prepare",
+                .PeerActorType = "SchemeCache",
+            }, NWilson::EFlags::AUTO_END);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
+            0, 0, PartitioningSpan.GetTraceId());
         Become(&TKqpTableResolver::ResolveKeysState);
     }
 
@@ -515,6 +558,8 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TIssue&& issue) {
+        EndQueryTraceSpan(MetadataSpan, status);
+        EndQueryTraceSpan(PartitioningSpan, status);
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
@@ -535,6 +580,8 @@ private:
     }
 
 private:
+    NWilson::TSpan MetadataSpan;
+    NWilson::TSpan PartitioningSpan;
     const TActorId Owner;
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -548,6 +595,7 @@ private:
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;
+    NWilson::TTraceId TraceId;
 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
@@ -557,8 +605,8 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames, NWilson::TTraceId traceId) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames, std::move(traceId));
 }
 
 } // namespace NKikimr::NKqp

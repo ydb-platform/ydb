@@ -614,6 +614,7 @@ enum EDbCountersService {
     LABELED = 5;
     RESERVED_3 = 6;
     RESERVED_4 = 7;
+    TABLETS_FOLLOWERS = 8;
 }
 
 // node -> sysview processor tablet
@@ -623,9 +624,16 @@ message TEvSendDbCountersRequest {
         optional EDbCountersService Service = 1;
         optional TDbServiceCounters Counters = 2;
     }
+
+    message TDetailedCounters {
+        optional EDbCountersService Service = 1;
+        repeated TDetailedTableCounters Tables = 2;
+    }
+
     repeated TServiceCounters ServiceCounters = 1;
     optional uint64 NodeId = 2;
     optional uint64 Generation = 3;
+    repeated TDetailedCounters DetailedCounters = 4;
 }
 
 message TEvSendDbCountersResponse {

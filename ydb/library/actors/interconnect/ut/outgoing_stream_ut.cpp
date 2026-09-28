@@ -11,6 +11,7 @@
 Y_UNIT_TEST_SUITE(OutgoingStream) {
     using TOutStream = NInterconnect::TOutgoingStreamT<4096>;
 
+#if !defined(INTERCONNECT_UT_DISABLE_RDMA_TESTS)
     std::shared_ptr<NInterconnect::NRdma::IMemPool> CreateWarmedSlotMemPool() {
         auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
         for (size_t size = 512; size <= static_cast<size_t>(memPool->GetMaxAllocSz()); size <<= 1) {
@@ -81,6 +82,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
         std::shared_ptr<NInterconnect::NRdma::IMemPool> Underlying;
         std::vector<TRange> Ranges;
     };
+#endif
 
     void OutgoingTest(bool withExternal, std::shared_ptr<NInterconnect::NRdma::IMemPool> allocator = {}) {
         struct {
@@ -261,6 +263,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
         OutgoingTest(true);
     }
 
+#if !defined(INTERCONNECT_UT_DISABLE_RDMA_TESTS)
     Y_UNIT_TEST(RdmaMemory) {
         auto memPool = CreateWarmedSlotMemPool();
         if (!memPool) {
@@ -472,4 +475,5 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
             PublicMethodsLatencyBenchmarkImpl("rdma", std::move(memPool));
         }
     }
+#endif
 }

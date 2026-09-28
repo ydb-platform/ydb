@@ -57,8 +57,6 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
     TDataShardLocksDb locksDb(DataShard, txc);
     TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
-    ui64 tabletId = DataShard.TabletID();
-
     if (writeTx->CheckCancelled()) {
         writeOp->ReleaseTxData(txc);
         writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
@@ -68,7 +66,10 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
 
     try {
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};
-        KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), tabletId);
+        const bool allowAncestorLocks =
+            AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        KqpFillOutReadSets(
+            op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), allowAncestorLocks);
     } catch (const TNotReadyTabletException&) {
         YDB_LOG_CRIT_CTX(ctx, "TBuildWriteOutRSUnit::Execute: unexpected TNotReadyTabletException while building out readset");
         return OnTabletNotReady(*writeOp, txc, ctx);

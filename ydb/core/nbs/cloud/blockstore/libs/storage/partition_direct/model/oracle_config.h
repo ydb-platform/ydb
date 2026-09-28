@@ -6,6 +6,10 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+// Unset MaxInflightWritesForDirectWrite selects adaptive DirectWrite at or
+// below this disk-wide in-flight count.
+constexpr ui32 DefaultMaxInflightWritesForDirectWrite = 16;
+
 class TOracleConfig
 {
 public:
@@ -28,6 +32,11 @@ public:
     [[nodiscard]] TDuration GetMaxDurationBeforeReturningOnline() const;
 
     [[nodiscard]] ui32 GetMinSuccessesCountBeforeReturningOnline() const;
+
+    // Disk-wide in-flight write count at or below which GetWriteMode selects
+    // DirectWrite. Unset defaults to DefaultMaxInflightWritesForDirectWrite.
+    // 0 keeps the configured static WriteMode.
+    [[nodiscard]] ui32 GetMaxInflightWritesForDirectWrite() const;
 
 private:
     TStorageConfigPtr StorageConfig;

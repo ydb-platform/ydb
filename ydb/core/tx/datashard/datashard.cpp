@@ -14,6 +14,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -786,13 +787,14 @@ public:
             TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
             const TActorId& target,
             ui64 step, ui64 txId,
-            NWilson::TSpan&& span)
+            NWilson::TSpan&& span, ui64 cookie)
         : Self(self)
         , WriteResult(std::move(writeResult))
         , Target(target)
         , Step(step)
         , TxId(txId)
         , Span(std::move(span))
+        , Cookie(cookie)
     {
     }
 
@@ -814,7 +816,7 @@ public:
         }
 
         LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
-        Self->Send(Target, WriteResult.release(), 0, 0, Span.GetTraceId());
+        Self->Send(Target, WriteResult.release(), 0, Cookie, Span.GetTraceId());
         Span.End();
     }
 
@@ -833,6 +835,7 @@ private:
     ui64 Step;
     ui64 TxId;
     NWilson::TSpan Span;
+    ui64 Cookie;
 };
 
 void TDataShard::SendResult(const TActorContext &ctx,
@@ -872,7 +875,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
 
 void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result,
         const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId)
+        NWilson::TTraceId traceId, ui64 cookie)
 {
     Y_ENSURE(txId == result->Record.GetTxId(), " Result for txId " << txId << " has txId " << result->Record.GetTxId());
 
@@ -882,7 +885,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         // This is a volatile transaction, and we need to wait until it is resolved
         bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
             new TSendVolatileWriteResult(this, std::move(result), target, step, txId,
-                std::move(span)));
+                std::move(span), cookie));
         Y_ENSURE(ok);
         return;
     }
@@ -895,7 +898,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         {"target", target});
 
     LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
-    ctx.Send(target, result.release(), 0, 0, span.GetTraceId());
+    ctx.Send(target, result.release(), 0, cookie, span.GetTraceId());
 }
 
 void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
@@ -3294,7 +3297,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
             SetOverloadSubscribed(overloadSubscribe, ev->Recipient, ev->Sender, rejectReasons, result->Record);
         }
 
-        ctx.Send(ev->Sender, result.release());
+        ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
         IncCounter(COUNTER_WRITE_OVERLOADED);
         IncCounter(COUNTER_WRITE_COMPLETE);
         return true;
@@ -4147,6 +4150,8 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
     if (TableInfos.empty()) {
         return;
     }
+
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
     // Expected that it's almost always one table here, hence only TableInfos.begin()
     // IsBackup can be filtered out though

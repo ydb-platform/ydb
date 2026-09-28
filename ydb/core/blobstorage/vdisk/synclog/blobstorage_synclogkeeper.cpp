@@ -236,6 +236,12 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, new TEvSyncLogLocalStatusResult(e));
             }
 
+            void Handle(TEvSyncLogSpaceStat::TPtr &ev, const TActorContext &ctx) {
+                auto result = std::make_unique<TEvSyncLogSpaceStatResult>();
+                KeepState.FillInSpaceStat(result.get());
+                ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
+            }
+
             void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
                 Y_UNUSED(ev);
                 if (CommitterId) {
@@ -311,6 +317,7 @@ namespace NKikimr {
                 HFunc(TEvSyncLogDiskOutOfSpace, Handle)
                 HFunc(TEvSyncLogSnapshot, Handle)
                 HFunc(TEvSyncLogLocalStatus, Handle)
+                HFunc(TEvSyncLogSpaceStat, Handle)
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)

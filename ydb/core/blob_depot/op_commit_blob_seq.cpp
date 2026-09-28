@@ -54,10 +54,15 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(NodeId);
-                if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) { // agent disconnected while transaction was in queue -- drop this request
+                // Checking node and instance id alone is not enough: a transient disconnect and reconnect of the
+                // same agent instance keeps both, while OnAgentDisconnect has already emptied S3WritesInFlight --
+                // the erase below would then trip Y_ABORT_UNLESS(numErased). The pipe server this request arrived
+                // on is also exactly what the response is addressed through, so require it to still be current.
+                TAgent *agentPtr = Self->FindAgent(Request->Recipient);
+                if (!agentPtr || agentPtr->AgentInstanceId != AgentInstanceId) { // agent disconnected while transaction was in queue -- drop this request
                     return true;
                 }
+                TAgent& agent = *agentPtr;
 
                 if (!Self->Data->LoadMissingKeys(Request->Get()->Record, txc)) {
                     return false;

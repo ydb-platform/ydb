@@ -173,11 +173,11 @@ void TOpJoin::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THas
     Y_UNUSED(ctx);
 
     for (auto& k : JoinKeys) {
-        if (renameMap.contains(k.first)) {
-            k.first = renameMap.at(k.first);
+        if (renameMap.contains(k.Left)) {
+            k.Left = renameMap.at(k.Left);
         }
-        if (renameMap.contains(k.second)) {
-            k.second = renameMap.at(k.second);
+        if (renameMap.contains(k.Right)) {
+            k.Right = renameMap.at(k.Right);
         }
     }
 

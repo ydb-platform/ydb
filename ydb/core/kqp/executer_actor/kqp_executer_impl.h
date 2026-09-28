@@ -1,5 +1,8 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
@@ -139,7 +142,7 @@ public:
         , UserToken(userToken)
         , FormatsSettings(std::move(formatsSettings))
         , Counters(counters)
-        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
+        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), "Execute plan")
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
@@ -156,6 +159,10 @@ public:
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
 
+        ExecuterSpan.Attribute("ydb.actor.type", spanName);
+        if (ExecuterSpan) {
+            TraceStats.emplace(ExecuterSpan.GetTraceId().GetVerbosity(), CollectFullStats(Request.StatsMode));
+        }
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
@@ -319,6 +326,12 @@ protected:
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
             }
+
+            if (stageInfo.Meta.IsCsWriteAffinitySink()) {
+                for (const auto& shardId : stageInfo.Meta.GetColumnShardIds()) {
+                    shardIds.insert(shardId);
+                }
+            }
         }
 
         if (shardIds.size() > 0) {
@@ -329,7 +342,13 @@ protected:
                 {"ctx", *GetUserRequestContext()},
                 {"shardIdsCount", shardIds.size()},
                 {"traceId", TraceId()});
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ExecuterShardsResolve,
+                ExecuterSpan.GetTraceId(), {
+                    .Name = "Locate shards",
+                    .Phase = "ResolveShards",
+                    .ActorType = "TKqpShardsResolver",
+                    .Component = "KqpExecuter.Prepare",
+                }, NWilson::EFlags::AUTO_END);
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -947,6 +966,12 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED:
                 // Don't finalize stats twice.
                 if (Planner->CompletedCA(taskId, computeActor)) {
+                    if (TraceStats && taskId) {
+                        const auto& task = TasksGraph.GetTask(taskId);
+                        const auto& stage = TasksGraph.GetStageInfo(task.StageId);
+                        TraceStats->OnTaskFinished({stage.Id.TxId, stage.Id.StageId},
+                            stage.Tasks.size(), state, computeActor.NodeId());
+                    }
                     ui64 cycleCount = GetCycleCountFast();
 
                     auto& extraData = ExtraData[computeActor];
@@ -1162,11 +1187,6 @@ protected:
         if (IsSchedulable()) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
 
-            // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
-            //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
-            this->Send(schedulerServiceId, addDatabaseEvent.Release());
-
             // TODO: replace with more precise pool events.
             auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
             this->Send(schedulerServiceId, addPoolEvent.Release());
@@ -1205,6 +1225,8 @@ protected:
                 break;
         }
 
+        TasksGraph.GetMeta().SetDisablePessimisticLocks(Request.DisablePessimisticLocks);
+
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Executing physical tx",
@@ -1223,9 +1245,15 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ExecuterTableResolve,
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Resolve tables",
+                .Phase = "ResolveTables",
+                .ActorType = "TKqpTableResolver",
+                .Component = "KqpExecuter.Prepare",
+            }, NWilson::EFlags::AUTO_END);
 
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false, ExecuterStateSpan.GetTraceId());
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         YDB_LOG_TRACE_COMP(NKikimrServices::KQP_EXECUTER, "Got request, become WaitResolveState",
@@ -1588,6 +1616,12 @@ protected:
     }
 
     [[nodiscard]] bool BuildPlannerAndSubmitTasks() {
+        auto& tasksSpan = ExecuterStateSpan.GetTraceId() ? ExecuterStateSpan : ExecuterSpan;
+        if (TraceStats) {
+            for (const auto& [id, stage] : TasksGraph.GetStagesInfo()) {
+                TraceStats->StartStage(tasksSpan, {id.TxId, id.StageId}, stage.Meta.GetStage(id), stage.Tasks.size());
+            }
+        }
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
@@ -1598,7 +1632,8 @@ protected:
             .StatsMode = Request.StatsMode,
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
-            .ExecuterSpan =  ExecuterSpan,
+            .ExecuterSpan = tasksSpan,
+            .Trace = TraceStats ? &*TraceStats : nullptr,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
             .ExecuterRetriesConfig = ExecuterRetriesConfig,
             .MkqlMemoryLimit = Request.MkqlMemoryLimit,
@@ -1614,6 +1649,7 @@ protected:
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
             .EnableWatermarks = EnableWatermarks,
+            .StreamingQueryNodesManager = StreamingQueryNodesManagerId,
         });
 
         auto err = Planner->PlanExecution();
@@ -1803,10 +1839,6 @@ protected:
             {"status", NYql::NDqProto::StatusIds_StatusCode_Name(status)},
             {"issues", issues.ToOneLineString()},
             {"traceId", TraceId()});
-        if (ExecuterSpan) {
-            ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
-        }
-
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
         NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
@@ -1871,9 +1903,6 @@ protected:
 
         LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
 
-        if (ExecuterSpan) {
-            ExecuterSpan.EndError(response.DebugString());
-        }
         if (ExecuterStateSpan) {
             ExecuterStateSpan.EndError(response.DebugString());
         }
@@ -1983,6 +2012,19 @@ protected:
             }
         }
 
+        const auto& response = ResponseEv->Record.GetResponse();
+        AddExecutionTraceCpuTime(ExecuterSpan,
+            *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), Stats->GetCpuTimeUs());
+        if (ExecuterSpan) {
+            if (TraceStats) {
+                TraceStats->Finish(ExecuterSpan,
+                    *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), response.GetStatus());
+            }
+            ExecuterSpan.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(Stats->LocksBrokenAsVictim));
+            ExecuterSpan.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(Stats->LocksBrokenAsBreaker));
+        }
+        EndQueryTraceSpan(ExecuterStateSpan, response.GetStatus());
+        EndQueryTraceSpan(ExecuterSpan, response.GetStatus());
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
@@ -2028,6 +2070,12 @@ protected:
                 }
             }
         }
+
+        if (StreamingQueryNodesManagerId) {
+            this->Send(StreamingQueryNodesManagerId, new NActors::TEvents::TEvPoisonPill());
+            StreamingQueryNodesManagerId = TActorId{};
+        }
+
 
         if (CheckpointCoordinatorId) {
             this->Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
@@ -2170,6 +2218,7 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
+    std::optional<TExecutionTrace> TraceStats;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     struct TResultChannelFlowState {
@@ -2220,6 +2269,7 @@ protected:
 
     THashSet<ui32> SentResultIndexes;
 
+    TActorId StreamingQueryNodesManagerId;
     TActorId CheckpointCoordinatorId;
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 

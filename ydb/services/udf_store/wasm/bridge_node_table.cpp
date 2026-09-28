@@ -115,6 +115,9 @@ TBridgeKinds BridgeKindsFromType(const TType* type, const ITypeInfoHelper* helpe
             // payload kind so scalar getters keep working through a level of
             // optionality, as the historical leaf arguments did.
             const TOptionalTypeInspector optional(*helper, type);
+            if (helper->GetTypeKind(optional.GetItemType()) != ETypeKind::Data) {
+                return {EBridgeNodeKind::Optional, EBridgeValueKind::Optional};
+            }
             const auto inner = BridgeKindsFromType(optional.GetItemType(), helper);
             if (inner.Node == EBridgeNodeKind::Scalar || inner.Node == EBridgeNodeKind::String) {
                 return inner;
@@ -281,8 +284,15 @@ ui64 TWasmBridgeNodeTable::RegisterOrReuse(
     const TType* auxType)
 {
     if (const ui64 existing = TryReuse(value); existing != NullBridgeHandle) {
-        Ref(existing);
-        return TrackInRunScope(existing);
+        const auto& node = Resolve(existing);
+        // Optional<Boxed> shares the payload's identity, but its handle has
+        // a different declared type and cannot serve as the unwrapped value.
+        if (node.Kind == kind && node.ValueKind == valueKind
+            && node.Type == type && node.AuxType == auxType)
+        {
+            Ref(existing);
+            return TrackInRunScope(existing);
+        }
     }
     return TrackInRunScope(
         RegisterUntracked(kind, valueKind, type, TUnboxedValue(value), auxType));

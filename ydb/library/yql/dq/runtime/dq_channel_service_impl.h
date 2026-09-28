@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <atomic>
+#include <type_traits>
 
 // Flow control design principles
 //
@@ -264,6 +265,7 @@ public:
     std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
 
+    // set by the side which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> NeedToNotifyInput = false;
 
@@ -303,7 +305,25 @@ public:
     void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
     void UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
-    bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
+    // Adopts genMajor and tells whether the channel may go on at it: false if it is aborted, or is aborted right
+    // here for a generation change. The message is needed only then, so it is a literal or a callable building it
+    template <typename TMessage>
+    bool CheckGenMajor(ui64 genMajor, TMessage&& message) {
+        auto prevGenMajor = GenMajor.exchange(genMajor);
+        if (Aborted.load()) {
+            return false;
+        }
+        if (prevGenMajor && prevGenMajor != genMajor) {
+            if constexpr (std::is_invocable_v<TMessage>) {
+                AbortOnGenMajor(prevGenMajor, genMajor, message());
+            } else {
+                AbortOnGenMajor(prevGenMajor, genMajor, TStringBuf(message));
+            }
+            return false;
+        }
+        return true;
+    }
+    void AbortOnGenMajor(ui64 prevGenMajor, ui64 genMajor, TStringBuf message);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFinished();
     bool IsEarlyFinished();
@@ -397,6 +417,7 @@ public:
     std::atomic<ui64> SpilledBytes = 0;
     std::atomic<ui64> SeqNo = 0;
 
+    // set by the output which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> Terminated = false;
@@ -439,29 +460,23 @@ private:
     std::atomic<bool> QuotaManagerAssigned;
 };
 
+// std::priority_queue keeps on top what compares greatest: the channel whose waiting chunk is the oldest one
 struct TOutputDescriptorCompare {
     constexpr bool operator()(const std::shared_ptr<TOutputDescriptor>& a, const std::shared_ptr<TOutputDescriptor>& b) const noexcept {
-        return a->WaitTimestamp < b->WaitTimestamp;
+        return a->WaitTimestamp > b->WaitTimestamp;
     }
 };
 
 class TOutputItem {
 public:
 
-    enum EState {
-        Init,
-        Wait,
-        Sent
-    };
-
     TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor, bool quoted)
-        : Data(std::move(data)), Descriptor(descriptor), State(EState::Init), IsQuoted(quoted) {
+        : Data(std::move(data)), Descriptor(std::move(descriptor)), IsQuoted(quoted) {
     }
     ~TOutputItem();
 
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
-    std::atomic<EState> State;
     const bool IsQuoted; // whether Data.Bytes is tracked by Descriptor's QuotaManager
     ui64 SeqNo = 0;
     bool Leading = false;
@@ -523,6 +538,8 @@ public:
     ~TInputDescriptor();
 
     bool IsEmpty();
+    // lock free: true if the queue is empty, and then the consumer is going to be woken up by the next push
+    bool IsEmptyFast();
     bool PushDataChunk(TDataChunk&& data);
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
@@ -548,12 +565,14 @@ public:
     TDqThreadSafeStats PopStats;
 
     mutable std::mutex QueueMutex;
+    // changed under QueueMutex, read without it by IsEmptyFast; a push increments it before it takes NeedToNotifyInput
     std::atomic<ui64> QueueSize = 0;
     std::atomic<ui64> QueueBytes = 0;
     mutable std::queue<TInputItem> Queue;
     std::atomic<ui64> InflightBytes = 0;
     std::atomic<ui64> SeqNo = 0;
 
+    // set by the input which is going to wait, whoever clears it sends TEvResumeExecution, so a flag found set need not be stored again
     std::atomic<bool> NeedToNotifyInput = false;
     std::atomic<bool> FinishPushed = false;
     std::atomic<bool> Finished = false;
@@ -564,9 +583,13 @@ public:
     // Node level memory pressure on this (receiver) node, reported to the sender via TEvChannelUpdateV2.
     // Written under QueueMutex by RefreshMemoryPressure, read by TNodeState::SendUpdateProgress
     std::atomic<bool> MemoryPressure = false;
-    // Written by TNodeState::SendUpdateProgress under TNodeState::Mutex only, read lock free to
+    // Written by TNodeState::SendUpdateProgress under UpdateMutex only, read lock free to
     // detect that a flip of MemoryPressure is not delivered to the sender yet
     std::atomic<bool> LastSentMemoryPressure = false;
+    // Orders the updates of this channel: they go from the consumer thread and from the session thread (on a
+    // discovery), and a flip of MemoryPressure overtaken by the previous state would stick on the sender.
+    // Taken under TNodeState::Mutex by HandleDiscovery, takes nothing itself
+    std::mutex UpdateMutex;
 
     bool IsMemoryPressureReported() const {
         return MemoryPressure.load() == LastSentMemoryPressure.load();
@@ -686,13 +709,19 @@ public:
         SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
         auto now = TInstant::Now();
         LastPeerActivity.store(now);
+        LastQueueProgress.store(now);
         LastCleanup = now;
     }
 
     virtual ~TNodeState();
-    void FailDescriptors();
+    void FailDescriptors(const TString& reason);
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
-    void SendMessage(std::shared_ptr<TOutputItem> item);
+    // The part of a data message which does not depend on the session, built off Mutex where possible
+    static THolder<TEvDqCompute::TEvChannelDataV2> BuildDataEvent(const TDataChunk& data, const TOutputDescriptor& descriptor);
+    // Stamps the session and the numbers of the item onto the message and sends it. Under Mutex, together with the
+    // numbering: the messages must go in SeqNo order, a gap makes the receiver ask to resend
+    void SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const TOutputItem& item);
+    void SendMessage(const TOutputItem& item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev);
@@ -706,16 +735,29 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor);
-    void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    // the reason is needed only where there is no peer to compare against, i.e. for the session teardown
+    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
+    void FailOutputs(const TString& reason);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
-    void SendFromWaiters(ui64 deltaBytes);
+    // Sends from the WaitQueues of the waiting channels while the window lasts, starting with the waiter given
+    // (as HandleAck picks one under its lock) or with the one it picks itself
+    void SendFromWaiters(std::shared_ptr<TOutputDescriptor> waiter = {});
+    // under Mutex: the next waiter to send from if the window is open, the waiter is taken off WaitersQueue
+    std::shared_ptr<TOutputDescriptor> PopWaiterLocked();
+    // empties the WaitQueue of an aborted channel, whose chunks are never sent
+    void DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& descriptor);
+    // releases what a message leaving the Queue held, under Mutex, and returns what was actually released
+    ui64 ReleaseInflight(const TOutputItem& item);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
-    virtual TString GetDebugInfo();
+    // off Mutex: the consumer calls it on every pop
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    // under UpdateMutex of the descriptor
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+
+    // SendFromWaiters has taken a chunk off the WaitQueue of a channel and not sequenced it yet
+    virtual void OnWaiterDequeued() {}
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major, char logSymbol);
@@ -728,9 +770,29 @@ public:
     TString LogPrefix;
     mutable std::mutex Mutex;
     mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
+    // What leaves the Queue under Mutex waits here to be destroyed once it is released: ~TOutputItem frees the
+    // quota, which may take the locks of the resource manager, and usually the payload. Session thread only
+    std::vector<std::shared_ptr<TOutputItem>> ReleasedItems;
+    void FreeReleasedItems();
+    // Declared before the lock_guard of Mutex, it frees what the section released after the unlock, on any path
+    struct TReleaseGuard {
+        TNodeState& State;
+        ~TReleaseGuard() {
+            State.FreeReleasedItems();
+        }
+    };
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
+    // FlagTrackDelivery, plus FlagSubscribeOnSession for the 1st event since the session was (re)connected
+    ui32 SendFlags() {
+        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+        // a load first: a locked exchange on every event would bounce the line between the sending threads
+        if (!Subscribed.load() && !Subscribed.exchange(true)) {
+            flags |= NActors::IEventHandle::FlagSubscribeOnSession;
+        }
+        return flags;
+    }
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
     mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
@@ -747,7 +809,23 @@ public:
     NActors::TActorId OutputNodeActorId;
     std::atomic<ui64> OutputNodeGenMajor = 0;
     std::atomic<ui64> OutputNodeGenMinor = 0;
-    ui64 ConfirmedSeqNo = 0;
+    // The three above as the consumer threads read them for the updates they send off Mutex: a seqlock, which
+    // only the session thread writes, as it does the fields. An update read from the previous peer is lost or
+    // dropped by the sender as obsolete, and HandleDiscovery resends every one after it has published the new peer
+    struct TPeer {
+        NActors::TActorId ActorId;
+        ui64 GenMajor = 0;
+        ui64 GenMinor = 0;
+    };
+    void PublishPeer();
+    TPeer ReadPeer() const;
+    std::atomic<ui64> PeerSeq = 0;
+    std::atomic<ui64> PeerActorIdX1 = 0;
+    std::atomic<ui64> PeerActorIdX2 = 0;
+    std::atomic<ui64> PeerGenMajor = 0;
+    std::atomic<ui64> PeerGenMinor = 0;
+    // written by the session thread only, atomic for the mon page
+    std::atomic<ui64> ConfirmedSeqNo = 0;
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;
@@ -755,6 +833,10 @@ public:
     std::atomic<ui64> WaitersQueueSize = 0;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconciliation = 1;
+    // when the Queue last moved: a pop, a push into an empty Queue, or the resend of a reconciliation.
+    // Written under Mutex; atomic for the mon page. The age of the front is not the same thing: on a slow
+    // link every message is old by the time it is confirmed while the Queue keeps moving all along
+    std::atomic<TInstant> LastQueueProgress;
     std::atomic<ui64> WaiterBytes = 0;
     std::atomic<ui64> WaiterMessages = 0;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;
@@ -785,6 +867,8 @@ public:
     std::deque<char> ReconciliationLog;
     TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
     std::atomic<ui64> SendCount = 0;
+    // messages built off Mutex for the window and then not admitted to it, see PushDataChunk
+    std::atomic<ui64> PrebuildMisses = 0;
     std::atomic<ui64> ResendCount = 0;
     std::atomic<ui64> ReconCount = 0;
     std::atomic<TInstant> ReconSent;
@@ -803,6 +887,13 @@ public:
 
     void HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
 
+    // Parks the session thread while HoldWaiterDequeue is set, for a test to act in between (a timeout
+    // keeps a failed test from hanging the session for good)
+    void OnWaiterDequeued() override;
+
+    // A debug session discovers its peer only here, so that a test can register every one it needs first
+    void StartSession();
+
     void PauseChannelData();
     void ResumeChannelData();
     void PauseChannelAck();
@@ -816,6 +907,16 @@ public:
 
     std::atomic<bool> ChannelDataPaused;
     std::atomic<bool> ChannelAckPaused;
+    // Lose the data message with this SeqNo, 0 for none. Applied where the message would be delivered
+    // rather than where it arrives, so one already pending can be named and the loss owes nothing to timing
+    std::atomic<ui64> DropDataSeqNo = 0;
+    // Lose the acks confirming up to this SeqNo, 0 for none. Only an OK one: a RESEND is what the peer is
+    // waiting for, and losing it would stall the session rather than the channel
+    std::atomic<ui64> DropOkAckUpToSeqNo = 0;
+    // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
+    std::atomic<ui64> PendingDataCount = 0;
+    std::atomic<bool> HoldWaiterDequeue = false;
+    std::atomic<bool> WaiterDequeueHeld = false;
     std::atomic<double> DataLossProbability;
     std::atomic<ui64> DataLossCount;
     std::atomic<double> AckLossProbability;
@@ -888,7 +989,6 @@ public:
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
     // extras
     void NotifyCleanup();
-    TString GetDebugInfo();
 
     NActors::TActorSystem* ActorSystem;
     NActors::TActorId ServiceActorId;
@@ -1292,6 +1392,7 @@ public:
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
@@ -1325,34 +1426,48 @@ public:
         if (NodeState->ShouldLooseData()) {
             return;
         }
-        if (NodeState->ChannelDataPaused.load()) {
+        // pending too, or it would overtake what arrived before it and a replay would deliver more than
+        // it was asked for
+        if (NodeState->ChannelDataPaused.load() || !PendingChannelData.empty()) {
             PendingChannelData.emplace(ev.Release());
-        } else {
-            while (!PendingChannelData.empty()) {
-                NodeState->HandleData(PendingChannelData.front());
-                PendingChannelData.pop();
-            }
-            if (NodeState->IsNullMode()) {
-                NodeState->HandleNullMode(ev);
-            } else {
-                NodeState->HandleData(ev);
-            }
+            NodeState->PendingDataCount++;
+            return;
         }
+        DeliverChannelData(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (NodeState->ShouldLooseAck()) {
             return;
         }
-        if (NodeState->ChannelAckPaused.load()) {
+        if (NodeState->ChannelAckPaused.load() || !PendingChannelAck.empty()) {
             PendingChannelAck.emplace(ev.Release());
-        } else {
-            while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
-                PendingChannelAck.pop();
-            }
-            NodeState->HandleAck(ev);
+            return;
         }
+        DeliverChannelAck(ev);
+    }
+
+    // whether the message was delivered: the one named by DropDataSeqNo is lost instead
+    bool DeliverChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+        if (auto seqNo = NodeState->DropDataSeqNo.load(); seqNo && ev->Get()->Record.GetSeqNo() == seqNo) {
+            NodeState->DropDataSeqNo.store(0);
+            return false;
+        }
+        if (NodeState->IsNullMode()) {
+            NodeState->HandleNullMode(ev);
+        } else {
+            NodeState->HandleData(ev);
+        }
+        return true;
+    }
+
+    void DeliverChannelAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        if (auto seqNo = NodeState->DropOkAckUpToSeqNo.load(); seqNo && record.GetSeqNo() <= seqNo
+            && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
+            return; // lost on the wire, a RESEND is never dropped
+        }
+        NodeState->HandleAck(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
@@ -1374,26 +1489,29 @@ public:
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
         auto maxCount = ev->Get()->MaxCount;
 
-        if (!NodeState->ChannelDataPaused.load()) {
+        // An exact count ignores the pause on purpose - reaching one state and stopping there is what a
+        // test needs - and counts delivered data alone: not a message lost to DropDataSeqNo, and not the
+        // acks, which have a queue and a pause of their own. It stops where it is told only while the
+        // session is paused; a running queue drains its remainder below.
+        if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                if (NodeState->IsNullMode()) {
-                    NodeState->HandleNullMode(PendingChannelData.front());
-                } else {
-                    NodeState->HandleData(PendingChannelData.front());
-                }
+                auto delivered = DeliverChannelData(PendingChannelData.front());
                 PendingChannelData.pop();
-                if (maxCount && --maxCount == 0) {
-                    return;
+                NodeState->PendingDataCount--;
+                if (delivered && maxCount && --maxCount == 0) {
+                    break;
                 }
+            }
+            // an arrival joins the pending ones to keep the order, so without this every later message
+            // would park behind the remainder for good, with no pause set to explain it
+            if (!PendingChannelData.empty() && !NodeState->ChannelDataPaused.load()) {
+                NodeState->ProcessPending(0);
             }
         }
         if (!NodeState->ChannelAckPaused.load()) {
             while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
+                DeliverChannelAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
-                if (maxCount && --maxCount == 0) {
-                    return;
-                }
             }
         }
     }

@@ -75,7 +75,7 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetConfigPath() : NTiering::NCommon::DeleteTierName)
+        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->ToString() : NTiering::NCommon::DeleteTierName)
            << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
         if (Serializer) {
             sb << Serializer->DebugString();
@@ -130,6 +130,12 @@ class TTiering {
     using TTiersMap = THashMap<NColumnShard::NTiers::TExternalStorageId, std::shared_ptr<TTierInfo>>;
     TSet<TTierRef> OrderedTiers;
     std::optional<TString> TTLColumnName;
+
+    static NColumnShard::NTiers::TExternalStorageId MakeExternalStorageId(
+        const NKikimrSchemeOp::TTTLSettings::TEvictionToExternalStorageSettings& settings) {
+        return NColumnShard::NTiers::TExternalStorageId(
+            settings.GetStorage(), settings.HasObjectKeyPrefix() ? std::make_optional(settings.GetObjectKeyPrefix()) : std::nullopt);
+    }
 
 public:
     class TTieringContext {
@@ -229,7 +235,7 @@ public:
                     tierInfo = TTierInfo::MakeTtl(TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    tierInfo = std::make_shared<TTierInfo>(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()),
+                    tierInfo = std::make_shared<TTierInfo>(MakeExternalStorageId(tier.GetEvictToExternalStorage()),
                         TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
@@ -271,7 +277,7 @@ public:
         THashSet<NColumnShard::NTiers::TExternalStorageId> usedTiers;
         for (const auto& tier : ttlSettings.GetTiers()) {
             if (tier.HasEvictToExternalStorage()) {
-                usedTiers.emplace(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()));
+                usedTiers.emplace(MakeExternalStorageId(tier.GetEvictToExternalStorage()));
             }
         }
         return usedTiers;

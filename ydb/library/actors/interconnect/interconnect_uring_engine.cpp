@@ -3,6 +3,8 @@
 #include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "v2_probes.h"
+
 #include "v2_io_buffers.h"
 #include "v2_serialize_window.h"
 #include "interconnect_common.h"
@@ -38,6 +40,7 @@
 #include <vector>
 
 namespace NActors {
+    LWTRACE_USING(INTERCONNECT_V2_PROVIDER);
 
     namespace {
         constexpr ui32 RingQueueDepth = 4096;
@@ -245,6 +248,30 @@ namespace NActors {
                 Terminated = true;
             }
 
+            template <typename TFn>
+            bool TryProtocol(TFn&& fn) {
+                try {
+                    fn();
+                    return true;
+                } catch (const TExEventFormatError&) {
+                    if (!Terminated) {
+                        Disconnect(TDisconnectReason::FormatError());
+                    }
+                    return false;
+                } catch (const TExEventTooLarge&) {
+                    if (!Terminated) {
+                        Disconnect(TDisconnectReason::EventTooLarge());
+                    }
+                    return false;
+                }
+            }
+
+            void PushIncoming(TRcBuf buffer) {
+                TryProtocol([&] {
+                    Deserializer.Push(std::move(buffer), this, SessionId);
+                });
+            }
+
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // deserialization/receiving
 
@@ -262,11 +289,10 @@ namespace NActors {
                 Y_DEBUG_ABORT_UNLESS(num <= size);
                 NSan::Unpoison(ReadBuffer.data(), num);
                 if (num == size) {
-                    Deserializer.Push(std::move(ReadBuffer), this, SessionId);
+                    PushIncoming(std::move(ReadBuffer));
                     ReadBuffer = {};
                 } else {
-                    Deserializer.Push(TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer),
-                        this, SessionId);
+                    PushIncoming(TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer));
                     const size_t remain = size - num;
                     ReadBuffer.TrimFront(remain - remain % 64); // keep the tail cache-line aligned
                 }
@@ -279,7 +305,7 @@ namespace NActors {
             void ApplyBytesReadCopy(const char *data, size_t num, size_t poolBufSize) {
                 BytesReceived += num;
                 NSan::Unpoison(data, num);
-                Deserializer.Push(TRcBuf::Copy({data, num}), this, SessionId);
+                PushIncoming(TRcBuf::Copy({data, num}));
 
                 Y_DEBUG_ABORT_UNLESS(num <= poolBufSize);
                 ReadTarget.OnPoolCompletion(num, poolBufSize);
@@ -357,10 +383,15 @@ namespace NActors {
                     const size_t xdcScratchBefore = XdcWriteBuffer.size();
                     const ui64 mainBefore = Serializer.GetCumulativeProducedMain();
                     const ui64 xdcBefore = Serializer.GetCumulativeProducedXdc();
-                    const size_t numBytesProduced = XdcSocket
-                        ? Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
-                            &XdcWriteBuffer, &XdcOutgoingSpans, mainBudget, xdcBudget)
-                        : Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans, mainBudget);
+                    size_t numBytesProduced = 0;
+                    if (!TryProtocol([&] {
+                            numBytesProduced = XdcSocket
+                                ? Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
+                                    &XdcWriteBuffer, &XdcOutgoingSpans, mainBudget, xdcBudget)
+                                : Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans, mainBudget);
+                        })) {
+                        return;
+                    }
 
                     if (!numBytesProduced) {
                         break;
@@ -378,6 +409,7 @@ namespace NActors {
 
                 // A call that produced nothing at all (the span vectors are full, or the stream is
                 // blocked mid-event) carries no demand signal, so it must not move the targets.
+                LWPROBE(IO, reinterpret_cast<ui64>(this), "serialize", false, totalProduced, UnsentBytes);
                 if (totalProduced) {
                     MainScratch.OnProduce(mainCopied, mainUnthrottled);
                     XdcScratch.OnProduce(xdcCopied, xdcUnthrottled);
@@ -1392,12 +1424,16 @@ namespace NActors {
                         if (Sessions.find(&session) == Sessions.end()) { // forward event to other shard
                             Engine.GetShard(record->Conn).Enqueue(std::move(*record));
                         } else if (record->SeqNo != session.ExpectedSeqNo) {
+                            LWPROBE(Command, record->Conn, record->SeqNo, session.ExpectedSeqNo,
+                                record->Ev->Type, record->Ev->Cookie);
                             Y_DEBUG_ABORT_UNLESS(session.ExpectedSeqNo < record->SeqNo);
                             session.PendingRecordsHeap.push_back(std::move(*record));
                             std::ranges::push_heap(session.PendingRecordsHeap, std::greater<ui64>{},
                                 &TIncomingEventQueue::TRecord::SeqNo);
                             ++*OutOfOrderCameIn;
                         } else {
+                            LWPROBE(Command, record->Conn, record->SeqNo, session.ExpectedSeqNo,
+                                record->Ev->Type, record->Ev->Cookie);
                             // process this event
                             const bool isUnregister = record->Ev->Type == static_cast<ui32>(ENetwork::EvUnregisterSession);
                             ProcessIncomingEvent(&record.value());
@@ -1408,6 +1444,8 @@ namespace NActors {
                                 if (auto& heap = session.PendingRecordsHeap; Y_UNLIKELY(!heap.empty())) {
                                     while (!heap.empty() && heap.front().SeqNo == session.ExpectedSeqNo) {
                                         std::ranges::pop_heap(heap, std::greater<ui64>{}, &TIncomingEventQueue::TRecord::SeqNo);
+                                        LWPROBE(Command, heap.back().Conn, heap.back().SeqNo, session.ExpectedSeqNo,
+                                            heap.back().Ev->Type, heap.back().Ev->Cookie);
                                         ProcessIncomingEvent(&heap.back());
                                         ++session.ExpectedSeqNo;
                                         heap.pop_back();
@@ -1603,6 +1641,13 @@ namespace NActors {
                         continue;
                     }
 
+                    LWPROBE(SessionQueue, reinterpret_cast<ui64>(session.get()), session->IncomingSeqNo.load(),
+                        session->ExpectedSeqNo, session->PendingRecordsHeap.size(),
+                        session->PendingRecordsHeap.empty() ? 0 : session->PendingRecordsHeap.front().SeqNo,
+                        session->Serializer.IsTrafficPending());
+                    LWPROBE(SessionIO, reinterpret_cast<ui64>(session.get()), session->BytesSent, session->BytesReceived,
+                        session->UnsentBytes, session->XdcUnsentBytes, session->ReadPending, session->WritePending,
+                        session->XdcReadPending, session->XdcWritePending);
                     // Anything arriving from the peer -- payload, ping request, ping response -- counts as
                     // proof of life; when nothing has for the whole timeout, the link is declared dead. The
                     // peer keeps the stream flowing either by pinging us or by answering our pings, so this
@@ -1703,6 +1748,7 @@ namespace NActors {
             void DispatchRead(TSession& session, i32 res, ui32 cqeFlags, ui32 ringIdx) {
                 Y_DEBUG_ABORT_UNLESS(session.ReadPending);
                 session.ReadPending = false;
+                LWPROBE(IO, reinterpret_cast<ui64>(&session), "read-complete", false, res, session.UnsentBytes);
 
                 TRingSlot& slot = Rings[ringIdx];
 
@@ -1803,6 +1849,7 @@ namespace NActors {
                 }
 
                 session.ReadPending = true;
+                LWPROBE(IO, reinterpret_cast<ui64>(&session), "read-submit", false, span.size(), session.UnsentBytes);
             }
 
             void DispatchWrite(TSession& session, i32 res, bool xdc) {
@@ -1832,6 +1879,8 @@ namespace NActors {
                     }
                 }
 
+                LWPROBE(IO, reinterpret_cast<ui64>(&session), "write-complete", xdc, res,
+                    xdc ? session.XdcUnsentBytes : session.UnsentBytes);
                 TouchedSessions.PushBack(&session);
             }
 
@@ -1849,6 +1898,9 @@ namespace NActors {
                         && (windowHasRoom || session.Serializer.HasOutOfBandTraffic())) {
                     ACTIVITY(&SerializeTotalTime) {
                         session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
+                        if (session.Terminated) {
+                            return;
+                        }
                         const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
                         LastActivitySwitchTimestamp += serializeEventTime;
                         *SerializeEventTotalTime += serializeEventTime * Freq;
@@ -1867,6 +1919,8 @@ namespace NActors {
                         sqe->flags |= IOSQE_FIXED_FILE;
                     }
                     session.WritePending = true;
+                    LWPROBE(IO, reinterpret_cast<ui64>(&session), "write-submit", false,
+                        session.BytesToWriteLastTime, session.UnsentBytes);
                 }
                 const ui64 xdcLimit = session.Serializer.GetXdcAllowedToSend();
                 const size_t xdcBytesAllowed = xdcLimit > session.BytesSentXdc
@@ -1883,12 +1937,15 @@ namespace NActors {
                         sqe->flags |= IOSQE_FIXED_FILE;
                     }
                     session.XdcWritePending = true;
+                    LWPROBE(IO, reinterpret_cast<ui64>(&session), "write-submit", true,
+                        session.XdcBytesToWriteLastTime, session.XdcUnsentBytes);
                 }
             }
 
             void DispatchXdcRead(TSession& session, i32 res) {
                 Y_ABORT_UNLESS(session.XdcReadPending);
                 session.XdcReadPending = false;
+                LWPROBE(IO, reinterpret_cast<ui64>(&session), "read-complete", true, res, session.XdcUnsentBytes);
 
                 if (session.Terminated) {
                 } else if (res == -ECANCELED) {

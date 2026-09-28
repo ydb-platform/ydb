@@ -140,6 +140,10 @@ struct TEvLoad {
         ELoadType LoadType;
         ui64 MeasuredReadsSent = 0;
         ui64 BackgroundWritesSent = 0;
+        // Count actual outgoing PB requests, including warmup and background writes.
+        ui64 PBWriteRequestsSent = 0;
+        ui64 PBChecksummedWriteRequestsSent = 0;
+        ui64 PBPayloadChecksumsSent = 0;
         NMonitoring::TPercentileTrackerLg<10, 4, 1> LatencyUs; // Upper threshold of this tracker is ~134 seconds, size is 256kB
 
         double GetAverageSpeed() const {

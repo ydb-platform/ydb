@@ -1,6 +1,9 @@
-#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+
+#include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
+
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -108,6 +111,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
+    , Trace(args.Trace)
     , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
     , TasksGraph(args.TasksGraph)
     , MkqlMemoryLimit(args.MkqlMemoryLimit)
@@ -124,6 +128,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
     , EnableWatermarks(args.EnableWatermarks)
+    , StreamingQueryNodesManagerId(args.StreamingQueryNodesManager)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -257,7 +262,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
+        auto* serializedTask = SerializeTaskForExecution(task);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -533,11 +538,19 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
+NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& task) {
+    auto* result = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    if (Trace) {
+        Trace->AnnotateTask({task.StageId.TxId, task.StageId.StageId}, *result);
+    }
+    return result;
+}
+
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    auto* taskDesc = SerializeTaskForExecution(task);
 
     if (!TxInfo) {
         double memoryPoolPercent = 100;
@@ -759,8 +772,8 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
-        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
-            SendReadyStateToCheckpointCoordinator();
+        if (PendingComputeTasks.empty() && (CheckpointCoordinatorId || StreamingQueryNodesManagerId)) {
+            SendReadyState();
         }
         return true;
     }
@@ -974,15 +987,15 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
     }
 }
 
-void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
-    if (CheckpointsReadyStateSent) {
+void TKqpPlanner::SendReadyState() {
+    if (ReadyStateSent) {
         return;
     }
 
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
-            YDB_LOG_WARN("Skip sending TEvReadyState to checkpoint coordinator: task has no compute actor id (node disconnected or task not started)",
+            YDB_LOG_WARN("Skip sending TEvReadyState: task has no compute actor id (node disconnected or task not started)",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
                 {"taskId", dqTask.Id});
@@ -1002,12 +1015,20 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
         event->Tasks.emplace_back(std::move(task));
     }
 
-    YDB_LOG_INFO("Sending TEvReadyState to checkpoint coordinator",
+    YDB_LOG_INFO("Sending TEvReadyState",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"checkpointCoordinatorId", CheckpointCoordinatorId});
-    TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    CheckpointsReadyStateSent = true;
+        {"checkpointCoordinatorId", CheckpointCoordinatorId},
+        {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId});
+    if (StreamingQueryNodesManagerId) {
+        auto managerEvent = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+        managerEvent->Tasks = event->Tasks;
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(StreamingQueryNodesManagerId, ExecuterId, managerEvent.release()));
+    }
+    if (CheckpointCoordinatorId) {
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    }
+    ReadyStateSent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

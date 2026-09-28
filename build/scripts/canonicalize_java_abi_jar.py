@@ -1,4 +1,4 @@
-"""Normalize only compiler JAR envelopes, never class or resource payloads."""
+"""Normalize compiler JAR envelopes, never class, source or resource payloads."""
 
 import argparse
 import os
@@ -18,11 +18,12 @@ def _entry_order(name):
     return (2, name)
 
 
-def canonicalize(path, *, ijar=False):
+def canonicalize(path, *, ijar=False, preserve_member_attributes=False):
     """Atomically repack, retaining each occurrence and its compression method.
 
     Equal names keep their original relative order: differing duplicate payloads
-    are intentionally outside the determinism guarantee.
+    are intentionally outside the determinism guarantee. Generated full/source
+    JARs can retain member platform/permission attributes; ABI defaults stay fixed.
     """
     temporary = None
     try:
@@ -51,14 +52,22 @@ def canonicalize(path, *, ijar=False):
                 with zipfile.ZipFile(output, "w") as target:
                     for name, original in sorted(entries, key=lambda entry: _entry_order(entry[0])):
                         info = zipfile.ZipInfo(name, TIMESTAMP)
-                        info.create_system = 3
-                        info.external_attr = (0o40755 << 16 | 0x10) if info.is_dir() else (0o100644 << 16)
+                        if preserve_member_attributes:
+                            info.create_system = original.create_system
+                            info.external_attr = original.external_attr
+                        else:
+                            info.create_system = 3
+                            info.external_attr = (0o40755 << 16 | 0x10) if info.is_dir() else (0o100644 << 16)
                         # Read the ORIGINAL ZipInfo (also for duplicates and
                         # recovered names); fresh write metadata drops extras,
-                        # comments and platform/timestamp-dependent attributes.
+                        # comments and timestamp-dependent attributes.
                         target.writestr(
                             info, source.read(original), compress_type=original.compress_type, compresslevel=6
                         )
+                        if preserve_member_attributes:
+                            # zipfile synthesizes permissions for a zero value.
+                            # Restore it before the central directory is written.
+                            info.external_attr = original.external_attr
         os.chmod(temporary, stat.S_IMODE(os.stat(path).st_mode))
         os.replace(temporary, path)
         temporary = None

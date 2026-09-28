@@ -1,7 +1,6 @@
 #include "table_kind_state.h"
 #include "uploader.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/util/backoff.h>
 
@@ -19,7 +18,6 @@ public:
     )
         : ITableKindState(selfId, database, defaultTablePath, result)
     {
-        Path = JoinPath(result->ResultSet.front().Path);
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
@@ -70,9 +68,6 @@ public:
 
         return true;
     }
-
-private:
-    TString Path;
 };
 
 std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, const TString& defaultTablePath, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {

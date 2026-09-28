@@ -18,6 +18,17 @@ PEERDIR(
 
 )
 
+IF (NOT OPENSOURCE)
+    PEERDIR(yql/spark/tools/tool_lib)
+    SRCS(
+       yqlrun_lib_spark.cpp
+    )
+ELSE()
+    SRCS(
+       yqlrun_lib_no_spark.cpp
+    )
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 END()

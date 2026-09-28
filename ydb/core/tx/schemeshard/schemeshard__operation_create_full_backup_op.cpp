@@ -4,10 +4,9 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -17,6 +16,8 @@ namespace NKikimr::NSchemeShard {
 // FinalizeFullBackupOnOpComplete. Concurrent backups of one collection are
 // rejected via BCPathToFullBackup, not path-state (see CalcPathState).
 class TCreateFullBackupOp : public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateFullBackupOp"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -45,6 +46,8 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& createOp = Transaction.GetCreateFullBackupOp();
 
@@ -123,15 +126,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateFullBackupOp AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         // Do not use forceDropTxId here - the backup id == OperationId.GetTxId().
-        LOG_N("TCreateFullBackupOp AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", forceDropTxId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortUnsafe",
+            {"schemeshard", context.SS->TabletID()},
+            {"operationId", OperationId},
+            {"forceDropTxId", forceDropTxId},
+        );
 
         auto* infoPtr = context.SS->FullBackups.FindPtr(ui64(OperationId.GetTxId()));
         if (infoPtr && (*infoPtr)->State == TFullBackupInfo::EState::Transferring) {
@@ -177,3 +181,5 @@ bool AppendFullBackupOpToBackupBackupCollection(TOperationId opId, const TPath& 
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -93,6 +93,7 @@ private:
 };
 
 Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed = true);
+Ydb::ResultSet ExecuteYqlScriptWithResult(TTestEnv& env, const TString& script);
 
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount = 1, bool isShared = false, const TString& poolName = "hdd1");

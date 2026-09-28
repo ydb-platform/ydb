@@ -4,6 +4,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard::NBSVState {
 
@@ -12,15 +13,11 @@ namespace NKikimr::NSchemeShard::NBSVState {
 TConfigureParts::TConfigureParts(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+    IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
 }
 
 bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, TOperationContext& context) {
-    TTabletId ssId = context.SS->SelfTabletId();
-
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvSetConfigResult"
-                            << ", at schemeshard: " << ssId);
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -38,10 +35,9 @@ bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::
                     << " tablet " << tabletId);
 
     if (status == NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS) {
-        LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "BlockStore reconfiguration is in progress. We'll try to finish it later."
-                        << " Tx " << OperationId
-                        << " tablet " << tabletId);
+        YDB_LOG_ERROR_CTX(context.Ctx, "BlockStore reconfiguration is in progress. We'll try to finish it later.",
+                    {"tablet", tabletId},
+        );
         return false;
     }
 
@@ -61,11 +57,7 @@ bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::
 }
 
 bool TConfigureParts::ProgressState(TOperationContext& context) {
-    TTabletId ssId = context.SS->SelfTabletId();
-
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << ", at schemeshard" << ssId);
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -131,16 +123,15 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 TPropose::TPropose(TOperationId id)
     : OperationId(id)
 {
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvBlockStore::TEvUpdateVolumeConfigResponse::EventType});
+    IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType, TEvBlockStore::TEvUpdateVolumeConfigResponse::EventType});
 }
 
 bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
     TStepId step = TStepId(ev->Get()->StepId);
-    TTabletId ssId = context.SS->SelfTabletId();
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply TEvOperationPlan"
-                            << ", at schemeshard: " << ssId);
+    YDB_LOG_INFO_CTX(context.Ctx, "",
+        {"step", step},
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     if (!txState) {
@@ -187,11 +178,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 }
 
 bool TPropose::ProgressState(TOperationContext& context) {
-    TTabletId ssId = context.SS->SelfTabletId();
-
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " ProgressState"
-                            << ", at schemeshard: " << ssId);
+    YDB_LOG_INFO_CTX(context.Ctx, "");
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -203,3 +190,5 @@ bool TPropose::ProgressState(TOperationContext& context) {
 }
 
 }  // NKikimr::NSchemeShard::NBSVState
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

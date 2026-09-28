@@ -1,8 +1,9 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard {
@@ -13,13 +14,17 @@ namespace {
 
 class TPropose : public TSubOperationState {
 public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
     explicit TPropose(TOperationId id)
         : OperationId(std::move(id))
     {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -62,7 +67,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -73,15 +78,11 @@ public:
     }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder() << "TDropStreamingQuery TPropose, operationId: " << OperationId << ", ";
-    }
-
-private:
     const TOperationId OperationId;
 };
 
 class TDropStreamingQuery : public TSubOperation {
+    virtual const char* Name() const override final { return "TDropStreamingQuery"; }
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -186,7 +187,9 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDrop();
         const TString& name = dropDescription.GetName();
-        LOG_N("TDropStreamingQuery Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -212,11 +215,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropStreamingQuery AbortPropose: opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropStreamingQuery AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -235,3 +242,5 @@ ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, TTxState::ETxState
 }
 
 }  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

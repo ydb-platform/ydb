@@ -270,6 +270,14 @@ public:
         NYql::TPosition tokenPos,
         std::function<bool(NSQLTranslation::TSQLHint)> pred);
 
+    const NSQLTranslation::TSQLHints& GetSqlHints() const {
+        return SqlHints_;
+    }
+
+    void SetSqlHints(NSQLTranslation::TSQLHints hints) {
+        SqlHints_ = std::move(hints);
+    }
+
     bool WarnUnusedHints();
 
     TScopedStatePtr CreateScopedState() const;
@@ -426,6 +434,7 @@ public:
     bool DistinctOverKeys = false;
     bool GroupByExprAfterWhere = false;
     bool FailOnGroupByExprOverride = false;
+    bool RespectWarnPolicyForUnusedSqlHints = false;
     bool EmitUnionMerge = false;
     bool OptimizeSimpleIlike = false;
     EFlattenAndAggrExprsPersistence FlattenAndAggrExprsPersistence =
@@ -434,6 +443,7 @@ public:
     bool DebugPositions = false;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
+    bool RuntimeUserAttrs = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;

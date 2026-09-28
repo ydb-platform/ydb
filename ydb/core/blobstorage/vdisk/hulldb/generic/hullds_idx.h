@@ -310,6 +310,35 @@ namespace NKikimr {
         void FreshCompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
             Fresh.CompactionSstCreated(std::move(freshSegment));
         }
+        void FreshCompactionAborted() {
+            Fresh.CompactionAborted();
+        }
+
+        // Chunks reserved in advance for Fresh compaction, see TFreshData.
+        bool IsFreshRotationPending() const {
+            return Fresh.IsRotationPending();
+        }
+        ui64 GetFreshReservationShortfall(const TFreshOutputEstimate& record) const {
+            return Fresh.GetCurReservationShortfall(record);
+        }
+        void AddFreshReservedChunks(const TVector<TChunkIdx>& chunks) {
+            Fresh.AddCurReservedChunks(chunks);
+        }
+        void AdmitToFresh(const TFreshOutputEstimate& record) {
+            Fresh.AdmitInFlight(record);
+        }
+        void LandInFresh(const TFreshOutputEstimate& record) {
+            Fresh.LandInFlight(record);
+        }
+        bool FreshWouldOutgrowSst(const TFreshOutputEstimate& record) const {
+            return Fresh.WouldOutgrowSst(record);
+        }
+        bool CanRotateFreshCur() const {
+            return Fresh.CanRotateCur();
+        }
+        void RequestFreshSizeRotation() {
+            Fresh.RequestSizeRotation();
+        }
 
         // Fresh Appendix Compaction
         typename TFreshData::TCompactionJob CompactFreshAppendix() {

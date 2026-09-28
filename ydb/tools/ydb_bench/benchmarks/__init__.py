@@ -3,6 +3,7 @@
 from ydb.tools.ydb_bench.benchmarks.actors import PING_BENCHMARK, STAR_PING_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.local_ydb import LOCAL_YDB_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.memory import MEMORY_BENCHMARK
+from ydb.tools.ydb_bench.benchmarks.distributed_ydb import DISTRIBUTED_YDB_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.registry import BENCHMARKS, BenchmarkRegistry
 
 __all__ = (
@@ -12,4 +13,5 @@ __all__ = (
     "STAR_PING_BENCHMARK",
     "MEMORY_BENCHMARK",
     "LOCAL_YDB_BENCHMARK",
+    "DISTRIBUTED_YDB_BENCHMARK",
 )

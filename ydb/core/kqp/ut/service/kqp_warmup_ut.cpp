@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/aclib/aclib.h>
@@ -16,6 +17,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <util/stream/str.h>
+#include <util/string/split.h>
 
 namespace NKikimr::NKqp {
 
@@ -23,6 +28,42 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
+    class TTestLogStream : public TStringStream {
+        void DoWrite(const void* data, size_t size) override {
+            TStringStream::DoWrite(data, size);
+            TStringStream::DoWrite("\n", 1);
+        }
+    };
+
+    Ydb::StatusIds::StatusCode ExecuteQueryWithToken(TTestActorRuntime& runtime, ui32 nodeIndex,
+        const NACLib::TUserToken& token, const TString& query, Ydb::ResultSet* result = nullptr)
+    {
+        auto edge = runtime.AllocateEdgeActor(nodeIndex);
+        auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
+        event->Record.SetUserToken(token.SerializeAsString());
+        auto& request = *event->Record.MutableRequest();
+        request.SetDatabase("/Root");
+        request.SetQuery(query);
+        request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
+        request.SetUsePublicResponseDataFormat(result != nullptr);
+        request.MutableQueryCachePolicy()->set_keep_in_cache(true);
+        request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        request.MutableTxControl()->set_commit_tx(true);
+        runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId(nodeIndex)), edge,
+            event.release()), nodeIndex);
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT(response);
+        if (result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.GetResponse().DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetResponse().YdbResultsSize(), 1);
+            *result = response->Get()->Record.GetResponse().GetYdbResults(0);
+        }
+        return response->Get()->Record.GetYdbStatus();
+    }
+
     struct TCompileCacheEntry {
         TString QueryId;
         TString Query;
@@ -532,6 +573,301 @@ namespace {
             VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
         }
 
+        Y_UNIT_TEST_QUAD(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins, LegacyMetadata, SysViewSource) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+            TTestLogStream logs;
+            auto settings = MakeWarmupTestSettings(params);
+            settings.SetLogStream(&logs);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpSysViewSourceRead(SysViewSource);
+            TKikimrRunner kikimr(settings);
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+            GrantPermissions(kikimr, "/Root/KeyValue", {"user0", "warmup-readers"}, true);
+
+            kikimr.RunCall([&] {
+                auto result = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                        NYdb::NScheme::TPermissions("user0@builtin",
+                            {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"}))
+                        .AddGrantPermissions(NYdb::NScheme::TPermissions("root@builtin",
+                            {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"})))
+                    .ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return true;
+            });
+
+            const TString userSid = "user1@builtin";
+            const TVector<NACLib::TSID> groups = {
+                "warmup-readers@builtin", "another-group@builtin", "all-users@well-known"};
+            const TString credential = "original-credential-must-not-be-cached";
+            const NACLib::TUserToken originalToken(credential, userSid, groups);
+            // Required for access to the default resource pool.
+            const NACLib::TUserToken tokenWithoutGroups(userSid, {"all-users@well-known"});
+            const NACLib::TUserToken directAccessToken("user0@builtin", {"all-users@well-known"});
+            const TString query = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 42u; /* warmup-sql-secret */";
+
+            auto execute = [&](ui32 nodeIndex, const NACLib::TUserToken& token) {
+                return ExecuteQueryWithToken(runtime, nodeIndex, token, query);
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(execute(1, originalToken), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(execute(1, directAccessToken), Ydb::StatusIds::SUCCESS);
+            VerifyLocalCacheContainsUsers(runtime, 1, "/Root", {"user0", "user1"});
+            const auto coldCache = GetLocalCacheUserSids(runtime, 0, "/Root");
+            UNIT_ASSERT(!coldCache.contains(userSid));
+            UNIT_ASSERT(!coldCache.contains(directAccessToken.GetUserSID()));
+            UNIT_ASSERT(execute(0, tokenWithoutGroups) != Ydb::StatusIds::SUCCESS);
+
+            for (ui32 node = 0; node < params.NodeCount; ++node) {
+                runtime.GetAppData(node).AdministrationAllowedSIDs = {"root@builtin"};
+                runtime.GetAppData(node).FeatureFlags.SetEnableDatabaseAdmin(false);
+            }
+
+            // Keep discovery deterministic by selecting the seeded peer.
+            const auto peersObserver = runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+                [&](TEvKqp::TEvListProxyNodesResponse::TPtr& event) {
+                    event->Get()->ProxyNodes = {runtime.GetNodeId(1)};
+                });
+
+            const auto metadataObserver = runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& event) {
+                    TVector<NKikimrKqp::TCompileCacheQueryInfo> inaccessible;
+                    for (auto& entry : *event->Get()->Record.MutableCacheCacheQueries()) {
+                        if (entry.GetUserSID() != userSid) {
+                            continue;
+                        }
+                        UNIT_ASSERT(!entry.GetMetaInfo().Contains(credential));
+                        if constexpr (LegacyMetadata) {
+                            NJson::TJsonValue metadata;
+                            UNIT_ASSERT(NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata));
+                            metadata.EraseValue("user_group_sids");
+                            entry.SetMetaInfo(NJson::WriteJson(metadata, false));
+                        }
+                        auto missingDatabase = entry;
+                        missingDatabase.ClearDatabase();
+                        missingDatabase.SetQueryId(entry.GetQueryId() + "-missing-db");
+                        missingDatabase.SetQuery(query + " /* missing database */");
+                        inaccessible.push_back(std::move(missingDatabase));
+                        auto wrongDatabase = entry;
+                        wrongDatabase.SetDatabase("/Root/another-database");
+                        wrongDatabase.SetQueryId(entry.GetQueryId() + "-wrong-db");
+                        wrongDatabase.SetQuery(query + " /* wrong database */");
+                        inaccessible.push_back(std::move(wrongDatabase));
+                    }
+                    for (auto& entry : inaccessible) {
+                        *event->Get()->Record.AddCacheCacheQueries() = std::move(entry);
+                    }
+                });
+
+            size_t prepares = 0;
+            TActorId warmupActor;
+            ui64 groupQueryCookie = 0;
+            const auto observer = runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
+                    const auto& request = event->Get()->Record.GetRequest();
+                    if (!request.GetIsWarmupCompilation()
+                            || event->Recipient != MakeKqpProxyID(runtime.GetNodeId(0))) {
+                        return;
+                    }
+                    const NACLib::TUserToken token(event->Get()->Record.GetUserToken());
+                    if (token.GetUserSID() != userSid) {
+                        return;
+                    }
+                    ++prepares;
+                    warmupActor = event->Sender;
+                    groupQueryCookie = event->Cookie;
+                    UNIT_ASSERT_STRING_CONTAINS(request.GetQuery(), "/Root/KeyValue");
+                    if constexpr (LegacyMetadata) {
+                        UNIT_ASSERT(token.GetGroupSIDs().empty());
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(token.GetGroupSIDs().size(), groups.size());
+                        for (const auto& group : groups) {
+                            UNIT_ASSERT(token.IsExist(group));
+                        }
+                    }
+                    UNIT_ASSERT(token.GetOriginalUserToken().empty());
+                    UNIT_ASSERT(!event->Get()->Record.GetUserToken().Contains(credential));
+                });
+
+            bool groupResponseSeen = false;
+            const auto responseObserver = runtime.AddObserver<TEvKqp::TEvQueryResponse>(
+                [&](TEvKqp::TEvQueryResponse::TPtr& event) {
+                    if (!warmupActor || event->Recipient != warmupActor || event->Cookie != groupQueryCookie) {
+                        return;
+                    }
+                    groupResponseSeen = true;
+                    const auto& record = event->Get()->Record;
+                    if constexpr (LegacyMetadata) {
+                        UNIT_ASSERT(record.GetYdbStatus() != Ydb::StatusIds::SUCCESS);
+                        const auto issues = record.GetResponse().DebugString();
+                        UNIT_ASSERT_STRING_CONTAINS(issues, "does not exist or you do not have access permissions");
+                        UNIT_ASSERT_STRING_CONTAINS(issues, "/Root/KeyValue");
+                        event->Get()->Record.MutableResponse()->AddQueryIssues()->set_message("warmup-issue-secret");
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+                    }
+                });
+
+            TWarmupTestEnv env{kikimr, runtime, true, 0, params.NodeCount, {}, 0};
+            TKqpWarmupConfig config;
+            auto complete = RunWarmup(env, config, config.HardDeadline, /* waitBootstrap */ true);
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(prepares, 1, complete->Get()->Message
+                << ", loaded=" << complete->Get()->EntriesLoaded << ", failed=" << complete->Get()->EntriesFailed);
+            UNIT_ASSERT(groupResponseSeen);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, LegacyMetadata ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, LegacyMetadata ? 1 : 0);
+            bool sawCompilationLog = false;
+            for (TStringBuf line : StringSplitter(logs.Str()).Split('\n')) {
+                if (line.Contains("Query compiled successfully") || line.Contains("Query compilation failed")) {
+                    sawCompilationLog = true;
+                    UNIT_ASSERT(!line.Contains("warmup-sql-secret"));
+                    UNIT_ASSERT(!line.Contains("warmup-issue-secret"));
+                    UNIT_ASSERT(!line.Contains("queryPreview"));
+                }
+            }
+            UNIT_ASSERT(sawCompilationLog);
+            const auto warmedCache = GetLocalCacheUserSids(runtime, 0, "/Root");
+            UNIT_ASSERT(warmedCache.contains(directAccessToken.GetUserSID()));
+            if constexpr (LegacyMetadata) {
+                UNIT_ASSERT(!warmedCache.contains(userSid));
+            } else {
+                UNIT_ASSERT(warmedCache.contains(userSid));
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(execute(0, originalToken), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(execute(0, tokenWithoutGroups) != Ydb::StatusIds::SUCCESS);
+
+            auto result = ExecuteQueryWithCache(kikimr, "user0",
+                "SELECT UserSID, Metadata FROM `/Root/.sys/compile_cache_queries`", env.IsThreadLocked);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TResultSetParser parser(result.GetResultSet(0));
+            size_t rows = 0;
+            while (parser.TryNextRow()) {
+                auto sid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                UNIT_ASSERT(sid);
+                UNIT_ASSERT_VALUES_EQUAL(*sid, directAccessToken.GetUserSID());
+                const auto metadata = parser.ColumnParser("Metadata").GetOptionalUtf8();
+                UNIT_ASSERT(metadata);
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(TString(*metadata), &json));
+                UNIT_ASSERT(!json.Has("user_group_sids"));
+                ++rows;
+            }
+            UNIT_ASSERT(rows > 0);
+
+            auto checkVisibility = [&](const NACLib::TUserToken& token, bool visible, bool groupsVisible) {
+                Ydb::ResultSet result;
+                ExecuteQueryWithToken(runtime, 0, token,
+                    "SELECT Query, Metadata FROM `/Root/.sys/compile_cache_queries` WHERE UserSID = 'user1@builtin'",
+                    &result);
+                UNIT_ASSERT_VALUES_EQUAL(result.rows_size(), visible ? 1 : 0);
+                if (visible) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.rows(0).items(0).text_value(), query);
+                    const TString metadata(result.rows(0).items(1).text_value());
+                    UNIT_ASSERT_VALUES_EQUAL(metadata.Contains("user_group_sids"), groupsVisible);
+                    UNIT_ASSERT_VALUES_EQUAL(metadata.Contains("another-group@builtin"), groupsVisible);
+                }
+            };
+            checkVisibility(NACLib::TSystemUsers::Metadata(), true, !LegacyMetadata);
+            checkVisibility(NACLib::TUserToken("root@builtin", {}), true, false);
+            checkVisibility(NACLib::TSystemUsers::Tmp(), false, false);
+        }
+
+        Y_UNIT_TEST_TWIN(WarmupSkipsOversizedGroupMetadata, ByteLimit) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            GrantPermissions(kikimr, "/Root/KeyValue", {"warmup-readers"}, true);
+
+            TVector<TString> groups = {"warmup-readers@builtin", "all-users@well-known"};
+            if constexpr (ByteLimit) {
+                groups.push_back(TString(MaxWarmupGroupSidsBytes - groups[0].size() - groups[1].size(), 'g'));
+            } else {
+                while (groups.size() < MaxWarmupGroupSids) {
+                    groups.push_back("group-" + ToString(groups.size()));
+                }
+            }
+            auto oversizedGroups = groups;
+            if constexpr (ByteLimit) {
+                oversizedGroups.back() += 'g';
+            } else {
+                oversizedGroups.push_back("one-group-too-many");
+            }
+
+            const TString query = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 42u";
+            for (const auto& user : {"bounded", "oversized", "oversized-peer"}) {
+                const TString sid = TString(user) + "@builtin";
+                const NACLib::TUserToken token(sid, TStringBuf(user) == "oversized" ? oversizedGroups : groups);
+                UNIT_ASSERT_VALUES_EQUAL(ExecuteQueryWithToken(runtime, 1, token, query), Ydb::StatusIds::SUCCESS);
+            }
+
+            const auto peersObserver = runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+                [&](TEvKqp::TEvListProxyNodesResponse::TPtr& event) {
+                    event->Get()->ProxyNodes = {runtime.GetNodeId(1)};
+                });
+            THashSet<TString> seenUsers;
+            const auto metadataObserver = runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& event) {
+                    for (auto& entry : *event->Get()->Record.MutableCacheCacheQueries()) {
+                        if (entry.GetQuery() != query) {
+                            continue;
+                        }
+                        seenUsers.insert(entry.GetUserSID());
+                        NJson::TJsonValue metadata;
+                        UNIT_ASSERT(NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata));
+                        if (entry.GetUserSID() == "oversized@builtin") {
+                            UNIT_ASSERT(metadata["user_group_sids"].IsNull());
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(metadata["user_group_sids"].GetArray().size(), groups.size());
+                        }
+                        if (entry.GetUserSID() == "oversized-peer@builtin") {
+                            metadata["user_group_sids"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+                            for (const auto& group : oversizedGroups) {
+                                metadata["user_group_sids"].AppendValue(group);
+                            }
+                            entry.SetMetaInfo(NJson::WriteJson(metadata, false));
+                        }
+                    }
+                });
+            ui32 prepares = 0;
+            const auto prepareObserver = runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
+                    if (!event->Get()->Record.GetRequest().GetIsWarmupCompilation()
+                            || event->Recipient != MakeKqpProxyID(runtime.GetNodeId(0))) {
+                        return;
+                    }
+                    const NACLib::TUserToken token(event->Get()->Record.GetUserToken());
+                    UNIT_ASSERT_VALUES_EQUAL(token.GetUserSID(), "bounded@builtin");
+                    UNIT_ASSERT_VALUES_EQUAL(token.GetGroupSIDs().size(), groups.size());
+                    for (const auto& group : groups) {
+                        UNIT_ASSERT(token.IsExist(group));
+                    }
+                    ++prepares;
+                });
+
+            TWarmupTestEnv env{kikimr, runtime, true, 0, params.NodeCount, {}, 0};
+            TKqpWarmupConfig config;
+            auto complete = RunWarmup(env, config, config.HardDeadline, true);
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL(seenUsers.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(prepares, 1);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 1);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 2);
+            const auto warmed = GetLocalCacheUserSids(runtime, 0, "/Root");
+            UNIT_ASSERT(warmed.contains("bounded@builtin"));
+            UNIT_ASSERT(!warmed.contains("oversized@builtin"));
+            UNIT_ASSERT(!warmed.contains("oversized-peer@builtin"));
+        }
+
         Y_UNIT_TEST(WarmupSoftDeadlineStopsNewQueriesButCompletesPending) {
             TWarmupTestParams params;
             params.UserSids = {"user0", "user1", "user2"};
@@ -577,6 +913,43 @@ namespace {
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete before hard deadline expires");
             UNIT_ASSERT_C(!warmupComplete->Get()->Success,
                 "Warmup should fail due to hard deadline: " << warmupComplete->Get()->Message);
+        }
+
+        Y_UNIT_TEST(WarmupFetchHardDeadline) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.NodeCount = 1;
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto env = PrepareWarmupTest(kikimr, params);
+            ui32 fetchRequests = 0;
+            ui32 prepares = 0;
+            const auto observer = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
+                    prepares += event->Get()->Record.GetRequest().GetIsWarmupCompilation();
+                    const auto& token = event->Get()->GetUserToken();
+                    if (event->Get()->IsInternalCall() && token
+                        && token->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID())
+                    {
+                        ++fetchRequests;
+                        event.Reset();
+                    }
+                });
+
+            TKqpWarmupConfig config;
+            config.SoftDeadline = TDuration::Seconds(1);
+            config.HardDeadline = TDuration::Seconds(1);
+            const auto start = env.Runtime.GetCurrentTime();
+            auto complete = RunWarmup(env, config, TDuration::Seconds(5), true);
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT(!complete->Get()->Success);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->Message, "Hard deadline exceeded");
+            UNIT_ASSERT(env.Runtime.GetCurrentTime() >= start + config.HardDeadline);
+            UNIT_ASSERT(fetchRequests > 0);
+            UNIT_ASSERT_VALUES_EQUAL(prepares, 0);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
         }
 
         Y_UNIT_TEST(WarmupEmptyCache) {
@@ -742,40 +1115,51 @@ namespace {
         }
 
         Y_UNIT_TEST(WarmupInvalidMetadata) {
-            TWarmupTestParams params;
-            params.UseRealThreads = false;
-            params.UserSids = {"user0"};
-            params.FillImplicitParams = false;
+            for (const TString& metadata : {
+                    TString("{invalid json broken!!!}}}"),
+                    TString(R"({"user_group_sids":42})"),
+                    TString(R"({"user_group_sids":["discard-me",42,"also-discard-me"]})")}) {
+                TStringStream logs;
+                {
+                    TWarmupTestParams params;
+                    params.UseRealThreads = false;
+                    params.UserSids = {"user0"};
+                    params.FillImplicitParams = false;
 
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+                    TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogStream(&logs));
+                    TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+                    env.Runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_WARN);
 
-            const auto metadataObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
-                [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
-                    auto& record = ev->Get()->Record;
-                    for (size_t i = 0; i < record.CacheCacheQueriesSize(); ++i) {
-                        record.MutableCacheCacheQueries(i)->SetMetaInfo("{invalid json broken!!!}}}");
-                    }
-                });
+                    const auto metadataObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                        [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
+                            for (auto& entry : *ev->Get()->Record.MutableCacheCacheQueries()) {
+                                entry.SetMetaInfo(metadata);
+                            }
+                        });
+                    size_t prepares = 0;
+                    const auto prepareObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                        [&](TEvKqp::TEvQueryRequest::TPtr& ev) {
+                            if (!ev->Get()->Record.GetRequest().GetIsWarmupCompilation()
+                                    || ev->Recipient != MakeKqpProxyID(env.Runtime.GetNodeId(env.NodeId))) {
+                                return;
+                            }
+                            ++prepares;
+                        });
 
-            TKqpWarmupConfig warmupActorConfig;
-            warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
-            warmupActorConfig.HardDeadline = TDuration::Seconds(15);
+                    TKqpWarmupConfig config;
+                    config.SoftDeadline = TDuration::Seconds(5);
+                    config.HardDeadline = TDuration::Seconds(15);
+                    auto complete = RunWarmup(env, config,
+                        config.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
 
-            auto warmupComplete = RunWarmup(env, warmupActorConfig,
-                warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
-
-            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
-            UNIT_ASSERT_C(warmupComplete->Get()->Success,
-                "Warmup should succeed with invalid metadata (graceful degradation): "
-                << warmupComplete->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, env.ExpectedUniqueCount,
-                "All queries should compile despite corrupted metadata "
-                "(FillYdbParametersFromMetadata silently ignores invalid JSON). "
-                "Loaded: " << warmupComplete->Get()->EntriesLoaded
-                << ", expected: " << env.ExpectedUniqueCount);
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesFailed, 0,
-                "No compilations should fail with invalid metadata (graceful degradation)");
+                    UNIT_ASSERT_C(complete, "Warmup actor must complete");
+                    UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
+                    UNIT_ASSERT_VALUES_EQUAL(prepares, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, env.ExpectedUniqueCount);
+                }
+                UNIT_ASSERT_STRING_CONTAINS(logs.Str(), "Invalid or oversized warmup group metadata; skipping query");
+            }
         }
 
         Y_UNIT_TEST(WarmupMaxNodesToRequestZero) {
@@ -849,8 +1233,10 @@ namespace {
             params.UserSids = {"user0"};
             params.FillImplicitParams = false;
 
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TTestLogStream logs;
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogStream(&logs));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            env.Runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_WARN);
 
             TKqpWarmupConfig warmupActorConfig;
             warmupActorConfig.SoftDeadline = TDuration::Seconds(5);
@@ -860,10 +1246,12 @@ namespace {
             auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
             auto warmupActorId = env.Runtime.Register(warmupActor, env.NodeId);
 
+            ui32 responses = 0;
             const auto compileObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryResponse>(
-                [warmupActorId](TEvKqp::TEvQueryResponse::TPtr& ev) {
+                [&](TEvKqp::TEvQueryResponse::TPtr& ev) {
                     if (ev->Recipient == warmupActorId) {
-                        ev->Get()->Record.SetYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                        ev->Get()->Record.SetYdbStatus(responses++ == 0
+                            ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::UNAUTHORIZED);
                     }
                 });
 
@@ -885,6 +1273,15 @@ namespace {
                 "No entries should be loaded when all compilations fail");
             UNIT_ASSERT_C(warmupComplete->Get()->EntriesFailed > 0,
                 "All compilations should be counted as failed. Failed: " << warmupComplete->Get()->EntriesFailed);
+            UNIT_ASSERT(responses > 2);
+            ui32 warnings = 0;
+            for (TStringBuf line : StringSplitter(logs.Str()).Split('\n')) {
+                if (line.Contains("Query compilation failed")) {
+                    UNIT_ASSERT(line.Contains(warnings == 0 ? "SCHEME_ERROR" : "UNAUTHORIZED"));
+                    ++warnings;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(warnings, 2);
         }
 
         Y_UNIT_TEST(WarmupQueryTypePropagation) {
@@ -954,7 +1351,7 @@ namespace {
                 "No entries should fail for empty database");
         }
 
-        Y_UNIT_TEST(WarmupServerlessUnavailable) {
+        Y_UNIT_TEST(WarmupUnsupportedSysviewDoesNotRetry) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -963,12 +1360,23 @@ namespace {
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
 
+            ui32 fetches = 0;
+            ui32 prepares = 0;
+            const auto queryObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& ev) {
+                    if (ev->Recipient != MakeKqpProxyID(env.Runtime.GetNodeId(env.NodeId))) {
+                        return;
+                    }
+                    prepares += ev->Get()->GetIsWarmupCompilation();
+                    fetches += ev->Get()->GetQuery().Contains("/.sys/compile_cache_queries");
+                });
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
                     response->Record.SetNodeId(ev->Cookie);
-                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                    NYql::TIssue issue("Compile cache is not available for this database");
+                    response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+                    NYql::TIssue issue("Compile cache view and warmup are not supported for serverless or shared resource databases");
+                    issue.SetCode(NKikimrIssues::TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
@@ -984,14 +1392,19 @@ namespace {
                 warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
 
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
-            UNIT_ASSERT_C(!warmupComplete->Get()->Success,
-                "Warmup should fail for serverless-like unavailable: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
-                "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Success, warmupComplete->Get()->Message);
+            UNIT_ASSERT_STRING_CONTAINS(warmupComplete->Get()->Message,
+                "Skipped: Compile cache view and warmup are not supported for serverless or shared resource databases");
+            UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesLoaded, 0);
+            UNIT_ASSERT_VALUES_EQUAL(warmupComplete->Get()->EntriesFailed, 0);
+            env.Runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(prepares, 0);
+            // Main fetch and diagnostic count; neither should be retried.
+            UNIT_ASSERT_C(fetches > 0 && fetches <= 2, "Fetch requests: " << fetches);
         }
 
-        Y_UNIT_TEST(WarmupUnavailableSysview) {
-            // All peers UNAVAILABLE: warmup fails AND PeerScanWarnings bumps once per failing peer.
+        Y_UNIT_TEST_TWIN(WarmupUnavailableSysview, AccessDenied) {
+            // All peers fail: warmup fails AND PeerScanWarnings bumps once per failing peer.
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -1012,8 +1425,11 @@ namespace {
                     sysviewRequestCount++;
                     auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
                     response->Record.SetNodeId(ev->Cookie);
-                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                    response->Record.SetStatus(AccessDenied ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::UNAVAILABLE);
                     NYql::TIssue issue("Compile cache is not available");
+                    if (AccessDenied) {
+                        issue.SetCode(NKikimrIssues::TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
+                    }
                     NYql::TIssues issues;
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
@@ -1459,4 +1875,3 @@ namespace {
     } // Y_UNIT_TEST_SUITE(KqpWarmup)
 
 } // namespace NKikimr::NKqp
-

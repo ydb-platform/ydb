@@ -22,20 +22,17 @@ TCoNameValueTuple BuildMemberTuple(const TString& name, const TString& sourceNam
 }
 
 TExprBase BuildOptionalIf(const TExprBase& predicate, const TExprBase& value, TExprContext& ctx, TPositionHandle pos) {
-    const auto item = ctx.NewCallable(pos, "Just", {value.Ptr()});
-    return TExprBase(ctx.Builder(pos)
-        .Callable("If")
-            .Callable(0, "Coalesce")
-                .Add(0, predicate.Ptr())
-                .Callable(1, "Bool")
-                    .Atom(0, "false")
-                .Seal()
-            .Seal()
-            .Add(1, item)
-            .Callable(2, "EmptyFrom")
-                .Add(0, item)
-            .Seal()
-        .Seal().Build());
+    // clang-format off
+    return Build<TCoOptionalIf>(ctx, pos)
+        .Predicate<TCoCoalesce>()
+            .Predicate(predicate)
+            .Value<TCoBool>()
+                .Literal().Build("false")
+            .Build()
+        .Build()
+        .Value(value)
+    .Done();
+    // clang-format on
 }
 
 } // anonymous namespace
@@ -73,7 +70,9 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         }
     }
 
-    for (const auto& [leftKey, rightKey] : lookup.ResidualJoinKeys) {
+    for (const auto& joinKey : lookup.ResidualJoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         Y_UNUSED(rightKey);
         addLeftMember(leftKey);
     }
@@ -298,7 +297,9 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
 
         // The join keys which are not present in the right side index.
         // We have to evaluate them before apply index lookup join.
-        for (const auto& [leftKey, rightKey] : lookup.ResidualJoinKeys) {
+        for (const auto& joinKey : lookup.ResidualJoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             // clang-format off
             equalities.push_back(Build<TCoCmpEqual>(Ctx, Pos)
                 .Left<TCoMember>()

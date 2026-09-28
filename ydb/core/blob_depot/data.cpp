@@ -786,6 +786,43 @@ namespace NKikimr::NBlobDepot {
         return finished;
     }
 
+    bool TData::OnTabletDeleted(ui64 tabletId, ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc,
+            void *cookie) {
+        YDB_LOG_DEBUG("OnTabletDeleted",
+            {"marker", "BDT85"},
+            {"id", Self->GetLogId()},
+            {"tabletId", tabletId},
+            {"maxItems", maxItems});
+
+        Y_ABORT_UNLESS(Loaded);
+
+        // the whole tablet is gone, so this covers all of its channels in a single scan
+        const TData::TKey first(TLogoBlobID(tabletId, 0, 0, 0, 0, 0));
+        const TData::TKey last(TLogoBlobID(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
+            TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
+
+        bool finished = true;
+        TScanRange r{first, last, TData::EScanFlags::INCLUDE_BEGIN | TData::EScanFlags::INCLUDE_END};
+        std::vector<TKey> keysToDelete;
+        ScanRange(r, nullptr, nullptr, [&](auto& key, auto& /*value*/) {
+            // a complete deletion is a hard barrier, so Keep flags do not save anything here
+            if (maxItems) {
+                keysToDelete.push_back(key);
+                --maxItems;
+            } else {
+                finished = false;
+                return false;
+            }
+            return true;
+        });
+
+        for (const TKey& key : keysToDelete) {
+            DeleteKey(key, txc, cookie);
+        }
+
+        return finished;
+    }
+
     void TData::AddFirstMentionedBlob(TLogoBlobID id) {
         YDB_LOG_DEBUG("AddFirstMentionedBlob",
             {"marker", "BDT80"},

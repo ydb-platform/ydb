@@ -120,6 +120,9 @@ message TEvWrite {
         optional bool IsBulk = 8;
         optional uint64 QuerySpanId = 9;
         optional TWriteSeqNum WriteSeqNum = 10;
+        // If this operation is retried on a different shard after a split/merge, this field contains
+        // the original shard id.
+        optional fixed64 OriginalShard = 11;
     }
 
     // Transaction operations

@@ -59,19 +59,20 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
 
     auto& ctx = rboCtx.ExprCtx;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    if (!IsLambdaOptionalType(node, structType, rboCtx)) {
-        return node;
-    }
 
     auto lambda = TCoLambda(node);
-    // clang-format off
-    auto newBody = Build<TCoCoalesce>(ctx, node->Pos())
-        .Predicate(lambda.Body())
-        .Value<TCoBool>()
-            .Literal().Build("false")
-        .Build()
-    .Done();
-    // clang-format on
+    // The range extractor expects a non optional predicate.
+    TExprBase newBody = lambda.Body();
+    if (IsLambdaOptionalType(node, structType, rboCtx)) {
+        // clang-format off
+        newBody = Build<TCoCoalesce>(ctx, node->Pos())
+            .Predicate(lambda.Body())
+            .Value<TCoBool>()
+                .Literal().Build("false")
+            .Build()
+        .Done();
+        // clang-format on
+    }
 
     // clang-format off
     auto newLambda = Build<TCoLambda>(ctx, node->Pos())
@@ -609,7 +610,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                                                 std::move(rangeInfo), std::nullopt, ESortDir::None, read->Props, read->Pos);
 
         auto indexFilter = MakeIntrusive<TOpFilter>(indexRead, filter->Pos, filter->Props,
-                                                    TExpression(lookupResult.PrunedLambda, &ctx, &props));
+                                                    TExpression(lookupResult.PrunedLambda, &ctx, &props), true);
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
         const size_t renameCount = std::min(read->Columns.size(), read->OutputIUs.size());
         for (size_t i = 0; i < renameCount; ++i) {
@@ -664,6 +665,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
-    return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props));
+    return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
 }
 } // namespace NKikimr::NKqp

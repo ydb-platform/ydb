@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges;
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(0, 100),
+            TBlockRange16::MakeClosedInterval(0, 100),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL("0:0[0..100];", DebugPrintResult(result));
@@ -42,9 +42,9 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 19)}};
+             .Range = TBlockRange16::MakeClosedInterval(10, 19)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(10, 19),
+            TBlockRange16::MakeClosedInterval(10, 19),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL("0:100[10..19];", DebugPrintResult(result));
@@ -54,11 +54,11 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 50)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 50)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(20, 60)}};
+             .Range = TBlockRange16::MakeClosedInterval(20, 60)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(15, 55),
+            TBlockRange16::MakeClosedInterval(15, 55),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -71,11 +71,11 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 50)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 50)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(20, 40)}};
+             .Range = TBlockRange16::MakeClosedInterval(20, 40)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(15, 45),
+            TBlockRange16::MakeClosedInterval(15, 45),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -89,11 +89,11 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 19)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 19)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(30, 39)}};
+             .Range = TBlockRange16::MakeClosedInterval(30, 39)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(0, 49),
+            TBlockRange16::MakeClosedInterval(0, 49),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -109,11 +109,11 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 50)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 50)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(20, 30)}};
+             .Range = TBlockRange16::MakeClosedInterval(20, 30)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(10, 50),
+            TBlockRange16::MakeClosedInterval(10, 50),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -127,11 +127,11 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 30)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 30)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(25, 45)}};
+             .Range = TBlockRange16::MakeClosedInterval(25, 45)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(10, 45),
+            TBlockRange16::MakeClosedInterval(10, 45),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -144,13 +144,13 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 50)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 50)},
             {.Key = Key(150),
-             .Range = TBlockRange64::MakeClosedInterval(20, 40)},
+             .Range = TBlockRange16::MakeClosedInterval(20, 40)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(30, 35)}};
+             .Range = TBlockRange16::MakeClosedInterval(30, 35)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(10, 50),
+            TBlockRange16::MakeClosedInterval(10, 50),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -166,11 +166,11 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 109)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 109)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(10, 49)}};
+             .Range = TBlockRange16::MakeClosedInterval(10, 49)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(0, 99),
+            TBlockRange16::MakeClosedInterval(0, 99),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -187,10 +187,10 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
         for (ui64 i = 1; i <= keysCount; ++i) {
             ranges.push_back(
                 {.Key = Key(i),
-                 .Range = TBlockRange64::MakeClosedInterval(i, i)});
+                 .Range = TBlockRange16::MakeClosedInterval(i, i)});
         }
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(0, keysCount),
+            TBlockRange16::MakeClosedInterval(0, keysCount),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(keysCount + 1, result.size());
@@ -206,13 +206,13 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 30)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 30)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(25, 45)},
+             .Range = TBlockRange16::MakeClosedInterval(25, 45)},
             {.Key = Key(300),
-             .Range = TBlockRange64::MakeClosedInterval(40, 60)}};
+             .Range = TBlockRange16::MakeClosedInterval(40, 60)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(10, 60),
+            TBlockRange16::MakeClosedInterval(10, 60),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -226,13 +226,13 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 15)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 15)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(25, 30)},
+             .Range = TBlockRange16::MakeClosedInterval(25, 30)},
             {.Key = Key(300),
-             .Range = TBlockRange64::MakeClosedInterval(45, 50)}};
+             .Range = TBlockRange16::MakeClosedInterval(45, 50)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(0, 60),
+            TBlockRange16::MakeClosedInterval(0, 60),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -250,15 +250,15 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
     {
         TVector<TWeightedRange> ranges = {
             {.Key = Key(100),
-             .Range = TBlockRange64::MakeClosedInterval(10, 100)},
+             .Range = TBlockRange16::MakeClosedInterval(10, 100)},
             {.Key = Key(200),
-             .Range = TBlockRange64::MakeClosedInterval(20, 25)},
+             .Range = TBlockRange16::MakeClosedInterval(20, 25)},
             {.Key = Key(300),
-             .Range = TBlockRange64::MakeClosedInterval(40, 45)},
+             .Range = TBlockRange16::MakeClosedInterval(40, 45)},
             {.Key = Key(400),
-             .Range = TBlockRange64::MakeClosedInterval(70, 75)}};
+             .Range = TBlockRange16::MakeClosedInterval(70, 75)}};
         auto result = SplitOnNonOverlappingContinuousRanges(
-            TBlockRange64::MakeClosedInterval(0, 100),
+            TBlockRange16::MakeClosedInterval(0, 100),
             ranges);
 
         UNIT_ASSERT_VALUES_EQUAL(

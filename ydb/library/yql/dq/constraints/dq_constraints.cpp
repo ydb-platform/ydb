@@ -1,11 +1,52 @@
 #include "dq_constraints.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
 namespace NYql::NDq {
+
+// Internal DQ-only constraint: the stage runs as a single task consuming all input data.
+// Mirrors the scheduler planning one task for such a stage (see NYql::NDq::CommonBuildTasks()).
+class TDqConsolidateConstraintNode final: public TConstraintNode {
+protected:
+    friend struct NYql::TExprContext;
+
+    explicit TDqConsolidateConstraintNode(TExprContext& ctx)
+        : TConstraintNode(ctx, Name())
+    {
+    }
+
+    TDqConsolidateConstraintNode(TDqConsolidateConstraintNode&& constr)
+        : TConstraintNode(std::move(static_cast<TConstraintNode&>(constr)))
+    {
+    }
+
+public:
+    static constexpr std::string_view Name() {
+        return "DqConsolidate";
+    }
+
+    bool Equals(const TConstraintNode& node) const override {
+        if (this == &node) {
+            return true;
+        }
+        if (GetHash() != node.GetHash()) {
+            return false;
+        }
+        return GetName() == node.GetName();
+    }
+
+    void ToJson(NJson::TJsonWriter& out) const override {
+        out.Write(true);
+    }
+
+    NYT::TNode ToYson() const override {
+        return NYT::TNode::CreateEntity();
+    }
+};
 
 namespace {
 
@@ -134,15 +175,16 @@ TStatus ConstrainDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext
 
 class TDqConstraintsTransformer final : public TVisitorTransformerBase {
 public:
-    explicit TDqConstraintsTransformer(bool disableChecks)
+    TDqConstraintsTransformer(bool disableChecks, bool processSortConstraint)
         : TVisitorTransformerBase(/* failOnUnknown */ true)
         , DisableChecks(disableChecks)
+        , ProcessSortConstraint(processSortConstraint)
     {
         AddHandler({
             TDqStage::CallableName(),
             TDqPhyStage::CallableName(),
-        }, Hndl(&ConstraintDqStage));
-        AddHandler({TDqOutput::CallableName()}, Hndl(&ConstraintDqOutput));
+        }, Hndl(&TDqConstraintsTransformer::HandleDqStage));
+        AddHandler({TDqOutput::CallableName()}, Hndl(&TDqConstraintsTransformer::HandleDqOutput));
         AddHandler({
             TDqCnUnionAll::CallableName(),
             TDqCnParallelUnionAll::CallableName(),
@@ -151,9 +193,9 @@ public:
             TDqCnStreamLookup::CallableName(),
             TDqCnHashShuffle::CallableName(),
             TDqCnResult::CallableName(),
-        }, Hndl(&ConstraintDqConnection));
+        }, Hndl(&TDqConstraintsTransformer::HandleDqConnection));
         AddHandler({TDqCnValue::CallableName()}, Hndl(&ConstraintDqCnValue));
-        AddHandler({TDqCnMerge::CallableName()}, HndlInt(&ConstraintDqCnMerge));
+        AddHandler({TDqCnMerge::CallableName()}, Hndl(&TDqConstraintsTransformer::HandleDqCnMerge));
         AddHandler({TDqReplicate::CallableName()}, Hndl(&ConstraintDqReplicate));
         AddHandler({
             TDqJoin::CallableName(),
@@ -174,18 +216,29 @@ public:
     }
 
 private:
-    THandler HndlInt(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&, bool disableCheck)) {
-        return [handler, disableCheck = DisableChecks](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
-            return handler(input, ctx, disableCheck);
-        };
+    TStatus HandleDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return ConstraintDqCnMerge(input, ctx, DisableChecks);
+    }
+
+    TStatus HandleDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return ConstraintDqStage(input, ctx, ProcessSortConstraint);
+    }
+
+    TStatus HandleDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return ConstraintDqOutput(input, ctx, ProcessSortConstraint);
+    }
+
+    TStatus HandleDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return ConstraintDqConnection(input, ctx, ProcessSortConstraint);
     }
 
     const bool DisableChecks = false;
+    const bool ProcessSortConstraint = false;
 };
 
 } // anonymous namespace
 
-TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
+TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx, bool processSortConstraint) {
     const TDqStageBase stage(input);
     const auto& inputs = stage.Inputs();
     TSmallVec<TConstraintNode::TListType> argConstraints(inputs.Size());
@@ -198,10 +251,21 @@ TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     TCopyConstraint<TStreamingConstraintNode>::Do(stage.Program().Ref(), stage.Ptr());
+
+    if (processSortConstraint) {
+        TCopyConstraint<TSortedConstraintNode>::Do(stage.Program().Ref(), stage.Ptr());
+
+        if (TDqStageSettings::Parse(stage).PartitionMode == TDqStageSettings::EPartitionMode::Single
+            || AnyOf(inputs, [](const TExprBase& stageInput) { return stageInput.Maybe<TDqCnUnionAll>() || stageInput.Maybe<TDqCnMerge>(); }))
+        {
+            input->AddConstraint(ctx.MakeConstraint<TDqConsolidateConstraintNode>());
+        }
+    }
+
     return TStatus::Ok;
 }
 
-TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
+TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx, bool processSortConstraint) {
     Y_UNUSED(ctx);
 
     const TDqOutput output(input);
@@ -214,13 +278,20 @@ TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
     } else {
         input->CopyConstraints(programBody);
     }
+    if (processSortConstraint) {
+        TCopyConstraint<TDqConsolidateConstraintNode>::Do(output.Stage().Ref(), input);
+    }
 
     return TStatus::Ok;
 }
 
-TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
+TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx, bool processSortConstraint) {
     Y_UNUSED(ctx);
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode>::Do(TDqConnection(input).Output().Ref(), input);
+    const auto cn = TDqConnection(input);
+    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode>::Do(cn.Output().Ref(), input);
+    if (processSortConstraint && TDqCnUnionAll::Match(input.Get()) && cn.Output().Ref().GetConstraint<TDqConsolidateConstraintNode>()) {
+        TCopyConstraint<TSortedConstraintNode>::Do(cn.Output().Ref(), input);
+    }
     return TStatus::Ok;
 }
 
@@ -412,8 +483,13 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-std::unique_ptr<TVisitorTransformerBase> CreateDqConstraintsTransformer(bool disableCheck) {
-    return std::make_unique<TDqConstraintsTransformer>(disableCheck);
+std::unique_ptr<TVisitorTransformerBase> CreateDqConstraintsTransformer(bool disableCheck, bool processSortConstraint) {
+    return std::make_unique<TDqConstraintsTransformer>(disableCheck, processSortConstraint);
 }
 
 } // namespace NYql::NDq
+
+template <>
+void Out<NYql::NDq::TDqConsolidateConstraintNode>(IOutputStream& out, const NYql::NDq::TDqConsolidateConstraintNode& value) {
+    value.Out(out);
+}

@@ -19,7 +19,7 @@ struct TAggregationTraits {
     TVector<TInfoUnit> KeyColumns;
 };
 
-const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg", "variance_1_1"};
+const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg", "variance_1_1", "some"};
 
 TString GetColumnNameFromGroupRef(TExprNode::TPtr groupRef,
                                   const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap) {
@@ -76,6 +76,95 @@ TCoLambda ReplaceGroupRefs(TCoLambda lambda, const TVector<std::pair<TInfoUnit, 
     return TCoLambda(ctx.ReplaceNodes(lambda.Ptr(), replacements));
 }
 
+using TGroupingIndicators = TVector<std::pair<TInfoUnit, TInfoUnit>>;
+
+TVector<TInfoUnit> GetGroupingIndicatorColumns(const TGroupingIndicators& groupingIndicators) {
+    TVector<TInfoUnit> columns;
+    columns.reserve(groupingIndicators.size());
+    for (const auto& [key, indicator] : groupingIndicators) {
+        Y_UNUSED(key);
+        columns.push_back(indicator);
+    }
+    return columns;
+}
+
+TExprNode::TListType CollectGroupingCalls(const TExprNode::TPtr& root) {
+    return FindNodes(root, [](const TExprNode::TPtr& node) {
+        return node->IsCallable("YqlGrouping");
+    });
+}
+
+ui32 GetGroupingKeyIndex(const TExprNode::TPtr& groupRef) {
+    Y_ENSURE(groupRef->IsCallable("YqlGroupRef"), "GROUPING() argument must be a group by key");
+    Y_ENSURE(groupRef->ChildrenSize() > 2, "Invalid children size for `GroupRef`");
+    return FromString<ui32>(TString(groupRef->Child(2)->Content()));
+}
+
+std::set<ui32> CollectGroupingKeyIndexes(const TExprNode::TListType& groupingCalls) {
+    std::set<ui32> keyIndexes;
+    for (const auto& groupingCall : groupingCalls) {
+        for (const auto& groupRef : groupingCall->Children()) {
+            keyIndexes.insert(GetGroupingKeyIndex(groupRef));
+        }
+    }
+    return keyIndexes;
+}
+
+TExprNode::TPtr ReplaceGroupingCalls(TExprNode::TPtr root, const THashMap<ui32, TInfoUnit>& indicatorByKeyIndex, TExprContext& ctx) {
+    TNodeOnNodeOwnedMap replacements;
+    for (const auto& groupingCall : CollectGroupingCalls(root)) {
+        TExprNode::TPtr mask;
+        for (const auto& groupRef : groupingCall->Children()) {
+            const auto indicatorIt = indicatorByKeyIndex.find(GetGroupingKeyIndex(groupRef));
+
+            TExprNode::TPtr indicator;
+            if (indicatorIt != indicatorByKeyIndex.end()) {
+                // clang-format off
+                indicator = Build<TCoMember>(ctx, groupingCall->Pos())
+                    .Struct(groupRef->HeadPtr())
+                    .Name<TCoAtom>()
+                        .Value(indicatorIt->second.GetFullName())
+                    .Build()
+                .Done().Ptr();
+                // clang-format on
+            } else {
+                // clang-format off
+                indicator = Build<TCoUint64>(ctx, groupingCall->Pos())
+                    .Literal().Build("0")
+                .Done().Ptr();
+                // clang-format on
+            }
+
+            if (!mask) {
+                mask = indicator;
+                continue;
+            }
+
+            // clang-format off
+            mask = ctx.Builder(groupingCall->Pos())
+                .Callable("+")
+                    .Callable(0, "*")
+                        .Add(0, mask)
+                        .Callable(1, "Uint64")
+                            .Atom(0, "2")
+                        .Seal()
+                    .Seal()
+                    .Add(1, indicator)
+                .Seal()
+                .Build();
+            // clang-format on
+        }
+
+        Y_ENSURE(mask, "GROUPING() must have at least one argument");
+        replacements[groupingCall.Get()] = std::move(mask);
+    }
+
+    if (replacements.empty()) {
+        return root;
+    }
+    return ctx.ReplaceNodes(std::move(root), replacements);
+}
+
 bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("YqlAgg"); }
 
 TString GetAggregationFunction(TExprNode::TPtr node) {
@@ -85,7 +174,16 @@ TString GetAggregationFunction(TExprNode::TPtr node) {
     return TString(node->Content());
 }
 
-void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& aggregations) {
+bool IsNestedSelectNode(const TExprNode::TPtr& node) {
+    return node->IsCallable({"YqlSelect", "KqpExprSublink", "KqpInSublink", "KqpExistsSublink"});
+}
+
+void CollectAggregationsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& aggregations,
+                             THashSet<const TExprNode*>& visited) {
+    if (!visited.insert(node.Get()).second || IsNestedSelectNode(node)) {
+        return;
+    }
+
     if (IsAggregation(node)) {
         if (node->ChildrenSize() == 2) {
             Y_ENSURE(node->ChildPtr(0)->Content() == "count", "Unsupported aggregation function for *");
@@ -109,13 +207,14 @@ void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& agg
     }
 
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        CollectAggregationsImpl(node->ChildPtr(i), aggregations);
+        CollectAggregationsImpl(node->ChildPtr(i), aggregations, visited);
     }
 }
 
 TVector<TExprNode::TPtr> CollectAggregations(TExprNode::TPtr node) {
     TVector<TExprNode::TPtr> aggregations;
-    CollectAggregationsImpl(node, aggregations);
+    THashSet<const TExprNode*> visited;
+    CollectAggregationsImpl(node, aggregations, visited);
     return aggregations;
 }
 
@@ -206,7 +305,7 @@ TExprNode::TPtr BuildAggregate(TExprNode::TPtr resultExpr, const TVector<TExprNo
 }
 
 TExprNode::TPtr BuildGroupingSets(TExprNode::TPtr aggregate, const TVector<TVector<TInfoUnit>>& groupingSets,
-                                  TExprContext& ctx, TPositionHandle pos) {
+                                  const TGroupingIndicators& groupingIndicators, TExprContext& ctx, TPositionHandle pos) {
     TVector<TKqpOpGroupingSet> groupingSetNodes;
     groupingSetNodes.reserve(groupingSets.size());
     for (const auto& groupingSet : groupingSets) {
@@ -218,11 +317,22 @@ TExprNode::TPtr BuildGroupingSets(TExprNode::TPtr aggregate, const TVector<TVect
         groupingSetNodes.push_back(Build<TKqpOpGroupingSet>(ctx, pos).Add(keys).Done());
     }
 
+    TVector<TKqpOpGroupingIndicator> groupingIndicatorNodes;
+    groupingIndicatorNodes.reserve(groupingIndicators.size());
+    for (const auto& [key, indicator] : groupingIndicators) {
+        TVector<TCoAtom> pair{Build<TCoAtom>(ctx, pos).Value(key.GetFullName()).Done(),
+                              Build<TCoAtom>(ctx, pos).Value(indicator.GetFullName()).Done()};
+        groupingIndicatorNodes.push_back(Build<TKqpOpGroupingIndicator>(ctx, pos).Add(pair).Done());
+    }
+
     // clang-format off
     return Build<TKqpOpGroupingSets>(ctx, pos)
         .Input(aggregate)
         .GroupingSets<TKqpOpGroupingSetList>()
             .Add(groupingSetNodes)
+        .Build()
+        .GroupingIndicators<TKqpOpGroupingIndicatorList>()
+            .Add(groupingIndicatorNodes)
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -734,19 +844,25 @@ bool IsWindowCall(const TExprNode::TPtr& node) {
     return node->IsCallable("YqlWin") || node->IsCallable("YqlAggWin");
 }
 
-void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls) {
+void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls,
+                            THashSet<const TExprNode*>& visited) {
+    if (!visited.insert(node.Get()).second || IsNestedSelectNode(node)) {
+        return;
+    }
+
     if (IsWindowCall(node)) {
         calls.push_back(node);
         return;
     }
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        CollectWindowCallsImpl(node->ChildPtr(i), calls);
+        CollectWindowCallsImpl(node->ChildPtr(i), calls, visited);
     }
 }
 
 TVector<TExprNode::TPtr> CollectWindowCalls(const TExprNode::TPtr& node) {
     TVector<TExprNode::TPtr> calls;
-    CollectWindowCallsImpl(node, calls);
+    THashSet<const TExprNode*> visited;
+    CollectWindowCallsImpl(node, calls, visited);
     return calls;
 }
 
@@ -815,8 +931,11 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
                                          TVector<std::pair<TInfoUnit, TExprNode::TPtr>>&& groupByKeysExpressionsMap, TAggregationTraits&& aggTraits,
                                          TAggregationTraits&& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
                                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg,
-                                         const TVector<TVector<TInfoUnit>>& groupingSets, TExprContext& ctx, TPositionHandle pos,
-                                         bool additivePostAggMap = false) {
+                                         const TVector<TVector<TInfoUnit>>& groupingSets, const TGroupingIndicators& groupingIndicators,
+                                         TExprContext& ctx, TPositionHandle pos, bool additivePostAggMap = false) {
+    Y_ENSURE(groupingIndicators.empty() || (!groupingSets.empty() && !aggTraits.AggTraitsList.empty()),
+             "GROUPING() is supported only for grouping sets over an aggregation");
+
     // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
     // TODO: Make a special rule in optimizer for that and support more cases, currently we support only simple one aka:
     // select f(a) ... having f(a) > val ...;
@@ -832,7 +951,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
         resultExpr = BuildAggregate(resultExpr, aggTraits.AggTraitsList, aggTraits.KeyColumns, /*distinct=*/false, ctx, pos);
         if (!groupingSets.empty()) {
             // Emit grouping sets.
-            resultExpr = BuildGroupingSets(resultExpr, groupingSets, ctx, pos);
+            resultExpr = BuildGroupingSets(resultExpr, groupingSets, groupingIndicators, ctx, pos);
         }
     }
      // Build a having filter for aggregation result.
@@ -846,7 +965,11 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
     }
     // In case we have an expression on aggregation - f(...) x b.
     if (!expressionsMapPostAgg.empty()) {
-        resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPostAgg, BuildExpressionsFromColumns(aggTraits.KeyColumns, ctx, pos), ctx, pos,
+        TVector<TInfoUnit> passThroughColumns = aggTraits.KeyColumns;
+        const auto indicatorColumns = GetGroupingIndicatorColumns(groupingIndicators);
+        passThroughColumns.insert(passThroughColumns.end(), indicatorColumns.begin(), indicatorColumns.end());
+
+        resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPostAgg, BuildExpressionsFromColumns(passThroughColumns, ctx, pos), ctx, pos,
                                                  /*project=*/!additivePostAggMap);
     }
     // Build distinct aggregate post aggregate.
@@ -1016,7 +1139,7 @@ TString ResolveWindowKeyColumn(TExprNode::TPtr lambdaPtr, const TString& purpose
     auto lambda = TCoLambda(ctx.DeepCopyLambda(*lambdaPtr));
     auto body = lambda.Body().Ptr();
 
-    if (auto groupRef = GetCallable(body, "YqlGroupRef")) {
+    if (const auto groupRef = GetCallable(body, "YqlGroupRef"); groupRef && groupRef.Get() == body.Get()) {
         return NormalizeColumnName(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
     }
 
@@ -1024,8 +1147,10 @@ TString ResolveWindowKeyColumn(TExprNode::TPtr lambdaPtr, const TString& purpose
         return NormalizeColumnName(TCoMember(body).Name().StringValue());
     }
 
+    lambda = ReplaceGroupRefs(lambda, groupByKeysExpressionsMap, ctx);
+
     TString colName = GenerateUniqueColumnName(uniqueAggColumnId, purpose, "win_key");
-    ProcessAggregations(lambdaPtr, TString(colName), aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggTraits,
+    ProcessAggregations(lambda.Ptr(), TString(colName), aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggTraits,
                         distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, /*distinctAll=*/false, ctx, pos);
 
     const auto alreadyAdded = std::any_of(expressionsMapPostAgg.begin(), expressionsMapPostAgg.end(),
@@ -1425,8 +1550,13 @@ TExprNode::TListType FindSublinks(const TExprNode::TPtr& node) {
     });
 }
 
+bool IsAsTable(const TExprNode::TPtr input) {
+    return TCoParameter::Match(input.Get()) ||
+           (input->IsCallable("ToList") && TCoParameter::Match(input->HeadPtr().Get()));
+}
+
 TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated) {
 
     auto sublinks = FindSublinks(node);
     YQL_CLOG(TRACE, ProviderKikimr) << "Sublinks size: " << sublinks.size();
@@ -1441,7 +1571,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newNode;
 
-        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+        auto newSubquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
         auto sublinkType = sublink->Child(0)->Content();
 
         if (sublinkType == "expr") {
@@ -1475,7 +1605,6 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
     }
     return node;
 }
-
 } // anonymous namespace
 
 TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -1486,12 +1615,62 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
         tableEffectInput = tableEffectInput->ChildPtr(0);
     }
 
-    Y_ENSURE(TKqpOpRoot::Match(tableEffectInput.Get()), "Only support subqueries as input to table effects operation");
-    TKqpOpRoot root(tableEffectInput);
+    TExprNode::TPtr newInput;
+
+    if (TCoMap::Match(tableEffectInput.Get()) && TKqpOpRoot::Match(tableEffectInput->ChildPtr(0).Get())) {
+        TCoMap map(tableEffectInput);
+        auto root = map.Input().Cast<TKqpOpRoot>();
+
+        auto lambda = map.Lambda();
+        auto asStruct = lambda.Body().Maybe<TCoAsStruct>();
+        Y_ENSURE(asStruct);
+
+        TVector<TExprNode::TPtr> mapElements;
+
+        for (auto ch : asStruct.Cast()) {
+            Y_ENSURE(ch.Size()==2);
+            auto name = ch.Item(0);
+            auto expr = ch.Item(1);
+
+            // clang-format off
+            mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
+                .Input(root.Input())
+                .Variable(name.Cast<TCoAtom>())
+                .Lambda<TCoLambda>()
+                    .Args({"_map_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(expr)
+                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                    .Build()
+                .Build()
+                .ForceOptional().Value("False").Build()
+            .Done().Ptr());
+            // clang-format on
+        }
+        
+        // clang-format off
+        newInput = Build<TKqpOpMap>(ctx, node->Pos())
+            .Input(root.Input())
+            .MapElements()
+                .Add(mapElements)
+            .Build()
+            .Project()
+                .Value("true")
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+
+    } else if (TKqpOpRoot::Match(tableEffectInput.Get())) {
+        TKqpOpRoot root(tableEffectInput);
+        newInput = root.Input().Ptr();
+    } else {
+        Y_ENSURE(false, "Only support subqueries as input to table effects operation");
+    }
 
     TString effectType = TString(node->Content());
 
     TKqlTableEffect tableEffect(node);
+    TVector<TExprNode::TPtr> emptyList;
 
     if (TKqlInsertRows::Match(node.Get()) || TKqlInsertRowsIndex::Match(node.Get())) {
         TKqlInsertRowsBase insert(node);
@@ -1500,7 +1679,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(insert.Columns())
@@ -1517,7 +1696,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1534,7 +1713,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1551,7 +1730,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(upsert.Columns())
@@ -1568,14 +1747,14 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
-                .Columns().Build()
+                .Columns().Add(emptyList).Build()
                 .ReturningColumns(deleteRows.ReturningColumns())
                 .IsBatch(deleteRows.IsBatch())
-                .DefaultColumns().Build()
-                .Settings(deleteRows.Settings())
+                .DefaultColumns().Add(emptyList).Build()
+                .Settings().Build()
                 .OnConflict().Build()
             .Build()
             .ColumnOrder(deleteRows.ReturningColumns())
@@ -1585,14 +1764,14 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpTableEffect>()
-                .Input(root.Input())
+                .Input(newInput)
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
-                .Columns().Build()
+                .Columns().Add(emptyList).Build()
                 .ReturningColumns(deleteRows.ReturningColumns())
                 .IsBatch(deleteRows.IsBatch())
-                .DefaultColumns().Build()
-                .Settings(deleteRows.Settings())
+                .DefaultColumns().Add(emptyList).Build()
+                .Settings().Build()
                 .OnConflict().Build()
             .Build()
             .ColumnOrder(deleteRows.ReturningColumns())
@@ -1603,21 +1782,21 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
     }
 }
 
-
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot) {
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
+                              bool generateRoot) {
 
     if(translated.contains(input.Get())) {
         return translated.at(input.Get());
     }
     TVector<TString> finalColumnOrder;
-    // Start from beggining for each proccesed select;
-    ui64 uniqueAggColumnId = 0;
+    // Generated column names must be unique across the whole query.
+    ui64& uniqueAggColumnId = uniqueColumnIdCounter;
 
     TExprNode::TPtr node = input;
 
     if (generateRoot) {
-        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated);
+        node = RewriteSublinks(node, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated);
     }
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
@@ -1673,7 +1852,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     if (translated.contains(childExpr.Get())) {
                         subquery = translated.at(childExpr.Get());
                     } else {
-                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, translated, false);
+                        subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, uniqueColumnIdCounter, translated, false);
                     }
 
                     // We need to rename all the IUs in the subquery to reflect the new alias
@@ -1681,6 +1860,20 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                         .Input(subquery)
                         .Alias(alias)
                         .Done().Ptr();
+                }
+                else if (IsAsTable(childExpr)) {
+                    auto param = childExpr->IsCallable("ToList") ? childExpr->HeadPtr() : childExpr;
+
+                    // clang-format off
+                    auto source = Build<TKqpOpEmptySource>(ctx, node->Pos())
+                        .Input(param)
+                    .Done();
+
+                    fromExpr = Build<TKqpOpReplaceAlias>(ctx, node->Pos())
+                        .Input(source)
+                        .Alias(alias)
+                    .Done().Ptr();
+                    // clang-format on
                 }
                 else {
                     Y_ENSURE(false, TStringBuilder() << "Unsupported callable: " << childExpr->Content());
@@ -1972,6 +2165,21 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             }
         }
 
+        TGroupingIndicators groupingIndicators;
+        if (const auto groupingCalls = CollectGroupingCalls(setItem); !groupingCalls.empty()) {
+            THashMap<ui32, TInfoUnit> indicatorByKeyIndex;
+            if (hasRollup) {
+                for (const auto keyIndex : CollectGroupingKeyIndexes(groupingCalls)) {
+                    Y_ENSURE(keyIndex < groupByKeysExpressionsMap.size(), "GROUPING() argument is out of range");
+                    const TInfoUnit indicator(GenerateUniqueColumnName(uniqueAggColumnId, "grouping_result", "grouping_col"));
+                    indicatorByKeyIndex.emplace(keyIndex, indicator);
+                    groupingIndicators.emplace_back(groupByKeysExpressionsMap[keyIndex].first, indicator);
+                }
+            }
+
+            setItem = ReplaceGroupingCalls(setItem, indicatorByKeyIndex, ctx);
+        }
+
         auto having = GetSetting(setItem->Tail(), "having");
         if (having) {
             ProcessAggregationsInHaving(having, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
@@ -2004,7 +2212,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             additivePostAggMap = !usedWindowsInOrder.empty() && !hasRollup && aggregationTraits.AggTraitsList.empty() &&
                                  distinctAggregationTraitsPostAggregate.AggTraitsList.empty();
             if (!additivePostAggMap) {
-                KeepWindowInputsAfterAggregation(windows, usedWindowsInOrder, aggregationTraits.KeyColumns, expressionsMapPostAgg, ctx, node->Pos());
+                TVector<TInfoUnit> alreadyProducedColumns = aggregationTraits.KeyColumns;
+                const auto indicatorColumns = GetGroupingIndicatorColumns(groupingIndicators);
+                alreadyProducedColumns.insert(alreadyProducedColumns.end(), indicatorColumns.begin(), indicatorColumns.end());
+
+                KeepWindowInputsAfterAggregation(windows, usedWindowsInOrder, alreadyProducedColumns, expressionsMapPostAgg, ctx, node->Pos());
             }
         }
 
@@ -2030,7 +2242,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         // We emit grouping sets op and will rewrite it in rbo.
         resultExpr = BuildAggregationPipeline(resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap),
                                               std::move(aggregationTraits), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda,
-                                              std::move(expressionsMapPostAgg), groupingSets, ctx, node->Pos(), additivePostAggMap);
+                                              std::move(expressionsMapPostAgg), groupingSets, groupingIndicators, ctx, node->Pos(),
+                                              additivePostAggMap);
 
         if (!usedWindowsInOrder.empty()) {
             resultExpr = BuildWindowOperators(resultExpr, windows, usedWindowsInOrder, expressionsMapPostWindow, ctx, node->Pos());

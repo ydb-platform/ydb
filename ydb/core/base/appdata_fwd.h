@@ -17,6 +17,9 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    namespace NPathAliasing {
+        class TPathNormalizer;
+    }
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
@@ -90,6 +93,7 @@ namespace NKikimrConfig {
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
     class TLongTxServiceConfig;
+    class TUdfStoreConfig;
 }
 
 namespace NKikimrReplication {
@@ -211,6 +215,9 @@ struct TAppData {
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
+    // Compiled once before actors start; configuration changes require a restart.
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
     NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
@@ -290,6 +297,7 @@ struct TAppData {
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig& UdfStoreConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AlwaysSetSystemOwner = false;
@@ -343,7 +351,6 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
-    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

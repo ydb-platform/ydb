@@ -15,7 +15,6 @@ public:
     )
         : ITableKindState(selfId, database, defaultTablePath, result)
     {
-        Path = JoinPath(result->ResultSet.front().Path);
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
@@ -42,9 +41,6 @@ public:
 
         return true;
     }
-
-private:
-    TString Path;
 };
 
 std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, const TString& database, const TString& defaultTablePath, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {

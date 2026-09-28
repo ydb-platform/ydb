@@ -91,14 +91,22 @@ public:
         return *RecordsCountActual;
     }
 
+    // Length of the arrays currently held (the row space the next filter must be built in).
     ui32 GetRecordsCountRobustVerified() const {
+        if (!Accessors.empty()) {
+            return Accessors.begin()->second->GetRecordsCount();
+        }
         if (UseFilter) {
             AFL_VERIFY(!!RecordsCountActual);
             return *RecordsCountActual;
-        } else {
-            AFL_VERIFY(!!RecordsCountOriginal);
-            return *RecordsCountOriginal;
         }
+        // Not-applied filter mode: arrays keep their original length once a non-trivial filter is collected. Before that
+        // the length follows the added accessors: a dictionary-only fetch shortens the row space to the dictionary.
+        if (RecordsCountActual && Filter->IsTotalAllowFilter()) {
+            return *RecordsCountActual;
+        }
+        AFL_VERIFY(!!RecordsCountOriginal);
+        return *RecordsCountOriginal;
     }
 
     TAccessorsCollection() = default;

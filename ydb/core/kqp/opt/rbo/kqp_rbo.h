@@ -114,7 +114,7 @@ public:
 
     // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
     // and returns a root of the physical program.
-    TExprNode::TPtr Optimize(TOpRoot& root, TRBOContext& rboCtx);
+    TExprNode::TPtr Optimize(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& rboCtx);
 
     // Adds a RBO stage to the RBO pipeline.
     void AddStage(std::unique_ptr<IRBOStage>&& stage) {
@@ -128,7 +128,7 @@ public:
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+TExprNode::TPtr ConvertToPhysical(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& ctx);
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 void ComputePlanLiveness(TOpRoot& root);
 const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex);

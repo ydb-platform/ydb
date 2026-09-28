@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
@@ -46,6 +47,8 @@ struct TEvWorker {
         EvReaderStarted,
         EvTerminateWriter,
         EvStatsWakeup,
+        EvSchemaChange,
+        EvSchemaChangeApplied,
         EvEnd,
     };
 
@@ -71,6 +74,27 @@ struct TEvWorker {
         size_t Offset;
 
         explicit TEvCommitResult(size_t offset);
+        TString ToString() const override;
+    };
+
+    // The writer has drained every old-schema record before Offset and has
+    // validated the schema record at Offset. The worker must checkpoint that
+    // prefix before it can report the barrier to the controller.
+    struct TEvSchemaChange: public TEventLocal<TEvSchemaChange, EvSchemaChange> {
+        NKikimrReplication::TSchemaChange Schema;
+        size_t Offset;
+
+        TEvSchemaChange(const NKikimrReplication::TSchemaChange& schema, size_t offset);
+        TString ToString() const override;
+    };
+
+    // The writer has re-resolved the destination following a controller
+    // release. The worker may discard the retained schema record and feed its
+    // raw suffix back to the writer.
+    struct TEvSchemaChangeApplied: public TEventLocal<TEvSchemaChangeApplied, EvSchemaChangeApplied> {
+        NKikimrReplication::TSchemaChange Schema;
+
+        explicit TEvSchemaChangeApplied(const NKikimrReplication::TSchemaChange& schema);
         TString ToString() const override;
     };
 

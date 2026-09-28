@@ -137,7 +137,7 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
             break;
         }
 
-        WriteFileByBatches(writer, data, maxAttachmentSize);
+        WriteInBatches(writer, data, maxAttachmentSize);
     }
 
     WaitFor(writer->Close())

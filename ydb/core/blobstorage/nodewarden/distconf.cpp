@@ -302,6 +302,10 @@ namespace NKikimr::NStorage {
                     "Binding# " << Binding->ToString() << " Subscription# " << subs.ToString());
                 okay = true;
             }
+            if (RootProbe && RootProbe->NodeId == nodeId) {
+                Y_ABORT_UNLESS(!RootProbe->SessionId || subs.SessionId == RootProbe->SessionId);
+                okay = true;
+            }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
                 Y_VERIFY_S(!subs.SessionId || subs.SessionId == it->second.SessionId, "sessionId# " << subs.SessionId
                     << " node.SessionId# " << it->second.SessionId);
@@ -337,6 +341,9 @@ namespace NKikimr::NStorage {
 
         if (Binding) {
             Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
+        }
+        if (RootProbe) {
+            Y_ABORT_UNLESS(Scepter && !Binding && SubscribedSessions.contains(RootProbe->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY_S(SubscribedSessions.contains(nodeId), "NodeId# " << nodeId);
@@ -432,8 +439,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                UpdateQuorums();
-                IssueNextBindRequest();
+                ReconcileNodeRole();
             }
             processPendingEvents();
         }
@@ -480,7 +486,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
-            IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
+            hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -507,6 +513,8 @@ namespace NKikimr::NStorage {
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
             cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
+            fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
+            fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -518,9 +526,7 @@ namespace NKikimr::NStorage {
         }
 
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
-            UpdateQuorums();
-            IssueNextBindRequest();
-            CheckRootNodeStatus();
+            ReconcileNodeRole();
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();

@@ -33,6 +33,7 @@ def _setenv(varname, value):
     except Exception:
         pass
 
+
 _PQ_CONFIG_TABLES = [
     """
 --!syntax_v1
@@ -103,7 +104,7 @@ class FederationRecipe(object):
         configurator.yaml_config['pqconfig']['pqdiscovery_config'] = {
             'lb_user_database_root': '/Root/logbroker-federation'
         }
-        configurator.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = True;
+        configurator.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = True
 
         cluster = kikimr_cluster_factory(configurator)
         cluster.start()
@@ -582,13 +583,14 @@ class FederationRecipe(object):
 
 _recipe_instance = None
 
+
 def start(args):
     global _recipe_instance
     _recipe_instance = FederationRecipe()
     _recipe_instance.start(args)
 
+
 def stop(args):
-    global _recipe_instance
     if _recipe_instance is not None:
         _recipe_instance.stop(args)
 

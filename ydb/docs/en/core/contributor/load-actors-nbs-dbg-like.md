@@ -49,6 +49,8 @@ For explicit tablet-channel bindings, pass the `storage_pools` form field as a n
 
 Allocation persists across runs. Change it by deleting and recreating the load tablet.
 
+The tablet page pre-fills `NumDirectBlockGroups: 32`. The table below lists protobuf defaults, which apply when a field is omitted from a configuration message.
+
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `DDiskPoolName` | `"ddp1"` | BSC pool for DDisk data. |
@@ -70,7 +72,7 @@ curl --fail-with-body 'http://<node>:8765/actors/load?mode=tablet_list'
 
 The HTML listing combines Hive information with each tablet's `TEvNbsLoadTabletGetSummary` response. It shows tablet placement, pools, and DBG counts. This also works after creating multiple tablets; there is no separate multi-tablet allocation message.
 
-The actor protocol's summary contains allocated DBG count, vChunk geometry, and `NumReadyDirectBlockGroups`: the longest consecutive prefix of DBGs with at least three connected PB peers. Create completes before these connections finish. A positive ready count limits a run's address space. For compatibility, the current load proxy falls back to the allocated count when the ready count is zero, so starting immediately after Create can still produce "peers not ready" errors. PB readiness also does not guarantee that all DDisk connections required by reads and flushes are ready.
+The actor protocol's summary contains allocated DBG count, vChunk geometry, and `NumReadyDirectBlockGroups`: the longest consecutive prefix of DBGs with at least three ready PB peers. For each PB, the worker completes `TEvConnect`, obtains a single-use token bound to its tablet, generation and DBG via `TEvGetPersistentBufferRegistrationToken`, sends `TEvRegisterPersistentBuffer` with that token, and probes the registration with `TEvListPersistentBuffer`. Only a successful list makes the peer ready; this also verifies continued service after a duplicate registration is rejected on reconnect. See [PB registration](distributed-storage/persistent-buffer.md). Create completes before these steps finish. A positive ready count limits a run's address space. For compatibility, the current load proxy falls back to the allocated count when the ready count is zero, so starting immediately after Create can still produce "peers not ready" errors. PB readiness also does not guarantee that all DDisk connections required by reads and flushes are ready.
 
 ## Run a Workload {#run}
 
@@ -122,6 +124,8 @@ An empty result array means that no completed result for that UUID is available 
 ### Workload Parameters {#workload-parameters}
 
 These fields belong to `NbsDbgLikeLoad.WorkloadConfig`.
+
+The tablet page pre-fills `MaxInFlight: 2048` and `MaxInflightLsns: 65536` for a run. The `tablet_run` HTTP endpoint uses the same values when these parameters are omitted. The tables below list protobuf defaults for configuration messages.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |

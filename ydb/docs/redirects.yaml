@@ -175,11 +175,17 @@ common:
   - from: /operations/manage-users-attr.md
     to: /dev/custom-attributes.md
   - from: /operations/query_plans_optimization.md
-    to: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
   - from: /dev/query-plans-optimization.md
-    to: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
   - from: /dev/query-hints.md
-    to: /dev/query-execution-optimization/query-hints.md
+    to: /dev/optimization/hints.md
+  - from: /dev/query-execution-optimization/index.md
+    to: /dev/optimization/index.md
+  - from: /dev/query-execution-optimization/query-plans-optimization.md
+    to: /dev/optimization/plans.md
+  - from: /dev/query-execution-optimization/query-hints.md
+    to: /dev/optimization/hints.md
   - from: /best_practices/cdc.md
     to: /dev/cdc.md
   - from: /best_practices/pk-olap-scalability.md
@@ -405,9 +411,11 @@ common:
   - from: /recipes/nfs-backup/(.*)$
     to: /recipes/backup/nfs-backup/$1
   - from: /recipes/import-export-column-tables.md
-    to: /recipes/backup/import-export-column-tables.md
+    to: /concepts/query_execution/federated_query/import_and_export.md
   - from: /recipes/backup/import-export-column-tables/import-export-column-tables.md
-    to: /recipes/backup/import-export-column-tables.md
+    to: /concepts/query_execution/federated_query/import_and_export.md
+  - from: /recipes/backup/import-export-column-tables.md
+    to: /concepts/query_execution/federated_query/import_and_export.md
 
 # Redirects from export_import to export-import
   - from: /reference/ydb-cli/export_import/s3_conn.md

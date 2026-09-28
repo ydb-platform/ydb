@@ -23,9 +23,8 @@ TConstructor::TConstructor(const IColumnEngine& engine, const ui64 tabletId, con
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : schemasAll) {
         if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
-            constructors.emplace_back(TabletId, std::move(current));
-            if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                    constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+            constructors.emplace_back(TabletId, std::move(current), sourcesSorting);
+            if (!constructors.back().IsUsedBy(*pkFilter)) {
                 constructors.pop_back();
             }
             current.clear();
@@ -33,9 +32,8 @@ TConstructor::TConstructor(const IColumnEngine& engine, const ui64 tabletId, con
         current.emplace_back(i);
     }
     if (current.size()) {
-        constructors.emplace_back(TabletId, std::move(current));
-        if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
-                constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
+        constructors.emplace_back(TabletId, std::move(current), sourcesSorting);
+        if (!constructors.back().IsUsedBy(*pkFilter)) {
             constructors.pop_back();
         }
         current.clear();

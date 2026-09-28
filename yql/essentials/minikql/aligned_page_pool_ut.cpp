@@ -1,4 +1,5 @@
 #include "aligned_page_pool.h"
+#include "fake_mmap.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

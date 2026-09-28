@@ -459,14 +459,13 @@ size_t TBlockRangeFieldFlatSet::GetSegmentCount() const
     return RangeCount;
 }
 
-size_t TBlockRangeFieldFlatSet::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeFieldFlatSet::GetMemoryStats() const
 {
-    return Chunks.size() * ChunkSize;
-}
-
-size_t TBlockRangeFieldFlatSet::GetUsedSize() const
-{
-    return Chunks.size() * sizeof(ui32) + RangeCount * sizeof(TRange);
+    return {
+        .ReservedSize = Chunks.size() * ChunkSize,
+        .UsedSize = Chunks.size() * sizeof(ui32) + RangeCount * sizeof(TRange),
+        .AllocationCount = 0,
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////

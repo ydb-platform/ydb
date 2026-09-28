@@ -5,11 +5,6 @@
 
 namespace NKikimr::NReplication::NTransfer {
 
-TString TSchemeColumn::TypeName() const {
-    return NScheme::TypeName(PType);
-}
-
-
 TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     const auto& entry = nav->ResultSet.at(0);
 

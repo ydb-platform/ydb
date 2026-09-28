@@ -451,7 +451,9 @@ public:
         shardDesc.SetCluster(shard.Cluster().StringValue());
         shardDesc.SetService(shard.Service().StringValue());
 
-        shardDesc.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
+        shardDesc.SetClusterType(NSo::IsMoniumProject(*clusterDesc)
+            ? NSo::NProto::CT_MONIUM
+            : NSo::MapClusterType(clusterDesc->GetClusterType()));
         shardDesc.SetUseSsl(clusterDesc->GetUseSsl());
 
         const TTypeAnnotationNode* itemType = shard.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();

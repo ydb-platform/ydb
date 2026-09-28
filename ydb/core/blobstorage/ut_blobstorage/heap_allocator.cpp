@@ -1,5 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/util/lz4_data_generator.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompact.h>
 
 namespace {
 
@@ -196,6 +199,284 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
+
+    Y_UNIT_TEST(MetadataFreshCompaction) {
+        for (bool enableProjection : {false, true}) {
+            TFeatureFlags ff;
+            ff.SetEnableVDiskHeapAllocator(true);
+            ff.SetEnableVDiskFreshSpaceProjection(enableProjection);
+            TEnvironmentSetup env({
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
+                .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+                    config.HeapAllocatorMaxSstInBytes = 1_MB;
+                },
+                .FeatureFlags = ff,
+            });
+            env.CreateBoxAndPool(1, 1);
+            env.Sim(TDuration::Seconds(30));
+            const auto groups = env.GetGroups();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            const auto info = env.GetGroupInfo(groups.front());
+            const TActorId vdiskActorId = info->GetActorId(0);
+            const ui64 blockedTabletId = 1000;
+            const ui32 blockedGeneration = 7;
+            const ui64 collectedTabletId = 1001;
+            auto deadline = [&] { return env.Runtime->GetClock() + TDuration::Minutes(1); };
+
+            // With projection, the block and the garbage collection are admitted against chunks reserved for their
+            // Fresh segments. The metadata SSTs go into heap stripes instead, so those chunks are never written, and
+            // they have to go back to PDisk once the compactions are over.
+            bool admitting = true;
+            std::set<ui32> admitted;
+            std::set<ui32> forgotten;
+            ui32 metadataChunkCommits = 0;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::EvChunkReserveResult:
+                        if (const auto* msg = ev->Get<NPDisk::TEvChunkReserveResult>();
+                                admitting && msg->Status == NKikimrProto::OK) {
+                            admitted.insert(msg->ChunkIds.begin(), msg->ChunkIds.end());
+                        }
+                        break;
+                    case TEvBlobStorage::EvChunkForget: {
+                        const auto& chunks = ev->Get<NPDisk::TEvChunkForget>()->ForgetChunks;
+                        forgotten.insert(chunks.begin(), chunks.end());
+                        break;
+                    }
+                    case TEvBlobStorage::EvHullChange:
+                        if (const auto* msg = dynamic_cast<THullChange<TKeyBlock, TMemRecBlock>*>(ev->GetBase())) {
+                            metadataChunkCommits += msg->CommitChunks.size();
+                        } else if (const auto* msg = dynamic_cast<THullChange<TKeyBarrier, TMemRecBarrier>*>(
+                                ev->GetBase())) {
+                            metadataChunkCommits += msg->CommitChunks.size();
+                        }
+                        break;
+                }
+                return true;
+            };
+
+            TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(blockedTabletId,
+                    blockedGeneration, deadline()));
+            });
+            auto block = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false, deadline());
+            UNIT_ASSERT(block);
+            UNIT_ASSERT_VALUES_EQUAL(block->Get()->Status, NKikimrProto::OK);
+
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(collectedTabletId, 1,
+                    1, 0, true, 1, 2, nullptr, nullptr, deadline(), true));
+            });
+            auto gc = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false, deadline());
+            UNIT_ASSERT(gc);
+            UNIT_ASSERT_VALUES_EQUAL(gc->Get()->Status, NKikimrProto::OK);
+            admitting = false;
+            // One chunk for the Blocks segment, one for the Barriers segment.
+            UNIT_ASSERT_VALUES_EQUAL(admitted.size(), enableProjection ? 2 : 0);
+
+            // CompactVDisk() covers LogoBlobs only. Both metadata databases need a HugeKeeper destination
+            // to allocate their SST stripes, even when Fresh space projection is disabled.
+            for (EHullDbType db : {EHullDbType::Blocks, EHullDbType::Barriers}) {
+                env.Runtime->Send(new IEventHandle(vdiskActorId, edge,
+                    TEvCompactVDisk::Create(db, TEvCompactVDisk::EMode::FRESH_ONLY)), vdiskActorId.NodeId());
+                auto compact = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, false, deadline());
+                UNIT_ASSERT_C(compact, "metadata Fresh compaction timed out; db# "
+                    << (db == EHullDbType::Blocks ? "Blocks" : "Barriers")
+                    << " projection# " << enableProjection);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(metadataChunkCommits, 0);
+            for (const ui32 chunk : admitted) {
+                UNIT_ASSERT_C(forgotten.contains(chunk), "chunk# " << chunk << " reserved for Fresh was never returned");
+            }
+            env.Runtime->FilterFunction = {};
+            env.Runtime->DestroyActor(edge);
+
+            env.RestartNode(vdiskActorId.NodeId());
+            env.Sim(TDuration::Seconds(30));
+            edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGetBlock(blockedTabletId, deadline()));
+            });
+            auto getBlock = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetBlockResult>(edge, false, deadline());
+            UNIT_ASSERT(getBlock);
+            UNIT_ASSERT_VALUES_EQUAL(getBlock->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(getBlock->Get()->BlockedGeneration, blockedGeneration);
+
+            env.WithQueueId(info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
+                env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVGetBarrier(
+                    info->GetVDiskId(0), TKeyBarrier::First(), TKeyBarrier::Inf(), nullptr, true)), queueId.NodeId());
+                auto getBarrier = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetBarrierResult>(edge, true, deadline());
+                UNIT_ASSERT(getBarrier);
+                const auto& record = getBarrier->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(record.KeysSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.ValuesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetTabletId(), collectedTabletId);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetChannel(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectGen(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectStep(), 2);
+            });
+        }
+    }
+
+    Y_UNIT_TEST(MetadataCompactionFromStripeToChunks) {
+        for (EHullDbType db : {EHullDbType::Blocks, EHullDbType::Barriers}) {
+            ui32 stripeSstBytes = 1_MB;
+            TFeatureFlags ff;
+            ff.SetEnableVDiskHeapAllocator(true);
+            ff.SetEnableVDiskFreshSpaceProjection(true);
+            ff.SetEnableTightPDiskSpaceColors(true);
+            TEnvironmentSetup env({
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
+                .VDiskConfigPreprocessor = [&](TVDiskConfig& config) {
+                    config.HeapAllocatorMaxSstInBytes = stripeSstBytes;
+                },
+                .FeatureFlags = ff,
+            });
+            env.CreateBoxAndPool(1, 1);
+            env.Sim(TDuration::Seconds(30));
+            const auto groups = env.GetGroups();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            const auto info = env.GetGroupInfo(groups.front());
+            const TActorId vdiskActorId = info->GetActorId(0);
+            constexpr ui64 tabletId = 1000;
+            constexpr ui32 generation = 7;
+            auto deadline = [&] { return env.Now() + TDuration::Minutes(1); };
+
+            TActorId levelIndexActor;
+            TDiskPart inputStripe;
+            ui32 levelResults = 0;
+            ui32 preCompacts = 0;
+            ui32 stripeDeletions = 0;
+            auto observeChange = [&](const auto* msg, const TActorId& recipient) {
+                UNIT_ASSERT(!msg->Aborted);
+                levelIndexActor = recipient;
+                if (msg->FreshCompaction) {
+                    UNIT_ASSERT(inputStripe.Empty());
+                    UNIT_ASSERT_VALUES_EQUAL(msg->AllocatedStripeBlobs.Size(), 1);
+                    UNIT_ASSERT(msg->CommitChunks.empty());
+                    inputStripe = msg->AllocatedStripeBlobs.Vec.front();
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(stripeSstBytes, 0);
+                    UNIT_ASSERT(!msg->CommitChunks.empty());
+                    // None of the worker's lists would trigger PreCompact before the fix: only the input
+                    // SST stripe, which the level-index actor adds later, needs a huge-heap write ID.
+                    UNIT_ASSERT(msg->FreedHugeBlobs.Empty());
+                    UNIT_ASSERT(msg->AllocatedHugeBlobs.Empty());
+                    UNIT_ASSERT(msg->AllocatedStripeBlobs.Empty());
+                    ++levelResults;
+                }
+            };
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::EvHullChange:
+                        if (db == EHullDbType::Blocks) {
+                            if (const auto* msg = dynamic_cast<THullChange<TKeyBlock, TMemRecBlock>*>(ev->GetBase())) {
+                                observeChange(msg, ev->Recipient);
+                            }
+                        } else if (const auto* msg = dynamic_cast<THullChange<TKeyBarrier, TMemRecBarrier>*>(
+                                ev->GetBase())) {
+                            observeChange(msg, ev->Recipient);
+                        }
+                        break;
+                    case TEvBlobStorage::EvHugePreCompact:
+                        if (levelResults && ev->Sender == levelIndexActor) {
+                            ++preCompacts;
+                        }
+                        break;
+                    case TEvBlobStorage::EvHullFreeHugeSlots: {
+                        const auto* msg = ev->Get<TEvHullFreeHugeSlots>();
+                        for (const auto& part : msg->HugeBlobs) {
+                            if (!inputStripe.Empty() && part == inputStripe) {
+                                UNIT_ASSERT(msg->WId);
+                                ++stripeDeletions;
+                            }
+                        }
+                        break;
+                    }
+                }
+                return true;
+            };
+
+            TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                if (db == EHullDbType::Blocks) {
+                    SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, generation, deadline()));
+                } else {
+                    SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, generation,
+                        1, 0, true, generation, 2, nullptr, nullptr, deadline(), true));
+                }
+            });
+            if (db == EHullDbType::Blocks) {
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false, deadline());
+                UNIT_ASSERT(res);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            } else {
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false, deadline());
+                UNIT_ASSERT(res);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            }
+
+            auto compact = [&](TEvCompactVDisk::EMode mode) {
+                env.Runtime->Send(new IEventHandle(vdiskActorId, edge, TEvCompactVDisk::Create(db, mode)),
+                    vdiskActorId.NodeId());
+                UNIT_ASSERT_C(env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, false, deadline()),
+                    "metadata compaction timed out; db# " << static_cast<ui32>(db));
+            };
+            compact(TEvCompactVDisk::EMode::FRESH_ONLY);
+            UNIT_ASSERT(!inputStripe.Empty());
+
+            // Recover the striped input with stripe SST output disabled. This reproduces the same transition
+            // as planned compaction without depending on its feature flag or PDisk arbitration protocol.
+            stripeSstBytes = 0;
+            env.Runtime->DestroyActor(edge);
+            env.RestartNode(vdiskActorId.NodeId());
+            env.Sim(TDuration::Seconds(30));
+            edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            compact(TEvCompactVDisk::EMode::FULL);
+            const TInstant until = deadline();
+            while (!stripeDeletions) {
+                UNIT_ASSERT_C(env.Now() < until, "input SST stripe was not freed");
+                env.Sim(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(levelResults);
+            UNIT_ASSERT(preCompacts);
+            UNIT_ASSERT_VALUES_EQUAL(stripeDeletions, 1);
+            env.Runtime->FilterFunction = {};
+            env.Runtime->DestroyActor(edge);
+
+            env.RestartNode(vdiskActorId.NodeId());
+            env.Sim(TDuration::Seconds(30));
+            edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            if (db == EHullDbType::Blocks) {
+                env.Runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGetBlock(tabletId, deadline()));
+                });
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetBlockResult>(edge, true, deadline());
+                UNIT_ASSERT(res);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->BlockedGeneration, generation);
+            } else {
+                env.WithQueueId(info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
+                    env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVGetBarrier(
+                        info->GetVDiskId(0), TKeyBarrier::First(), TKeyBarrier::Inf(), nullptr, true)), queueId.NodeId());
+                    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetBarrierResult>(edge, true, deadline());
+                    UNIT_ASSERT(res);
+                    const auto& record = res->Get()->Record;
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                    UNIT_ASSERT_VALUES_EQUAL(record.KeysSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.ValuesSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetTabletId(), tabletId);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetChannel(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectGen(), generation);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectStep(), 2);
+                });
+            }
+        }
+    }
 
     Y_UNIT_TEST(RandomWorkloadHeapOff) {
         for (ui64 seed = 1; seed <= 3; ++seed) {

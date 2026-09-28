@@ -74,7 +74,6 @@ void CheckCommonTypeBothCastable(TCommonTypeFn commonTypeFn, const TString& pipe
 
     TExprContext ctx;
     TTypeAnnotationContext typesCtx;
-    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithCommonTypeFixup);
 
     for (int i = minDecimalTypePart; i <= maxDecimalTypePart; ++i) {
         for (int j = minDecimalTypePart; j <= maxDecimalTypePart; ++j) {
@@ -123,7 +122,6 @@ Y_UNIT_TEST(CommonTypeBothCastable) {
 Y_UNIT_TEST(CommonTypeExpectedResults) {
     TExprContext ctx;
     TTypeAnnotationContext typesCtx;
-    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithCommonTypeFixup);
 
     auto dec = [&](int precision, int scale) {
         return MakeDecimalNode(precision, scale, ctx, typesCtx);

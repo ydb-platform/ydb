@@ -609,10 +609,14 @@ public:
             case NKqpProto::TKqpSchemeOperation::kAnalyzeTable: {
                 const auto& analyzeOperation = schemeOp.GetAnalyzeTable();
 
+                // Older plans omit the rate, which defaults to zero in proto3.
+                const double sampleRate = analyzeOperation.GetSampleRate() == 0.0 ? 1.0 : analyzeOperation.GetSampleRate();
+
                 auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
 
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
-                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise);
+                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise,
+                    sampleRate);
 
                 auto actorSystem = TActivationContext::ActorSystem();
                 AnalyzeActorId = RegisterWithSameMailbox(analyzeActor);
@@ -914,7 +918,7 @@ public:
 
     void Navigate(const TActorId& schemeCache) {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-    
+
         TString path;
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {

@@ -29,8 +29,8 @@ TVector<TPBufferKey> DoMakePBufferKeys(std::span<const T> segments)
 TReadRangeHint::TReadRangeHint(
     THostMask hostMask,
     TPBufferKey pBufferKey,
-    TBlockRange64 requestRelativeRange,
-    TBlockRange64 vchunkRange,
+    TBlockRange16 requestRelativeRange,
+    TBlockRange16 vchunkRange,
     TRangeLock&& lock)
     : HostMask(hostMask)
     , PBufferKey(pBufferKey)
@@ -109,7 +109,7 @@ void TFlushHints::AddHint(
     THostIndex source,
     THostIndex destination,
     TPBufferKey pBufferKey,
-    TBlockRange64 range)
+    TBlockRange16 range)
 {
     Hints[THostRoute{
               .SourceHostIndex = source,

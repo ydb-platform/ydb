@@ -7,6 +7,7 @@
 #include <util/system/tempfile.h>
 
 #include "device_test_tool.h"
+#include "device_test_tool_cli.h"
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
@@ -373,6 +374,78 @@ Y_UNIT_TEST(DDiskTestWriteLargeIo) {
     )___";
 
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+}
+
+Y_UNIT_TEST(DDiskCliPhysicalChunkSize) {
+    for (bool physical : {false, true}) {
+        NKikimr::TPerfTestConfig config("SectorMap:cli:64", "name", "ROT", "json", "0", false);
+        if (physical) {
+            config.PhysicalChunkSize = NKikimr::NStressTool::DDiskChunkSize;
+        }
+        NDevicePerfTest::TPDiskTest proto;
+        NKikimr::TPDiskTest<> test(config, proto);
+        test.FormatPDiskForTest();
+        NKikimr::NPDisk::TMainKey mainKey{
+            .Keys = {NKikimr::NPDisk::YdbDefaultPDiskSequence}, .IsInitialized = true};
+        NKikimr::TPDiskInfo info;
+        UNIT_ASSERT_C(NKikimr::ReadPDiskFormatInfo(config.Path, mainKey, info, false, config.SectorMap),
+            info.ErrorReason);
+        const auto pdiskConfig = test.MakePDiskConfig(0);
+        if (physical) {
+            UNIT_ASSERT_VALUES_EQUAL(info.RawChunkSizeBytes, 128 << 20);
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->PhysicalChunkSize, 128 << 20);
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->ChunkSize, 0);
+        } else {
+            UNIT_ASSERT(info.RawChunkSizeBytes > (128 << 20));
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->PhysicalChunkSize, 0);
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->ChunkSize, 128 << 20);
+        }
+    }
+}
+
+void ProbeDDiskCli(bool readOnly, bool fallback) {
+    NKikimr::NStressTool::TCommandLine cli(true);
+    TVector<const char*> args = {"tool ddisk", "--areas", "1", "--duration", "1", "--io-size", "65536"};
+    if (readOnly) {
+        args.push_back("--read-only");
+    }
+    NLastGetopt::TOptsParseResultException parsed(&cli.Opts, args.size(), args.data());
+    const auto tests = NKikimr::NStressTool::LoadTests(parsed, true);
+    TTempFileHandle file;
+    file.Resize(FileSize);
+    NKikimr::TPerfTestConfig config(file.Name(), "cli", "ROT", "json", "0", true);
+    config.PhysicalChunkSize = NKikimr::NStressTool::DDiskChunkSize;
+    config.PersistentBufferChunks = 10;
+    config.ForcePDiskFallback = fallback;
+    NKikimr::TDDiskTest<> test(config, tests.GetDDiskTestList(0));
+    test.InitialSleep = TDuration::MilliSeconds(100);
+    auto printer = MakeIntrusive<TPrinterStub>(true);
+    test.SetPrinter(printer);
+    test.RunTest();
+    printer->EndTest();
+    bool measured = false;
+    for (const auto& [name, value] : printer->Results) {
+        if (name == "IOPS") {
+            measured = FromString<double>(value) > 0;
+        }
+    }
+    UNIT_ASSERT_C(measured, "generated workload must complete measured I/O");
+}
+
+Y_UNIT_TEST(DDiskCliWrite) {
+    ProbeDDiskCli(false, false);
+}
+
+Y_UNIT_TEST(DDiskCliRead) {
+    ProbeDDiskCli(true, false);
+}
+
+Y_UNIT_TEST(DDiskCliWritePDiskFallback) {
+    ProbeDDiskCli(false, true);
+}
+
+Y_UNIT_TEST(DDiskCliReadPDiskFallback) {
+    ProbeDDiskCli(true, true);
 }
 
 void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false) {

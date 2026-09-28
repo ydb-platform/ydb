@@ -306,3 +306,37 @@ Y_UNIT_TEST(MultipleBasicExecutorsCanSharePlacement) {
 }
 
 } // ActorSystemConfigHelpers
+
+Y_UNIT_TEST_SUITE(GrpcConfigurationInitializer) {
+    class TTestKikimrRunner : public NKikimr::TKikimrRunner {
+    public:
+        using TKikimrRunner::InitializeGRpc;
+
+        bool IsGrpcEnabled() const {
+            return EnabledGrpcService;
+        }
+    };
+
+    Y_UNIT_TEST(EnabledBeforeFactoryRuns) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableGRpcConfig()->SetStartGRpcProxy(true);
+        TTestKikimrRunner runner;
+        runner.InitializeGRpc(NKikimr::TKikimrRunConfig(appConfig));
+        UNIT_ASSERT(runner.IsGrpcEnabled());
+    }
+
+    Y_UNIT_TEST(DisabledWithoutGrpcConfig) {
+        NKikimrConfig::TAppConfig appConfig;
+        TTestKikimrRunner runner;
+        runner.InitializeGRpc(NKikimr::TKikimrRunConfig(appConfig));
+        UNIT_ASSERT(!runner.IsGrpcEnabled());
+    }
+
+    Y_UNIT_TEST(DisabledByGrpcConfig) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableGRpcConfig()->SetStartGRpcProxy(false);
+        TTestKikimrRunner runner;
+        runner.InitializeGRpc(NKikimr::TKikimrRunConfig(appConfig));
+        UNIT_ASSERT(!runner.IsGrpcEnabled());
+    }
+}

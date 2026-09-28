@@ -27,10 +27,9 @@ public:
             TTabletId tabletId = protoTabletInfo.GetTabletID();
             std::pair<ui64, ui64> owner(protoTabletInfo.GetTabletOwner().GetOwner(), protoTabletInfo.GetTabletOwner().GetOwnerIdx());
             TLeaderTabletInfo& tablet = Self->GetTablet(tabletId);
-            tablet.SetType(protoTabletInfo.GetTabletType());
-            tablet.NodeId = 0;
-            tablet.Node = nullptr;
+            // A repeated import must remove the previous resources before replacing tablet data.
             tablet.BecomeStopped();
+            tablet.SetType(protoTabletInfo.GetTabletType());
             tablet.KnownGeneration = protoTabletInfo.GetGeneration();
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
@@ -54,12 +53,19 @@ public:
             tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tablet.Id, tablet.Type));
             tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
             tablet.TabletStorageInfo->Version = protoTabletInfo.GetTabletStorageVersion();
+            tablet.ConfirmedStorageVersion = protoTabletInfo.HasConfirmedStorageVersion()
+                ? protoTabletInfo.GetConfirmedStorageVersion()
+                : Max<ui32>();
 
-            tablet.LockedToActor = ActorIdFromProto(protoTabletInfo.GetLockedToActor());
-            tablet.LockedReconnectTimeout = TDuration::MilliSeconds(protoTabletInfo.GetLockedReconnectTimeout());
-            if (Self->CurrentConfig.GetLockedTabletsSendMetrics() && tablet.LockedToActor) {
-                tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+            const ui64 pendingUnlockSeqNo = tablet.PendingUnlockSeqNo;
+            const TActorId previousOwner = tablet.SetLockedToActor(
+                ActorIdFromProto(protoTabletInfo.GetLockedToActor()),
+                TDuration::MilliSeconds(protoTabletInfo.GetLockedReconnectTimeout()));
+            if (previousOwner == tablet.LockedToActor) {
+                // Importing the same lock is not a reconnect from its owner.
+                tablet.PendingUnlockSeqNo = pendingUnlockSeqNo;
             }
+            tablet.RestoreLockedTabletMetrics();
 
             db.Table<Schema::Tablet>().Key(tabletId).Update(
                         NIceDb::TUpdate<Schema::Tablet::Owner>(owner),
@@ -71,6 +77,7 @@ public:
                         //NIceDb::TUpdate<Schema::Tablet::AllowedNodes>(),
                         //NIceDb::TUpdate<Schema::Tablet::AllowedDataCenters>(),
                         NIceDb::TUpdate<Schema::Tablet::TabletStorageVersion>(tablet.TabletStorageInfo->Version),
+                        NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(tablet.ConfirmedStorageVersion),
                         NIceDb::TUpdate<Schema::Tablet::ObjectID>(protoTabletInfo.GetObjectId()),
                         //NIceDb::TUpdate<Schema::Tablet::ActorsToNotify>(),
                         NIceDb::TUpdate<Schema::Tablet::AllowedDomains>(allowedDomains),
@@ -168,8 +175,20 @@ public:
         if (!TabletIds.empty()) {
             THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
             request->Record.SetNewOwnerID(Self->TabletID());
+            THashSet<TNodeId> lockOwnerNodes;
             for (TTabletId tabletId : TabletIds) {
                 request->Record.AddTabletIDs(tabletId);
+                const auto* tablet = Self->FindTabletEvenInDeleting(tabletId);
+                if (tablet && tablet->LockedToActor) {
+                    lockOwnerNodes.insert(tablet->LockedToActor.NodeId());
+                }
+            }
+            for (TNodeId nodeId : lockOwnerNodes) {
+                if (nodeId != Self->SelfId().NodeId()) {
+                    // Subscribe even when the owner has no Local and has never contacted this Hive.
+                    // A failed connection also reports NodeDisconnected and starts the reconnect timeout.
+                    ctx.Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode());
+                }
             }
             ctx.Send(Request->Sender, request.Release());
         } else {

@@ -47,8 +47,11 @@ struct TTestFixture {
 
 template <typename TArrayType, typename TValue>
 std::shared_ptr<arrow::Array> MakeArray(const std::vector<TValue>& values) {
-    typename arrow::TypeTraits<TArrayType>::BuilderType builder;
-    UNIT_ASSERT(builder.AppendValues(values).ok());
+    using TBuilder = typename arrow::TypeTraits<TArrayType>::BuilderType;
+    // i64 is `long` on darwin while arrow's int64_t is `long long` there, so std::vector<i64> is not a std::vector<value_type>
+    const std::vector<typename TBuilder::value_type> converted(values.begin(), values.end());
+    TBuilder builder;
+    UNIT_ASSERT(builder.AppendValues(converted).ok());
     std::shared_ptr<arrow::Array> array;
     UNIT_ASSERT(builder.Finish(&array).ok());
     return array;

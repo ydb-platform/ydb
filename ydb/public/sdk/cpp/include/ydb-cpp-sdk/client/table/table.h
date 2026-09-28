@@ -339,6 +339,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float16,
+        BFloat16,
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -369,6 +371,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float16,
+        BFloat16,
     };
 
     TVectorIndexSettings Settings;
@@ -800,12 +804,15 @@ class TTtlDeleteAction {};
 class TTtlEvictToExternalStorageAction {
 public:
     TTtlEvictToExternalStorageAction(const std::string& storageName);
+    TTtlEvictToExternalStorageAction(const std::string& storageName, const std::optional<std::string>& objectKeyPrefix);
     void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
 
     std::string GetStorage() const;
+    const std::optional<std::string>& GetObjectKeyPrefix() const;
 
 private:
     std::string Storage_;
+    std::optional<std::string> ObjectKeyPrefix_;
 };
 
 class TTtlTierSettings {

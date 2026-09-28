@@ -314,11 +314,12 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                     else:
                         prev_t, prev_m = metrics[r - 1]
                         record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
-                elif not k.endswith('satisfaction') or v >= 0.:
+                else:
                     record[k] = v
             for p in pools:
-                s = record.get(f'{p.name} satisfaction', -1.)
-                if s >= 0.:
+                # The pool is under load while it has any demand - the classical satisfaction, which was used
+                # for this before, is not exported anymore.
+                if record.get(f'{p.name} demand', 0.) > 0.:
                     if first_i is None:
                         first_i = r
                     last_i = r
@@ -328,8 +329,6 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             for k in keys:
                 v = record.get(k)
                 empty = empty and v is None
-                if k.find('satisfaction') and v is not None and v < 0:
-                    v = None
                 v = f'{v:.3f}' if v is not None else ''
                 line += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
             line += '</tr>\n'
@@ -344,8 +343,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for p in range(len(pools)):
             pool = pools[p]
             axs[p].set_title(pool.name)
-            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label='satisfaction')
             axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label='adj satisfaction')
+            axs[p].plot(times, [m.get(f'{pool.name} demand') for m in norm_metrics], label='demand')
             if last_i is not None:
                 axs[p].plot([datetime.fromtimestamp(metrics[first_i][0]), datetime.fromtimestamp(metrics[last_i][0])], [1, 1], label='period')
             axs[p].set_ylabel('satisfaction')
@@ -372,7 +371,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         metrics_request = {}
         for pool in cls.get_resource_pools():
             metrics_request.update({
-                f'{pool.name} satisfaction': {'schedulerPool': pool.name, 'sensor': 'Satisfaction'},
+                f'{pool.name} demand': {'schedulerPool': pool.name, 'sensor': 'Demand'},
                 f'{pool.name} adjusted satisfaction d': {'schedulerPool': pool.name, 'sensor': 'AdjustedSatisfaction'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
@@ -380,16 +379,16 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         count = {}
         for slot, values in metrics.items():
             for k, v in values.items():
-                if not k.endswith('satisfaction') or v >= 0.:
-                    sum.setdefault(k, 0.)
-                    count.setdefault(k, 0)
-                    sum[k] += v
-                    count[k] += 1
+                sum.setdefault(k, 0.)
+                count.setdefault(k, 0)
+                sum[k] += v
+                count[k] += 1
                 cls.metrics_keys.add(k)
         for k in sum.keys():
             if count[k] > 0:
                 sum[k] /= count[k]
-            if k.find('satisfaction') >= 0:
+            # Both the adjusted satisfaction and the demand are accounted as value * 1e6
+            if k.find('satisfaction') >= 0 or k.find('demand') >= 0:
                 sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))
         return ''

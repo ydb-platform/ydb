@@ -2265,7 +2265,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
     Specs_ = &specs;
     JobStats_ = specs.JobStats_;
 
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_)
     THashMap<TStructType*, std::pair<llvm::Function*, llvm::Function*>> llvmFunctions;
     if (Specs_->UseSkiff_ && Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
         for (size_t i: xrange(Specs_->Outputs.size())) {
@@ -2315,7 +2315,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
                 YQL_ENSURE(columns.empty());
                 Encoders_.emplace_back(new TSkiffEmptySchemaEncoder(out->Buf_, *Specs_));
             }
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_)
             else if (auto p = llvmFunctions.FindPtr(Specs_->Outputs[i].RowType)) {
                 Encoders_.emplace_back(new TSkiffLLVMEncoder(out->Buf_, *Specs_,
                     (TSkiffLLVMEncoder::TRowWriter)Codegen_->GetPointerToFunction(p->first),

@@ -28,9 +28,9 @@ it is a separate client and does not reproduce every partition policy.
 | [TFastPathService](fast_path_service.h) | `IStorage` entry point; regions, LSN generation, volume-wide cleanup and copy budget |
 | [TRegion](region.cpp), [region geometry](model/region_geometry.cpp) | Stripe-to-vChunk address translation and vChunk-to-DBG mapping |
 | [TVChunk](vchunk.cpp) | Per-vChunk requests, dirty map, flush/erase, host configuration and data copiers |
-| [TVChunkConfig](model/vchunk_config.cpp), [THostRoles](model/host_roles.cpp) | Primary/handoff roles, availability, promotion, evacuation and watermarks |
+| [TVChunkConfig](model/vchunk_config.cpp), [THostRoles](model/host_roles.cpp) | Primary/handoff roles, availability, promotion and evacuation |
 | [TBlocksDirtyMap](dirty_map/dirty_map.cpp), [TInflightInfo](dirty_map/inflight_info.cpp) | Versioned PB records, read hints, locks and cleanup readiness |
-| [TDDiskState](dirty_map/ddisk_state.cpp) | Readable watermark and ahead/behind ranges for recovering or lagging DDisks |
+| [TDDiskState](dirty_map/ddisk_state.cpp) | Behind ranges and the readable prefix of recovering or lagging DDisks |
 | [TWriteRequestExecutor](write_request.cpp) | Direct/indirect PB writes, quorum, timeout, hedging and late completions |
 | [Read executors](read_request_executor.cpp) | One or multiple location hints, retry and read hedging |
 | [Flush](flush_request.cpp), [erase](erase_request.cpp), [restore](restore_request.cpp) | Translate dirty-map work into DBG operations |

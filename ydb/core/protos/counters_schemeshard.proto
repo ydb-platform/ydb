@@ -308,6 +308,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 
     COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
+
+    COUNTER_WASM_COMPILE_CONTROLLER_COUNT = 240           [(CounterOpts) = {Name: "WasmCompileControllers"}];
 }
 
 enum ECumulativeCounters {

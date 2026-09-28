@@ -194,6 +194,42 @@ public:
 };
 
 //
+// TCompactionBidder
+//
+class TCompactionBidder : public TRequestBase {
+public:
+    const NPDisk::TEvCompactionBidder::EKind Kind;
+    const ui32 BidderId;
+    const ui64 RoundId;
+    const bool HasCandidate;
+    const ui32 NeedChunks;
+    const ui32 FreeChunks;
+
+    TCompactionBidder(const NPDisk::TEvCompactionBidder &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::CompactionBidder, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Kind(ev.Kind)
+        , BidderId(ev.BidderId)
+        , RoundId(ev.RoundId)
+        , HasCandidate(ev.HasCandidate)
+        , NeedChunks(ev.NeedChunks)
+        , FreeChunks(ev.FreeChunks)
+    {}
+
+    std::unique_ptr<NPDisk::TEvCompactionBidder> ToEvent() const {
+        auto ev = std::make_unique<NPDisk::TEvCompactionBidder>(Kind, Owner, OwnerRound, BidderId);
+        ev->RoundId = RoundId;
+        ev->HasCandidate = HasCandidate;
+        ev->NeedChunks = NeedChunks;
+        ev->FreeChunks = FreeChunks;
+        return ev;
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestCompactionBidder;
+    }
+};
+
+//
 // TCheckSpace
 //
 class TCheckSpace : public TRequestBase {
@@ -755,14 +791,29 @@ public:
 class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
+    bool ForHousekeeping;
+    bool IsDDisk;
+    NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
+        , ForHousekeeping(ev.ForHousekeeping)
+        , IsDDisk(ev.IsDDisk)
+        , RefuseAtColor(ev.RefuseAtColor)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkReserve;
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!IsDDisk) {
+            return;
+        }
+        TString errorReason = "PDisk stopped before processing chunk reserve";
+        actorSystem->Send(Sender, new NPDisk::TEvChunkReserveResult(
+            NKikimrProto::CORRUPTED, 0, errorReason), 0, Cookie);
     }
 };
 
@@ -772,14 +823,25 @@ public:
 class TChunkForget : public TRequestBase {
 public:
     TVector<TChunkIdx> ForgetChunks;
+    bool IsDDisk;
 
     TChunkForget(const NPDisk::TEvChunkForget &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkForget, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::LogWrite)
         , ForgetChunks(std::move(ev.ForgetChunks))
+        , IsDDisk(ev.IsDDisk)
     {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkForget;
+    }
+
+    void Abort(TActorSystem* actorSystem) override {
+        if (!IsDDisk) {
+            return;
+        }
+        TString errorReason = "PDisk stopped before processing chunk forget";
+        actorSystem->Send(Sender, new NPDisk::TEvChunkForgetResult(
+            NKikimrProto::CORRUPTED, 0, errorReason), 0, Cookie);
     }
 
     void EstimateCost(const TDriveModel &) override {

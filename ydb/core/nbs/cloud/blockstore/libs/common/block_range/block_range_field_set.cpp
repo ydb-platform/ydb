@@ -232,14 +232,9 @@ size_t TBlockRangeFieldSet::GetSegmentCount() const
     return Pool.GetAllocatedCount();
 }
 
-size_t TBlockRangeFieldSet::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeFieldSet::GetMemoryStats() const
 {
-    return Pool.GetAllocatedSize();
-}
-
-size_t TBlockRangeFieldSet::GetUsedSize() const
-{
-    return Pool.GetUsedSize();
+    return Pool.GetMemoryStats();
 }
 
 ui16 TBlockRangeFieldSet::AllocNode()

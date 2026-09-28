@@ -8,12 +8,35 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+void AggregateArenaPoolStats(
+    const TArenaAllocatorStats& stats,
+    TMap<size_t, TArenaAllocatorSlotStats>* result)
+{
+    for (const auto& slotStats: stats) {
+        auto& total = (*result)[slotStats.SlotSize];
+        total.SlotSize = slotStats.SlotSize;
+        total.ArenaSize += slotStats.ArenaSize;
+        total.ReservedSize += slotStats.ReservedSize;
+        total.UsedSize += slotStats.UsedSize;
+        total.MaxUsedSize += slotStats.MaxUsedSize;
+        total.Count += slotStats.Count;
+    }
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void RenderMemory(IOutputStream& str, const TMonPageData& data)
 {
-    size_t totalAllocatedMemorySize = 0;
-    size_t totalUsedMemorySize = 0;
+    TDirtyMapStats dirtyMapStats;
+    TMap<size_t, TArenaAllocatorSlotStats> arenaPoolStats;
+    for (const auto& dbg: data.Dbgs) {
+        dirtyMapStats.Aggregate(dbg.DirtyMapStats);
+        AggregateArenaPoolStats(dbg.DetailedMemoryStats, &arenaPoolStats);
+    }
 
     HTML (str) {
         if (data.FastPathServiceInfo) {
@@ -30,10 +53,16 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                             str << "Slot size";
                         }
                         TABLEH () {
+                            str << "Arena size";
+                        }
+                        TABLEH () {
                             str << "Reserved";
                         }
                         TABLEH () {
                             str << "Used";
+                        }
+                        TABLEH () {
+                            str << "Max used";
                         }
                         TABLEH () {
                             str << "Count";
@@ -52,10 +81,90 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                                 str << FormatByteSize(usage.SlotSize);
                             }
                             TABLED () {
+                                str << FormatByteSize(usage.ArenaSize);
+                            }
+                            TABLED () {
                                 str << FormatByteSize(usage.ReservedSize);
                             }
                             TABLED () {
                                 str << FormatByteSize(usage.UsedSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.MaxUsedSize);
+                            }
+                            TABLED () {
+                                str << usage.Count;
+                            }
+                        }
+                    }
+                    TABLER () {
+                        TABLED () {
+                            str << "Total";
+                        }
+                        TABLED () {
+                            str << "-";
+                        }
+                        TABLED () {
+                            str << FormatByteSize(totalReservedSize);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(totalUsedSize);
+                        }
+                        TABLED () {
+                            str << "-";
+                        }
+                        TABLED () {
+                            str << totalCount;
+                        }
+                    }
+                }
+            }
+
+            TAG (TH3) {
+                str << "Arena allocator pool summary (one pool per DBG)";
+            }
+            TABLE_CLASS ("table table-condensed") {
+                TABLEHEAD () {
+                    TABLER () {
+                        TABLEH () {
+                            str << "Slot size";
+                        }
+                        TABLEH () {
+                            str << "Reserved";
+                        }
+                        TABLEH () {
+                            str << "Used";
+                        }
+                        TABLEH () {
+                            str << "Max used";
+                        }
+                        TABLEH () {
+                            str << "Count";
+                        }
+                    }
+                }
+                TABLEBODY () {
+                    size_t totalReservedSize = 0;
+                    size_t totalUsedSize = 0;
+                    size_t totalMaxUsedSize = 0;
+                    size_t totalCount = 0;
+                    for (const auto& [_, usage]: arenaPoolStats) {
+                        totalReservedSize += usage.ReservedSize;
+                        totalUsedSize += usage.UsedSize;
+                        totalMaxUsedSize += usage.MaxUsedSize;
+                        totalCount += usage.Count;
+                        TABLER () {
+                            TABLED () {
+                                str << FormatByteSize(usage.SlotSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.ReservedSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.UsedSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.MaxUsedSize);
                             }
                             TABLED () {
                                 str << usage.Count;
@@ -71,6 +180,9 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         }
                         TABLED () {
                             str << FormatByteSize(totalUsedSize);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(totalMaxUsedSize);
                         }
                         TABLED () {
                             str << totalCount;
@@ -90,17 +202,29 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         str << "DBG";
                     }
                     TABLEH () {
+                        str << "Reserved";
+                    }
+                    TABLEH () {
                         str << "Used";
                     }
                     TABLEH () {
-                        str << "Allocated";
+                        str << "Count";
+                    }
+                    TABLEH () {
+                        str << "DDiskState<br>Reserved";
+                    }
+                    TABLEH () {
+                        str << "DDiskState<br>Used";
+                    }
+                    TABLEH () {
+                        str << "DDiskState<br>Count";
                     }
                 }
             }
             TABLEBODY () {
+                TArenaPoolStats totalMemoryStats;
                 for (const auto& dbg: data.Dbgs) {
-                    totalAllocatedMemorySize += dbg.AllocatedMemorySize;
-                    totalUsedMemorySize += dbg.UsedMemorySize;
+                    totalMemoryStats.Aggregate(dbg.MemoryStats);
                     TABLER () {
                         TABLED () {
                             str << "<a href='?TabletID="
@@ -109,10 +233,26 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                                 << dbg.Index << "</a>";
                         }
                         TABLED () {
-                            str << FormatByteSize(dbg.UsedMemorySize);
+                            str << FormatByteSize(dbg.MemoryStats.ReservedSize);
                         }
                         TABLED () {
-                            str << FormatByteSize(dbg.AllocatedMemorySize);
+                            str << FormatByteSize(dbg.MemoryStats.UsedSize);
+                        }
+                        TABLED () {
+                            str << dbg.MemoryStats.AllocationCount;
+                        }
+                        TABLED () {
+                            str << FormatByteSize(
+                                dbg.DirtyMapStats.DDisksMemoryStats
+                                    .ReservedSize);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(
+                                dbg.DirtyMapStats.DDisksMemoryStats.UsedSize);
+                        }
+                        TABLED () {
+                            str << dbg.DirtyMapStats.DDisksMemoryStats
+                                       .AllocationCount;
                         }
                     }
                 }
@@ -121,10 +261,24 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         str << "Total";
                     }
                     TABLED () {
-                        str << FormatByteSize(totalUsedMemorySize);
+                        str << FormatByteSize(totalMemoryStats.ReservedSize);
                     }
                     TABLED () {
-                        str << FormatByteSize(totalAllocatedMemorySize);
+                        str << FormatByteSize(totalMemoryStats.UsedSize);
+                    }
+                    TABLED () {
+                        str << totalMemoryStats.AllocationCount;
+                    }
+                    TABLED () {
+                        str << FormatByteSize(
+                            dirtyMapStats.DDisksMemoryStats.ReservedSize);
+                    }
+                    TABLED () {
+                        str << FormatByteSize(
+                            dirtyMapStats.DDisksMemoryStats.UsedSize);
+                    }
+                    TABLED () {
+                        str << dirtyMapStats.DDisksMemoryStats.AllocationCount;
                     }
                 }
             }

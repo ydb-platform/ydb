@@ -109,9 +109,11 @@ TMaybeNode<TKqpPhysicalTx> PropogateHashFuncToHashShuffles(
                         .UseSpilling().Build(false);
                 }
 
-                withHashFunc
-                    .HashFunc()
-                        .Build(ToString(hashTypeByStageID[stageID]));
+                if (!hashShuffle.HashFunc()) {
+                    withHashFunc
+                        .HashFunc()
+                            .Build(ToString(hashTypeByStageID[stageID]));
+                }
 
                 stagesInputMap.emplace(input.Raw(), withHashFunc.Done().Ptr());
             }

@@ -3726,6 +3726,43 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         )", params));
     }
 
+    Y_UNIT_TEST(PrefixedJsonStructParameter) {
+        auto kikimr = KikimrJsonPrefix(/* enableJsonIndexAutoSelect */ false, /* compact */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (UserId, Text)
+            );
+        )sql");
+        ExecuteJsonStatement(db, R"sql(
+            UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                (1, 100, JsonDocument('{"kind":"cats"}')),
+                (2, 100, JsonDocument('{"kind":"dogs"}')),
+                (3, 200, JsonDocument('{"kind":"cats"}'));
+        )sql");
+
+        const auto params = TParamsBuilder()
+            .AddParam("$filter")
+                .BeginStruct()
+                    .AddMember("A").Uint64(42)
+                    .AddMember("UserId").Uint64(200)
+                .EndStruct()
+                .Build()
+            .Build();
+        CompareYson("[[[3u]]]", SelectJsonRows(db, R"sql(
+            DECLARE $filter AS Struct<A: Uint64, UserId: Uint64>;
+
+            SELECT Key FROM `/Root/Docs` VIEW json_idx
+            WHERE UserId = $filter.UserId AND JSON_EXISTS(Text, '$.kind')
+            ORDER BY Key;
+        )sql", params));
+    }
+
     Y_UNIT_TEST_TWIN(PrefixedJsonMultiPrefixMatrix, Compact) {
         // Pair storage type with the opposite format here; the full type/format cross is covered above.
         const std::string jsonType = Compact ? "Json" : "JsonDocument";

@@ -44,6 +44,7 @@ namespace NKikimr {
         public:
             TIndexKey() = default;
             explicit TIndexKey(ui64 tabletId, ui8 channel);
+            ui64 GetTabletId() const { return TabletId; }
             size_t Hash() const;
             bool operator ==(const TIndexKey &v) const;
             void Output(IOutputStream &str) const;
@@ -78,6 +79,7 @@ namespace NKikimr {
             TString VDiskLogPrefix;
             TIndex Index;
             TDead Dead;
+            THashSet<ui64> DeadTablets;
 
         public:
             TTree(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix);
@@ -85,6 +87,11 @@ namespace NKikimr {
                     bool gcOnlySynced,
                     const TKeyBarrier &key,
                     const TMemRecBarrier &memRec);
+            void MarkTabletDeleted(ui64 tabletId);
+            // Bulk version for marking many tablets at once (VDisk start); it makes a single
+            // pass over the index instead of probing all 256 channels of every tablet.
+            void MarkTabletsDeleted(const THashSet<ui64> &tabletIds);
+            bool IsTabletDeleted(ui64 tabletId) const;
             void GetBarrier(
                     ui64 tabletId,
                     ui8 channel,
@@ -144,6 +151,9 @@ namespace NKikimr {
             {
                 return Tree->GetBarrier(tabletId, channel, soft, hard);
             }
+            bool IsTabletDeleted(ui64 tabletId) const {
+                return Tree->IsTabletDeleted(tabletId);
+            }
             void Output(IOutputStream &str) const { return Tree->Output(str); }
         };
 
@@ -159,6 +169,7 @@ namespace NKikimr {
 
                 std::shared_ptr<TTree> Tree;
                 TLog Log;
+                TDeque<ui64> DeletedTabletsLog;
 
                 TTreeWithLog(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix);
                 void RollUp(bool gcOnlySynced);
@@ -166,6 +177,8 @@ namespace NKikimr {
                         bool gcOnlySynced,
                         const TKeyBarrier &key,
                         const TMemRecBarrier &memRec);
+                void MarkTabletDeleted(bool gcOnlySynced, ui64 tabletId);
+                void MarkTabletsDeleted(bool gcOnlySynced, const THashSet<ui64> &tabletIds);
                 bool Shared() const;
                 bool NeedRollUp() const;
                 TMemViewSnap GetSnapshot() const;
@@ -178,6 +191,8 @@ namespace NKikimr {
         public:
             TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced);
             void Update(const TKeyBarrier &key, const TMemRecBarrier &memRec);
+            void MarkTabletDeleted(ui64 tabletId);
+            void MarkTabletsDeleted(const THashSet<ui64> &tabletIds);
             TMemViewSnap GetSnapshot();
         };
 

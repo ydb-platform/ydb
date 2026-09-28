@@ -627,6 +627,141 @@ Y_UNIT_TEST_SUITE(TDbsControllerTest)
                 response->Record.GetBlockingPartitionIds(0));
         }
     }
+
+    Y_UNIT_TEST(ShouldNotGivePermissionForOneNodeOnPartiallyOfflineDBG)
+    {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+
+        const ui64 tabletId = MakeTabletID(0, 0, 1);
+
+        {
+            CreateTestBootstrapper(
+                runtime,
+                CreateTestTabletInfo(tabletId, TTabletTypes::DbsController),
+                [](const TActorId& tablet, TTabletStorageInfo* info) -> IActor*
+                { return new TDbsControllerActor(tablet, info); });
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::EvBoot, 1);
+            runtime.DispatchEvents(options);
+        }
+
+        const TActorId& edge = runtime.AllocateEdgeActor();
+
+        {
+            auto request = std::make_unique<
+                TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest>();
+            request->Record.SetTabletId(1);
+            auto* ddisks = request->Record.MutablePartitionDDisks();
+            auto* dbgDDisks = ddisks->AddDirectBlockGroupsDDisks();
+            {
+                auto* ids = dbgDDisks->AddDDiskIds();
+                {
+                    auto* ddiskId = ids->MutableDDisk();
+                    ddiskId->SetNodeId(1);
+                    ddiskId->SetPDiskId(1);
+                    ddiskId->SetDDiskSlotId(1);
+                }
+                {
+                    auto* pBufferId = ids->MutablePersistentBuffer();
+                    pBufferId->SetNodeId(1);
+                    pBufferId->SetPDiskId(1);
+                    pBufferId->SetDDiskSlotId(2);
+                }
+            }
+            {
+                auto* ids = dbgDDisks->AddDDiskIds();
+                {
+                    auto* ddiskId = ids->MutableDDisk();
+                    ddiskId->SetNodeId(2);
+                    ddiskId->SetPDiskId(1);
+                    ddiskId->SetDDiskSlotId(1);
+                }
+                {
+                    auto* pBufferId = ids->MutablePersistentBuffer();
+                    pBufferId->SetNodeId(2);
+                    pBufferId->SetPDiskId(1);
+                    pBufferId->SetDDiskSlotId(2);
+                }
+            }
+            {
+                auto* ids = dbgDDisks->AddDDiskIds();
+                {
+                    auto* ddiskId = ids->MutableDDisk();
+                    ddiskId->SetNodeId(3);
+                    ddiskId->SetPDiskId(1);
+                    ddiskId->SetDDiskSlotId(1);
+                }
+                {
+                    auto* pBufferId = ids->MutablePersistentBuffer();
+                    pBufferId->SetNodeId(3);
+                    pBufferId->SetPDiskId(1);
+                    pBufferId->SetDDiskSlotId(2);
+                }
+            }
+            {
+                auto* ids = dbgDDisks->AddDDiskIds();
+                {
+                    auto* ddiskId = ids->MutableDDisk();
+                    ddiskId->SetNodeId(4);
+                    ddiskId->SetPDiskId(1);
+                    ddiskId->SetDDiskSlotId(1);
+                }
+                {
+                    auto* pBufferId = ids->MutablePersistentBuffer();
+                    pBufferId->SetNodeId(4);
+                    pBufferId->SetPDiskId(1);
+                    pBufferId->SetDDiskSlotId(2);
+                }
+            }
+            {
+                auto* ids = dbgDDisks->AddDDiskIds();
+                {
+                    auto* ddiskId = ids->MutableDDisk();
+                    ddiskId->SetNodeId(5);
+                    ddiskId->SetPDiskId(1);
+                    ddiskId->SetDDiskSlotId(1);
+                }
+                {
+                    auto* pBufferId = ids->MutablePersistentBuffer();
+                    pBufferId->SetNodeId(5);
+                    pBufferId->SetPDiskId(1);
+                    pBufferId->SetDDiskSlotId(2);
+                }
+                ids->SetHealth(NProto::EHostHealth::OFFLINE);
+            }
+
+            runtime.SendToPipe(tabletId, edge, request.release());
+
+            const auto response = runtime.GrabEdgeEvent<
+                TEvDbsControllerPrivate::TEvUpdateDDiskMapResponse>();
+
+            UNIT_ASSERT(!HasError(response->GetError()));
+        }
+
+        {
+            auto request = std::make_unique<
+                TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest>();
+            request->Record.AddNodeIds(1);
+
+            runtime.SendToPipe(tabletId, edge, request.release());
+
+            const auto response =
+                runtime
+                    .GrabEdgeEvent<TEvDbsControllerPrivate::
+                                       TEvNodeMaintenancePermissionResponse>();
+
+            UNIT_ASSERT(!HasError(response->GetError()));
+            UNIT_ASSERT(NProto::DENY == response->Record.GetDecision());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                response->Record.BlockingPartitionIdsSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                response->Record.GetBlockingPartitionIds(0));
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

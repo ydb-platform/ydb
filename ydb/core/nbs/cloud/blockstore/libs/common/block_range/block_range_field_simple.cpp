@@ -97,14 +97,9 @@ size_t TBlockRangeFieldSimple::GetSegmentCount() const
     return Range ? 1 : 0;
 }
 
-size_t TBlockRangeFieldSimple::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeFieldSimple::GetMemoryStats() const
 {
-    return 0;
-}
-
-size_t TBlockRangeFieldSimple::GetUsedSize() const
-{
-    return 0;
+    return {};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

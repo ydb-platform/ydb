@@ -17,6 +17,9 @@ public:
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
     static bool CanBuildWindow(const TOpWindow& window);
+    static bool UsesWholePartition(const TOpWindow& window);
+    static bool UsesRangeCarry(const TOpWindow& window);
+    static bool UsesRangePeerGroups(const TOpWindow& window);
 
 private:
     void Prepare(const TVector<TInfoUnit>& inputs);
@@ -29,6 +32,14 @@ private:
 
     TExprNode::TPtr BuildChain(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildChainLambda(bool update) const;
+    TExprNode::TPtr BuildAccumulator(const TOpWindowFunc& func, ui32 funcIndex, TExprNode::TPtr itemArg, TExprNode::TPtr previousState,
+                                     TExprNode::TPtr sortKeyChanged, TVector<std::pair<TString, TExprNode::TPtr>>& stateMembers) const;
+    TExprNode::TPtr BuildWholePartition(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildFoldLambda(bool update) const;
+    TExprNode::TPtr BuildRangeCarry(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildRangePeerGroups(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildPartitionHandler(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildExpandFromStructs(TExprNode::TPtr list) const;
     TExprNode::TPtr BuildExpandFromChain(TExprNode::TPtr chained) const;
 
     TString AccumulatorName(ui32 funcIndex) const;
@@ -50,4 +61,7 @@ private:
     const TStructExprType* InputStruct = nullptr;
     TVector<TInfoUnit> OutputLayout;
     bool NeedsPeerKey = false;
+    bool WholePartition = false;
+    bool RangeCarry = false;
+    bool RangePeerGroups = false;
 };

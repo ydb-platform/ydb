@@ -805,6 +805,10 @@ public:
         return TupleLayout_.get();
     }
 
+    void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
+        TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
+    }
+
 private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;

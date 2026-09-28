@@ -68,6 +68,15 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             }
         }
 
+        // An update may set only a part of the attributes (e.g. the guarantee without the limit),
+        // so the configuration should be validated against the result of the merge - not against
+        // the incoming attributes alone.
+        TStaticAttributes MergedWith(const TStaticAttributes& other) const {
+            TStaticAttributes merged = *this;
+            merged.Update(other);
+            return merged;
+        }
+
         TString ToString() const {
             return TStringBuilder()
                 << "Weight: " << GetWeight()
@@ -107,6 +116,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         size_t ChildrenSize() const {
             return Children.size();
+        }
+
+        // Sum of the guarantees reserved by children. Saturates instead of overflowing, since the
+        // guarantees are configured independently and are not bound by the parent's own limit.
+        ui64 GetChildrenCpuGuarantee() const {
+            ui64 reserved = 0;
+            for (const auto& child : Children) {
+                // TODO: replace with std::add_sat() in C++26
+                const auto guarantee = child->GetCpuGuarantee();
+                reserved = guarantee > Infinity() - reserved ? Infinity() : reserved + guarantee;
+            }
+            return reserved;
         }
 
         template <class T, class Fn>
@@ -187,7 +208,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
     struct TPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Limit;
         NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
+        NMonitoring::TDynamicCounters::TCounterPtr EffectiveGuarantee;
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
+        NMonitoring::TDynamicCounters::TCounterPtr ActualDemand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
         NMonitoring::TDynamicCounters::TCounterPtr Read;
@@ -196,7 +219,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
-        NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::THistogramPtr                 Delay;
     };

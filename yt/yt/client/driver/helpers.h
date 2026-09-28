@@ -25,7 +25,7 @@ bool operator==(const TEtag& lhs, const TEtag& rhs);
 TErrorOr<TEtag> ParseEtag(TStringBuf etagString);
 void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf spec);
 
-void WriteFileByBatches(const NApi::IFileWriterPtr& writer, const TSharedRef& data, i64 maxAttachmentSize);
+void WriteInBatches(const NApi::IFileWriterPtr& writer, const TSharedRef& data, i64 maxAttachmentSize);
 
 ////////////////////////////////////////////////////////////////////////////////
 

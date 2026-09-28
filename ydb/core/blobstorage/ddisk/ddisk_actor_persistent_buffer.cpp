@@ -29,6 +29,27 @@ namespace NKikimr::NDDisk {
             + (hasPayloadChecksums ? dataSectorsCnt * sizeof(ui64) : 0);
     }
 
+    ui64 TDDiskActor::TPersistentBufferRegistrationToken::Generate(TMonotonic now) {
+        // Shared across PB incarnations in this process. A process restart invalidates
+        // the connection credentials required to obtain and use registration tokens.
+        static std::atomic<ui64> lastToken{0};
+        ui64 previous = lastToken.load(std::memory_order_relaxed);
+        for (;;) {
+            const ui64 token = Max(now.MicroSeconds(), previous + 1);
+            if (lastToken.compare_exchange_weak(previous, token, std::memory_order_relaxed)) {
+                return token;
+            }
+        }
+    }
+
+    TDDiskActor::TPersistentBufferRegistrationToken::TPersistentBufferRegistrationToken(
+            TMonotonic now, const TQueryCredentials& creds)
+        : Token(Generate(now))
+        , IssuedAt(now)
+        , Key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)}
+        , Generation(creds.Generation)
+    {}
+
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
         if (!IssuePersistentBufferChunkAllocationInflight) {
@@ -167,6 +188,10 @@ namespace NKikimr::NDDisk {
     ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
         Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
 
+        if (begin.Valid() && begin.ContiguousSize() >= numBytes) {
+            return XXH3_64bits(begin.ContiguousData(), numBytes) ^ PersistentBufferUniqueId;
+        }
+
         // XXH3_64bits_reset() does not zero the whole state (buffer, customSecret, reserved64,
         // trailing alignment padding — see XXH3_reset_internal). Digest then reads those fields,
         // which MSAN reports as use-of-uninitialized-value. xxHash documents value-init / memset
@@ -178,8 +203,8 @@ namespace NKikimr::NDDisk {
             XXH3_64bits_update(&state, it.ContiguousData(), n);
             numBytes -= n;
         }
-        XXH3_64bits_update(&state, &PersistentBufferUniqueId, sizeof(PersistentBufferUniqueId));
-        return XXH3_64bits_digest(&state);
+        Y_ABORT_UNLESS(numBytes == 0);
+        return XXH3_64bits_digest(&state) ^ PersistentBufferUniqueId;
     }
 
     void TDDiskActor::StartRestorePersistentBuffer() {
@@ -255,6 +280,7 @@ namespace NKikimr::NDDisk {
         const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex, ui64 headerUniqueId)
     {
         TRope fullData(std::move(payloadWithHeader));
+        Y_ABORT_UNLESS(payloadChecksums.empty() || payloadChecksums.size() == sectors.size() - 1);
 
         // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
         // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
@@ -320,8 +346,11 @@ namespace NKikimr::NDDisk {
             auto& loc = locations[i - 1];
             loc = sectors[i]; // carries signature correction and first 8 bytes of data from Phase 1
             if (PersistentBufferFormat.EnableChecksums) {
-                auto it = fullData.Begin() + SectorSize * i;
-                loc.ChecksumOrData = CalculateChecksum(it);
+                // Sender checksums cover the original bytes. Signature correction changes
+                // the on-disk sector, so only unchanged sectors can reuse them.
+                loc.ChecksumOrData = hasPayloadChecksums && !loc.HasSignatureCorrection
+                    ? payloadChecksums[i - 1] ^ PersistentBufferUniqueId
+                    : CalculateChecksum(fullData.Begin() + SectorSize * i);
                 sectors[i].ChecksumOrData = loc.ChecksumOrData;
             }
         }
@@ -448,14 +477,29 @@ namespace NKikimr::NDDisk {
                 const TWriteInstruction instr(record.GetInstruction());
                 Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
                 TRope payload = ev.Get()->GetPayload(*instr.PayloadId);
+                const auto& incomingChecksums = record.GetChecksums();
+                const bool hasIncomingPayloadChecksums = incomingChecksums.size() > 0;
                 for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
                     auto it = payload.Position(SectorSize * i);
+                    bool signatureCorrected = false;
                     if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                        signatureCorrected = true;
                         *it.ContiguousDataMut() = 0;
                     }
-                    if (!data.ChecksumsDisabled && data.Sectors[i + 1].ChecksumOrData != CalculateChecksum(it)) {
-                        dataEqual = false;
-                        break;
+                    if (!data.ChecksumsDisabled) {
+                        // Mirror the write path: an unmodified sector may have reused the
+                        // sender-supplied checksum verbatim (never locally verified against the
+                        // bytes), so compare against that same value here instead of a freshly
+                        // computed hash. Only signature-corrected sectors, whose on-disk bytes
+                        // differ from what the sender originally hashed, are compared against a
+                        // checksum computed from the (corrected) bytes.
+                        const ui64 expected = hasIncomingPayloadChecksums && !signatureCorrected
+                            ? incomingChecksums[i] ^ PersistentBufferUniqueId
+                            : CalculateChecksum(it);
+                        if (data.Sectors[i + 1].ChecksumOrData != expected) {
+                            dataEqual = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -1330,7 +1374,9 @@ namespace NKikimr::NDDisk {
                     sectorsIt->HasSignatureCorrection = true;
                     *it.ContiguousDataMut() = 0;
                 }
-                r.Sectors[i + 1].ChecksumOrData = CalculateChecksum(it);
+                r.Sectors[i + 1].ChecksumOrData = !r.PayloadChecksums.empty() && !r.Sectors[i + 1].HasSignatureCorrection
+                    ? r.PayloadChecksums[i] ^ PersistentBufferUniqueId
+                    : CalculateChecksum(it);
                 sectorsIt->ChecksumOrData = r.Sectors[i + 1].ChecksumOrData;
             } else {
                 ui64 originalPrefix;
@@ -1884,6 +1930,54 @@ namespace NKikimr::NDDisk {
         return TStatus::OK;
     }
 
+    void TDDiskActor::Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        auto& counters = Counters.Interface.GetPersistentBufferRegistrationToken;
+        if (!CheckQuery(*ev, &counters)) {
+            return;
+        }
+        counters.Request();
+        auto reply = [&](TStatus::E status, const TString& reason = {}, ui64 token = 0) {
+            counters.Reply(status == TStatus::OK);
+            auto result = std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(status, reason);
+            result->Record.SetToken(token);
+            SendReply(*ev, std::move(result));
+        };
+        const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            reply(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration");
+            return;
+        }
+        if (PersistentBufferRegistrationTokens.size() >= PersistentBufferFormat.MaxRegistrationTokens) {
+            reply(TStatus::OVERLOADED, "registration token limit reached");
+            return;
+        }
+        const auto& token = PersistentBufferRegistrationTokens.emplace_back(TActivationContext::Monotonic(), creds);
+        // Consumed tokens free their slots immediately, without accumulating expiry timers.
+        if (!PersistentBufferRegistrationTokenExpiryScheduled) {
+            PersistentBufferRegistrationTokenExpiryScheduled = true;
+            Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
+                new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+        }
+        reply(TStatus::OK, {}, token.Token);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr) {
+        const auto now = TActivationContext::Monotonic();
+        const auto timeout = TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds);
+        const auto firstLive = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
+            PersistentBufferRegistrationTokens.end(), now,
+            [timeout](const TPersistentBufferRegistrationToken& token, TMonotonic deadline) {
+                return token.IssuedAt + timeout <= deadline;
+            });
+        PersistentBufferRegistrationTokens.erase(PersistentBufferRegistrationTokens.begin(), firstLive);
+        PersistentBufferRegistrationTokenExpiryScheduled = !PersistentBufferRegistrationTokens.empty();
+        if (PersistentBufferRegistrationTokenExpiryScheduled) {
+            const auto nextExpiry = PersistentBufferRegistrationTokens.front().IssuedAt + timeout;
+            Schedule(nextExpiry - now, new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+        }
+    }
+
     void TDDiskActor::Handle(TEvRegisterPersistentBuffer::TPtr ev) {
         using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
         if (!CheckQuery(*ev, nullptr)) {
@@ -1891,19 +1985,28 @@ namespace NKikimr::NDDisk {
         }
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
-        const auto now = TActivationContext::Now();
-        const auto timestamp = TInstant::MicroSeconds(record.GetTimestampMicroseconds());
-        // NOTE: timestamp is the sender's wall-clock time, so this anti-replay check is sensitive
-        // to cross-node clock skew: if the client node's clock is ahead of (or behind) this node's
-        // by more than RegistrationTimeoutMilliseconds, every registration attempt fails with
-        // OUTDATED. The anti-replay property only requires "recent, not reused" - callers relying
-        // on this must keep client/DDisk clocks synchronized within the configured timeout window.
-        if (timestamp > now || now - timestamp > TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
-            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::OUTDATED, "registration timestamp expired or is in the future"));
-            return;
-        }
         if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
             SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
+            return;
+        }
+        const auto tokenIt = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
+            PersistentBufferRegistrationTokens.end(), record.GetToken(),
+            [](const TPersistentBufferRegistrationToken& token, ui64 value) { return token.Token < value; });
+        const bool found = tokenIt != PersistentBufferRegistrationTokens.end() && tokenIt->Token == record.GetToken();
+        if (!found || TActivationContext::Monotonic() - tokenIt->IssuedAt
+                >= TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
+            if (found) {
+                PersistentBufferRegistrationTokens.erase(tokenIt);
+            }
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
+                TStatus::OUTDATED, "registration token is unknown, expired or already used"));
+            return;
+        }
+        const auto& token = *tokenIt;
+        if (token.Key.TabletId != creds.TabletId || token.Key.DirectBlockGroupIndex != creds.DirectBlockGroupIndex
+                || token.Generation != creds.Generation) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
+                TStatus::INCORRECT_REQUEST, "registration token belongs to another tablet, generation or DBG"));
             return;
         }
         if (!PersistentBufferReady) {
@@ -1915,6 +2018,8 @@ namespace NKikimr::NDDisk {
             }
             return;
         }
+        // Do not consume while queued: readiness replays this request and checks expiry again.
+        PersistentBufferRegistrationTokens.erase(tokenIt);
         const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
         if (PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
                 || PersistentBufferRemovals.contains(key)) {

@@ -3,6 +3,7 @@ LIBRARY(ydb_device_test)
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/getopt
     library/cpp/monlib/dynamic_counters/percentile
     ydb/core/blobstorage/lwtrace_probes
     ydb/core/load_test/blobstorage
@@ -13,6 +14,7 @@ PEERDIR(
 
 SRCS(
     ../device_test_tool.h
+    ../device_test_tool_cli.cpp
     ../device_test_tool_aio_test.h
     ../device_test_tool_driveestimator.h
     ../device_test_tool_trim_test.cpp

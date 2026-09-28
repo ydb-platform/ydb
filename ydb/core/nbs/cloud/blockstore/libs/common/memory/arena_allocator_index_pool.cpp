@@ -123,6 +123,7 @@ ui64 TArenaAllocatorIndexPool::Allocate()
 
     if (ui64 result = CurrentSlot->Allocate(); result != InvalidIndex) {
         ++UsedChunks;
+        ++AllocationCount;
         return result;
     }
 
@@ -134,6 +135,7 @@ ui64 TArenaAllocatorIndexPool::Allocate()
     const ui64 result = CurrentSlot->Allocate();
     Y_ABORT_UNLESS(result != InvalidIndex);
     ++UsedChunks;
+    ++AllocationCount;
     return result;
 }
 
@@ -171,15 +173,19 @@ size_t TArenaAllocatorIndexPool::GetAllocatedCount() const
     return result;
 }
 
-size_t TArenaAllocatorIndexPool::GetAllocatedSize() const
+TArenaPoolStats TArenaAllocatorIndexPool::GetMemoryStats() const
 {
-    size_t result = 0;
+    size_t reservedSize = 0;
     for (const auto& slot: Slots) {
         if (slot) {
-            result += SlotSize;
+            reservedSize += SlotSize;
         }
     }
-    return result;
+    return {
+        .ReservedSize = reservedSize,
+        .UsedSize = GetUsedSize(),
+        .AllocationCount = GetAllocatedCount(),
+    };
 }
 
 size_t TArenaAllocatorIndexPool::GetUsedSize() const

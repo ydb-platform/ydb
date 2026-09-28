@@ -16,6 +16,10 @@ SRCS(
     iam_token_service.h
     mock_access_service.cpp
     mock_access_service.h
+    operation_service.cpp
+    operation_service.h
+    service_control_service.cpp
+    service_control_service.h
     service_account_service.cpp
     service_account_service.h
     user_account_service.cpp

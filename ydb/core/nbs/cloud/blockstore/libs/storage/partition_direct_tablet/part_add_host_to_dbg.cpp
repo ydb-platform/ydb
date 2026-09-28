@@ -3,6 +3,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
@@ -227,7 +228,6 @@ void TPartitionActor::HandleAddHostAllocationResult(
     // the new host takes the position after the last entry.
     const auto newHostIndex =
         static_cast<THostIndex>(dbgConnections.ConnectionsSize());
-    NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
     TDirectBlockGroupsConnections updated;
     if (auto error = AddConnection(
@@ -393,15 +393,25 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     const TActorContext& ctx,
     size_t dbgId)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip AddHost BSC send during delete dbgId=%lu",
+            LogTitle.GetWithTime().c_str(),
+            dbgId);
+        return;
+    }
+
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionCount =
-        CalcRegionCount(blockCount, VolumeConfig.GetBlockSize());
-
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    AddHostInFlight->BSPipeClient = pipe;
+    const ui64 regionCount = GetRegionCount(
+        VolumeConfig.GetPartitions(0).GetBlockCount(),
+        VolumeConfig.GetBlockSize(),
+        StorageConfig->GetVChunkSize());
+    const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
+        regionCount,
+        DefaultVolumeDirectBlockGroupCount);
 
     // NumDDisks is the desired final state in live hosts (dead slots have no
     // resources in BSC), so a re-sent request is idempotent.
@@ -416,10 +426,10 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     op->SetDirectBlockGroupId(dbgId);
     auto* define = op->MutableDefineDirectBlockGroup();
     define->SetNumDDisks(numDDisks);
-    define->SetNumChunksPerDDisk(regionCount);
+    define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

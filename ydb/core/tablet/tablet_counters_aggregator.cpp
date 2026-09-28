@@ -1,6 +1,7 @@
 #include "tablet_counters_aggregator.h"
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
+#include "detailed_metrics/memory_tags.h"
 #include "detailed_metrics/node_database_metrics_aggregator.h"
 #include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
@@ -48,6 +49,7 @@
 namespace NKikimr {
 
 const ui32 WAKEUP_TIMEOUT_SECONDS = 4;
+constexpr TDuration DETAILED_REREGISTER_TIMEOUT = TDuration::Seconds(60);
 
 constexpr TDuration DATABASE_PATH_RESOLVE_TIMEOUT = TDuration::Seconds(10);
 
@@ -138,6 +140,7 @@ bool IsOlderThan(const TDetailedMetricsTableInfo& lhs, const TDetailedMetricsTab
 ::NMonitoring::TDynamicCounterPtr GetDetailedMetricsRawGroup(
     ::NMonitoring::TDynamicCounterPtr countersRoot, const TActorContext& ctx)
 {
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
     static TMutex lock;
     TGuard<TMutex> guard(lock);
 
@@ -181,6 +184,8 @@ public:
         if (!DetailedMetricsEnabled) {
             return;
         }
+
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
         // Register a watch the first time this database is seen, so the detailed
         // metrics of its tables are reclaimed on database removal even when the
@@ -267,6 +272,8 @@ public:
             return;
         }
 
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+
         if (!tenantPathId || !executorCounters || !appCounters) {
             // Logged on every round of the counters of every tablet, hence TRACE
             YDB_LOG_TRACE_CTX(ctx, "Skipping the detailed metrics of the tablet",
@@ -348,6 +355,7 @@ public:
     }
 
     void ResolveDatabasePath(NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext& ctx) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         for (const auto& entry : navigate->ResultSet) {
             const auto pathId = entry.TableId.PathId;
 
@@ -369,7 +377,21 @@ public:
             }
 
             db.DatabasePath = CanonizePath(entry.Path);
-            CreateDetailedMetricsAggregator(db, ctx);
+            // A late duplicate reply must not replace a live aggregator
+            if (!db.Aggregator) {
+                CreateDetailedMetricsAggregator(db, ctx);
+            }
+        }
+    }
+
+    // Re-announce every live aggregator to the SysView Service. Idempotent: the service
+    // overwrites by (database, service) key. Driven from the wakeup heartbeat, so a
+    // restarted service picks the registrations back up without asking for them.
+    void ReRegisterDetailedMetricsAggregators(const TActorContext& ctx) {
+        for (const auto& [pathId, db] : DetailedMetricsByPathId) {
+            if (db.Aggregator) {
+                SendDetailedMetricsRegistration(db.DatabasePath, db.Aggregator, ctx);
+            }
         }
     }
 
@@ -1236,6 +1258,16 @@ private:
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
+    void SendDetailedMetricsRegistration(const TString& databasePath,
+        TIntrusivePtr<NSysView::IDbDetailedCounters> aggregator, const TActorContext& ctx) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+        ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()),
+            new NSysView::TEvSysView::TEvRegisterDbDetailedCounters(
+                databasePath,
+                IsFollower ? NKikimrSysView::TABLETS_FOLLOWERS : NKikimrSysView::TABLETS,
+                aggregator));
+    }
+
     void CreateDetailedMetricsAggregator(TDetailedMetricsForDb& db, const TActorContext& ctx) {
         db.Aggregator = CreateNodeDatabaseMetricsAggregator(
             DetailedMetricsGroup,
@@ -1245,12 +1277,22 @@ private:
 
         YDB_LOG_INFO_CTX(ctx, "Created the detailed metrics aggregator of the database",
             {"databasePath", db.DatabasePath});
+
+        SendDetailedMetricsRegistration(db.DatabasePath, db.Aggregator, ctx);
     }
 
     void ResetDetailedMetricsAggregator(TPathId pathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
         if (!db.Aggregator) {
             return;
         }
+
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+
+        // Unregister from the SysView Service before dropping the aggregator
+        ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()),
+            new NSysView::TEvSysView::TEvUnregisterDbDetailedCounters(
+                db.DatabasePath,
+                IsFollower ? NKikimrSysView::TABLETS_FOLLOWERS : NKikimrSysView::TABLETS));
 
         for (const auto& [tabletId, byFollower] : db.TabletContributions) {
             for (const auto& [followerId, _] : byFollower) {
@@ -1309,6 +1351,8 @@ private:
         if (itFollower == itTablet->second.end()) {
             return;
         }
+
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
         // Captured before erasing: DropUnreportedPath needs it once the contribution
         // itself is gone
@@ -1416,6 +1460,7 @@ private:
     THashMap<TActorId, std::pair<TActorId, TAutoPtr<NMon::TEvHttpInfo>>> HttpRequestHandlers;
     THashSet<ui32> TabletTypeOfReceivedLabeledCounters;
     bool Follower;
+    TInstant LastDetailedReRegister;
 };
 
 ////////////////////////////////////////////
@@ -1770,6 +1815,17 @@ void
 TTabletCountersAggregatorActor::HandleWakeup(const TActorContext &ctx) {
 
     TabletMon->RecalcAll();
+
+    // The SysView Service holds its detailed counters registrations in memory only, so a
+    // restart of that actor would otherwise silently stop detailed counters for every
+    // database on this node. Re-announcing is idempotent - the service overwrites by
+    // (database, service) key - so a coarse heartbeat is enough to heal it.
+    const TInstant now = ctx.Now();
+    if (now - LastDetailedReRegister >= DETAILED_REREGISTER_TIMEOUT) {
+        LastDetailedReRegister = now;
+        TabletMon->ReRegisterDetailedMetricsAggregators(ctx);
+    }
+
     ctx.Schedule(TDuration::Seconds(WAKEUP_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
 }
 

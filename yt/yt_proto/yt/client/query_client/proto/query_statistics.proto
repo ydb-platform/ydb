@@ -1,5 +1,7 @@
 package NYT.NQueryClient.NProto;
 
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TQueryStatistics
@@ -28,6 +30,18 @@ message TQueryStatistics
         optional int64 max = 2;
         optional string argmax_node = 3;
     };
+
+    // Matches NYT::NQueryClient::EReportedScanOrder.
+    enum EReportedScanOrder
+    {
+        SO_UNKNOWN = 0 [(NYT.NYson.NProto.enum_value_name) = "unknown"];
+        SO_UNORDERED = 1 [(NYT.NYson.NProto.enum_value_name) = "unordered"];
+        SO_ORDERED = 2 [(NYT.NYson.NProto.enum_value_name) = "ordered"];
+        SO_REVERSED = 3 [(NYT.NYson.NProto.enum_value_name) = "reversed"];
+        SO_MIXED = 4 [(NYT.NYson.NProto.enum_value_name) = "mixed"];
+    };
+
+    optional EReportedScanOrder scan_order = 33;
 
     optional TAggregate rows_read_aggr = 21;
     optional TAggregate data_weight_read_aggr = 22;

@@ -43,7 +43,12 @@ struct TTrackingAllocator final: public IArenaAllocator
         return AllocatedCount;
     }
 
-    TVector<TArenaAllocatorStats> GetStats() const override
+    size_t UsedSize() const override
+    {
+        return AllocatedCount;
+    }
+
+    TArenaAllocatorStats GetDetailedStat() const override
     {
         return {};
     }
@@ -67,27 +72,69 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         constexpr size_t ChunkSize = 128;
 
         TArenaAllocatorPool pool(CreateArenaAllocator(), SlotSize);
-        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, pool.GetUsedSize());
 
         void* first = pool.Allocate(ChunkSize);
         void* second = pool.Allocate(ChunkSize);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(2 * ChunkSize, pool.GetUsedSize());
 
         pool.Deallocate(first);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(ChunkSize, pool.GetUsedSize());
 
         void* reused = pool.Allocate(ChunkSize);
         UNIT_ASSERT_EQUAL(first, reused);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(2 * ChunkSize, pool.GetUsedSize());
 
         pool.Deallocate(second);
         pool.Deallocate(reused);
-        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, pool.GetUsedSize());
+    }
+
+    Y_UNIT_TEST(ReportsStatsByChunkSize)
+    {
+        constexpr size_t SlotSize = 1024;
+
+        TArenaAllocatorPool pool(CreateArenaAllocator(), SlotSize);
+        void* first = pool.Allocate(120);
+        void* second = pool.Allocate(120);
+        void* third = pool.Allocate(300);
+
+        auto stats = pool.GetDetailedStat();
+        UNIT_ASSERT_VALUES_EQUAL(2, stats.size());
+        UNIT_ASSERT_VALUES_EQUAL(120, stats[0].SlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, stats[0].ArenaSize);
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, stats[0].ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(240, stats[0].UsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(240, stats[0].MaxUsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(2, stats[0].Count);
+        UNIT_ASSERT_VALUES_EQUAL(304, stats[1].SlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, stats[1].ArenaSize);
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, stats[1].ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(304, stats[1].UsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(304, stats[1].MaxUsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(1, stats[1].Count);
+
+        pool.Deallocate(first);
+        first = pool.Allocate(120);
+        pool.Deallocate(first);
+        pool.Deallocate(second);
+        pool.Deallocate(third);
+
+        stats = pool.GetDetailedStat();
+        UNIT_ASSERT_VALUES_EQUAL(2, stats.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, stats[0].ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(0, stats[0].UsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(240, stats[0].MaxUsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(3, stats[0].Count);
+        UNIT_ASSERT_VALUES_EQUAL(0, stats[1].ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(0, stats[1].UsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(304, stats[1].MaxUsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(1, stats[1].Count);
     }
 
     Y_UNIT_TEST(AllocateAndFreeChunks)

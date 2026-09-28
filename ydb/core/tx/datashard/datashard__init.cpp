@@ -328,6 +328,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::LockConflicts);
         PRECHARGE_SYS_TABLE(Schema::LockVolatileDependencies);
         PRECHARGE_SYS_TABLE(Schema::LockWriteSeqNums);
+        PRECHARGE_SYS_TABLE(Schema::AncestorShardsLocks);
+        PRECHARGE_SYS_TABLE(Schema::AncestorLockWriteSeqNums);
         PRECHARGE_SYS_TABLE(Schema::LockChangeRecords);
         PRECHARGE_SYS_TABLE(Schema::ChangeRecordCommits);
         PRECHARGE_SYS_TABLE(Schema::TxVolatileDetails);

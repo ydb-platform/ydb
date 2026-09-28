@@ -6,7 +6,7 @@ DDisk shares PDisk and slot-management infrastructure with VDisk, but implements
 
 ## Ownership and Startup
 
-[NodeWarden](node-warden.md) creates a DDisk actor for a slot configured as DDisk. The actor initializes its PDisk owner, restores chunk-map snapshots and log increments, restores integrity mappings, and creates its [PersistentBuffer](persistent-buffer.md) child. The child has its own service ID and event handlers but shares the parent's PDisk ownership and PB resource lifecycle.
+[NodeWarden](node-warden.md) creates a DDisk actor for a slot configured as DDisk. The actor initializes its PDisk owner, restores chunk-map snapshots and log increments, restores integrity mappings, reconciles orphan reservations, and creates its [PersistentBuffer](persistent-buffer.md) child. The child has its own service ID and event handlers but shares the parent's PDisk ownership and PB resource lifecycle.
 
 Unless `ForcePDiskFallback` is set, DDisk asks for a submit-only io_uring client in `TEvYardInit` and passes its configured `IdleSpinUs`. On the first such request, PDisk duplicates its device handle and creates and starts one `TUringRouter` shared by the DDisk slots and their PB children. The first requester therefore selects `IdleSpinUs` for the shared router for that PDisk incarnation; later requesters use the existing setting. DDisk and PB hold shared `IUringRouterClient` references and cannot control the router lifecycle.
 
@@ -52,7 +52,13 @@ The operation reports `TEvSyncResult` after processing its destination work. It 
 
 ## Failure and Recovery
 
-Chunk-map snapshots and PDisk log increments restore ownership and integrity-extent mappings. PB then performs its own chunk scan and record recovery. Connection state must be re-established by clients after service replacement.
+Chunk-map snapshots and PDisk log increments restore ownership and integrity-extent mappings. After successful, complete log replay, DDisk computes orphan candidates as `OwnedChunksOnBoot` minus the union of restored data chunks, listed integrity chunks, every integrity chunk referenced by a restored extent, and PB chunks. Extent references protect chunks even when they are absent from the integrity-chunk list. DDisk computes this union before boot-time reclamation changes the mappings, so references recovered from both snapshots and later log increments are protected. This conservative protection does not make an otherwise invalid recovery mapping valid; existing recovery validation still applies. Failed or incomplete recovery does not attempt reconciliation.
+
+DDisk submits one orphan at a time through `TEvChunkForget`, tracks delivery, and waits for its reply before continuing. PB creation, new allocations, and client readiness remain blocked until reconciliation completes. DDisk explicitly sets `IsDDisk = true` on its reserve and forget requests; the field defaults to `false` for other callers. For flagged forget requests, PDisk preserves the request cookie in all replies and validates the owner and owner round when executing the request, so a delayed request from an older incarnation cannot release reused chunks. Existing VDisk behavior, including error responses, cookie handling, and logging severity, is unchanged.
+
+Successful cleanup and chunk-validation rejections both allow reconciliation to continue. DDisk preserves rejected chunks and logs their IDs and rejection reasons at WARN. For flagged requests, PDisk also logs BPD91 at WARN for expected transitional states: `DATA_ON_QUARANTINE`, `DATA_RESERVED_DELETE_IN_PROGRESS`, `DATA_COMMITTED_DELETE_IN_PROGRESS`, `DATA_RESERVED_DELETE_ON_QUARANTINE`, and `DATA_COMMITTED_DELETE_ON_QUARANTINE`. PDisk's existing I/O and log completion reclaim these chunks; reconciliation adds no retry or forced deletion. Rejection of a committed orphan (`DATA_COMMITTED`) remains an ERROR in PDisk, and other unexpected validation failures retain their existing severity. A PDisk session or device error, or request nondelivery, enters Stopping. Poison cancels remaining reconciliation, and a late reply cannot resume bootstrap. PDisk returns terminal `CORRUPTED` replies when shutdown aborts flagged queued reserve or forget requests, including requests in the dedicated forget queue. Unflagged queued requests are silently discarded as before.
+
+PB then performs its own chunk scan and record recovery. Connection state must be re-established by clients after service replacement.
 
 ## Shutdown and Restart {#shutdown-and-restart}
 
@@ -70,13 +76,52 @@ balances counters and publishes results before the final mailbox barrier.
 Existing completions may finish writes only when their integrity and allocation
 log durability conditions are satisfied; shutdown starts no further I/O.
 
+After its own I/O drain and terminal-result processing, DDisk requests release
+of its known reservations through `TEvChunkForget`, provided PDisk initialization
+and log replay have completed. Candidates include unused reserved chunks,
+abandoned formatting and data allocations, and integrity chunks, but only when
+their commit log has never been submitted. A submitted commit excludes a chunk
+even if its acknowledgement is still pending; PB allocations are also excluded.
+The request carries the current PDisk owner and owner round. Accepted router
+I/O must have retired before release; PDisk quarantines chunks with remaining
+fallback device I/O until that I/O finishes.
+
+Broken retains abandoned formatting and unlogged data allocations separately
+from unused reservations, so PB cannot reuse a chunk while an old DDisk write
+may still target it. Fresh reservations that have not been used for DDisk I/O
+remain available to PB. Successful reserve replies received during Stopping
+are collected without starting allocation or formatting. After DDisk's own drain,
+late replies can trigger further forget requests while the actor remains alive.
+Each chunk is submitted for release at most once per actor incarnation, so
+follow-up requests contain only new IDs, regardless of earlier forget replies.
+
+An outstanding reserve request (`ReserveInFlight`) prevents DDisk from publishing
+Gone, even after its own drain and PB shutdown finish. Every terminal reserve
+reply clears this barrier; successful replies contribute their chunks to the
+release set, and release waits for the existing I/O barrier. Reserve delivery is
+tracked: nondelivery clears the pending request and enters Stopping. PDisk returns
+a terminal `CORRUPTED` reply when shutdown aborts a queued reserve request marked
+`IsDDisk`. There is no
+timeout that abandons an outstanding reservation.
+
+Shutdown does not wait for forget replies and does not retry forget requests.
+These acknowledgements remain best effort: lost or rejected forget requests can
+leave reservations in a running PDisk across DDisk-only restarts. Startup
+reconciliation repairs unreferenced reservations left by earlier incarnations,
+subject to the validation and error handling above. A PDisk restart discards
+never-committed reservations. This cleanup requires no new event types, durable
+format, or log schema and does not change the protocol for deleting committed
+chunks.
+
 DDisk and PB drain their own I/O concurrently. PB releases its router reference
-before sending `TEvGone` to its concrete parent actor. The parent waits for both
-drains, releases its router reference, then notifies Warden. Tracked child poison
+before sending `TEvGone` to its concrete parent actor. The parent waits for its
+own drain, the concrete child's `TEvGone`, and resolution of its reserve request,
+releases its router reference, then notifies Warden. Tracked child poison
 handles an already absent PB; duplicate poison and notifications are harmless.
 After 60 seconds each actor with outstanding callbacks contributes one to
-`ddisks/io_stalled`, cleared as soon as its own drain finishes. Waiting for PB is
-reported separately. Normal shutdown waits indefinitely for stalled I/O.
+`ddisks/io_stalled`, cleared as soon as its own drain finishes. Shutdown diagnostics
+also report waiting for PB and an outstanding reserve request. Normal shutdown
+waits indefinitely for stalled I/O or an unresolved reservation.
 
 The callback retirement count and stopping flag share one atomic state. Callback
 cleanup and result publication precede retirement; completion and retry
@@ -99,12 +144,12 @@ The restore set continues to mean chunks already scheduled.
 
 For a NodeWarden-requested PDisk restart, NodeWarden first requests shutdown of
 all affected DDisk actor incarnations. Each DDisk requests shutdown of its PB
-and waits for its own drain and the concrete child's `TEvGone`. Only after the
-last DDisk's Gone does NodeWarden send PDisk restart permission. Replacement
-DDisk/PB startup remains fenced while waiting for these actors and while the
-PDisk restart is in flight. The order is therefore PB drain/Gone and DDisk drain,
-then DDisk Gone, then PDisk restart permission; the two drains may finish in
-either order.
+and waits for its own drain, the concrete child's `TEvGone`, and resolution of any
+outstanding reserve request. Only after the last DDisk's Gone does NodeWarden
+send PDisk restart permission. Replacement DDisk/PB startup remains fenced while waiting for these actors and while the
+PDisk restart is in flight. PB drain/Gone, DDisk drain, and reserve resolution
+must all precede DDisk Gone, which precedes PDisk restart permission. The drains
+and reserve resolution may finish in any order.
 
 A replacement PDisk cannot begin device I/O until the previous PDisk's I/O has
 retired. `TPDisk::Stop()` always calls the shared router's `StopSync()`, even if

@@ -19,12 +19,12 @@ public:
         return ExecutionNode;
     }
 
-    TConclusion<IResourceProcessor::EExecutionResult> Execute() {
+    TConclusion<TExecutionResult> Execute() {
         if (ExecutionNode) {
             Executed = true;
             return ExecutionNode->GetProcessor()->Execute(Context, *ExecutionNode);
         } else {
-            return IResourceProcessor::EExecutionResult::Success;
+            return TExecutionResult::Done();
         }
     }
 

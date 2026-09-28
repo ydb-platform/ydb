@@ -45,7 +45,6 @@ SRCS(
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
-    compression/public.cpp
     compression/snappy.cpp
     compression/zlib.cpp
     compression/zstd.cpp
@@ -196,7 +195,6 @@ SRCS(
 
     phoenix/context.cpp
     phoenix/descriptors.cpp
-    phoenix/load.cpp
     phoenix/schemas.cpp
     phoenix/type_def.cpp
     phoenix/type_registry.cpp
@@ -436,6 +434,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         concurrency/benchmarks
         bus/benchmarks
         logging/benchmark
+        phoenix/benchmarks
         rpc/benchmark
         ypath/benchmarks
         yson/benchmark

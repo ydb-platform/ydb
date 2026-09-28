@@ -66,6 +66,7 @@ namespace NActors {
         , ActorSystemIndex(TActorTypeOperator::GetActorSystemIndex())
     {
         ExecutionStats.Switch(&Stats[0]);
+        CurrentStats.store(&Stats[0], std::memory_order_relaxed);
     }
 
     TExecutorThread::TExecutorThread(TWorkerId workerId,
@@ -85,11 +86,13 @@ namespace NActors {
     {
         Stats.resize(poolCount);
         ExecutionStats.Switch(&Stats[executorPool->PoolId]);
+        CurrentStats.store(&Stats[executorPool->PoolId], std::memory_order_relaxed);
     }
 
     void TExecutorThread::SwitchPool(TExecutorPoolBaseMailboxed* pool) {
         Y_ABORT_UNLESS(ThreadCtx.IsShared());
         ExecutionStats.Switch(&Stats[pool->PoolId]);
+        CurrentStats.store(&Stats[pool->PoolId], std::memory_order_relaxed);
         ThreadCtx.AssignPool(pool);
     }
 
@@ -601,27 +604,34 @@ namespace NActors {
         return nullptr;
     }
 
-    void TExecutorThread::UpdateThreadStats() {
+    TExecutorThreadStats* TExecutorThread::UpdateThreadStats() {
+        // Keep one pool for the whole update, even if the executor switches pools.
+        // This selects an existing object, rather than publishing its contents.
+        TExecutionStats executionStats;
+        auto* stats = CurrentStats.load(std::memory_order_relaxed);
+        executionStats.Switch(stats);
         NHPTimer::STime hpnow = GetCycleCountFast();
 
         ui32 activityType = ThreadCtx.ActivityContext.ElapsingActorActivity.load(std::memory_order_acquire);
         NHPTimer::STime hpprev = ThreadCtx.UpdateStartOfProcessingEventTS(hpnow);
         if (activityType == SleepActivity) {
-            ExecutionStats.AddParkedCycles(hpnow - hpprev);
-            ExecutionStats.SetCurrentActivationTime(0, 0);
+            executionStats.AddParkedCycles(hpnow - hpprev);
+            executionStats.SetCurrentActivationTime(0, 0);
         } else {
-            ExecutionStats.AddElapsedCycles(activityType, hpnow - hpprev);
-            ExecutionStats.AddOveraddedCpuUs(Ts2Us(hpnow - hpprev));
+            executionStats.AddElapsedCycles(activityType, hpnow - hpprev);
+            executionStats.AddOveraddedCpuUs(Ts2Us(hpnow - hpprev));
             NHPTimer::STime activationStart = ThreadCtx.ActivityContext.ActivationStartTS.load(std::memory_order_acquire);
             NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
-            ExecutionStats.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
+            executionStats.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
         }
-        ExecutionStats.CopySafeTicks();
+        executionStats.CopySafeTicks();
+        return stats;
     }
 
     void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {
-        UpdateThreadStats();
-        ExecutionStats.GetCurrentStats(statsCopy);
+        auto* stats = UpdateThreadStats();
+        statsCopy = TExecutorThreadStats();
+        statsCopy.Aggregate(*stats);
     }
 
     void TExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) {
@@ -631,11 +641,11 @@ namespace NActors {
     }
 
     void TExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
-        UpdateThreadStats();
-        statsCopy.SafeElapsedTicks = RelaxedLoad(&ExecutionStats.Stats->SafeElapsedTicks);
-        statsCopy.SafeParkedTicks = RelaxedLoad(&ExecutionStats.Stats->SafeParkedTicks);
-        statsCopy.CpuUs = RelaxedLoad(&ExecutionStats.Stats->CpuUs);
-        statsCopy.NotEnoughCpuExecutions = RelaxedLoad(&ExecutionStats.Stats->NotEnoughCpuExecutions);
+        auto* stats = UpdateThreadStats();
+        statsCopy.SafeElapsedTicks = RelaxedLoad(&stats->SafeElapsedTicks);
+        statsCopy.SafeParkedTicks = RelaxedLoad(&stats->SafeParkedTicks);
+        statsCopy.CpuUs = RelaxedLoad(&stats->CpuUs);
+        statsCopy.NotEnoughCpuExecutions = RelaxedLoad(&stats->NotEnoughCpuExecutions);
     }
 
     void TExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {

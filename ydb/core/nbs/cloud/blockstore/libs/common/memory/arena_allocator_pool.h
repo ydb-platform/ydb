@@ -23,11 +23,14 @@ public:
 
     void* Allocate(size_t size);
     void Deallocate(void*) noexcept;
+    [[nodiscard]] IArenaAllocatorPtr GetAllocator() const;
 
-    // Returns the total size of slots allocated from the arena.
-    [[nodiscard]] size_t GetAllocatedSize() const;
+    // Returns memory statistics for the pool.
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const;
     // Returns the total size of chunks currently handed to clients.
     [[nodiscard]] size_t GetUsedSize() const;
+    // Returns allocation statistics grouped by chunk size.
+    [[nodiscard]] TArenaAllocatorStats GetDetailedStat() const;
 
 private:
     // Intrusive free list node stored in the first bytes of a free chunk
@@ -78,12 +81,19 @@ private:
         }
 
         [[nodiscard]] size_t GetAllocatedSize() const;
+        [[nodiscard]] TArenaAllocatorSlotStats GetStats(size_t chunkSize) const;
+
+        void OnAllocate(size_t chunkSize);
+        void OnDeallocate(size_t chunkSize);
 
         TList<TSlot> Slots;
         TSlot* CurrentSlot = nullptr;
 
     private:
         size_t SlotSize = 0;
+        size_t UsedSize = 0;
+        size_t MaxUsedSize = 0;
+        size_t AllocationCount = 0;
     };
 
     using TSizeMap = TMap<size_t, TSlots>;
@@ -95,6 +105,8 @@ private:
     // Slot bases for O(log n) lookup in Deallocate.
     TMap<void*, TSlot*> Bases;
 };
+
+TArenaAllocatorPoolPtr CreateArenaAllocatorPool();
 
 /////////////////////////////////////////////////////////////////////////////
 

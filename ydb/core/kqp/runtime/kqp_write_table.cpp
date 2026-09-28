@@ -300,6 +300,11 @@ public:
     virtual IDataBatchPtr FlushBatch(ui64 shardId) = 0;
     virtual const THashSet<ui64>& GetShardIds() const = 0;
 
+    virtual std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&&) {
+        AFL_ENSURE(false); // not supported for OLAP at current time
+        return {};
+    }
+
     virtual i64 GetMemory() = 0;
 };
 
@@ -909,12 +914,12 @@ public:
         AFL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
     }
 
-    void AddRow(TConstArrayRef<TCell> row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
-        AFL_ENSURE(row.size() >= KeyColumnTypes.size());
+    const TKeyDesc::TPartitionInfo& FindShard(TConstArrayRef<TCell> key, const TVector<TKeyDesc::TPartitionInfo>& partitioning) const {
+        AFL_ENSURE(key.size() >= KeyColumnTypes.size());
         auto shardIter = std::lower_bound(
             std::begin(partitioning),
             std::end(partitioning),
-            TArrayRef(row.data(), KeyColumnTypes.size()),
+            TArrayRef(key.data(), KeyColumnTypes.size()),
             [this](const auto &partition, const auto& key) {
                 const auto& range = *partition.Range;
                 return 0 > CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
@@ -922,17 +927,22 @@ public:
             });
 
         AFL_ENSURE(shardIter != partitioning.end());
+        return *shardIter;
+    }
 
-        auto batcherIter = Batchers.find(shardIter->ShardId);
+    void AddRow(TConstArrayRef<TCell> row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
+        auto shardIter = FindShard(row, partitioning);
+
+        auto batcherIter = Batchers.find(shardIter.ShardId);
         if (batcherIter == std::end(Batchers)) {
             Batchers.emplace(
-                shardIter->ShardId,
+                shardIter.ShardId,
                 TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc));
         }
 
         AFL_ENSURE(row.size() == Columns.size());
-        Batchers.at(shardIter->ShardId).AddRow(row);
-        ShardIds.insert(shardIter->ShardId);
+        Batchers.at(shardIter.ShardId).AddRow(row);
+        ShardIds.insert(shardIter.ShardId);
     }
 
     void AddData(IDataBatchPtr&& data) override {
@@ -951,6 +961,38 @@ public:
                 row,
                 Partitioning);
         }
+    }
+
+    std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&& batch) override {
+        auto datashardBatch = dynamic_cast<TRowBatch*>(batch.Get());
+        AFL_ENSURE(datashardBatch);
+        auto rows = datashardBatch->Extract();
+
+        THashMap<ui64, TRowsBatcher> shardBatchers;
+        for (const auto& row : rows) {
+            AFL_ENSURE(row.size() == Columns.size());
+            const auto& partition = FindShard(row, Partitioning);
+            auto batcherIter = shardBatchers.find(partition.ShardId);
+            if (batcherIter == std::end(shardBatchers)) {
+                batcherIter = shardBatchers.emplace(
+                    partition.ShardId,
+                    TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc)).first;
+            }
+            batcherIter->second.AddRow(row);
+        }
+
+        std::vector<std::pair<ui64, IDataBatchPtr>> result;
+        result.reserve(shardBatchers.size());
+        for (auto& [shardId, batcher] : shardBatchers) {
+            while (true) {
+                auto fragment = batcher.Flush(true);
+                if (fragment->IsEmpty()) {
+                    break;
+                }
+                result.emplace_back(shardId, std::move(fragment));
+            }
+        }
+        return result;
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
@@ -1122,24 +1164,27 @@ public:
             prefixCells[i] = row[Indexes[i]];
         }
         ui64 docId = (ui64)row[Indexes[PrefixSize+1]].AsValue<TDocId>();
-        auto text = row[Indexes[PrefixSize]].AsBuf();
         TVector<TString> tokens;
-        switch (TextTypeId) {
-            case NScheme::NTypeIds::String:
-            case NScheme::NTypeIds::Utf8:
-                tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
-                break;
-            case NScheme::NTypeIds::Json: {
-                TString error;
-                tokens = NJsonIndex::TokenizeJson(text, error);
-                // Ignore errors, JSON is already validated
-                break;
+        const auto& textCell = row[Indexes[PrefixSize]];
+        if (!textCell.IsNull()) {
+            const auto text = textCell.AsBuf();
+            switch (TextTypeId) {
+                case NScheme::NTypeIds::String:
+                case NScheme::NTypeIds::Utf8:
+                    tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
+                    break;
+                case NScheme::NTypeIds::Json: {
+                    TString error;
+                    tokens = NJsonIndex::TokenizeJson(text, error);
+                    YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                    break;
+                }
+                case NScheme::NTypeIds::JsonDocument:
+                    tokens = NJsonIndex::TokenizeBinaryJson(text);
+                    break;
+                default:
+                    YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
             }
-            case NScheme::NTypeIds::JsonDocument:
-                tokens = NJsonIndex::TokenizeBinaryJson(text);
-                break;
-            default:
-                YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
         }
         auto& prefix = PrefixBuffers[TSerializedCellVec::Serialize(prefixCells)];
         ui32 docLength = 0;
@@ -1593,6 +1638,11 @@ struct TBatchWithMetadata {
     // MvccSnapshot of the operation whose data this batch carries. Covering
     // (empty) batches have no snapshot.
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    ui64 WriteSeqNum = 0;
+    // Shard that first received this batch (its uncommitted write chain lives there).
+    // 0 = the batch is being sent to its original shard (current). Set on split/merge
+    // re-route so the destination validates against the transferred ancestor chain.
+    ui64 OriginalShard = 0;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1721,11 +1771,19 @@ public:
             return HasReadInBatch;
         }
 
+        // Next 1-based uncommitted write seq num in this shard's chain, assigned when
+        // batches are formed and carried by the batch itself on resend.
+        ui64 AllocateWriteSeqNum() {
+            return ++WriteSeqNum;
+        }
+
     private:
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
         ui64& PendingBatches;
         bool HasReadInBatch = false;
+
+        ui64 WriteSeqNum = 0;
 
         ui64& NextCookie;
         ui64 Cookie;
@@ -1747,6 +1805,11 @@ public:
         return insertIt->second;
     }
 
+    TShardInfo* FindShard(const ui64 shard) {
+        auto it = ShardsInfo.find(shard);
+        return it == std::end(ShardsInfo) ? nullptr : &it->second;
+    }
+
     void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
         for (const auto& [id, shard] : ShardsInfo) {
             if (!shard.IsEmpty() && shard.GetSendAttempts() == 0) {
@@ -1760,6 +1823,22 @@ public:
 
     bool Has(ui64 shardId) const {
         return ShardsInfo.contains(shardId);
+    }
+
+    std::vector<TBatchWithMetadata> ExtractShard(ui64 shardId) {
+        auto it = ShardsInfo.find(shardId);
+        if (it == std::end(ShardsInfo)) {
+            return {};
+        }
+        std::vector<TBatchWithMetadata> batches;
+        batches.reserve(it->second.Batches.size());
+        for (auto& batch : it->second.Batches) {
+            Memory -= batch.GetMemory();
+            --PendingBatches;
+            batches.push_back(std::move(batch));
+        }
+        ShardsInfo.erase(it);
+        return batches;
     }
 
     bool IsEmpty() const {
@@ -1796,6 +1875,12 @@ public:
 
     void Close() {
         Closed = true;
+    }
+
+    bool Reopen() {
+        const auto wasClosed = Closed;
+        Closed = false;
+        return wasClosed;
     }
 
 private:
@@ -1838,9 +1923,6 @@ public:
     }
 
     void BeforePartitioningChanged() {
-        if (!Settings.Inconsistent) {
-            return;
-        }
         for (auto& [token, writeInfo] : WriteInfos) {
             if (writeInfo.Serializer) {
                 if (!writeInfo.Closed) {
@@ -1853,18 +1935,85 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        if (!Settings.Inconsistent) {
-            return;
+        for (const auto& [token, writeInfo] : WriteInfos) {
+            if (writeInfo.Closed) {
+                // Close recreated serializers. If they must be closed.
+                Close(token);
+            }
         }
-        if (!WriteInfos.empty()) {
-            ShardsInfo.Close();
-            ReshardData();
-            ShardsInfo.Clear();
-            for (const auto& [token, writeInfo] : WriteInfos) {
-                if (writeInfo.Closed) {
-                    Close(token);
+    }
+
+    TPartitioning::TCPtr GetPartitioning() const override {
+        return Partitioning;
+    }
+
+    TVector<ui64> GetDeletedShards() const override {
+        if (IsOlap.value_or(false)) {
+            return {};
+        }
+        AFL_ENSURE(Partitioning);
+        THashSet<ui64> resolvedShards;
+        resolvedShards.reserve(Partitioning->Size());
+        for (const auto& partition : Partitioning->GetTablePartitioning()) {
+            resolvedShards.insert(partition.ShardId);
+        }
+        TVector<ui64> deletedShards;
+        for (const auto& [shardId, _] : ShardsInfo.GetShards()) {
+            if (!resolvedShards.contains(shardId)) {
+                deletedShards.push_back(shardId);
+            }
+        }
+        return deletedShards;
+    }
+
+    void EnsureShards(const TVector<ui64>& shardIds) override {
+        // Only records are created (no batch pushes), so the Reopen/Close dance of
+        // ReRouteShards is not needed here.
+        for (const ui64 shardId : shardIds) {
+            ShardsInfo.GetShard(shardId);
+        }
+    }
+
+    void ReRouteShards(TVector<ui64>&& deletedShards) override {
+        // Batches must be pushed even if the sink finished producing (the controller
+        // may already be closed): temporarily re-open, push, then close back.
+        const auto wasClosed = ShardsInfo.Reopen();
+        for (const ui64 shardId : deletedShards) {
+            auto batches = ShardsInfo.ExtractShard(shardId);
+            for (auto& batch : batches) {
+                // WRITE mode only (the reroute window): no covering batches exist.
+                AFL_ENSURE(batch.Data);
+                AFL_ENSURE(batch.OriginalShard != 0);
+                const ui64 originalShard = batch.OriginalShard;
+                auto fragments = WriteInfos.at(batch.Token).Serializer->SplitBatchByShards(std::move(batch.Data));
+                for (auto& [destShardId, fragment] : fragments) {
+                    if (!fragment || fragment->IsEmpty()) {
+                        continue;
+                    }
+                    auto& destShardInfo = ShardsInfo.GetShard(destShardId);
+                    destShardInfo.PushBatch(TBatchWithMetadata{
+                        .Token = batch.Token,
+                        .OperationType = batch.OperationType,
+                        .Data = std::move(fragment),
+                        .HasRead = batch.HasRead,
+                        .QuerySpanId = batch.QuerySpanId,
+                        .MvccSnapshot = batch.MvccSnapshot,
+                        // The chain position allocated by the original shard is
+                        // preserved; the destination's own counter does not move so
+                        // fresh current batches of the destination start at 1.
+                        .WriteSeqNum = Settings.EnableWriteSeqNum ? batch.WriteSeqNum : destShardInfo.AllocateWriteSeqNum(),
+                        .OriginalShard = originalShard,
+                    });
+                    ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                        .ShardId = destShardId,
+                        .HasRead = batch.HasRead,
+                        .QuerySpanId = batch.QuerySpanId,
+                    });
                 }
             }
+        }
+        if (wasClosed) {
+            ShardsInfo.Close();
         }
     }
 
@@ -2036,24 +2185,29 @@ public:
         return result;
     }
 
+    bool HasShard(ui64 shardId) const override {
+        return ShardsInfo.Has(shardId);
+    }
+
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
+        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty()) {
             return {};
         }
-        BuildBatchesForShard(shardInfo);
+        BuildBatchesForShard(*shardInfo);
 
         TMessageMetadata meta;
-        meta.Cookie = shardInfo.GetCookie();
-        meta.OperationsCount = shardInfo.GetBatchesInFlight();
-        meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
-        meta.SendAttempts = shardInfo.GetSendAttempts();
-        meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
+        meta.Cookie = shardInfo->GetCookie();
+        meta.OperationsCount = shardInfo->GetBatchesInFlight();
+        meta.IsFinal = shardInfo->IsClosed() && shardInfo->Size() == shardInfo->GetBatchesInFlight();
+        meta.SendAttempts = shardInfo->GetSendAttempts();
+        meta.NextOverloadSeqNo = shardInfo->GetOverloadSeqNo();
 
         return meta;
     }
 
-    TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) override {
+    TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
         const auto& shardInfo = ShardsInfo.GetShard(shardId);
@@ -2079,6 +2233,13 @@ public:
                 if (inFlightBatch.QuerySpanId != 0) {
                     operation.SetQuerySpanId(inFlightBatch.QuerySpanId);
                 }
+                if (Settings.EnableWriteSeqNum && !isFinalPrepareOrCommit) {
+                    auto* writeSeqNum = operation.MutableWriteSeqNum();
+                    writeSeqNum->SetWriterIndex(Settings.WriterIndex);
+                    writeSeqNum->SetWriteSeqNum(inFlightBatch.WriteSeqNum);
+
+                    operation.SetOriginalShard(inFlightBatch.OriginalShard);
+                }
             } else {
                 AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
             }
@@ -2088,30 +2249,33 @@ public:
     }
 
     std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        const auto result = shardInfo.PopBatches(cookie);
+        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        const auto result = shardInfo->PopBatches(cookie);
         if (result) {
             return TMessageAcknowledgedResult {
                 .DataSize = result->DataSize,
-                .IsShardEmpty = shardInfo.IsEmpty(),
+                .IsShardEmpty = shardInfo->IsEmpty(),
             };
         }
         return std::nullopt;
     }
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        AFL_ENSURE(!shardInfo.IsEmpty() && shardInfo.GetCookie() == cookie);
-        shardInfo.IncSendAttempts();
-        shardInfo.IncOverloadSeqNo();
+        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        AFL_ENSURE(!shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
+        shardInfo->IncSendAttempts();
+        shardInfo->IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
+        auto* shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
             return;
         }
-        shardInfo.ResetSendAttempts();
+        shardInfo->ResetSendAttempts();
     }
 
     i64 GetMemory() const override {
@@ -2184,18 +2348,24 @@ private:
     void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
         for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
+            auto& shardInfo = ShardsInfo.GetShard(shardId);
             for (auto& batch : batches) {
                 if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
                             || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                    ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
+                    TBatchWithMetadata batchWithMetadata {
                         .Token = token,
                         .OperationType = writeInfo.Metadata.OperationType,
                         .Data = std::move(batch),
                         .HasRead = hasRead,
                         .QuerySpanId = writeInfo.QuerySpanId,
                         .MvccSnapshot = writeInfo.MvccSnapshot,
-                    });
+                        // Every non-empty batch gets a write seq num; whether it is attached
+                        // to the resulting operations is decided at serialization.
+                        .WriteSeqNum = shardInfo.AllocateWriteSeqNum(),
+                        .OriginalShard = shardId,
+                    };
+                    shardInfo.PushBatch(std::move(batchWithMetadata));
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
                         .ShardId = shardId,
                         .HasRead = hasRead,
@@ -2214,20 +2384,6 @@ private:
             } else {
                 shard.MakeNextBatches(std::nullopt);
                 AFL_ENSURE(shard.GetBatchesInFlight() == shard.Size());
-            }
-        }
-    }
-
-    void ReshardData() {
-        AFL_ENSURE(Settings.Inconsistent);
-        for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
-            for (size_t index = 0; index < shardInfo.Size(); ++index) {
-                auto& batch = shardInfo.GetBatch(index);
-                const auto& writeInfo = WriteInfos.at(batch.Token);
-                // Resharding supported only for inconsistent write,
-                // so convering empty batches don't exist in this case.
-                AFL_ENSURE(batch.Data);
-                writeInfo.Serializer->AddBatch(std::move(batch.Data));
             }
         }
     }

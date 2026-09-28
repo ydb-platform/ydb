@@ -298,7 +298,9 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
                 case EWireType::Tuple:
                     return CreateTupleSchema(childSchemaList)->SetName(schemaRepresentation->Name);
                 default:
-                    YT_ABORT();
+                    THROW_ERROR_EXCEPTION(
+                        "Wire type %Qlv is not yet supported in Skiff schema",
+                        schemaRepresentation->WireType);
             }
         }
     } else {

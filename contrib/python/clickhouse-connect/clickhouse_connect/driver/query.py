@@ -50,6 +50,9 @@ class QueryContext(BaseQueryContext):
     Argument/parameter object for queries.  This context is used to set thread/query specific formats
     """
 
+    bind_params: dict[str, str]
+    uncommented_query: str
+
     def __init__(
         self,
         query: str | bytes = "",
@@ -92,15 +95,15 @@ class QueryContext(BaseQueryContext):
         :param column_formats: Optional dictionary
         :param use_none: Use a Python None for ClickHouse NULL values in nullable columns.  Otherwise the default
           value of the column (such as 0 for numbers) will be returned in the result_set
-        :param max_str_len Limit returned ClickHouse String values to this length, which allows a Numpy
+        :param max_str_len: Limit returned ClickHouse String values to this length, which allows a Numpy
           structured array even with ClickHouse variable length String columns.  If 0, Numpy arrays for
           String columns will always be object arrays
-        :param query_tz  Either a string IANA timezone name or a tzinfo object (strings are resolved via zoneinfo).
+        :param query_tz: Either a string IANA timezone name or a tzinfo object (strings are resolved via zoneinfo).
           Values for any DateTime or DateTime64 column in the query will be converted to Python datetime.datetime
           objects with the selected timezone
-        :param column_tzs A dictionary of column names to tzinfo objects (or strings that will be converted to
+        :param column_tzs: A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
-        :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
+        :param tz_mode: Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
           naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
           match the server's column definition which means timezone-aware when the column schema defines a timezone
           (e.g. DateTime('UTC')) and naive for bare DateTime columns.
@@ -116,10 +119,10 @@ class QueryContext(BaseQueryContext):
         )
         self.query = query
         self.parameters = parameters or {}
-        self.use_none = True if use_none is None else use_none
-        self.column_oriented = False if column_oriented is None else column_oriented
-        self.use_numpy = use_numpy if use_numpy is not None else False
-        self.max_str_len = 0 if max_str_len is None else max_str_len
+        self.use_none: bool = True if use_none is None else use_none
+        self.column_oriented: bool = False if column_oriented is None else column_oriented
+        self.use_numpy: bool = use_numpy if use_numpy is not None else False
+        self.max_str_len: int = 0 if max_str_len is None else max_str_len
         self.server_tz = server_tz
         self.apply_server_tz = apply_server_tz
         self.external_data = external_data
@@ -147,6 +150,8 @@ class QueryContext(BaseQueryContext):
         self.column_tz: str | tzinfo | None = None
         self.response_tz: tzinfo | None = None
         self.block_info = False
+        # Marks driver-internal metadata queries, which always decode with the Python codec
+        self.internal = False
         self.as_pandas = as_pandas
         self.streaming = streaming
         self.show_clickhouse_errors: ShowClickHouseErrors = True
@@ -245,7 +250,7 @@ class QueryContext(BaseQueryContext):
         Creates Query context copy with parameters overridden/updated as appropriate.
         """
         resolved_tz_mode = tz_mode if tz_mode is not None else self.tz_mode
-        return QueryContext(
+        copy = QueryContext(
             query=query or self.query,
             parameters=(
                 dict_copy(self.parameters, parameters if isinstance(parameters, dict) else None)
@@ -272,6 +277,8 @@ class QueryContext(BaseQueryContext):
             transport_settings=self.transport_settings if transport_settings is None else transport_settings,
             rename_response_column=self.rename_response_column if rename_response_column is None else rename_response_column,
         )
+        copy.internal = self.internal
+        return copy
 
     def _update_query(self):
         query = self.query

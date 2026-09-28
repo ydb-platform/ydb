@@ -28,6 +28,9 @@ constexpr std::chrono::milliseconds BACKOFF_START{50};
 constexpr std::chrono::milliseconds BACKOFF_MAX{10000};
 constexpr std::chrono::milliseconds PERIODIC_TICK{100};
 constexpr std::chrono::milliseconds MINIMUM_REFRESH_INTERVAL{100};
+// Delay before a new token request cycle after the previous one ended with a terminal error
+// (non-retryable status, exhausted retry budget, malformed response or request).
+constexpr std::chrono::milliseconds TERMINAL_FAILURE_RETRY_DELAY{10000};
 
 // Implementation detail for the IAM factory templates below. Symbols in NDetail are not part of
 // the public YDB C++ SDK API and may change or be removed without notice.
@@ -166,6 +169,8 @@ private:
     private:
         using SysDuration = SysClock::duration;
 
+        // Unrecoverable failure: the provider has no facility to run on. Stops the periodic task
+        // for good and fails every current and future GetAuthInfoAsync().
         void Fail(std::string error) {
             NThreading::TPromise<std::string> promise;
             {
@@ -176,6 +181,19 @@ private:
                     Context_->TryCancel();
                 }
             }
+            promise.TrySetException(std::make_exception_ptr(yexception() << error));
+        }
+
+        // Terminal failure of the current token request cycle: the cycle's waiters get the error
+        // right away (via the returned promise, to be completed outside Lock_), but the provider
+        // stays alive and starts a new cycle after TERMINAL_FAILURE_RETRY_DELAY, so a temporary
+        // IAM outage or a briefly revoked grant does not leave it permanently dead.
+        NThreading::TPromise<std::string> FailAttemptImpl() { // call with Lock_
+            NextTicketUpdate_ = SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(TERMINAL_FAILURE_RETRY_DELAY));
+            return AuthInfo_;
+        }
+
+        static void SetError(NThreading::TPromise<std::string>& promise, const std::string& error) {
             promise.TrySetException(std::make_exception_ptr(yexception() << error));
         }
 
@@ -238,10 +256,14 @@ private:
                 RequestFiller_(req);
                 Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
             } catch (...) {
-                std::unique_lock guard(Lock_);
-                ResetContextImpl();
-                guard.unlock();
-                Fail(CurrentExceptionMessage());
+                const std::string error = CurrentExceptionMessage();
+                NThreading::TPromise<std::string> promise;
+                {
+                    std::lock_guard guard(Lock_);
+                    ResetContextImpl();
+                    promise = FailAttemptImpl();
+                }
+                SetError(promise, error);
             }
         }
 
@@ -297,6 +319,7 @@ private:
 
         bool OnPeriodicTick() {
             std::optional<std::string> terminalError;
+            NThreading::TPromise<std::string> promise;
             bool updateTicket = false;
             bool authPending = false;
             {
@@ -308,8 +331,10 @@ private:
                     return true;
                 }
                 if (AuthInfo_.GetFuture().IsReady()) {
+                    // Start a new token request cycle with a fresh retry budget.
                     AuthInfo_ = NThreading::NewPromise<std::string>();
                     RetryDeadline_ = SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(2 * IamEndpoint_.RequestTimeout));
+                    BackoffTimeout_ = BACKOFF_START;
                 }
                 try {
                     authPending = !FillContext(guard);
@@ -323,8 +348,10 @@ private:
                     ResetContextImpl();
                     return false;
                 }
-                if (!Context_.has_value()) {
-                    if (!authPending && !terminalError) {
+                if (terminalError) {
+                    promise = FailAttemptImpl();
+                } else if (!Context_.has_value()) {
+                    if (!authPending) {
                         RescheduleOnFailure();
                     }
                 } else {
@@ -332,10 +359,8 @@ private:
                 }
             }
             if (terminalError) {
-                Fail(*terminalError);
-                return false;
-            }
-            if (updateTicket) {
+                SetError(promise, *terminalError);
+            } else if (updateTicket) {
                 UpdateTicket();
             }
             return true;
@@ -371,13 +396,17 @@ private:
                     RescheduleOnSuccess(expiresAt);
                 }
 
+                if (terminalError) {
+                    promise = FailAttemptImpl();
+                }
+
                 ResetContextImpl();
             }
 
             if (token) {
                 promise.TrySetValue(std::move(*token));
             } else if (terminalError) {
-                Fail(*terminalError);
+                SetError(promise, *terminalError);
             }
         }
 

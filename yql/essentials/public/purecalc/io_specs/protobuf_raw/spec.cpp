@@ -793,7 +793,7 @@ public:
             // its own destruction. So we're using our own reference to the scoped alloc. That reference is alive
             // because scoped alloc destroyed after computation graph.
             auto unguard = Unguard(ScopedAlloc_);
-            Underlying_.Destroy();
+            Underlying_.reset();
         }
     }
 

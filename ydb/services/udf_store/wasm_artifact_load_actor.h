@@ -48,6 +48,7 @@ private:
     //! Body of the wasm_data blob, held while the object_code blob of the same
     //! artifact is read. Already verified against the sizes in the artifact row.
     TString PendingWasmData_;
+    TVector<TString> PendingChunks_;
     TVector<NWasm::TNamedModuleBytecode> Libraries_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);

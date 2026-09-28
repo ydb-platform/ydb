@@ -1911,7 +1911,7 @@ private:
             return;
         }
 
-        auto state = MakeIntrusive<NYql::TS3State>();
+        auto state = MakeIntrusive<NYql::TS3State>(TypesCtx->StrictConfigValidation);
 
         auto& configuration = *state->Configuration;
         if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
@@ -2010,7 +2010,7 @@ private:
             return;
         }
 
-        auto solomonState = MakeIntrusive<TSolomonState>();
+        auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
@@ -2032,7 +2032,7 @@ private:
         }
 
         TString sessionId = CreateGuidAsString();
-        auto state = MakeIntrusive<TPqState>(sessionId);
+        auto state = MakeIntrusive<TPqState>(sessionId, TypesCtx->StrictConfigValidation);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
         state->EnableSettingsValidation = true;
@@ -2045,6 +2045,7 @@ private:
         state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
         state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->EnableExactlyOnceDeliveryGuaranty = Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting();
+        state->EnableConsumerRewindForDisposition = Config->FeatureFlags.GetEnableStreamingQueryReadFrom();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2172,6 +2173,7 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "DecimalCommonTypeConversionMode"
                 || settingName == "FilterPushdownOverJoinOptionalSide"
                 || settingName == "DisableFilterPushdownOverJoinOptionalSide"
                 || settingName == "RotateJoinTree"

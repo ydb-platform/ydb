@@ -14,7 +14,7 @@ namespace {
 
 struct TBoundary
 {
-    ui64 Offset{};
+    ui32 Offset{};
     TPBufferKey Key{};
     bool Open{};
 
@@ -37,7 +37,7 @@ struct TBoundary
 // greatest key
 
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
-    TBlockRange64 fullRange,
+    TBlockRange16 fullRange,
     std::span<const TWeightedRange> overlappingRanges)
 {
     TVector<TWeightedRange> result;
@@ -51,24 +51,28 @@ TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
     boundaries.push_back(
         {.Offset = fullRange.Start, .Key = TPBufferKey{}, .Open = true});
     boundaries.push_back(
-        {.Offset = fullRange.End + 1, .Key = TPBufferKey{}, .Open = false});
+        {.Offset = static_cast<ui32>(fullRange.End) + 1,
+         .Key = TPBufferKey{},
+         .Open = false});
 
     for (const auto& item: overlappingRanges) {
         auto intersect = fullRange.Intersect(item.Range);
         boundaries.push_back(
             {.Offset = intersect.Start, .Key = item.Key, .Open = true});
         boundaries.push_back(
-            {.Offset = intersect.End + 1, .Key = item.Key, .Open = false});
+            {.Offset = static_cast<ui32>(intersect.End) + 1,
+             .Key = item.Key,
+             .Open = false});
     }
     Sort(boundaries.begin(), boundaries.end());
 
     // main algorithm's part
     TSet<TPBufferKey, std::greater<TPBufferKey>> activeKeys;
     activeKeys.insert(boundaries[0].Key);
-    ui64 segmentStart = boundaries[0].Offset;
+    ui32 segmentStart = boundaries[0].Offset;
     TPBufferKey currentBestKey = *activeKeys.begin();
 
-    for (ui64 i = 1; i < boundaries.size(); ++i) {
+    for (size_t i = 1; i < boundaries.size(); ++i) {
         if (boundaries[i].Open) {
             activeKeys.insert(boundaries[i].Key);
         } else {
@@ -83,12 +87,12 @@ TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
         }
         if (newBestKey != currentBestKey || isLast) {
             if (boundaries[i].Offset > segmentStart) {
-                ui64 segmentEnd = boundaries[i].Offset - 1;
+                const ui32 segmentEnd = boundaries[i].Offset - 1;
                 result.push_back(
                     {.Key = currentBestKey,
-                     .Range = TBlockRange64::MakeClosedInterval(
-                         segmentStart,
-                         segmentEnd)});
+                     .Range = TBlockRange16::MakeClosedInterval(
+                         IntegerCast<ui16>(segmentStart),
+                         IntegerCast<ui16>(segmentEnd))});
             }
             segmentStart = boundaries[i].Offset;
             currentBestKey = newBestKey;

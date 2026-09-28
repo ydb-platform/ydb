@@ -185,7 +185,15 @@ TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders
     return FetchEx(url, "GET"_sb, TStringBuf{}, additionalHeaders, timeout, redirects, policy);
 }
 
-TFetchResultPtr FetchEx(const THttpURL& url, TStringBuf method, TStringBuf body, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
+TFetchResultPtr FetchEx(
+    const THttpURL& url,
+    TStringBuf method,
+    TStringBuf body,
+    const THttpHeaders& additionalHeaders,
+    const TDuration& timeout,
+    size_t redirects,
+    const IRetryPolicy<unsigned>::TPtr& policy,
+    EHttpStatusHandling statusHandling) {
     const auto& actualPolicy = policy ? policy : GetDefaultPolicy();
     THttpURL currentUrl = url;
     for (size_t fetchNum = 0; fetchNum < redirects; ++fetchNum) {
@@ -228,6 +236,10 @@ TFetchResultPtr FetchEx(const THttpURL& url, TStringBuf method, TStringBuf body,
             currentUrl = fr->GetRedirectURL(currentUrl);
             YQL_LOG(INFO) << "Got redirect to " << currentUrl.PrintS();
             continue;
+        }
+
+        if (statusHandling == EHttpStatusHandling::ReturnResponse) {
+            return fr;
         }
 
         TString errorBody;

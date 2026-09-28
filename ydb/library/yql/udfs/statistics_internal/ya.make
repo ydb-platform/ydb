@@ -25,6 +25,10 @@ PEERDIR(
     yql/essentials/minikql/computation
 )
 
+IF (OS_WINDOWS AND MODULE_TAG == "YQL_UDF_SHARED")
+    PEERDIR(yql/essentials/sql/pg_dummy)
+ENDIF()
+
 END()
 
 RECURSE_FOR_TESTS(

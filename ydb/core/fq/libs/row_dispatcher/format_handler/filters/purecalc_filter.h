@@ -4,6 +4,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
+#include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
 
@@ -69,7 +70,7 @@ protected:
     IProgramHolder::TPtr ProgramHolder_;
 };
 
-IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer);
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, NMonitoring::TDynamicCounterPtr memoryQuotaCounters = {});
 
 IProgramCompileHandler::TPtr CreateProgramCompileHandler(
     IProcessedDataConsumer::TPtr consumer,

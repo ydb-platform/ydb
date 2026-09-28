@@ -52,6 +52,7 @@ public:
                     Col("stat_type", NScheme::NTypeIds::Uint32),
                     Col("column_tags", NScheme::NTypeIds::String),
                     Col("data", NScheme::NTypeIds::String),
+                    Col("sampled_data", NScheme::NTypeIds::String),
                 },
                 { "owner_id", "local_path_id", "stat_type", "column_tags"},
                 NKikimrServices::STATISTICS,
@@ -116,6 +117,7 @@ public:
             DECLARE $stat_types AS List<Uint32>;
             DECLARE $column_tags AS List<String>;
             DECLARE $data AS List<String>;
+            DECLARE $sampled AS List<Bool>;
 
             $to_struct = ($t) -> {
                 RETURN <|
@@ -124,13 +126,21 @@ public:
                     stat_type:$t.0,
                     column_tags:$t.1,
                     data:$t.2,
+                    sampled:$t.3,
                 |>;
             };
 
+            $rows = ListMap(ListZip($stat_types, $column_tags, $data, $sampled), $to_struct);
+
             UPSERT INTO `)" << StatisticsTablePath << R"(`
-                (owner_id, local_path_id, stat_type, column_tags, data)
-            SELECT owner_id, local_path_id, stat_type, column_tags, data FROM
-            AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
+                (owner_id, local_path_id, stat_type, column_tags, sampled_data)
+            SELECT owner_id, local_path_id, stat_type, column_tags, data AS sampled_data
+            FROM AS_TABLE($rows) WHERE sampled;
+
+            UPSERT INTO `)" << StatisticsTablePath << R"(`
+                (owner_id, local_path_id, stat_type, column_tags, data, sampled_data)
+            SELECT owner_id, local_path_id, stat_type, column_tags, data, NULL AS sampled_data
+            FROM AS_TABLE($rows) WHERE NOT sampled;
         )";
 
         NYdb::TParamsBuilder params;
@@ -160,11 +170,22 @@ public:
 
         auto& data = params.AddParam("$data").BeginList();
         for (const auto& item : Items) {
-            data
-                .AddListItem()
-                .String(item.Data);
+            if (!item.Sampling) {
+                data.AddListItem().String(item.Data);
+                continue;
+            }
+            NKikimrStat::TSampledStatistic payload;
+            *payload.MutableSampling() = *item.Sampling;
+            payload.SetData(item.Data);
+            data.AddListItem().String(payload.SerializeAsString());
         }
         data.EndList().Build();
+
+        auto& sampled = params.AddParam("$sampled").BeginList();
+        for (const auto& item : Items) {
+            sampled.AddListItem().Bool(item.Sampling.has_value());
+        }
+        sampled.EndList().Build();
 
         RunDataQuery(sql, &params);
     }
@@ -227,7 +248,8 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
-        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags) {
+        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags,
+        bool acceptSampledStatistics) {
     const TString serializedColumnTags = SerializeColumnTags(columnTags);
     YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery]",
         {"queryId", queryId},
@@ -240,6 +262,10 @@ void DispatchLoadStatisticsQuery(
 
     auto readRowsRequest = Ydb::Table::ReadRowsRequest();
     readRowsRequest.set_path(statisticsTablePath);
+    readRowsRequest.add_columns("data");
+    if (acceptSampledStatistics) {
+        readRowsRequest.add_columns("sampled_data");
+    }
 
     NYdb::TValueBuilder keys_builder;
     keys_builder.BeginList()
@@ -262,9 +288,11 @@ void DispatchLoadStatisticsQuery(
     auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
         std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
     );
-    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
+    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem, acceptSampledStatistics](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
         const auto& response = future.GetValueSync();
         auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+        query_response->Status = response.status();
+        NYql::IssuesFromMessage(response.issues(), query_response->Issues);
 
         if (response.status() == Ydb::StatusIds::SUCCESS) {
             NYdb::TResultSetParser parser(response.result_set());
@@ -277,19 +305,29 @@ void DispatchLoadStatisticsQuery(
                     {"rowsCount", 0});
             }
 
-            query_response->Success = rowsCount > 0;
-
-            while(parser.TryNextRow()) {
+            if (parser.TryNextRow()) {
                 auto& col = parser.ColumnParser("data");
                 // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
                 query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
                     ? col.GetOptionalString()
                     : col.GetString();
+                if (acceptSampledStatistics) {
+                    const auto sampledData = parser.ColumnParser("sampled_data").GetOptionalString();
+                    NKikimrStat::TSampledStatistic payload;
+                    if (sampledData && payload.ParseFromString(*sampledData) && payload.HasData() && payload.HasSampling()
+                            && payload.GetSampling().HasRequestedRate() && payload.GetSampling().HasEligibleUnits()
+                            && payload.GetSampling().HasSelectedUnits() && payload.GetSampling().HasSampleRows()) {
+                        query_response->Data = std::move(*payload.MutableData());
+                        query_response->Sampling = std::move(*payload.MutableSampling());
+                    }
                 }
+            }
+            query_response->Success = query_response->Data.has_value();
         } else {
             YDB_LOG_ERROR("[ReadRowsResponse]",
                 {"queryId", queryId},
-                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
+                {"status", response.status()},
+                {"issues", query_response->Issues.ToOneLineString()});
             query_response->Success = false;
         }
 

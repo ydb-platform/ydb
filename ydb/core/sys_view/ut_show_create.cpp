@@ -1181,6 +1181,23 @@ Y_UNIT_TEST(TableKeyBloomFilter) {
     );
 }
 
+Y_UNIT_TEST(TableTtlObjectKeyPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTieringObjectKeyTree(true);
+    TShowCreateChecker checker(env);
+    checker.CheckShowCreateTable(R"(
+        CREATE TABLE test_show_create (
+            ts Timestamp NOT NULL,
+            PRIMARY KEY(ts)
+        ) WITH (
+            STORE = COLUMN,
+            TTL = Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive//2026:09`,
+                  Interval("P2D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`cold`,
+                  Interval("P3D") DELETE ON ts
+        );
+    )", "test_show_create");
+}
+
 Y_UNIT_TEST(TableTtlSettings) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -1378,7 +1395,7 @@ Y_UNIT_TEST(Table) {
                 Key Uint64,
                 Text String,
                 PRIMARY KEY (Key),
-                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, language=russian, use_filter_superlemmer=true)
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, language="russian,english", use_filter_superlemmer=true)
             );
         )", "test_show_create"
     );

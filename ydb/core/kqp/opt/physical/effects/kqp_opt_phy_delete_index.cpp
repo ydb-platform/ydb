@@ -97,7 +97,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             case TIndexDescription::EType::GlobalFulltextCompact:
             case TIndexDescription::EType::GlobalFulltextCompactRelevance:
             case TIndexDescription::EType::GlobalJsonCompact:
-                YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
+                YQL_ENSURE(false, "Compact indexes are always updated by KqpWriteActor");
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
                 // deleteIndexKeys are already correct
@@ -187,7 +187,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx, kqpCtx);
+    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
     auto idxNeedsKqpEffect = [](const std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {

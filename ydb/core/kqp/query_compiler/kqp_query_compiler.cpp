@@ -3134,6 +3134,8 @@ private:
             const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
             proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            proto.SetFullRangeHnsw(indexDesc->Type == TIndexDescription::EType::GlobalSyncDistributedHnsw
+                && indexDesc->KeyColumns.size() == 1);
             proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
 
             const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;

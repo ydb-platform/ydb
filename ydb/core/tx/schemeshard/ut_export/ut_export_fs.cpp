@@ -3,6 +3,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/wrappers/abstract.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <google/protobuf/text_format.h>
@@ -291,6 +293,110 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_C(!dataContent.empty(), "Data file is empty");
         UNIT_ASSERT_C(dataContent.Contains("row1") || dataContent.Contains("row2") || dataContent.Contains("row3"),
                      "Data file doesn't contain expected rows");
+    }
+
+    Y_UNIT_TEST(TableBackupAsSqlChecksumFailureStopsFsExportBeforeDataStage) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+
+        const TString basePath = tempDir.Path();
+        const TString destination = "backup/Table";
+        const TString sqlPath = MakeExportPath(basePath, destination, "create_table.sql");
+        const TString checksumPath = sqlPath + ".sha256";
+        const TString metadataPath = MakeExportPath(basePath, destination, "metadata.json");
+        const TString dataPath = MakeExportPath(basePath, destination, "data_00.csv");
+
+        NActors::TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backupProposals(
+            runtime, [](const auto& ev) {
+                const auto& record = ev->Get()->Record;
+                return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+            });
+        NActors::TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> checksumUploads(
+            runtime, [&checksumPath](const auto& ev) {
+                return ev->Get()->Request.GetKey() == checksumPath;
+            });
+
+        const ui64 exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              number_of_retries: 0
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "%s"
+              }
+            }
+        )", basePath.c_str(), destination.c_str()));
+        runtime.WaitFor("blocked FS CREATE TABLE checksum upload", [&] { return !checksumUploads.empty(); });
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT(FileExists(sqlPath));
+        UNIT_ASSERT(!FileExists(checksumPath));
+        UNIT_ASSERT(!FileExists(metadataPath));
+        UNIT_ASSERT(!FileExists(dataPath));
+        UNIT_ASSERT_C(backupProposals.empty(), "FS backup must not start before SQL checksum upload");
+
+        const auto& request = checksumUploads.front();
+        auto response = MakeHolder<NWrappers::NExternalStorage::TEvPutObjectResponse>(
+            checksumPath,
+            Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>(
+                Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::ACCESS_DENIED, false)));
+        auto failure = MakeHolder<NActors::IEventHandle>(request->Sender, request->Recipient,
+            response.Release(), request->Flags, request->Cookie);
+        checksumUploads.Stop();
+        checksumUploads.clear();
+        runtime.Send(failure.Release(), 0, true);
+
+        env.TestWaitNotification(runtime, exportId);
+        auto desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT_C(entry.IssuesSize() > 0, entry.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "create_table.sql.sha256");
+        UNIT_ASSERT_C(backupProposals.empty(), "failed FS export must not reach data backup");
+        UNIT_ASSERT(!FileExists(metadataPath));
+        UNIT_ASSERT(!FileExists(dataPath));
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1u);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 2u);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "after_failure" Type: "Utf8" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString exportPath = Sprintf("/MyRoot/export-%" PRIu64, exportId);
+        TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathExist});
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_C(desc.GetResponse().GetEntry().IssuesSize() > 0, desc.GetResponse().GetEntry().DebugString());
+        UNIT_ASSERT_C(backupProposals.empty(), "failed FS export must not restart after reboot");
+
+        TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathNotExist});
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathNotExist});
+        UNIT_ASSERT_C(backupProposals.empty(), "forgotten FS export must not be resurrected after reboot");
+        backupProposals.Stop();
     }
 
     Y_UNIT_TEST(ShouldExportMultipleTablesWithData) {

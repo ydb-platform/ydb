@@ -2,7 +2,10 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -11,6 +14,7 @@
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -7117,6 +7121,235 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(setDatabase.GetStatus(), EStatus::SUCCESS, setDatabase.GetIssues().ToString());
             verifyOverride(true);
         }
+    }
+
+    // Tests::TTenants::CreateTenant blocks the test thread on futures that only the
+    // dispatching test thread itself can complete when the runtime is simulated, so the
+    // same steps are driven through the runtime here.
+    void CreateTenantInSimulatedRuntime(TTestActorRuntime& runtime, Tests::TTenants& tenants,
+        const TString& path, const TString& poolKind)
+    {
+        using TEvCreateDatabaseRequest = NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Cms::CreateDatabaseRequest, Ydb::Cms::CreateDatabaseResponse>;
+
+        Ydb::Cms::CreateDatabaseRequest request;
+        request.set_path(path);
+        auto* storage = request.mutable_resources()->add_storage_units();
+        storage->set_unit_kind(poolKind);
+        storage->set_count(1);
+
+        auto response = runtime.WaitFuture(NRpcService::DoLocalRpc<TEvCreateDatabaseRequest>(
+            std::move(request), "", "", runtime.GetActorSystem(0)));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
+
+        tenants.Run(path, 1);
+
+        const auto sender = runtime.AllocateEdgeActor();
+        Ydb::Cms::GetDatabaseStatusResult status;
+        for (ui32 attempt = 0; attempt < 300; ++attempt) {
+            auto statusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            statusRequest->Record.MutableRequest()->set_path(path);
+            runtime.SendToPipe(MakeConsoleID(), sender, statusRequest.release(), 0, GetPipeConfigWithRetries());
+
+            auto reply = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(sender, TDuration::Seconds(30));
+            UNIT_ASSERT_C(reply, "No status of the database " << path);
+            reply->Get()->Record.GetResponse().operation().result().UnpackTo(&status);
+            if (status.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+                return;
+            }
+
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+
+        UNIT_FAIL("The database " << path << " is not running: " << status.DebugString());
+    }
+
+    // The detailed metrics a node publishes for a table: "none" (DATABASE level), "table"
+    // (one bucket for the whole table) or "partition" (a leaf per partition).
+    TString GetPublishedDetailedMetrics(TTestActorRuntime& runtime, const TString& database,
+        const TString& table, ui64 tabletId)
+    {
+        auto findExecutorGroup = [](::NMonitoring::TDynamicCounterPtr group) -> ::NMonitoring::TDynamicCounterPtr {
+            auto typeGroup = group ? group->FindSubgroup("type", "DataShard") : nullptr;
+            return typeGroup ? typeGroup->FindSubgroup("category", "executor") : nullptr;
+        };
+
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            auto rawGroup = runtime.GetAppData(nodeIndex).Counters->FindSubgroup("counters", "ydb_detailed_raw");
+            auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", database) : nullptr;
+            auto tableGroup = databaseGroup ? databaseGroup->FindSubgroup("table", table) : nullptr;
+            if (!tableGroup) {
+                continue;
+            }
+
+            const bool hasTableBucket = bool(findExecutorGroup(tableGroup));
+
+            auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
+            auto tabletGroup = perPartitionGroup ? perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId)) : nullptr;
+            auto leaderGroup = tabletGroup ? tabletGroup->FindSubgroup("follower_id", "0") : nullptr;
+            const bool hasPartitionLeaf = bool(findExecutorGroup(leaderGroup));
+
+            if (hasTableBucket && !hasPartitionLeaf) {
+                return "table";
+            }
+            if (hasPartitionLeaf && !hasTableBucket) {
+                return "partition";
+            }
+            if (hasTableBucket && hasPartitionLeaf) {
+                return "table and partition";
+            }
+        }
+
+        return "none";
+    }
+
+    // SQL-to-runtime: the levels set by SQL reach the DataShards (their table info events)
+    // and shape the detailed counters the nodes publish.
+    Y_UNIT_TEST(TableMetricsLevelSqlToRuntime) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAlterDatabase(true);
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        // The table info events are observed, which needs the simulated runtime.
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false)
+            .SetDynamicNodeCount(1)
+            .SetStoragePoolTypes({"hdd1"}));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        const TString database = "/Root/Test";
+        Tests::TTenants tenants(&kikimr.GetTestServer());
+        CreateTenantInSimulatedRuntime(runtime, tenants, database, "hdd1");
+
+        auto rootClient = kikimr.GetQueryClient();
+        auto tenantClient = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings()
+            .Database(database).DiscoveryMode(EDiscoveryMode::Off));
+        auto tenantTableClient = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .Database(database).DiscoveryMode(EDiscoveryMode::Off));
+
+        auto execute = [&](NYdb::NQuery::TQueryClient& client, const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query << "\n" << result.GetIssues().ToString());
+        };
+
+        auto getConfiguredLevel = [&](const TString& path) {
+            return kikimr.RunCall([&] {
+                auto session = tenantTableClient.CreateSession().GetValueSync().GetSession();
+                return GetConfiguredMetricsLevel(session, path);
+            });
+        };
+
+        // The last level each table leader reported, with its tablet.
+        struct TReported {
+            ui64 TabletId = 0;
+            ui32 MetricsLevel = 0;
+        };
+        THashMap<TString, TReported> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev) {
+                const auto* msg = ev->Get();
+                if (msg->FollowerId == 0) {
+                    reported[msg->TablePath] = {msg->TabletID, msg->MetricsLevel};
+                }
+            });
+
+        using TSchemeMetricsSettings = NKikimrSchemeOp::TTableDetailedMetricsSettings;
+        struct TExpected {
+            TString Table;
+            TSchemeMetricsSettings::EMetricsLevel MetricsLevel;
+            TString Published;
+        };
+
+        // Waits for fresh table info events and published counters of every table to match.
+        auto waitFor = [&](const TString& step, const TVector<TExpected>& expected) {
+            reported.clear();
+            TStringBuilder state;
+            for (ui32 attempt = 0; attempt < 90; ++attempt) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+
+                state.clear();
+                bool matches = true;
+                for (const auto& table : expected) {
+                    const auto it = reported.find(database + "/" + table.Table);
+                    const ui32 level = it != reported.end() ? it->second.MetricsLevel : 0;
+                    const ui64 tabletId = it != reported.end() ? it->second.TabletId : 0;
+                    const auto published = GetPublishedDetailedMetrics(runtime, database, table.Table, tabletId);
+                    state << " " << table.Table << ": level " << level << ", published " << published << ";";
+                    matches = matches && level == ui32(table.MetricsLevel) && published == table.Published;
+                }
+
+                if (matches) {
+                    return;
+                }
+            }
+
+            UNIT_FAIL(step << ":" << state);
+        };
+
+        // The database default is TABLE: a table without its own level inherits it.
+        execute(rootClient, R"(
+            ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "TABLE");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(kikimr.GetTestServer(), "/Root/Test"),
+            ui32(TSchemeMetricsSettings::MetricsLevelTable));
+
+        execute(tenantClient, R"(
+            CREATE TABLE `/Root/Test/Inherits` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+
+            CREATE TABLE `/Root/Test/Pinned` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+            WITH (METRICS_LEVEL = "TABLE");
+        )");
+        UNIT_ASSERT(!getConfiguredLevel("/Root/Test/Inherits"));
+        UNIT_ASSERT(getConfiguredLevel("/Root/Test/Pinned") == TMetricsSettings::EMetricsLevel::Table);
+        waitFor("database default TABLE", {
+            {"Inherits", TSchemeMetricsSettings::MetricsLevelTable, "table"},
+            {"Pinned", TSchemeMetricsSettings::MetricsLevelTable, "table"},
+        });
+
+        // An explicit DATABASE on the table disables its detailed metrics.
+        execute(tenantClient, R"(
+            ALTER TABLE `/Root/Test/Inherits` SET (METRICS_LEVEL = "DATABASE");
+        )");
+        UNIT_ASSERT(getConfiguredLevel("/Root/Test/Inherits") == TMetricsSettings::EMetricsLevel::Database);
+        waitFor("table override DATABASE", {
+            {"Inherits", TSchemeMetricsSettings::MetricsLevelDisabled, "none"},
+            {"Pinned", TSchemeMetricsSettings::MetricsLevelTable, "table"},
+        });
+
+        // RESET drops the override, the table inherits the database default again.
+        execute(tenantClient, R"(
+            ALTER TABLE `/Root/Test/Inherits` RESET (METRICS_LEVEL);
+        )");
+        UNIT_ASSERT(!getConfiguredLevel("/Root/Test/Inherits"));
+        waitFor("table override reset", {
+            {"Inherits", TSchemeMetricsSettings::MetricsLevelTable, "table"},
+            {"Pinned", TSchemeMetricsSettings::MetricsLevelTable, "table"},
+        });
+
+        // A new database default reaches the existing inheriting table; the table with its
+        // own level keeps it.
+        execute(rootClient, R"(
+            ALTER DATABASE `/Root/Test` SET (TABLES_METRICS_LEVEL = "PARTITION");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(GetTablesMetricsLevel(kikimr.GetTestServer(), "/Root/Test"),
+            ui32(TSchemeMetricsSettings::MetricsLevelPartition));
+        UNIT_ASSERT(!getConfiguredLevel("/Root/Test/Inherits"));
+        UNIT_ASSERT(getConfiguredLevel("/Root/Test/Pinned") == TMetricsSettings::EMetricsLevel::Table);
+        waitFor("database default PARTITION", {
+            {"Inherits", TSchemeMetricsSettings::MetricsLevelPartition, "partition"},
+            {"Pinned", TSchemeMetricsSettings::MetricsLevelTable, "table"},
+        });
     }
 
     Y_UNIT_TEST(ModifyPermissions) {

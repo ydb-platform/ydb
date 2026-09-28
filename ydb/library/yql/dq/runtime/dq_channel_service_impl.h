@@ -218,7 +218,10 @@ public:
 
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void SetReadyHook(const TDqInputReadyHook& hook) override;
     void AbortChannelByMemoryLimit(ui64 bytes);
+    // under Mutex: marked where data becomes poppable or the buffer finishes, before the input is notified
+    TDqInputReadyHook ReadyHook;
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     NActors::TActorSystem* ActorSystem;
@@ -540,6 +543,7 @@ public:
     bool IsEmpty();
     // lock free: true if the queue is empty, and then the consumer is going to be woken up by the next push
     bool IsEmptyFast();
+    void SetReadyHook(const TDqInputReadyHook& hook);
     bool PushDataChunk(TDataChunk&& data);
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
@@ -586,6 +590,8 @@ public:
     // Written by TNodeState::SendUpdateProgress under UpdateMutex only, read lock free to
     // detect that a flip of MemoryPressure is not delivered to the sender yet
     std::atomic<bool> LastSentMemoryPressure = false;
+    // under QueueMutex: marked where data is queued or the channel finishes, before the consumer is notified
+    TDqInputReadyHook ReadyHook;
     // Orders the updates of this channel: they go from the consumer thread and from the session thread (on a
     // discovery), and a flip of MemoryPressure overtaken by the previous state would stick on the sender.
     // Taken under TNodeState::Mutex by HandleDiscovery, takes nothing itself
@@ -628,6 +634,9 @@ public:
     void EarlyFinish() override;
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void SetReadyHook(const TDqInputReadyHook& hook) override {
+        Descriptor->SetReadyHook(hook);
+    }
 
     std::shared_ptr<TNodeState> NodeState;
     std::shared_ptr<TInputDescriptor> Descriptor;
@@ -988,6 +997,9 @@ public:
     // unbound channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
+    bool IsChannelNotificationsEnabled() const final {
+        return Limits.EnableChannelNotifications;
+    }
     // extras
     void NotifyCleanup();
 
@@ -1206,6 +1218,8 @@ public:
     void ResumeByCheckpoint() override {
         Y_ENSURE(PausedByCheckpoint);
         PausedByCheckpoint = false;
+        // Pop told nothing while paused, the union may have set the input aside
+        ReadyHook.Mark();
     }
 
     bool IsPausedByCheckpoint() const override {
@@ -1245,6 +1259,14 @@ public:
         Callback = callback;
     }
 
+    // the hook goes to the buffer, and again to the bound buffer which replaces the stub, see Bind
+    bool BindReadySet(const std::shared_ptr<TDqInputReadySet>& set, ui32 slot) override {
+        ReadyHook = TDqInputReadyHook{set, slot};
+        Buffer->SetReadyHook(ReadyHook);
+        ReadyHook.Mark();
+        return true;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
@@ -1252,6 +1274,7 @@ public:
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
     IDqInputChannelCallbacks* Callback = nullptr;
     bool PausedByCheckpoint = false;
+    TDqInputReadyHook ReadyHook;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

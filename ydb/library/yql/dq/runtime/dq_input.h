@@ -5,9 +5,13 @@
 
 #include "dq_async_stats.h"
 
+#include <memory>
+
 namespace NYql::NDq {
 
 using TDqInputStats = TDqAsyncStats;
+
+class TDqInputReadySet;
 
 class IDqInput : public TSimpleRefCount<IDqInput> {
 public:
@@ -44,6 +48,17 @@ public:
     virtual void PauseByCheckpoint() = 0;
     virtual void ResumeByCheckpoint() = 0;
     virtual bool IsPausedByCheckpoint() const = 0;
+
+    // Opt in to be polled by a union only when marked, see TDqInputReadySet. An input which returns true marks
+    // `slot` right away, and then whenever Pop() or IsFinished() may have changed: data, a watermark or a
+    // checkpoint arrived, the input finished, or it is resumed after a checkpoint. It marks itself before it wakes
+    // the consumer up, and also when its Pop() returns false without the input having been found empty.
+    // Binding again replaces the previous binding. A union is either all bound or all polled: if one of its inputs
+    // returns false, it polls them all as before. The task runner asks for it only where the inputs support it.
+    virtual bool BindReadySet(const std::shared_ptr<TDqInputReadySet>& set, ui32 slot) {
+        Y_UNUSED(set, slot);
+        return false;
+    }
 };
 
 } // namespace NYql::NDq

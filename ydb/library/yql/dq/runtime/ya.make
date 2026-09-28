@@ -34,6 +34,7 @@ SRCS(
     dq_compute.cpp
     dq_input_channel.cpp
     dq_input_producer.cpp
+    dq_input_ready.cpp
     dq_output_channel.cpp
     dq_output_consumer.cpp
     dq_tasks_counters.cpp

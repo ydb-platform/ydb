@@ -2210,7 +2210,8 @@ public:
         // COMMIT-mode completions from lock-only participant shards) must not create
         // empty shard entries, which would otherwise leak into GetShardsIds().
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
-        if (!shardInfo || shardInfo->IsEmpty()) {
+        AFL_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty()) {
             return {};
         }
         return MakeMetadata(*shardInfo);
@@ -2272,9 +2273,7 @@ public:
         // A read-only lookup: acknowledgements from shards unknown to the controller
         // (e.g. COMMIT-mode completions) must not create empty shard entries.
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
-        if (!shardInfo) {
-            return std::nullopt;
-        }
+        AFL_ENSURE(shardInfo);
         // Controller cookies are always non-zero (see AllocateMessageCookie), so a
         // zero cookie (e.g. a distributed-commit completion) must never reach the
         // acknowledgement path: callers drop or early-return such results.
@@ -2291,14 +2290,16 @@ public:
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
-        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
+        AFL_ENSURE(shardInfo);
+        AFL_ENSURE(!shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
         shardInfo->IncSendAttempts();
         shardInfo->IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
-        if (!shardInfo || shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
+        AFL_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
             return;
         }
         shardInfo->ResetSendAttempts();

@@ -7,7 +7,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/provider/sql_path_aliases.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
@@ -1232,6 +1234,12 @@ public:
 
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
+        if (HasAppData(ActorSystem)) {
+            if (auto normalizer = AppData(ActorSystem)->PathNormalizer; normalizer && normalizer->HasRules()) {
+                config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+            }
+        }
+
         TypesCtx->LangVer = config->GetDefaultLangVer();
         TypesCtx->BackportMode = config->GetYqlBackportMode();
         SessionCtx->SetDatabase(database);
@@ -1465,6 +1473,9 @@ private:
         YQL_CLOG(INFO, CoreDq) << "Good place to weld in";
 
         if (!CompileExpr(*queryAst->Root, queryExpr, ctx, ModuleResolver.get(), nullptr)) {
+            return result;
+        }
+        if (isSql && !RewriteSqlPathAliases(queryExpr, ctx, Cluster, SessionCtx->Config().NormalizePath)) {
             return result;
         }
         YQL_CLOG(INFO, CoreDq) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);

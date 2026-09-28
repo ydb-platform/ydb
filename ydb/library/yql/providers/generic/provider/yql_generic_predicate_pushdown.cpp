@@ -776,7 +776,7 @@ namespace NYql {
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << ToIso8601(duration) << "\")";
                 }
                 default:
-                    [[fallthrough]];
+                    throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
                 }
             }
             case Ydb::Type::TIMESTAMP: {
@@ -787,7 +787,7 @@ namespace NYql {
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
                 }
                 default:
-                    [[fallthrough]];
+                    throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
                 }
             }
             case Ydb::Type::DATE: {
@@ -797,7 +797,7 @@ namespace NYql {
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\""
                         << TInstant::Days(value.uint32_value()).FormatGmTime("%Y-%m-%d") << "\")";
                 default:
-                    [[fallthrough]];
+                    throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
                 }
             }
             default:

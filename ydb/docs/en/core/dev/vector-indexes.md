@@ -249,7 +249,14 @@ ALTER TABLE `my_table` REBUILD INDEX `my_index`
 WITH (clusters = 128, levels = 2);
 ```
 
-The existing index continues to serve queries and receive table updates during the build. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement. You can limit build parallelism with the `parallel` parameter described in the [SQL reference](../yql/reference/syntax/alter_table/indexes.md#rebuild-index).
+The existing index continues to serve queries and receive table updates during the build. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement.
+
+To limit the number of parallel partition handlers during the rebuild, set the [`parallel` parameter](../yql/reference/syntax/alter_table/indexes.md#rebuild-index). For example, to run no more than eight handlers at a time:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`
+WITH (parallel = 8);
+```
 
 The replacement is built from a snapshot, so the [consistency limitation during index building](#build-consistency) also applies to rebuilding. Pause writes until rebuilding completes if you need a fully consistent index. Queries remain available, but may require a [retry](../recipes/ydb-sdk/retry.md) when the index is replaced.
 

@@ -8748,7 +8748,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         if (inStore) {
             const auto result = session.ExecuteSchemeQuery(R"(
                 CREATE TABLESTORE `/Root/tiering_store` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))
-                WITH (STORE = COLUMN);
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
             )").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -8775,7 +8775,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             checkTier();
         };
         const TString createBase = TStringBuilder() << "CREATE TABLE `" << tableName
-            << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts)) WITH (STORE = COLUMN, TTL = ";
+            << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))"
+            << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1, TTL = ";
         const auto create = session.ExecuteSchemeQuery(createBase
             + R"(Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts);)").GetValueSync();
         if (!enableTree) {
@@ -8801,7 +8802,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const TString legacyName = tableName + "_legacy";
             const auto legacy = session.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `" << legacyName
-                << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts)) WITH (STORE = COLUMN);").GetValueSync();
+                << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))"
+                << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);").GetValueSync();
             UNIT_ASSERT_C(legacy.IsSuccess(), legacy.GetIssues().ToString());
             const auto alterLegacy = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << legacyName
                 << "` SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts;").GetValueSync();

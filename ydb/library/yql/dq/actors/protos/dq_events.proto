@@ -292,13 +292,14 @@ message TEvChannelAckV2 {
     optional EAckStatus Status = 3;
     optional uint64 SeqNo = 4;
 
-    // Application level
+    // Application level, not read by the sender: an ack refers to the message with SeqNo
 
     optional NActorsProto.TActorId SrcActorId = 5;
     optional NActorsProto.TActorId DstActorId = 6;
     optional uint64 ChannelId = 7;
 
-    // Only if OK
+    // Never set: the progress of a channel goes with TEvChannelUpdateV2. Senders up to 26-3 would apply these
+    // under their session lock and deadlock, newer ones ignore them
 
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;

@@ -140,7 +140,6 @@ EWireProtocolCommand GetWireProtocolCommand(const TWireProtocolWriteCommand& com
 //! Builds wire-encoded stream.
 struct IWireProtocolWriter
 {
-public:
     virtual ~IWireProtocolWriter() = default;
 
     virtual size_t GetByteSize() const = 0;
@@ -215,7 +214,6 @@ std::unique_ptr<IWireProtocolWriter> CreateWireProtocolWriter();
  */
 struct IWireProtocolReader
 {
-public:
     using TIterator = const char*;
 
     virtual ~IWireProtocolReader() = default;

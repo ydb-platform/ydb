@@ -264,6 +264,7 @@ protected:
 
     TNodePtr IntegerOrBind(const TRule_integer_or_bind& node);
     TNodePtr TypeNameTag(const TRule_type_name_tag& node);
+    TNodePtr RuntimeTypeNameTag(const TRule_type_name_tag& node);
     TNodePtr TypeNodeOrBind(const TRule_type_name_or_bind& node);
     TNodePtr SerialTypeNode(const TRule_type_name_or_bind& node);
     TNodePtr TypeNode(const TRule_type_name& node);
@@ -301,16 +302,11 @@ protected:
                         const TString& service,
                         const TDeferredAtom& cluster);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
-    bool PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result);
-    bool HashParameter(const TRule_hash_option& hashOption, TUserParameters& result);
-    void LoginParameter(const TRule_login_option& loginOption, std::optional<bool>& canLogin);
-    bool UserParameters(const std::vector<TRule_user_option>& optionsList, TUserParameters& result, bool isCreateUser);
-    bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
-    bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
-    bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
     bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
+    bool ParseTruncateTableSettings(const TRule_truncate_table_settings& in, THashMap<TString, TNodePtr>& out);
+    bool ParseTruncateTableSetting(const TRule_truncate_table_setting_is_unsafe& in, THashMap<TString, TNodePtr>& out);
 
     TMaybe<TDeferredAtom> ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix);
     TMaybe<TDeferredAtom> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);

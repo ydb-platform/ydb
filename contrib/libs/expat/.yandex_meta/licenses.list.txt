@@ -84,6 +84,9 @@
    Copyright (c) 2026      Kartik Kenchi <netliomax25@gmail.com>
    Copyright (c) 2026      Haris Hussain <hextheshadow0x@gmail.com>
    Copyright (c) 2026      Evgeny Kotkov <kotkov@apache.org>
+   Copyright (c) 2026      Darren Carreras <carrerasdarren@gmail.com>
+   Copyright (c) 2026      Alberto Maschietto <albertomaschietto9@gmail.com>
+   Copyright (c) 2026      Zeyou Liu <zeyouliu@tencent.com>
    Licensed under the MIT license:
 
 
@@ -207,6 +210,7 @@
    Copyright (c) 2019      David Loffredo <loffredo@steptools.com>
    Copyright (c) 2023-2024 Sony Corporation / Snild Dolkow <snild@sony.com>
    Copyright (c) 2024      Taichi Haradaguchi <20001722@ymail.ne.jp>
+   Copyright (c) 2026      Matthew Wozniczka <mattheww@simba.com>
    Licensed under the MIT license:
 
 

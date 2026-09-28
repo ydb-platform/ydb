@@ -21,22 +21,31 @@ namespace {
         .MaxRandomDelay = TDuration::MicroSeconds(100),
     };
 
-    std::vector<TSchedulableTaskPtr> CreateDemandTasks(const NHdrf::NDynamic::TQueryPtr& query, ui64 demand) {
+    // Creates the tasks which make the query demand `demand` CPUs at most, and `actualDemand` CPUs really:
+    // - the max demand is the number of tasks;
+    // - the actual demand is the number of the tasks wanting CPU, so the first `actualDemand` tasks are kept throttled.
+    std::vector<TSchedulableTaskPtr> CreateDemandTasks(const NHdrf::NDynamic::TQueryPtr& query, ui64 demand, std::optional<ui64> actualDemand = {}) {
         std::vector<TSchedulableTaskPtr> tasks;
 
-        // Currently Demand for query snapshot is set as (Demand + ActualDemand) / 2.
-        // ActualDemand is set to 0 after each snapshot take, so to avoid updating is every time this workaround was implemented
-        tasks.reserve(2 * demand);
-        for (ui64 i = 0; i < 2 * demand; ++i) {
+        tasks.reserve(demand);
+        for (ui64 i = 0; i < demand; ++i) {
             tasks.emplace_back(std::make_shared<TSchedulableTask>(query));
+        }
+
+        for (ui64 i = 0; i < actualDemand.value_or(demand); ++i) {
+            tasks.at(i)->IncreaseThrottle();
         }
 
         return tasks;
     }
 
+    // Expects the tasks created by CreateDemandTasks() with the actual demand equal to the max one
     void ShrinkDemand(std::vector<TSchedulableTaskPtr>& tasks, ui64 demand) {
-        Y_ENSURE(demand * 2 < tasks.size());
-        tasks.resize(2 * demand);
+        Y_ENSURE(demand < tasks.size());
+        for (ui64 i = demand; i < tasks.size(); ++i) {
+            tasks.at(i)->DecreaseThrottle();
+        }
+        tasks.resize(demand);
     }
 } // namespace
 
@@ -704,7 +713,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - 1 database with 2 pools, the first one has 1 query with demand 2, the second one - 1 query with demand 10
             - The demand of the first pool is under its proportion, so it gets exactly its demand, and the rest goes to the second
             - Adding one more query with demand 1 to the first pool increases its demand, and the second pool gets less
-            - Decreasing the demand of the first query gives it back to the second pool
+            - Decreasing the demand of the first query gives it back to the second pool immediately - the departed tasks
+              don't want anything anymore, even though the actual demand is smoothed
             - Every query gets the whole FairShare of its pool
         */
         constexpr ui64 kCpuLimit = 10;
@@ -999,7 +1009,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(databaseId, "pool1", {});
 
         auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
-        auto tasks = CreateDemandTasks(query, 4);
+        auto tasks = CreateDemandTasks(query, 4, 0);
         tasks.at(0)->IncreaseThrottle();
         tasks.at(1)->IncreaseThrottle();
 
@@ -1008,7 +1018,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         auto* pool = query->GetSnapshot()->GetParent();
         UNIT_ASSERT_VALUES_EQUAL(pool->CpuActualDemand, 2);
         UNIT_ASSERT_VALUES_EQUAL_C(pool->GetParent()->CpuActualDemand, 2, "The database sums up the actual demands of its pools");
-        UNIT_ASSERT_VALUES_EQUAL_C(pool->FairShare, pool->CpuMaxDemand.load(), "The fair-share is still based on the max demand");
+        UNIT_ASSERT_VALUES_EQUAL_C(pool->FairShare, pool->CpuMaxDemand.load(), "The spare fair-share is given as a headroom up to the max demand");
     }
 
     Y_UNIT_TEST(ParkedTasksWantNothing) {
@@ -1032,7 +1042,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(databaseId, "pool1", {});
 
         auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
-        auto tasks = CreateDemandTasks(query, 4);
+        auto tasks = CreateDemandTasks(query, 4, 0);
 
         scheduler.UpdateFairShare();
 
@@ -1065,7 +1075,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(databaseId, "pool1", {});
 
         auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
-        auto tasks = CreateDemandTasks(query, 1);
+        auto tasks = CreateDemandTasks(query, 2, 0);
 
         scheduler.UpdateFairShare();
         UNIT_ASSERT_VALUES_EQUAL_C(query->GetSnapshot()->GetParent()->CpuActualDemand, 1, "The pool with tasks keeps at least 1 CPU");
@@ -1101,7 +1111,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(databaseId, "pool1", {});
 
         auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
-        auto tasks = CreateDemandTasks(query, 4);
+        auto tasks = CreateDemandTasks(query, 4, 0);
         for (size_t i = 0; i < 4; ++i) {
             tasks.at(i)->IncreaseThrottle();
         }
@@ -1149,8 +1159,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
         auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 2, {});
-        auto tasks1 = CreateDemandTasks(query1, 2);
-        auto tasks2 = CreateDemandTasks(query2, 2);
+        auto tasks1 = CreateDemandTasks(query1, 4, 0);
+        auto tasks2 = CreateDemandTasks(query2, 4, 0);
 
         auto setWanting = [](std::vector<TSchedulableTaskPtr>& tasks, bool wanting) {
             for (auto& task : tasks) {
@@ -1176,6 +1186,139 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         setWanting(tasks2, true);
         checkActualDemands(4, 4); // the first query keeps its actual demand for one more snapshot
         checkActualDemands(0, 4);
+    }
+
+    Y_UNIT_TEST(SpareFairShareIsGivenAsHeadroom) {
+        /*
+            Scenario:
+            - 1 database with 2 pools, both have max demand 4 while really wanting only 1 and 2
+            - The actual demands are satisfied first, and the spare CPU is given away as a headroom up to the max demand,
+              so the pools get as much as before - and can grow without waiting for the next snapshot
+        */
+        constexpr ui64 kCpuLimit = 12;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 4, 1);
+        auto tasks2 = CreateDemandTasks(query2, 4, 2);
+
+        scheduler.UpdateFairShare();
+
+        auto* pool1 = query1->GetSnapshot()->GetParent();
+        auto* pool2 = query2->GetSnapshot()->GetParent();
+
+        UNIT_ASSERT_VALUES_EQUAL(pool1->CpuActualDemand, 1);
+        UNIT_ASSERT_VALUES_EQUAL(pool2->CpuActualDemand, 2);
+        UNIT_ASSERT_VALUES_EQUAL(pool1->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(pool2->FairShare, 4);
+    }
+
+    Y_UNIT_TEST(ActualDemandIsDividedUnderContention) {
+        /*
+            Scenario:
+            - 1 database with 2 pools, both have max demand above the CPU limit
+            - The first pool has a lot of tasks, but really wants only 2, while the second one wants 6
+            - Dividing by the max demand would give 4 and 4, but the fair division is based on what is really wanted,
+              so the pools get 2 and 6, and nothing is left for the headroom
+        */
+        constexpr ui64 kCpuLimit = 8;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 20, 2);
+        auto tasks2 = CreateDemandTasks(query2, 10, 6);
+
+        scheduler.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL(query1->GetSnapshot()->GetParent()->FairShare, 2);
+        UNIT_ASSERT_VALUES_EQUAL(query2->GetSnapshot()->GetParent()->FairShare, 6);
+    }
+
+    Y_UNIT_TEST(HeadroomIsSplitAfterActualDemand) {
+        /*
+            Scenario:
+            - 1 database with 2 pools, both have max demand 10 while really wanting 2 and 4, the CPU limit is 10
+            - The actual demands are satisfied first, and the spare 4 CPUs are split equally as a headroom, giving 4 and 6
+            - Dividing by the max demand would give 5 and 5 - the pool which wants more would get less
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 10, 2);
+        auto tasks2 = CreateDemandTasks(query2, 10, 4);
+
+        scheduler.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL(query1->GetSnapshot()->GetParent()->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(query2->GetSnapshot()->GetParent()->FairShare, 6);
+    }
+
+    Y_UNIT_TEST(MaxDemandIsTheNumberOfTasks) {
+        /*
+            Scenario:
+            - 1 pool with 1 query, which has 6 tasks, and only 2 of them want CPU
+            - The max demand is just the number of tasks - it's not averaged with the wanting ones anymore,
+              so the pool gets the whole headroom up to 6 without contention
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto tasks = CreateDemandTasks(query, 6, 2);
+
+        scheduler.UpdateFairShare();
+
+        auto querySnapshot = query->GetSnapshot();
+        UNIT_ASSERT_VALUES_EQUAL(querySnapshot->CpuMaxDemand.load(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(querySnapshot->CpuActualDemand, 2);
+        UNIT_ASSERT_VALUES_EQUAL(querySnapshot->GetParent()->FairShare, 6);
     }
 
     Y_UNIT_TEST(ThrottleTimeIsNotLostOnStop) {
@@ -1368,9 +1511,9 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         */
         THierarchy hierarchy(16);
 
-        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2);
-        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 2);
-        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 4, 0);
+        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 4, 0);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 4, 0);
         Throttle(tasks1, 2);
         Throttle(tasks3, 3);
 
@@ -1394,8 +1537,8 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         */
         THierarchy hierarchy(16);
 
-        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2);
-        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 4, 0);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 4, 0);
 
         auto check = [&](ui64 poolA1, ui64 poolB) {
             hierarchy.UpdateFairShare();
@@ -1426,9 +1569,9 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         */
         THierarchy hierarchy(16, {.CpuLimit = 2});
 
-        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2);
-        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 2);
-        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2);
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 2, 0);
+        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 2, 0);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 2, 0);
         Throttle(tasks1, 2);
         Throttle(tasks2, 2);
         Throttle(tasks3, 1);
@@ -1468,6 +1611,32 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         UNIT_ASSERT_VALUES_EQUAL(hierarchy.Query1->GetSnapshot()->FairShare, 3);
         UNIT_ASSERT_VALUES_EQUAL(hierarchy.Query2->GetSnapshot()->FairShare, 3);
         UNIT_ASSERT_VALUES_EQUAL(hierarchy.Query3->GetSnapshot()->FairShare, 2);
+    }
+
+    Y_UNIT_TEST(HeadroomIsDistributedDownTheHierarchy) {
+        /*
+            Scenario:
+            - The CPU limit is 10, query1 and query2 have max demand 4 each but really want 1 each, query3 has max demand 8
+              and really wants 4
+            - The database satisfies the actual demands first - 2 for poolA and 4 for poolB - and splits the spare 4 CPUs
+              equally as a headroom, giving 4 and 6
+            - poolA does the same with its 4: 1 and 1 first, then the spare 2 as a headroom - 2 and 2
+            - Dividing by the max demand would give poolA 5 and poolB 5, while poolB really wants more
+        */
+        THierarchy hierarchy(10);
+
+        auto tasks1 = CreateDemandTasks(hierarchy.Query1, 4, 1);
+        auto tasks2 = CreateDemandTasks(hierarchy.Query2, 4, 1);
+        auto tasks3 = CreateDemandTasks(hierarchy.Query3, 8, 4);
+
+        hierarchy.UpdateFairShare();
+
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.RootSnapshot()->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.Database()->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA()->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolB()->FairShare, 6);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA1()->FairShare, 2);
+        UNIT_ASSERT_VALUES_EQUAL(hierarchy.PoolA2()->FairShare, 2);
     }
 
 }

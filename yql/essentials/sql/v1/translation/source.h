@@ -378,6 +378,7 @@ TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferr
 TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
                                        TNodePtr node, const TString& view = {});
 void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
+void MakeRuntimeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
 TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix = {});
 TString NormalizeTypeString(const TString& str);
 } // namespace NSQLTranslationV1

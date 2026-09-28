@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.7.2)
+VERSION(1.8.0)
 
 LICENSE(Apache-2.0)
 
@@ -111,6 +111,8 @@ PY_SRCS(
     clickhouse_connect/driver/options.py
     clickhouse_connect/driver/parser.py
     clickhouse_connect/driver/query.py
+    clickhouse_connect/driver/rustcodec.py
+    clickhouse_connect/driver/rustnumpy.py
     clickhouse_connect/driver/streaming.py
     clickhouse_connect/driver/summary.py
     clickhouse_connect/driver/tools.py

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <memory>
 
 #include "kqp_node_state.h"
@@ -17,48 +16,31 @@ NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, st
     std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
     bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking);
 
-// Per query (per tx on a node), IS THREAD SAFE: the only path between the query's tx and the resource manager.
-// The start reservation and every allocation and free of the task and channel quota managers go through it, so it
-// knows how much the query holds: Memory + ExternalMemory, see GetAllocatedMemory(). A pure pass-through for now,
-// it never refuses on its own. Called from compute actors and from the channel service (under its locks), must stay
-// lock-free and must not call actors.
-class TQueryQuotaManager final : public NYql::NDq::IMemoryQuotaManager {
+// Per query (per tx on a node), IS THREAD SAFE, implemented by TQueryQuotaManager in the cpp: the only path between the
+// query's tx and the resource manager. It holds the execution units and the external memory of the started tasks till
+// it dies, see AllocateTasks(); the task and channel quota managers keep it alive and take Memory from it through
+// AllocateQuota() and FreeQuota(). GetCurrentQuota() is what the query holds from the resource manager: Memory +
+// ExternalMemory. Called from compute actors and from the channel service (under its locks), must stay lock-free and
+// must not call actors.
+class IQueryQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 public:
-    explicit TQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx);
-
-    // taskId and the request are forwarded as is: resource manager logs, fail reasons and broker task names are kept
-    NRm::TKqpRMAllocateResult AllocateResources(ui64 taskId, const NRm::TKqpResourcesRequest& resources);
-    void FreeResources(ui64 taskId, const NRm::TKqpResourcesRequest& resources);
-
-    // Query level Memory with taskId 0. isOptional is passed on to the resource manager, which refuses an optional
-    // request at the spilling threshold, see NRm::TKqpResourcesRequest::Optional
-    bool AllocateQuota(ui64 memorySize, bool isOptional) override;
-    void FreeQuota(ui64 memorySize) override;
-    ui64 GetCurrentQuota() const override;
-    ui64 GetMaxMemorySize() const override;
-    i64 GetMemoryAvailability() const override;
-    TString MemoryConsumptionDetails() const override;
-
-    // Memory + ExternalMemory currently held from the resource manager through this object
-    ui64 GetAllocatedMemory() const;
-    ui64 GetTxId() const;
-    // Read only, e.g. for the pool of the tx: an allocation made directly on the tx is not seen by the counter
-    const TIntrusivePtr<NRm::TTxState>& GetTx() const;
-
-private:
-    const TIntrusivePtr<NRm::TTxState> Tx;
-    std::atomic<ui64> AllocatedMemory = 0;
-    std::atomic<ui64> MaxAllocatedMemory = 0;
+    // The execution units and the external memory of the tasks of a start request, returned to the resource manager
+    // when the query quota manager dies. The task and channel quota managers use their part of the external memory as
+    // their initial limit
+    virtual NRm::TKqpRMAllocateResult AllocateTasks(ui64 executionUnits, ui64 externalMemory) = 0;
+    virtual const TIntrusivePtr<NRm::TTxState>& GetTx() const = 0;
 };
 
-using TQueryQuotaManagerPtr = std::shared_ptr<TQueryQuotaManager>;
+using TQueryQuotaManagerPtr = std::shared_ptr<IQueryQuotaManager>;
 
 TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx);
 
-NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(TQueryQuotaManagerPtr queryQuotaManager,
-    ui64 taskId, ui64 initialMemoryLimit);
+// initialMemoryLimit is the part of the external memory of the query quota manager the task starts with
+NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
+    ui64 initialMemoryLimit, ui64 allocationStep = 1_MB);
 
-NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(TQueryQuotaManagerPtr queryQuotaManager,
+// initialMemoryLimit is the part of the external memory of the query quota manager the channels start with
+NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
     ui64 initialMemoryLimit, ui64 allocationStep = 1_MB);
 
 

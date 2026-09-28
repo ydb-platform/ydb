@@ -15,68 +15,108 @@
 
 namespace NKikimr::NKqp {
 
-TQueryQuotaManager::TQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx)
-    : Tx(std::move(tx))
-{
-    Y_ABORT_UNLESS(Tx && Tx->ResourceManager);
-}
+namespace {
 
-NRm::TKqpRMAllocateResult TQueryQuotaManager::AllocateResources(ui64 taskId, const NRm::TKqpResourcesRequest& resources) {
-    auto result = Tx->ResourceManager->AllocateResources(*Tx, taskId, resources);
-    if (result) {
-        // counted after the grant and uncounted before the release: never more than the tx holds
-        const ui64 bytes = resources.Memory + resources.ExternalMemory;
+class TQueryQuotaManager final : public IQueryQuotaManager {
+public:
+    explicit TQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx)
+        : Tx(std::move(tx))
+    {
+        Y_ABORT_UNLESS(Tx && Tx->ResourceManager);
+    }
+
+    // the task and channel quota managers keep it alive: their Memory is back by now
+    ~TQueryQuotaManager() override {
+        const ui64 externalMemory = ExternalMemory.load();
+        Y_DEBUG_ABORT_UNLESS(AllocatedMemory.load() == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
+            Tx->TxId, AllocatedMemory.load() - externalMemory);
+        const ui64 executionUnits = ExecutionUnits.load();
+        if (executionUnits || externalMemory) {
+            Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
+                .ExecutionUnits = executionUnits,
+                .ExternalMemory = externalMemory,
+            });
+        }
+    }
+
+    NRm::TKqpRMAllocateResult AllocateTasks(ui64 executionUnits, ui64 externalMemory) override {
+        auto result = Tx->ResourceManager->AllocateResources(*Tx, 0,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = executionUnits, .ExternalMemory = externalMemory});
+        if (result) {
+            ExecutionUnits.fetch_add(executionUnits);
+            ExternalMemory.fetch_add(externalMemory);
+            Allocated(externalMemory);
+        }
+        return result;
+    }
+
+    const TIntrusivePtr<NRm::TTxState>& GetTx() const override {
+        return Tx;
+    }
+
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
+        auto result = Tx->ResourceManager->AllocateResources(*Tx, 0,
+            NRm::TKqpResourcesRequest{.Memory = memorySize, .Optional = isOptional});
+
+        if (!result) {
+            // an optional refusal is the spilling signal, the caller logs it
+            if (!isOptional) {
+                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                    {"problem", "cannot_allocate_memory"},
+                    {"txId", Tx->TxId},
+                    {"memory", memorySize});
+            }
+
+            return false;
+        }
+
+        Allocated(memorySize);
+        return true;
+    }
+
+    void FreeQuota(ui64 memorySize) override {
+        // uncounted before the release: never more than the tx holds
+        const ui64 prev = AllocatedMemory.fetch_sub(memorySize);
+        Y_DEBUG_ABORT_UNLESS(prev >= memorySize, "TxId: %" PRIu64 ", freeing %" PRIu64 " bytes of %" PRIu64 " allocated",
+            Tx->TxId, memorySize, prev);
+        Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memorySize});
+    }
+
+    ui64 GetCurrentQuota() const override {
+        return AllocatedMemory.load();
+    }
+
+    ui64 GetMaxMemorySize() const override {
+        return MaxAllocatedMemory.load();
+    }
+
+    i64 GetMemoryAvailability() const override {
+        return Tx->GetMemoryAvailability();
+    }
+
+    TString MemoryConsumptionDetails() const override {
+        return Tx->ToString();
+    }
+
+private:
+    // counted after the grant: never more than the tx holds
+    void Allocated(ui64 bytes) {
         const ui64 allocated = AllocatedMemory.fetch_add(bytes) + bytes;
         ui64 peak = MaxAllocatedMemory.load();
         while (peak < allocated && !MaxAllocatedMemory.compare_exchange_weak(peak, allocated)) {
         }
     }
-    return result;
-}
 
-void TQueryQuotaManager::FreeResources(ui64 taskId, const NRm::TKqpResourcesRequest& resources) {
-    const ui64 bytes = resources.Memory + resources.ExternalMemory;
-    const ui64 prev = AllocatedMemory.fetch_sub(bytes);
-    Y_DEBUG_ABORT_UNLESS(prev >= bytes, "TxId: %" PRIu64 ", taskId: %" PRIu64 ", freeing %" PRIu64 " bytes of %" PRIu64 " allocated",
-        Tx->TxId, taskId, bytes, prev);
-    Tx->ResourceManager->FreeResources(*Tx, taskId, resources);
-}
+    const TIntrusivePtr<NRm::TTxState> Tx;
+    // held till the destructor
+    std::atomic<ui64> ExecutionUnits = 0;
+    std::atomic<ui64> ExternalMemory = 0;
+    // Memory + ExternalMemory
+    std::atomic<ui64> AllocatedMemory = 0;
+    std::atomic<ui64> MaxAllocatedMemory = 0;
+};
 
-bool TQueryQuotaManager::AllocateQuota(ui64 memorySize, bool isOptional) {
-    return AllocateResources(0, NRm::TKqpResourcesRequest{.Memory = memorySize, .Optional = isOptional});
-}
-
-void TQueryQuotaManager::FreeQuota(ui64 memorySize) {
-    FreeResources(0, NRm::TKqpResourcesRequest{.Memory = memorySize});
-}
-
-ui64 TQueryQuotaManager::GetCurrentQuota() const {
-    return GetAllocatedMemory();
-}
-
-ui64 TQueryQuotaManager::GetMaxMemorySize() const {
-    return MaxAllocatedMemory.load();
-}
-
-i64 TQueryQuotaManager::GetMemoryAvailability() const {
-    return Tx->GetMemoryAvailability();
-}
-
-TString TQueryQuotaManager::MemoryConsumptionDetails() const {
-    return Tx->ToString();
-}
-
-ui64 TQueryQuotaManager::GetAllocatedMemory() const {
-    return AllocatedMemory.load();
-}
-
-ui64 TQueryQuotaManager::GetTxId() const {
-    return Tx->TxId;
-}
-
-const TIntrusivePtr<NRm::TTxState>& TQueryQuotaManager::GetTx() const {
-    return Tx;
-}
+} // namespace
 
 TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx) {
     return std::make_shared<TQueryQuotaManager>(std::move(tx));
@@ -86,44 +126,25 @@ TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx) {
 
 struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
-    TMemoryQuotaManager(TQueryQuotaManagerPtr query
-        , ui64 taskId
-        , ui64 limit)
-    : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
+    // the limit is external memory of the query quota manager, it returns it when it dies
+    TMemoryQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr query
+        , ui64 limit, ui64 step = 1_MB)
+    : NYql::NDq::TGuaranteeQuotaManager(limit, limit, step)
     , Query(std::move(query))
-    , TaskId(taskId)
     {}
 
     ~TMemoryQuotaManager() override {
-        Query->FreeResources(TaskId, NRm::TKqpResourcesRequest{
-            .ExecutionUnits = 1,
-            .Memory = Limit - Guarantee,
-            .ExternalMemory = Guarantee,
-        });
+        if (Limit > Guarantee) {
+            Query->FreeQuota(Limit - Guarantee);
+        }
     }
 
     bool AllocateExtraQuota(ui64 extraSize, bool isOptional) override {
-        auto result = Query->AllocateResources(TaskId,
-            NRm::TKqpResourcesRequest{.Memory = extraSize, .Optional = isOptional});
-
-        if (!result) {
-            // an optional refusal is the spilling signal, the caller logs it
-            if (!isOptional) {
-                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
-                    {"problem", "cannot_allocate_memory"},
-                    {"txId", Query->GetTxId()},
-                    {"taskId", TaskId},
-                    {"memory", extraSize});
-            }
-
-            return false;
-        }
-
-        return true;
+        return Query->AllocateQuota(extraSize, isOptional);
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
-        Query->FreeResources(TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
+        Query->FreeQuota(extraSize);
     }
 
     i64 GetExtraMemoryAvailability() const override {
@@ -134,20 +155,20 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         return Query->MemoryConsumptionDetails();
     }
 
-    const TQueryQuotaManagerPtr Query;
-    const ui64 TaskId;
+    const NYql::NDq::IMemoryQuotaManager::TPtr Query;
 };
 
-NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(TQueryQuotaManagerPtr queryQuotaManager,
-    ui64 taskId, ui64 initialMemoryLimit) {
-    return std::make_shared<TMemoryQuotaManager>(std::move(queryQuotaManager), taskId, initialMemoryLimit);
+NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
+    ui64 initialMemoryLimit, ui64 allocationStep) {
+    return std::make_shared<TMemoryQuotaManager>(std::move(queryQuotaManager), initialMemoryLimit, allocationStep);
 }
 
 // for event/messages, IS THREAD SAFE, allows little overquoating
 
 struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 
-    TChannelQuotaManager(TQueryQuotaManagerPtr query
+    // the limit is external memory of the query quota manager, it returns it when it dies
+    TChannelQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr query
         , ui64 limit, ui64 step = 1_MB)
     : Query(std::move(query))
     , AvailableQuota(limit)
@@ -159,10 +180,9 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     }
 
     ~TChannelQuotaManager() {
-        Query->FreeResources(0, NRm::TKqpResourcesRequest{
-            .Memory = Limit.load() - DataMemoryLimit,
-            .ExternalMemory = DataMemoryLimit,
-        });
+        if (const ui64 memory = Limit.load() - DataMemoryLimit) {
+            Query->FreeQuota(memory);
+        }
     }
 
     bool AllocateQuota(ui64 memorySize, bool isOptional) override {
@@ -174,19 +194,10 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
             memoryRequired &= ~(AllocationStep - 1);
 
             // the resource manager refuses an optional request at the spilling threshold
-            auto result = Query->AllocateResources(0,
-                NRm::TKqpResourcesRequest{.Memory = memoryRequired, .Optional = isOptional});
-            if (result) {
+            if (Query->AllocateQuota(memoryRequired, isOptional)) {
                 AvailableQuota.fetch_add(memoryRequired);
                 Limit.fetch_add(memoryRequired);
             } else {
-                if (!isOptional) {
-                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
-                        {"problem", "cannot_allocate_memory"},
-                        {"txId", Query->GetTxId()},
-                        {"taskId", 0},
-                        {"memory", memoryRequired});
-                }
                 // a little over-quoting is tolerated for mandatory requests only: the caller of an optional
                 // request can do without the memory, it must not get what the resource manager refused
                 if (isOptional || memoryRequired >= AllocationStep * 10) {
@@ -214,7 +225,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         if (quota > static_cast<i64>(AllocationStep * 10 + DataMemoryLimit)) {
             AvailableQuota.fetch_sub(AllocationStep);
             Limit.fetch_sub(AllocationStep);
-            Query->FreeResources(0, NRm::TKqpResourcesRequest{.Memory = AllocationStep});
+            Query->FreeQuota(AllocationStep);
         }
     }
 
@@ -230,7 +241,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return TString();
     }
 
-    const TQueryQuotaManagerPtr Query;
+    const NYql::NDq::IMemoryQuotaManager::TPtr Query;
     std::atomic<ui64> AllocatedQuota = 0;
     std::atomic<i64> AvailableQuota;
     std::atomic<ui64> Limit;
@@ -238,7 +249,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     const ui64 AllocationStep;
 };
 
-NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(TQueryQuotaManagerPtr queryQuotaManager,
+NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
     ui64 initialMemoryLimit, ui64 allocationStep) {
     return std::make_shared<TChannelQuotaManager>(std::move(queryQuotaManager), initialMemoryLimit, allocationStep);
 }
@@ -418,8 +429,8 @@ public:
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException()));
         }
 
-        auto rmResult = QueryQuotaManager->AllocateResources(
-            0, NRm::TKqpResourcesRequest{.ExecutionUnits = tasksCount, .ExternalMemory = externalMemory});
+        // held by the query quota manager till it dies, the tasks and the channels start with their part of it
+        auto rmResult = QueryQuotaManager->AllocateTasks(tasksCount, externalMemory);
 
         if (!rmResult) {
             ReplyError(msg, rmResult.GetStatus(), ev->Cookie, rmResult.GetFailReason());
@@ -437,6 +448,12 @@ public:
                     auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult.GetFailReason());
                     Send(computeActorId, abortEv.release());
                 }
+            }
+
+            // the tasks of this request never start: the request ends with the aborted ones, and this actor, the
+            // owner of the query quota manager that returns what the earlier requests took, is poisoned
+            for (const auto taskId : tasks) {
+                State_->OnTaskFinished(txId, executerId, taskId, /* success */ false);
             }
 
             co_return;
@@ -463,7 +480,7 @@ public:
                 .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = QueryQuotaManager->GetTx(),
-                .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, taskId, initialMemoryLimit),
+                .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
                 .ChannelQuotaManager = ChannelQuotaManager,
                 .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
@@ -574,7 +591,7 @@ public:
             ev->Record.SetLocalInflightBytes(LocalBufferInflightBytes->Val());
         }
         if (QueryQuotaManager) {
-            ev->Record.SetMemQueryAllocated(QueryQuotaManager->GetAllocatedMemory());
+            ev->Record.SetMemQueryAllocated(QueryQuotaManager->GetCurrentQuota());
         }
 
         Send(ExecuterId, ev.Release());

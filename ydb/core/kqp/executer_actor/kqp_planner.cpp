@@ -575,8 +575,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
-    auto rmResult = QueryQuotaManager->AllocateResources(
-        0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+    // held by the query quota manager till it dies, the task starts with it
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
         return rmResult.GetFailReason();
@@ -590,7 +590,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
         .TxInfo = QueryQuotaManager->GetTx(),
-        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, taskId, initialMemoryLimit),
+        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
         .ReportStatsSettings = Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),

@@ -5,6 +5,6 @@
 
 namespace NYql::NDq {
 
-NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext = nullptr);
+NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory = nullptr);
 
 } // namespace NYql::NDq

@@ -8,6 +8,10 @@ Shared rules: [`RULES.md`](RULES.md).
 
 * In `pqrb` / `pqtablet`: batch when persisting; minimize persists and
   inter-actor messages.
+* Before changing PQRB read balancing (lock, families, Finish/Commit,
+  split/merge, ScaleAwareSDK): read
+  [`pqrb/README.md`](pqrb/README.md). That file is the source of truth for
+  the intended algorithm; keep it aligned with `read_balancer__balancing.*`.
 
 ## Layout
 
@@ -19,6 +23,7 @@ In `public/` and `common/`, nested dirs by **purpose**; in `pqrb/` and
 * **`common/`** — shared tablet internals only.
 * **`events/`** — internal events and protos.
 * **`pqrb/`** — whole-topic tablet (balancing, stats, autopartitioning).
+  Read balancing: [`pqrb/README.md`](pqrb/README.md).
 * **`pqtablet/`** — one or more partitions (reads, writes, batching, …).
 * **`writer/`**, **`dread_cache_service/`**, **`deferred_publish/`** — writer,
   direct-read cache, deferred publish.

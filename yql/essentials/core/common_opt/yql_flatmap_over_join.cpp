@@ -19,23 +19,27 @@ using namespace NNodes;
 namespace {
 
 TExprNode::TPtr ConstantPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate, bool ordered, TExprContext& ctx) {
+    // clang-format off
     auto lambda = ctx.Builder(predicate->Pos())
         .Lambda()
             .Param("row")
             .Set(predicate)
             .Seal()
         .Build();
+    // clang-format on
 
     auto ret = ctx.ShallowCopy(*equiJoin);
     auto inputsCount = ret->ChildrenSize() - 2;
     for (ui32 i = 0; i < inputsCount; ++i) {
         ret->ChildRef(i) = ctx.ShallowCopy(*ret->Child(i));
+        // clang-format off
         ret->Child(i)->ChildRef(0) = ctx.Builder(predicate->Pos())
             .Callable(ordered ? "OrderedFilter" : "Filter")
                 .Add(0, ret->Child(i)->ChildPtr(0))
                 .Add(1, lambda)
             .Seal()
             .Build();
+        // clang-format on
     }
 
     return ret;
@@ -160,6 +164,7 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool onlyKeys,
     ui32 firstCandidate, ui32 inputIndex, bool ordered, bool substituteWithNulls, bool forceOptional, TExprContext& ctx
 ) {
+    // clang-format off
     return ctx.Builder(predicate->Pos())
     .Callable(ordered ? "OrderedFilter" : "Filter")
         .Add(0, filterInput)
@@ -168,6 +173,7 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
             .ApplyPartial(args, predicate).With(0)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        // clang-format on
                         ui32 index = 0;
                         const auto& label = labels.Inputs[inputIndex];
                         for (auto column : label.EnumerateAllColumns()) {
@@ -204,13 +210,16 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
                             for (auto targetColumn : targetColumns) {
                                 if (substituteWithNulls) {
                                     auto typeNode = ExpandType(predicate->Pos(), *optMemberType, ctx);
+                                    // clang-format off
                                     parent.List(index++)
                                         .Atom(0, targetColumn)
                                         .Callable(1, "Nothing")
                                             .Add(0, typeNode)
                                         .Seal()
                                     .Seal();
+                                    // clang-format on
                                 } else if (forceOptional && !memberIsOptional) {
+                                    // clang-format off
                                     parent.List(index++)
                                         .Atom(0, targetColumn)
                                         .Callable(1, "Just")
@@ -220,7 +229,9 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
                                             .Seal()
                                         .Seal()
                                     .Seal();
+                                    // clang-format on
                                 } else {
+                                    // clang-format off
                                     parent.List(index++)
                                         .Atom(0, targetColumn)
                                         .Callable(1, "Member")
@@ -228,17 +239,20 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
                                             .Atom(1, memberName)
                                         .Seal()
                                     .Seal();
+                                    // clang-format on
                                 }
                             }
                         }
 
                         return parent;
+                    // clang-format off
                     })
                 .Seal()
             .Done().Seal()
         .Seal()
     .Seal()
     .Build();
+    // clang-format on
 }
 
 bool NeedEmitSkipNullMembers(const TTypeAnnotationContext* types) {
@@ -493,9 +507,11 @@ TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& pred
         processOrTerm();
     }
 
+    // clang-format off
     auto trueLiteral = Build<TCoBool>(ctx, predicate->Pos())
         .Literal().Build("true")
         .Done().Ptr();
+    // clang-format on
 
     TExprNode::TListType resultingPredicates;
     for (ui32 input : predicateInputs) {
@@ -749,25 +765,32 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     //firstly, join same labels with inner join:
 
     size_t i = 0;
+    // clang-format off
     auto innerJoin = ctx.Builder(pos)
         .Callable("EquiJoin")
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                // clang-format on
                 for (const auto& [labelNames, input] : leftJoinLabelsNoRightChild) {
                     if (labelNames.size() == 1) {
+                        // clang-format off
                         parent.List(i++)
                             .Add(0, input)
                             .Atom(1, *labelNames.begin())
                         .Seal();
+                        // clang-format on
                     } else {
                         // Create a label list if them more than 1.
                         auto labelList = CreateLabelList(labelNames, ctx, pos);
+                        // clang-format off
                         parent.List(i++)
                             .Add(0, input)
                             .Add(1, labelList)
                         .Seal();
+                        // clang-format on
                     }
                 }
                 return parent;
+            // clang-format off
             })
             .List(i++)
                 .Add(0, filteredInput)
@@ -777,29 +800,37 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
             .Add(i++, innerSettings)
         .Seal()
     .Build();
+    // clang-format on
 
     //then, do leftOnly join:
 
     i = 0;
+    // clang-format off
     auto leftOnlyJoin = ctx.Builder(pos)
         .Callable("EquiJoin")
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                // clang-format on
                 for (const auto& [labelNames, input] : leftJoinLabelsNoRightChild) {
                     if (labelNames.size() == 1) {
+                        // clang-format off
                         parent.List(i++)
                             .Add(0, input)
                             .Atom(1, *labelNames.begin())
                         .Seal();
+                        // clang-format on
                     } else {
                         // Create a label list if them more than 1.
                         auto labelList = CreateLabelList(labelNames, ctx, pos);
+                        // clang-format off
                         parent.List(i++)
                             .Add(0, input)
                             .Add(1, labelList)
                         .Seal();
+                        // clang-format on
                     }
                 }
                 return parent;
+            // clang-format off
             })
             .List(i++)
                 .Add(0, rightSideInput)
@@ -809,6 +840,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
             .Add(i++, innerSettings)
         .Seal()
     .Build();
+    // clang-format on
 
 
     //extend left only join with nulls as left part and apply same predicate
@@ -818,12 +850,14 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     );
 
     //then unite the results;
+    // clang-format off
     auto unionAll = ctx.Builder(pos)
         .Callable("UnionAll")
             .Add(0, innerJoin)
             .Add(1, nullPredicateFilter)
         .Seal()
         .Build();
+    // clang-format on
 
     if (!parentJoinPtr) {
         // TODO: Evaluate constraints in UnionAll automatically. See https://st.yandex-team.ru/YQL-20085#685bb01e8a10e760cdd58750.
@@ -853,6 +887,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
         }
     }
 
+    // clang-format off
     auto newParentJoin = ctx.Builder(joinTree->Pos())
         .List()
             .Add(0, parentJoinPtr->ChildPtr(0))
@@ -863,6 +898,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
             .Add(5, parentJoinPtr->ChildPtr(5))
         .Seal()
         .Build();
+    // clang-format on
 
     auto newJoinTree = ctx.ReplaceNode(joinTree, *parentJoinPtr, newParentJoin);
 
@@ -871,19 +907,24 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     auto combinedJoinLabels = CreateLabelList(combinedLabelList, ctx, pos);
 
     i = 0;
+    // clang-format off
     auto newEquiJoin = ctx.Builder(pos)
         .Callable("EquiJoin")
         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+            // clang-format on
             for (const auto& label : joinLabelCounters) {
                 if (label.second > 0) {
                     auto equiJoinInput = equiJoinLabels.at(TString(label.first));
+                    // clang-format off
                     parent.List(i++)
                         .Add(0, equiJoinInput)
                         .Atom(1, label.first)
                     .Seal();
+                    // clang-format on
                 }
             }
             return parent;
+        // clang-format off
         })
         .List(i++)
             .Add(0, unionAll)
@@ -893,6 +934,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
         .Add(i++, joinSettings)
         .Seal()
     .Build();
+    // clang-format on
 
     return KeepUniqueDistinct(newEquiJoin, *equiJoin, ctx);
 }
@@ -1280,6 +1322,7 @@ void AppendEquality(TPositionHandle pos, TExtraInputPredicates& dst, const TStri
     TStringBuf lColumn = label.ColumnName(left);
     TStringBuf rColumn = label.ColumnName(right);
 
+    // clang-format off
     dst.Preds.push_back(ctx.Builder(pos)
         .Callable("Coalesce")
             .Callable(0, "==")
@@ -1296,6 +1339,7 @@ void AppendEquality(TPositionHandle pos, TExtraInputPredicates& dst, const TStri
         .Seal()
         .Build()
     );
+    // clang-format on
 }
 
 struct TJoinEqRebuildResult {
@@ -1411,6 +1455,7 @@ TJoinEqRebuildResult RebuildJoinTreeForEquality(TVector<TMap<ui32, TEqColumn>>& 
     }
 
     TJoinEqRebuildResult result;
+    // clang-format off
     result.JoinTree = Build<TCoEquiJoinTuple>(ctx, joinTree.Pos())
         .Type().Build(newJoinType)
         .LeftScope(left.JoinTree)
@@ -1419,6 +1464,7 @@ TJoinEqRebuildResult RebuildJoinTreeForEquality(TVector<TMap<ui32, TEqColumn>>& 
         .RightKeys(ctx.NewList(joinTree.RightKeys().Pos(), std::move(rightKeys)))
         .Options(joinTree.Options())
         .Done().Ptr();
+    // clang-format on
     if (newJoinType != "RightSemi" && newJoinType != "RightOnly") {
         result.InputsInScope.insert(left.InputsInScope.begin(), left.InputsInScope.end());
     }
@@ -1560,6 +1606,7 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
         }
         prefix += YqlJoinKeyColumnName;
         TVector<TString> remappedNames = GenNoClashColumns(*itemType, prefix, nodesByInput[i].size());
+        // clang-format off
         newJoinArgs.push_back(ctx.Builder(equiJoin.Arg(i).Pos())
             .List()
                 .Callable(0, "OrderedMap")
@@ -1575,8 +1622,10 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
                                 .Atom(0, "")
                                 .Callable(1, "AsStruct")
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        // clang-format on
                                         for (size_t j = 0; j < nodesByInput[i].size(); ++j) {
                                             auto calcLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, TExprNode::TPtr(remaps[nodesByInput[i][j].Get()]));
+                                            // clang-format off
                                             parent
                                                 .List(j)
                                                     .Atom(0, remappedNames[j])
@@ -1589,16 +1638,20 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
                                                         .Done()
                                                     .Seal()
                                                 .Seal();
+                                            // clang-format on
                                             TString outputMember = isMultiTableInput ? remappedNames[j] : labels.Inputs[i].FullName(remappedNames[j]);
+                                            // clang-format off
                                             outputRemaps[nodesByInput[i][j].Get()] = ctx.Builder(nodesByInput[i][j]->Pos())
                                                 .Callable("Member")
                                                     .Add(0, rowPtr)
                                                     .Atom(1, outputMember)
                                                 .Seal()
                                                 .Build();
+                                            // clang-format on
                                             YQL_ENSURE(outputMembers.insert(outputMember).second);
                                         }
                                         return parent;
+                                    // clang-format off
                                     })
                                 .Seal()
                             .Seal()
@@ -1608,6 +1661,7 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
                 .Add(1, ejInput.Scope().Ptr())
             .Seal()
             .Build());
+        // clang-format on
     }
     newJoinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr());
     newJoinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 1).Ptr());
@@ -1620,6 +1674,7 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
     TExprNode::TPtr newPredicateLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(newPredicate));
     TExprNode::TPtr valueLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, body.Value().Ptr());
 
+    // clang-format off
     return TExprBase(ctx.Builder(node.Pos())
         .Callable(node.CallableName())
             .Add(0, newJoin)
@@ -1654,6 +1709,7 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
             .Seal()
         .Seal()
         .Build());
+    // clang-format on
 }
 
 TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLabels& labels,
@@ -1801,17 +1857,20 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
 
         TExprNode::TPtr& inputTuple = equiJoinArgs[i];
         TExprNode::TPtr oldInput = inputTuple->ChildPtr(TCoEquiJoinInput::idx_List);
+        // clang-format off
         auto newInput = ctx.Builder(oldInput->Pos())
             .Callable("OrderedFilter")
                 .Add(0, oldInput)
                 .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, { toPush.Row }), std::move(pred)))
             .Seal()
             .Build();
+        // clang-format on
 
         inputTuple = ctx.ChangeChild(*inputTuple, TCoEquiJoinInput::idx_List, std::move(newInput));
     }
 
     auto origJoinItemTypeNode = ExpandType(equiJoin.Pos(), *GetSeqItemType(*node.Input().Ref().GetTypeAnn()).Cast<TStructExprType>(), ctx);
+    // clang-format off
     auto newEquiJoin = ctx.Builder(equiJoin.Pos())
         .Callable(node.CallableName() == "OrderedFlatMap" ? "OrderedMap" : "Map")
             .Add(0, ctx.NewCallable(equiJoin.Pos(), "EquiJoin", std::move(equiJoinArgs)))
@@ -1828,6 +1887,7 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     if (rest.empty()) {
         rest.push_back(MakeBool<true>(predicate->Pos(), ctx));
@@ -1838,6 +1898,7 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
     auto newCond = ctx.ChangeChild(node.Lambda().Body().Ref(), TCoConditionalValueBase::idx_Predicate, std::move(newPred));
     auto newLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(newCond));
 
+    // clang-format off
     return TExprBase(ctx.Builder(node.Pos())
         .Callable(node.CallableName())
             .Add(0, newEquiJoin)
@@ -1849,6 +1910,7 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
             .Seal()
         .Seal()
         .Build());
+    // clang-format on
 }
 
 } // namespace
@@ -1938,12 +2000,14 @@ TExprBase FlatMapOverEquiJoin(
         auto renameMap = LoadJoinRenameMap(*joinSettings);
         joinSettings = RemoveSetting(*joinSettings, "rename", ctx);
         auto newRenameMap = UpdateUsedFieldsInRenameMap(renameMap, usedFields, structType);
+        // clang-format off
         auto newLambda = ctx.Builder(node.Pos())
             .Lambda()
             .Param("item")
                 .ApplyPartial(node.Lambda().Args().Ptr(), body).With(0, "item").Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         TExprNode::TListType joinSettingsNodes = joinSettings->ChildrenList();
         AppendEquiJoinRenameMap(node.Pos(), newRenameMap, joinSettingsNodes, ctx);
@@ -1951,12 +2015,14 @@ TExprBase FlatMapOverEquiJoin(
         auto updatedEquiJoin = ctx.ShallowCopy(equiJoin.Ref());
         updatedEquiJoin->ChildRef(updatedEquiJoin->ChildrenSize() - 1) = joinSettings;
 
+        // clang-format off
         return TExprBase(ctx.Builder(node.Pos())
             .Callable(node.CallableName())
                 .Add(0, updatedEquiJoin)
                 .Add(1, newLambda)
             .Seal()
             .Build());
+        // clang-format on
     }
 
     if (!node.Raw()->HasSideEffects() && IsPredicateFlatMap(node.Lambda().Body().Ref())) {
@@ -2099,6 +2165,7 @@ TExprBase FlatMapOverEquiJoin(
         }
 
         if (extraPredicate) {
+            // clang-format off
             ret = ctx.Builder(node.Pos())
                 .Callable(ordered ? "OrderedFilter" : "Filter")
                     .Add(0, std::move(ret))
@@ -2108,6 +2175,7 @@ TExprBase FlatMapOverEquiJoin(
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         if (value != &row) {
@@ -2115,6 +2183,7 @@ TExprBase FlatMapOverEquiJoin(
             if (ordered) {
                 name.prepend("Ordered");
             }
+            // clang-format off
             ret = ctx.Builder(node.Pos())
                 .Callable(name)
                     .Add(0, std::move(ret))
@@ -2124,6 +2193,7 @@ TExprBase FlatMapOverEquiJoin(
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         return TExprBase(ret);

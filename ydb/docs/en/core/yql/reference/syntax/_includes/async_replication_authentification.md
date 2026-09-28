@@ -7,7 +7,7 @@
     * `USER` — the username.
     * `PASSWORD_SECRET_PATH` — the [secret](../../../../concepts/datamodel/secrets.md) that contains the password.
 
-* Using a [delegated service account](https://yandex.cloud/ru/docs/iam/concepts/service-control):
+* Using a [service agent](https://yandex.cloud/ru/docs/iam/concepts/service-control?utm_referrer=about%3Ablank#service-agent):
 
     * `SERVICE_ACCOUNT_ID` — the identificator of the service account.
     * `INITIAL_TOKEN_SECRET_PATH` — the [secret](../../../../concepts/datamodel/secrets.md) that contains the account's token. It is used for initial authentication.

@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         checker(response);
     }
 
-    void EnableConfigV2(auto& channel) {
+    void EnableConfigV2(TKikimrWithGrpcAndRootSchema* server) {
         TString enableV2Config = R"(
 metadata:
   kind: MainConfig
@@ -238,7 +238,7 @@ config:
 )";
 
         std::unique_ptr<Ydb::DynamicConfig::V1::DynamicConfigService::Stub> stub;
-        stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(channel);
+        stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server->GetChannel());
 
         Ydb::DynamicConfig::ReplaceConfigRequest request;
         request.set_config(enableV2Config);
@@ -249,6 +249,13 @@ config:
 
         stub->ReplaceConfig(&context, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!server->GetRuntime()->GetAppData(0).FeatureFlags.GetSwitchToConfigV2()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline,
+                "SwitchToConfigV2 was not applied on the gRPC node");
+            Sleep(TDuration::MilliSeconds(10));
+        }
     }
 
     void FetchConfig(
@@ -296,7 +303,7 @@ config:
 
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
@@ -346,7 +353,7 @@ config:
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
@@ -377,7 +384,7 @@ config:
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
 
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
 
         auto* runtime = server.GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
@@ -417,7 +424,7 @@ config:
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
 
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
@@ -487,7 +494,7 @@ config:
     Y_UNIT_TEST(CheckDryRun) {
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
 
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
 

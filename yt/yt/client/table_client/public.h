@@ -203,6 +203,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
     ((UnableToSynchronizeReplicationCard)(329))
+    ((RequiredWriteLockMissing)          (330))
 );
 
 DEFINE_ENUM(EControlAttribute,

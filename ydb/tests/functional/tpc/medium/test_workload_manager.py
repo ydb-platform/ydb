@@ -84,7 +84,7 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:
         return [
-            wm.ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            wm.ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=50),
         ]
 
     @classmethod
@@ -104,7 +104,7 @@ class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:
         return [
-            wm.ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            wm.ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=50),
         ]
 
     @classmethod

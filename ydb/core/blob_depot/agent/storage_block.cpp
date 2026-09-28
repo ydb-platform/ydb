@@ -24,7 +24,9 @@ namespace NKikimr::NBlobDepot {
                 block.SetTabletId(Request.TabletId);
                 block.SetBlockedGeneration(Request.Generation);
                 block.SetIssuerGuid(Request.IssuerGuid);
-                block.SetVersion(Request.Version);
+                if (Request.Version) {
+                    block.SetVersion(*Request.Version);
+                }
                 block.SetWriteSourceOp(WriteSourceToProto(Request.WriteSource));
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
             }
@@ -44,7 +46,7 @@ namespace NKikimr::NBlobDepot {
                     EndWithError(NKikimrProto::ERROR, "incorrect TEvBlockResult response");
                 } else if (const auto status = msg.Record.GetStatus(); status != NKikimrProto::OK) {
                     EndWithError(status, msg.Record.GetErrorReason(),
-                        msg.Record.GetIsTabletStorageInfoVersionObsolete());
+                        msg.Record.GetIsTabletStorageInfoVersionObsolete(), msg.Record.GetActualGeneration());
                 } else {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();

@@ -22,7 +22,7 @@ class TPQTabletConfig;
 namespace NKikimr::NPQ::NSchema {
 
 struct TEvCheckDlqTopicsResponse
-    : public NActors::TEventLocal<TEvCheckDlqTopicsResponse, EEv::EvCheckDlqTopicsResponse>
+    : public NActors::TEventLocal<TEvCheckDlqTopicsResponse, static_cast<ui32>(EEv::EvCheckDlqTopicsResponse)>
 {
     TEvCheckDlqTopicsResponse(
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,

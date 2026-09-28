@@ -1,17 +1,22 @@
 #include "cms_impl.h"
 #include "info_collector.h"
+#include "json_proxy_ddisk.h"
 #include "ut_helpers.h"
 #include "walle.h"
 #include "cms_ut_common.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/null.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr::NCmsTest {
@@ -23,6 +28,90 @@ using namespace NKikimrCms;
 using namespace NKikimrBlobStorage;
 
 namespace {
+
+class TFakeMonHttpRequest: public NMonitoring::IMonHttpRequest {
+public:
+    TFakeMonHttpRequest(HTTP_METHOD method, TString uri, THttpHeaders headers, TString body)
+        : Method(method)
+        , Uri(std::move(uri))
+        , Headers(std::move(headers))
+        , Body(std::move(body))
+        , Params(TStringBuf(Uri).After('?'))
+        , PostParams(Body)
+    {
+    }
+
+    IOutputStream& Output() override {
+        return Cnull;
+    }
+
+    HTTP_METHOD GetMethod() const override {
+        return Method;
+    }
+
+    TStringBuf GetPath() const override {
+        return TStringBuf(Uri).Before('?');
+    }
+
+    TStringBuf GetPathInfo() const override {
+        return GetPath();
+    }
+
+    TStringBuf GetUri() const override {
+        return Uri;
+    }
+
+    const TCgiParameters& GetParams() const override {
+        return Params;
+    }
+
+    const TCgiParameters& GetPostParams() const override {
+        return PostParams;
+    }
+
+    TStringBuf GetPostContent() const override {
+        return Body;
+    }
+
+    const THttpHeaders& GetHeaders() const override {
+        return Headers;
+    }
+
+    TStringBuf GetHeader(TStringBuf name) const override {
+        if (const auto* header = Headers.FindHeader(name)) {
+            return header->Value();
+        }
+        return {};
+    }
+
+    TStringBuf GetCookie(TStringBuf) const override {
+        return {};
+    }
+
+    TString GetRemoteAddr() const override {
+        return {};
+    }
+
+    TString GetServiceTitle() const override {
+        return {};
+    }
+
+    NMonitoring::IMonPage* GetPage() const override {
+        return nullptr;
+    }
+
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+        return nullptr;
+    }
+
+private:
+    const HTTP_METHOD Method;
+    const TString Uri;
+    const THttpHeaders Headers;
+    const TString Body;
+    const TCgiParameters Params;
+    const TCgiParameters PostParams;
+};
 
 void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
                         const TString &host,
@@ -36,6 +125,21 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
     UNIT_ASSERT_VALUES_EQUAL(data.GetHost(), host);
     UNIT_ASSERT_VALUES_EQUAL(data.GetNodeId(), nodeId);
     UNIT_ASSERT_VALUES_EQUAL(data.GetVersion(), version);
+}
+
+void SetRunningSysTablet(ui32 nodeId, bool running) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    auto &info = TFakeNodeWhiteboardService::Info[nodeId];
+    const ui64 tabletId = MakeBSControllerID();
+    if (running) {
+        auto &tablet = info.TabletStateInfo[tabletId];
+        tablet.SetTabletId(tabletId);
+        tablet.SetType(TTabletTypes::BSController);
+        tablet.SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+        tablet.SetLeader(true);
+    } else {
+        info.TabletStateInfo.erase(tabletId);
+    }
 }
 
 } // anonymous namespace
@@ -282,6 +386,187 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(disks.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(disks.GetTotalCount(), 0);
         UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 0);
+    }
+
+    Y_UNIT_TEST(DDiskTabletListDegrade)
+    {
+        for (bool swapRoles : {false, true}) {
+            TCmsTestEnv env(8);
+            env.ConfigureDDiskPool(3);
+            // Use PDisks from the same base config that CMS collects, and
+            // retain the environment's routing to the fake BSC/Whiteboard.
+            THashMap<ui32, ui32> pdiskIds;
+            {
+                TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                const auto& config = TFakeNodeWhiteboardService::Config.GetResponse().GetStatus(0).GetBaseConfig();
+                for (const auto& pdisk : config.GetPDisk()) {
+                    pdiskIds.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                }
+                for (ui32 i = 0; i < env.GetNodeCount(); ++i) {
+                    const ui32 nodeId = env.GetNodeId(i);
+                    UNIT_ASSERT(pdiskIds.contains(nodeId));
+                    auto& disks = TFakeNodeWhiteboardService::Info.at(nodeId).PDiskStateInfo;
+                    UNIT_ASSERT(disks.contains(pdiskIds.at(nodeId)));
+                    disks.at(pdiskIds.at(nodeId)).SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                }
+            }
+            // Supply controlled layouts using these same PDisks.
+            TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
+                    auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
+                    const ui64 tabletId = record.GetTabletId();
+                    if (tabletId >= 2001 && tabletId <= 2003) {
+                        record.ClearGroups();
+                        auto addDisk = [&](auto* id, ui32 nodeIndex) {
+                            id->SetNodeId(env.GetNodeId(nodeIndex));
+                            id->SetPDiskId(pdiskIds.at(env.GetNodeId(nodeIndex)));
+                            id->SetDDiskSlotId(1);
+                        };
+                        for (ui32 i = 0; i < 3; ++i) {
+                            auto* group = record.AddGroups();
+                            group->SetDirectBlockGroupId(i + 1);
+                            // 2001: three DBGs with one failed disk in EACH role,
+                            // degrade 1. 2002: two failures in one role and one in
+                            // the other, degrade 2. 2003: healthy. Test both roles.
+                            const bool failed = tabletId == 2001 || (tabletId == 2002 && i == 0);
+                            auto addPrimary = [&] {
+                                return swapRoles ? group->AddPersistentBufferDDiskId() : group->AddDDiskId();
+                            };
+                            auto addSecondary = [&] {
+                                return swapRoles ? group->AddDDiskId() : group->AddPersistentBufferDDiskId();
+                            };
+                            addDisk(addPrimary(), failed ? 0 : 2);
+                            addDisk(addSecondary(), failed ? 0 : 3);
+                            if (tabletId == 2002 && i == 0) {
+                                addDisk(addPrimary(), 1);
+                            }
+                            group->AddDDiskId(); // Unallocated slots do not fail.
+                        }
+                    }
+                }
+                return prev(ev);
+            });
+            for (ui64 tabletId = 2001; tabletId <= 2003; ++tabletId) {
+                const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+                UNIT_ASSERT_VALUES_EQUAL(allocation.GetStatus(), NKikimrProto::OK);
+                env.WaitForDDiskInfo(tabletId, 1);
+            }
+            {
+                TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                for (ui32 i = 0; i < 2; ++i) {
+                    TFakeNodeWhiteboardService::Info[env.GetNodeId(i)]
+                        .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(i))).SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
+                }
+            }
+            // Exercise the HTTP parameter mapping through the actual proxy and CMS.
+            auto checkHttpOrder = [&](const TString& params, std::initializer_list<ui64> expectedIds) {
+                TFakeMonHttpRequest httpRequest(HTTP_METHOD_GET,
+                    "/api/json/ddisk/tablets?" + params, {}, "");
+                const auto edge = env.AllocateEdgeActor();
+                NMon::TEvHttpInfo::TPtr event = static_cast<NMon::TEvHttpInfo::THandle*>(new IEventHandle(
+                    TActorId(), edge, new NMon::TEvHttpInfo(httpRequest)));
+                env.Register(new TJsonProxyDDisk(event));
+                TAutoPtr<IEventHandle> handle;
+                const auto* response = env.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+                UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
+                NJson::TJsonValue json;
+                const size_t bodyOffset = response->Answer.find("\r\n\r\n");
+                UNIT_ASSERT(bodyOffset != TString::npos);
+                UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response->Answer).SubStr(bodyOffset + 4), &json, true));
+                UNIT_ASSERT_VALUES_EQUAL(json["Status"]["Code"].GetString(), "OK");
+                const auto& tablets = json["Tablets"].GetArray();
+                UNIT_ASSERT_VALUES_EQUAL(tablets.size(), expectedIds.size());
+                ui32 i = 0;
+                for (ui64 tabletId : expectedIds) {
+                    UNIT_ASSERT_VALUES_EQUAL(tablets[i++]["TabletId"].GetUInteger(), tabletId);
+                }
+            };
+            checkHttpOrder("sort_by=degrade&sort_desc=0", {2003, 2001, 2002});
+            checkHttpOrder("sort_by=degrade&sort_desc=1", {2002, 2001, 2003});
+            checkHttpOrder("group_by_degrade=1&sort_desc=0", {2002, 2001, 2003});
+            checkHttpOrder("group_by_degrade=1&sort_desc=1", {2002, 2001, 2003});
+            checkHttpOrder("group_by_degrade=0", {2001, 2002, 2003});
+            checkHttpOrder("group_by_degrade=1&offset=1&limit=1&only_problems=1", {2001});
+
+            // Counts must also be populated when parsing is deferred until after paging.
+            for (auto sortBy : {NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID,
+                                NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT}) {
+                NKikimrCms::TDDiskTabletListRequest lazyRequest;
+                lazyRequest.SetSortBy(sortBy);
+                lazyRequest.SetLimit(1);
+                for (ui32 offset = 0; offset < 3; ++offset) {
+                    lazyRequest.SetOffset(offset);
+                    const auto response = env.RequestDDiskTabletList(lazyRequest);
+                    UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+                    UNIT_ASSERT_VALUES_EQUAL(response.GetTotalCount(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 1);
+                    const auto& tablet = response.GetTablets(0);
+                    const ui64 tabletId = tablet.GetTabletId();
+                    UNIT_ASSERT(tabletId >= 2001 && tabletId <= 2003);
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetGroupsCount(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetDegrade(), tabletId == 2003 ? 0 : tabletId - 2000);
+                    const ui32 primary = tabletId == 2001 ? 3 : tabletId == 2002 ? 2 : 0;
+                    const ui32 secondary = tabletId == 2001 ? 3 : tabletId == 2002 ? 1 : 0;
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskCount(), swapRoles ? secondary : primary);
+                    UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferCount(), swapRoles ? primary : secondary);
+                }
+            }
+
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetGroupByDegrade(true);
+            request.SetLimit(0);
+            for (bool descending : {false, true}) {
+                request.SetSortDescending(descending);
+                const auto response = env.RequestDDiskTabletList(request);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response.TabletsSize(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetTabletId(), 2002);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(0).GetDegrade(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetTabletId(), 2001);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetDegrade(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(1).GetUnavailableDDiskCount(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(2).GetTabletId(), 2003);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetTablets(2).GetDegrade(), 0);
+            }
+            request.SetLimit(1);
+            request.SetOffset(1);
+            request.SetOnlyProblems(true);
+            const auto page = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTotalCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(page.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTablets(0).GetTabletId(), 2001);
+            UNIT_ASSERT_VALUES_EQUAL(page.GetTablets(0).GetDegrade(), 1);
+
+            // Explicit degrade sort also works without grouping, in both directions.
+            request.SetGroupByDegrade(false);
+            request.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE);
+            request.SetOnlyProblems(false);
+            request.SetOffset(0);
+            request.SetLimit(0);
+            for (bool descending : {false, true}) {
+                request.SetSortDescending(descending);
+                const auto sorted = env.RequestDDiskTabletList(request);
+                UNIT_ASSERT_VALUES_EQUAL(sorted.TabletsSize(), 3);
+                for (ui32 i = 0; i < 3; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(sorted.GetTablets(i).GetDegrade(), descending ? 2 - i : i);
+                }
+            }
+            request.SetOnlyProblems(true);
+
+            // Recover node 0: only the second disk in the primary role stays down.
+            {
+                TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+                TFakeNodeWhiteboardService::Info[env.GetNodeId(0)]
+                    .PDiskStateInfo.at(pdiskIds.at(env.GetNodeId(0))).SetState(NKikimrBlobStorage::TPDiskState::Normal);
+            }
+            request.SetOffset(0);
+            const auto recovered = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTotalCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetTabletId(), 2002);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetDegrade(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetUnavailableDDiskCount(), swapRoles ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTablets(0).GetUnavailablePersistentBufferCount(), swapRoles ? 1 : 0);
+        }
     }
 
     Y_UNIT_TEST(DDiskTabletListFilterSortAndPage)
@@ -3437,60 +3722,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
     }
 
-    Y_UNIT_TEST(SysTabletsNodeSortOrderPartialWithLimit)
-    {
-        TCmsTestEnv env(TTestEnvOpts(8, 0));
-
-        // Nodes 0-5: sys tablet candidates. Nodes 6-7: no sys tablets.
-        NKikimrConfig::TBootstrap bootstrapConfig;
-        TVector<ui32> sysNodes;
-        for (ui32 i = 0; i < 6; ++i) {
-            sysNodes.push_back(env.GetNodeId(i));
-        }
-        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
-            auto *tablet = bootstrapConfig.AddTablet();
-            tablet->SetType(type);
-            for (ui32 nodeId : sysNodes) {
-                tablet->AddNode(nodeId);
-            }
-        };
-        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
-
-        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
-        env.EnableSysNodeChecking();
-        env.RestartCms();
-
-        THashSet<TString> sysNodeHosts;
-        for (ui32 id : sysNodes) {
-            sysNodeHosts.insert(ToString(id));
-        }
-
-        // Request restart of all 8 nodes: 6 sys-tablet + 2 non-sys-tablet.
-        // In MODE_MAX_AVAILABILITY, limit is ~N/2 = 3 sys-tablet nodes can be locked.
-        // Non-sys-tablet nodes (6, 7) should get permission first,
-        // then 3 sys-tablet nodes get permission, remaining 3 get scheduled.
-        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
-                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
-
-        // 2 non-sys-tablet + 3 sys-tablet = 5 permissions
-        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
-        // First 2 permissions must be non-sys-tablet nodes
-        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
-        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
-        // Remaining 3 permissions must be sys-tablet nodes
-        for (int i = 2; i < 5; ++i) {
-            UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
-        }
-    }
-
     Y_UNIT_TEST(SysTabletsNodeSortOrderScheduledRequest)
     {
         TCmsTestEnv env(TTestEnvOpts(8, 0));
@@ -3543,8 +3774,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
         }
 
-        // Mark all granted permissions as done
+        THashSet<TString> grantedHosts;
         for (size_t i = 0; i < resp.PermissionsSize(); ++i) {
+            const auto &host = resp.GetPermissions(i).GetAction().GetHost();
+            UNIT_ASSERT_C(grantedHosts.insert(host).second, "Duplicate permission for host " << host);
             env.CheckDonePermission("user", resp.GetPermissions(i).GetId());
         }
 
@@ -3554,8 +3787,296 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW, 3);
         UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 3);
         for (size_t i = 0; i < resp2.PermissionsSize(); ++i) {
-            UNIT_ASSERT(sysNodeHosts.contains(resp2.GetPermissions(i).GetAction().GetHost()));
+            const auto &host = resp2.GetPermissions(i).GetAction().GetHost();
+            UNIT_ASSERT(sysNodeHosts.contains(host));
+            UNIT_ASSERT_C(grantedHosts.insert(host).second, "Duplicate permission for host " << host);
         }
+        for (ui32 i = 0; i < 8; ++i) {
+            UNIT_ASSERT_C(grantedHosts.contains(ToString(env.GetNodeId(i))),
+                          "Missing permission for node " << env.GetNodeId(i));
+        }
+    }
+
+    Y_UNIT_TEST(SysTabletsRunningLeaderDeferredWithoutBootstrapConfig)
+    {
+        TCmsTestEnv env(TTestEnvOpts(4, 0));
+
+        TFakeNodeWhiteboardService::BootstrapConfig.Clear();
+        env.EnableSysNodeChecking();
+        SetRunningSysTablet(env.GetNodeId(0), true);
+        env.RestartCms();
+
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        req->Record.SetMaxPermissionCount(2);
+
+        auto resp = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 2);
+        UNIT_ASSERT(!resp.GetRequestId().empty());
+
+        THashSet<TString> grantedHosts;
+        for (const auto &permission : resp.GetPermissions()) {
+            grantedHosts.insert(permission.GetAction().GetHost());
+            env.CheckDonePermission("user", permission.GetId());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(grantedHosts.size(), 2);
+        UNIT_ASSERT(grantedHosts.contains(ToString(env.GetNodeId(1))));
+        UNIT_ASSERT(grantedHosts.contains(ToString(env.GetNodeId(2))));
+
+        auto finalResp = env.CheckRequest("user", resp.GetRequestId(), false,
+                                          MODE_MAX_AVAILABILITY, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalResp.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(0)));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeDeferredOnCheckRequestAfterMigration)
+    {
+        TCmsTestEnv env(TTestEnvOpts(16, 0));
+
+        // Nodes 0-9: sys tablet candidates. No running tablets initially.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 10; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Batch 1: cap of 1 permission. No running tablets yet, so order is kept:
+        // node1 is granted, [node2, node3, node4] are scheduled.
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        req->Record.SetMaxPermissionCount(1);
+
+        auto resp = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(1)));
+        const TString requestId = resp.GetRequestId();
+        UNIT_ASSERT(!requestId.empty());
+
+        // Release the lock taken by the granted permission.
+        env.CheckDonePermission("user", resp.GetPermissions(0).GetId());
+
+        // A tablet migrates onto node2 (the first scheduled action).
+        SetRunningSysTablet(env.GetNodeId(2), true);
+        env.RestartCms();
+
+        auto resp2 = env.CheckRequest("user", requestId, false,
+                                      MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(3)));
+    }
+
+    // Scenario for the batched permission loop:
+    //  * 16 nodes split into three separated groups
+    //      G1 (non-candidates, not in bootstrap config)     : nodes 12..15
+    //      G2 (sys-tablet candidates without running leader): nodes 2..11
+    //      G3 (candidates currently hosting a running leader): nodes 0, 1
+    //  * A single permission request lists ALL 16 nodes in a shuffled order.
+    //  * With MaxPermissionCount=4 the permissions are handed out in 4 batches:
+    //      Batch 1 must contain exactly the G1 nodes (highest priority).
+    //      Between Batch 1 and Batch 2 the BSController leader migrates from
+    //      node 0 to node 2 — a former G2 node becomes G3, a former G3 node
+    //      becomes G2. The test verifies that CheckRequest observes the new
+    //      state and defers node 2 via DISALLOW_TEMP_SYS_TABLET.
+    //      Between Batch 2 and Batch 3 another migration happens: node 1
+    //      stops being a leader, node 8 becomes one.
+    //      Batch 4 contains the remaining nodes, including the current G3
+    //      leaders that are finally allowed once no G2 candidates are left
+    //      (the deferred sys-tablet actions loop kicks in).
+    Y_UNIT_TEST(SysTabletsBatchedPermissionsWithMigrations)
+    {
+        TCmsTestEnv env(TTestEnvOpts(16, 0));
+
+        // Sys-tablet candidates: nodes 0..11.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 12; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto *tablet = bootstrapConfig.AddTablet();
+        tablet->SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        for (ui32 nodeId : sysNodes) {
+            tablet->AddNode(nodeId);
+        }
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Initial state: nodes 0 and 1 are the only running leaders (G3).
+        SetRunningSysTablet(env.GetNodeId(0), true);
+        SetRunningSysTablet(env.GetNodeId(1), true);
+        env.RestartCms();
+
+        auto hostOf = [&](ui32 idx) { return ToString(env.GetNodeId(idx)); };
+
+        const THashSet<TString> g1Hosts = { // non-candidates
+            hostOf(12), hostOf(13), hostOf(14), hostOf(15),
+        };
+        const THashSet<TString> initialG2Hosts = { // candidates, no running leader
+            hostOf(2), hostOf(3), hostOf(4),  hostOf(5), hostOf(6),
+            hostOf(7), hostOf(8), hostOf(9), hostOf(10), hostOf(11),
+        };
+
+        // Shuffled action list mixing all three groups.
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(12), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(14), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(15), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4),  60000000, "storage"));
+        req->Record.SetMaxPermissionCount(4);
+
+        auto extractHosts = [](const NKikimrCms::TPermissionResponse &r) {
+            THashSet<TString> hosts;
+            for (size_t i = 0; i < r.PermissionsSize(); ++i) {
+                hosts.insert(r.GetPermissions(i).GetAction().GetHost());
+            }
+            return hosts;
+        };
+        auto releaseAll = [&](const NKikimrCms::TPermissionResponse &r) {
+            for (size_t i = 0; i < r.PermissionsSize(); ++i) {
+                env.CheckDonePermission("user", r.GetPermissions(i).GetId());
+            }
+        };
+
+        // Batch 1 — sort places G1 first, cap=4 exactly matches G1 size.
+        auto batch1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(batch1.PermissionsSize(), 4);
+        const TString requestId = batch1.GetRequestId();
+        UNIT_ASSERT(!requestId.empty());
+        {
+            auto hosts = extractHosts(batch1);
+            UNIT_ASSERT_VALUES_EQUAL(hosts.size(), 4);
+            for (const auto &h : hosts) {
+                UNIT_ASSERT_C(g1Hosts.contains(h),
+                    "Batch 1 must contain only G1 hosts, unexpected host: " << h);
+            }
+        }
+        releaseAll(batch1);
+
+        // Migration #1: leader moves from node 0 to node 2.
+        // node 0 becomes G2, node 2 becomes G3.
+        SetRunningSysTablet(env.GetNodeId(0), false);
+        SetRunningSysTablet(env.GetNodeId(2), true);
+        env.RestartCms();
+
+        // Batch 2 — deferred G2/G3 tail is reprocessed. Cap=4 is consumed by
+        // four G2 nodes. Node 2 (newly G3) must be deferred via
+        // DISALLOW_TEMP_SYS_TABLET and must NOT appear in this batch.
+        auto batch2 = env.CheckRequest("user", requestId, false,
+                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 4);
+        UNIT_ASSERT_VALUES_EQUAL(batch2.PermissionsSize(), 4);
+        THashSet<TString> batch2Hosts;
+        {
+            batch2Hosts = extractHosts(batch2);
+            UNIT_ASSERT_VALUES_EQUAL(batch2Hosts.size(), 4);
+            UNIT_ASSERT_C(!batch2Hosts.contains(hostOf(2)),
+                "New leader (node 2) must not receive permission in Batch 2");
+            for (const auto &h : batch2Hosts) {
+                UNIT_ASSERT_C(initialG2Hosts.contains(h),
+                    "Batch 2 must contain only initial G2 hosts, unexpected host: " << h);
+            }
+        }
+        releaseAll(batch2);
+
+        // Migration #2: leader moves from node 1 to node 8.
+        // node 1 becomes G2, node 8 becomes G3. Current leaders: {2, 8}.
+        SetRunningSysTablet(env.GetNodeId(1), false);
+        SetRunningSysTablet(env.GetNodeId(8), true);
+        env.RestartCms();
+
+        // Batch 3 — again cap=4 is consumed by G2 nodes. Node 8 (new leader)
+        // must be deferred. Node 2 stays deferred as well.
+        auto batch3 = env.CheckRequest("user", requestId, false,
+                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 4);
+        UNIT_ASSERT_VALUES_EQUAL(batch3.PermissionsSize(), 4);
+        THashSet<TString> batch3Hosts;
+        {
+            batch3Hosts = extractHosts(batch3);
+            UNIT_ASSERT_VALUES_EQUAL(batch3Hosts.size(), 4);
+            UNIT_ASSERT_C(!batch3Hosts.contains(hostOf(2)),
+                "Deferred leader (node 2) must not appear in Batch 3");
+            UNIT_ASSERT_C(!batch3Hosts.contains(hostOf(8)),
+                "New leader (node 8) must not appear in Batch 3");
+            // Batch 3 nodes must be candidates without a running leader now,
+            // taken from the set (initial G2 ∪ former G3) \ (still-running).
+            const THashSet<TString> allowedInBatch3 = {
+                hostOf(0), hostOf(1),
+                hostOf(3), hostOf(4),  hostOf(5), hostOf(6),
+                hostOf(7), hostOf(9), hostOf(10), hostOf(11),
+            };
+            for (const auto &h : batch3Hosts) {
+                UNIT_ASSERT_C(allowedInBatch3.contains(h),
+                    "Batch 3 host " << h << " must be a current non-leader candidate");
+                UNIT_ASSERT_C(!batch2Hosts.contains(h),
+                    "Batch 3 must not repeat Batch 2 hosts: " << h);
+            }
+        }
+        releaseAll(batch3);
+
+        // Batch 4 — only the deferred/current-leader nodes remain. Since no
+        // other candidates are left the sys-tablet deferred loop (allowDefer=false)
+        // hands out the remaining permissions even though cap>0.
+        auto batch4 = env.CheckRequest("user", requestId, false,
+                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW, 4);
+        UNIT_ASSERT_VALUES_EQUAL(batch4.PermissionsSize(), 4);
+        {
+            auto batch4Hosts = extractHosts(batch4);
+            UNIT_ASSERT_VALUES_EQUAL(batch4Hosts.size(), 4);
+
+            // Every original node must appear in exactly one of the batches.
+            THashSet<TString> allGranted;
+            allGranted.insert(g1Hosts.begin(), g1Hosts.end());
+            allGranted.insert(batch2Hosts.begin(), batch2Hosts.end());
+            allGranted.insert(batch3Hosts.begin(), batch3Hosts.end());
+            allGranted.insert(batch4Hosts.begin(), batch4Hosts.end());
+            UNIT_ASSERT_VALUES_EQUAL(allGranted.size(), 16);
+            for (ui32 i = 0; i < 16; ++i) {
+                UNIT_ASSERT_C(allGranted.contains(hostOf(i)),
+                    "Node " << i << " (" << hostOf(i) << ") never received a permission");
+            }
+
+            // The current running leaders (2 and 8) must be part of the very
+            // last batch, confirming they were correctly prioritized last.
+            UNIT_ASSERT_C(batch4Hosts.contains(hostOf(2)),
+                "Current leader node 2 must be granted only in the final batch");
+            UNIT_ASSERT_C(batch4Hosts.contains(hostOf(8)),
+                "Current leader node 8 must be granted only in the final batch");
+        }
+        releaseAll(batch4);
     }
 }
 

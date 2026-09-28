@@ -33,3 +33,7 @@ DEPENDS(
 )
 
 END()
+
+RECURSE(
+    s3_cpu
+)

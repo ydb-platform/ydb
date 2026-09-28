@@ -252,13 +252,16 @@ namespace NKikimr {
             case TBlobType::MemBlob:
                 Y_VERIFY_S(dataSize, HullCtx->VCtx->VDiskLogPrefix);
                 MemDataSize += AlignUp(dataSize, 8u);
+                OutputEstimate.AddInline(dataSize);
                 break;
             case TBlobType::DiskBlob:
                 Y_VERIFY_S(!memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
+                OutputEstimate.AddIndexOnly();
                 break;
             case TBlobType::HugeBlob:
                 Y_VERIFY_S(memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
                 HugeDataSize += memRec.DataSize();
+                OutputEstimate.AddHuge();
                 break;
             default:
                 Y_ABORT("Unexpected type: type# %d", int(type));
@@ -267,22 +270,29 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
-    void TFreshIndexAndData<TKey, TMemRec>::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+    template <class TCallback>
+    void TFreshIndexAndData<TKey, TMemRec>::ForEachHugeBlob(TCallback&& callback) const {
         using TIterator = typename TFreshIndex::TIterator;
         TIterator it(Index.get());
         it.SeekToFirst();
         while (it.Valid()) {
             const TMemRec &memRec = it.GetValue().MemRec;
+            // Put() rejects ManyHugeBlobs, so a single part is the only shape a fresh huge record can take.
             if (memRec.GetType() == TBlobType::HugeBlob) {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 if (part.Size) {
                     Y_VERIFY_S(part.ChunkIdx, HullCtx->VCtx->VDiskLogPrefix);
-                    chunks.insert(part.ChunkIdx);
+                    callback(part);
                 }
             }
             it.Next();
         }
+    }
+
+    template <class TKey, class TMemRec>
+    void TFreshIndexAndData<TKey, TMemRec>::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+        ForEachHugeBlob([&chunks](const TDiskPart& part) { chunks.insert(part.ChunkIdx); });
     }
 
     template <class TKey, class TMemRec>
@@ -702,6 +712,10 @@ namespace NKikimr {
                 DIV_CLASS("panel-heading") {
                     STRONG() { str << "Segment: " << which; }
                     str << "    StartTime: " + ToStringLocalTimeUpToSeconds(StartTime);
+                    const TFreshOutputEstimate estimate = GetOutputEstimate();
+                    str << "    CompactedBytes: " << estimate.GetCharge(OutputGeometry)
+                        << "    CompactedChunks: " << estimate.GetChunks(OutputGeometry)
+                        << "    ReservedChunks: " << ReservedChunks.size();
                 }
                 DIV_CLASS("panel-body") {
                     DIV_CLASS("row") {

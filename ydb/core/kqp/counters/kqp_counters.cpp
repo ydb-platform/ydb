@@ -806,12 +806,20 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);
     RmExternalMemory = KqpGroup->GetCounter("RM/ExternalMemory", false);
     RmNotEnoughMemory = KqpGroup->GetCounter("RM/NotEnoughMemory", true);
+    RmOptionalMemoryRefused = KqpGroup->GetCounter("RM/OptionalMemoryRefused", true);
     RmNotEnoughComputeActors = KqpGroup->GetCounter("RM/NotEnoughComputeActors", true);
     RmOnStartAllocs = KqpGroup->GetCounter("Rm/OnStartAllocs", true);
     RmExtraMemAllocs = KqpGroup->GetCounter("RM/ExtraMemAllocs", true);
     RmExtraMemFree = KqpGroup->GetCounter("RM/ExtraMemFree", true);
     RmOnCompleteFree = KqpGroup->GetCounter("RM/OnCompleteFree", true);
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
+    RmArenaSize = KqpGroup->GetCounter("RM/ArenaSize", false);
+    RmArenaUsed = KqpGroup->GetCounter("RM/ArenaUsed", false);
+    RmArenaDeficit = KqpGroup->GetCounter("RM/ArenaDeficit", false);
+    RmArenaGrows = KqpGroup->GetCounter("RM/ArenaGrows", true);
+    RmArenaShrinks = KqpGroup->GetCounter("RM/ArenaShrinks", true);
+    RmArenaGrowFailures = KqpGroup->GetCounter("RM/ArenaGrowFailures", true);
+    RmArenaBurstGrows = KqpGroup->GetCounter("RM/ArenaBurstGrows", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
@@ -868,6 +876,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     WriteActorWriteOnlyOperations = KqpGroup->GetCounter("SinkWrites/WriteActorWriteOnlyOperations", true);
     WriteActorReadWriteOperations = KqpGroup->GetCounter("SinkWrites/WriteActorReadWriteOperations", true);
+
+    WriteActorLocalShardWrites = KqpGroup->GetCounter("SinkWrites/WriteActorLocalShardWrites", true);
+    WriteActorRemoteShardWrites = KqpGroup->GetCounter("SinkWrites/WriteActorRemoteShardWrites", true);
 
     BufferActorFlushes = KqpGroup->GetCounter("SinkWrites/BufferActorFlushes", true);
     BufferActorImmediateCommits = KqpGroup->GetCounter("SinkWrites/BufferActorImmediateCommits", true);

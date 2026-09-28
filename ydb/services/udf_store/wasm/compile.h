@@ -13,6 +13,8 @@ NYdb::NWasm::EBytecodeFormat DetectBytecodeFormat(TStringBuf extension);
 //! (may begin with whitespace or ";;" / "(;" comments).
 NYdb::NWasm::EBytecodeFormat DetectBytecodeFormatFromBody(TStringBuf body);
 
+void ValidateModuleSource(TStringBuf bytes, NYdb::NWasm::EBytecodeFormat format);
+
 TString CompileModuleObjectCode(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFormat format);
 
 } // namespace NKikimr::NUdfStore::NWasm

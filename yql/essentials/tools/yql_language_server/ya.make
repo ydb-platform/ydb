@@ -1,3 +1,5 @@
+IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
+
 PROGRAM()
 
 PEERDIR(
@@ -22,3 +24,5 @@ RECURSE(
     service
     testing
 )
+
+ENDIF()

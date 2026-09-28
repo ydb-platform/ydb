@@ -639,6 +639,33 @@ public:
 
     void Reparse() {
         size_t size = TSocketBuffer::Size();
+        if (Streaming && (Stage == EParseStage::ChunkLength || Stage == EParseStage::ChunkData)
+                && (CompressContext || HeaderType::Body.empty())) {
+            // Streaming: delivered chunks may already be truncated from the buffer, so the body
+            // cannot be replayed (a compressed stream would hit a fresh decompressor without its
+            // beginning; a retained uncompressed prefix would be delivered twice). Re-parse only
+            // the headers and keep the decompression context and the current chunk state.
+            // A compressed Body lives in Content; an uncompressed non-empty Body points into the
+            // buffer and still needs the full reparse below.
+            const EParseStage stage = Stage;
+            const EParseStage lastSuccessStage = LastSuccessStage;
+            const size_t lineSize = Line.size();
+            const TStringBuf body = HeaderType::Body;
+            HeaderType::Clear();
+            TSocketBuffer::Clear();
+            Stage = GetInitialStage();
+            Line = {};
+            const size_t consumed = AdvancePartial(size);
+            if (Stage == EParseStage::Error) {
+                return; // keep the header error; the whole buffer is already consumed
+            }
+            TSocketBuffer::Advance(size - consumed);
+            Line = lineSize ? TStringBuf(TSocketBuffer::Data() + size - lineSize, lineSize) : TStringBuf();
+            HeaderType::Body = body;
+            Stage = stage;
+            LastSuccessStage = lastSuccessStage;
+            return;
+        }
         Clear();
         Advance(size);
     }

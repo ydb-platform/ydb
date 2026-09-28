@@ -37,12 +37,6 @@ void IClientRequest::RequireServerFeature(E featureId)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class... TArgs>
-void TClientRequest::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
-{
-    SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TRequestMessage, class TResponse>
@@ -173,6 +167,8 @@ TIntrusivePtr<T> TProxyBase::CreateRequest(const TMethodDescriptor& methodDescri
     request->SetMemoryUsageTracker(DefaultMemoryUsageTracker_);
     request->SetEnableLegacyRpcCodecs(DefaultEnableLegacyRpcCodecs_);
     request->SetMultiplexingBand(methodDescriptor.MultiplexingBand);
+    request->SetRequestHeavy(methodDescriptor.RequestHeavy);
+    request->SetResponseHeavy(methodDescriptor.ResponseHeavy);
 
     if (methodDescriptor.StreamingEnabled) {
         request->ClientAttachmentsStreamingParameters() =

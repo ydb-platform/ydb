@@ -1247,8 +1247,10 @@ struct TTtlSettings {
     struct TTierSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
+        std::optional<TIdentifier> ObjectKeyPrefix;
 
-        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt,
+                               const std::optional<TIdentifier>& objectKeyPrefix = std::nullopt);
     };
 
     TIdentifier ColumnName;
@@ -1401,12 +1403,15 @@ struct TAlterDatabaseParameters {
     THashMap<TString, TNodePtr> DatabaseSettings;
 };
 
-struct TTruncateTableParameters {};
+struct TTruncateTableParameters {
+    THashMap<TString, TNodePtr> Settings;
+};
 
 struct TTableRef;
 struct TAnalyzeParams {
     std::shared_ptr<TTableRef> Table;
     TVector<TString> Columns;
+    TNodePtr SampleRate;
 };
 
 struct TCompactEntry {
@@ -1456,24 +1461,6 @@ struct TAlterTableParameters {
                RebuildIndexes.empty();
     }
 };
-
-struct TRoleParameters {
-protected:
-    TRoleParameters() = default;
-
-public:
-    TVector<TDeferredAtom> Roles;
-};
-
-struct TUserParameters: TRoleParameters {
-    TMaybe<TDeferredAtom> Password;
-    bool IsPasswordNull = false;
-    bool IsPasswordEncrypted = false;
-    std::optional<bool> CanLogin;
-    TMaybe<TDeferredAtom> Hash;
-};
-
-struct TCreateGroupParameters: TRoleParameters {};
 
 struct TSequenceParameters {
     bool MissingOk = false;
@@ -1577,44 +1564,6 @@ struct TDropTopicParameters {
     bool MissingOk;
 };
 
-struct TCreateBackupCollectionParameters {
-    std::map<TString, TDeferredAtom> Settings;
-
-    bool Database;
-    TVector<TDeferredAtom> Tables;
-
-    bool ExistingOk;
-};
-
-struct TAlterBackupCollectionParameters {
-    enum class EDatabase {
-        Unchanged,
-        Add,
-        Drop,
-    };
-
-    std::map<TString, TDeferredAtom> Settings;
-    std::set<TString> SettingsToReset;
-
-    EDatabase Database = EDatabase::Unchanged;
-    TVector<TDeferredAtom> TablesToAdd;
-    TVector<TDeferredAtom> TablesToDrop;
-
-    bool MissingOk;
-};
-
-struct TDropBackupCollectionParameters {
-    bool MissingOk;
-};
-
-struct TBackupParameters {
-    bool Incremental = false;
-};
-
-struct TRestoreParameters {
-    TString At;
-};
-
 struct TStreamingQuerySettings {
     inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
     inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
@@ -1664,7 +1613,7 @@ TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TSt
 TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
 TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
 TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
-TNodePtr BuildYqlColumnRef(TPosition pos);
+TNodePtr BuildYqlColumnRef(TPosition pos, bool maybeType);
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
 TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
@@ -1731,16 +1680,6 @@ TNodeResult BuildBuiltinFunc(
     bool warnOnYqlNameSpace = true);
 
 // Implemented in query.cpp
-TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
-TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
-                          const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
-TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
-                         TScopedStatePtr scoped);
-TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped);
-TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
-TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
@@ -1781,38 +1720,6 @@ TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicPa
                          TScopedStatePtr scoped);
 TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                         TScopedStatePtr scoped);
-
-TNodePtr BuildCreateBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TCreateBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildAlterBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TAlterBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildDropBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TDropBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-
-TNodePtr BuildBackup(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TBackupParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildRestore(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TRestoreParameters& params,
-    const TObjectOperatorContext& context);
 
 TNodePtr BuildCreateSecret(
     TPosition pos,

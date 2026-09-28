@@ -1230,6 +1230,151 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetMainConfigUnknownFields().size(), 0);
     }
 
+    Y_UNIT_TEST(YamlConfigSemanticInvalidSelectorRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: base
+allowed_labels:
+  tenant:
+    type: string
+incompatibility_overrides:
+  disable_rules:
+    - builtin_tenant_must_be_defined
+selector_config:
+- description: bad tenant
+  selector:
+    tenant: bad
+  config: !inherit
+    auth_config: !inherit
+      account_lockout: !inherit
+        attempt_reset_duration: not-a-duration
+)",
+            "Cannot parse attempt reset duration");
+    }
+
+    // Shared inputs may vary under selectors, including redundant writes.
+
+    Y_UNIT_TEST(YamlConfigSharedSectionVariationAccepted) {
+        for (bool selected : {false, true}) {
+            TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+            const TString yaml = TStringBuilder() << R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  domains_config:
+    domain: [{name: sample}]
+    state_storage: [{ssid: 1, ring: {node: [1], nto_select: 1}}]
+    security_config: {enforce_user_token_requirement: true}
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: shared input variant
+  selector: {deployment: selected}
+  config:
+    domains_config: !inherit
+      security_config: !inherit
+        enforce_user_token_requirement: )" << (selected ? "true" : "false") << "\n";
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+            CheckMainConfigReplacedWith(runtime, yaml);
+        }
+    }
+
+    Y_UNIT_TEST(YamlConfigSharedSectionViolationRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  domains_config:
+    domain: [{name: sample}]
+    state_storage: [{ssid: 1, ring: {node: [1], nto_select: 1}}]
+    security_config: {enforce_user_token_requirement: true}
+  monitoring_config: {require_counters_authentication: true}
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: violates monitoring dependency
+  selector: {deployment: selected}
+  config:
+    domains_config: !inherit
+      security_config: !inherit
+        enforce_user_token_requirement: false
+)", "EnforceUserTokenRequirement");
+    }
+
+    // A valid config exercising the projection machinery end-to-end on the
+    // console actor: two independent labels, a deep-merge selector and an
+    // untagged (wholesale-replace) empty-mapping selector must be ACCEPTED.
+
+    Y_UNIT_TEST(YamlConfigJointNbsGrpcViolationRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+metadata: {cluster: "", version: 0}
+config:
+  nbs_config: {enabled: true, nbs_frontend_config: {enabled: false}}
+  grpc_config: {port: 2135, start_grpc_proxy: true}
+allowed_labels:
+  a: {type: string}
+  b: {type: string}
+selector_config:
+- description: enable frontend
+  selector: {a: x}
+  config:
+    nbs_config: !inherit
+      nbs_frontend_config: {enabled: true}
+- description: disable proxy
+  selector: {b: x}
+  config:
+    grpc_config: !inherit
+      start_grpc_proxy: false
+)", "GRpcConfig.StartGRpcProxy");
+    }
+
+    Y_UNIT_TEST(YamlConfigEmptyInheritTypeMismatchRejected) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, R"(
+metadata: {cluster: "", version: 0}
+config:
+  log_config: {cluster_name: base}
+allowed_labels:
+  a: {type: string}
+selector_config:
+- description: invalid merge
+  selector: {a: x}
+  config:
+    log_config: !inherit
+      cluster_name: !inherit {}
+)", "Overriding value with different types");
+    }
+
+    Y_UNIT_TEST(YamlConfigSelectorsRepairEveryBaseVariant) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata: {cluster: "", version: 0}
+config:
+  log_config: {cluster_name: base}
+  auth_config:
+    password_complexity: {min_length: 1, min_lower_case_count: 2}
+allowed_labels:
+  a: {type: enum, values: {x: {}}}
+selector_config:
+- description: repair every realizable value
+  selector: {a: {in: ['', x]}}
+  config:
+    auth_config:
+      password_complexity: {min_length: 20, min_lower_case_count: 2}
+)");
+    }
+
     // An unknown field nested inside a selector_config entry is reported with a path that
     // pinpoints the selector, so the UI can highlight it and its parents in the editable YAML.
     Y_UNIT_TEST(YamlConfigUnknownFieldsInSelectorHaveSelectorPath) {
@@ -5296,6 +5441,27 @@ config:
     const TString PermissiveTenantUserAttribute      = TString(NConsole::TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
     const TString NotAllowedErrorSubstring           = "\\'selector_config\\' and \\'allowed_labels\\' are not allowed";
     const TString ForbiddenTenantLabelErrorSubstring = "\\'tenant\\' label is forbidden";
+
+    Y_UNIT_TEST(TestDatabaseConfigAllowlistRemainsBaseOnly) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(DatabaseSelectorsTestConfig(), appcfg);
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "true");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfigForSelectors);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata: {kind: DatabaseConfig, database: "/dc-1/users/tenant-1", version: 0}
+config: {}
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: existing database selector policy
+  selector: {deployment: selected}
+  config:
+    auth_config: {account_lockout: {attempt_reset_duration: 1s}}
+)");
+    }
 
     Y_UNIT_TEST(TestAllowDatabaseConfigSelectorsOnlyWithPermissiveTenantUserAttribute) {
         NKikimrConfig::TAppConfig appcfg;

@@ -40,7 +40,7 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
 
     const auto joinAlgo = *props.JoinAlgo;
     props.UseBlockHashJoin = config.GetUseBlockHashJoin()
-        && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
+        && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin || joinAlgo == EJoinAlgoType::MapJoin)
         && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
 
@@ -79,7 +79,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
-        auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
             const auto opRead = CastOperator<TOpRead>(input);
@@ -113,8 +112,8 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
             for (const auto& key : join->JoinKeys) {
-                leftShuffleKeys.push_back(key.first);
-                rightShuffleKeys.push_back(key.second);
+                leftShuffleKeys.push_back(key.Left);
+                rightShuffleKeys.push_back(key.Right);
             }
             const TVector<TInfoUnit>& effectiveLeftShuffleKeys =
                 join->Props.LeftShuffleBy ? *join->Props.LeftShuffleBy : leftShuffleKeys;
@@ -224,6 +223,21 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
+    } else if (input->Kind == EOperator::Window) {
+        auto window = CastOperator<TOpWindow>(input);
+        const auto inputStageId = *(window->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+
+        const auto newStageId = props.StageGraph.AddStage();
+        window->Props.StageId = newStageId;
+        if (!window->GetPartitionKeys().empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(window->GetPartitionKeys(), outputIndex));
+        } else {
+            // Without partition by we assume the whole input is one partition, so do it in one task.
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+        }
+
+        YQL_CLOG(TRACE, CoreDq) << "Assign stage to window";
     } else if (input->Kind == EOperator::TableLookup) {
         auto lookup = CastOperator<TOpTableLookup>(input);
         auto& exprCtx = ctx.ExprCtx;
@@ -271,7 +285,19 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         Y_ENSURE(lookup->IsSingleConsumer(), "A table lookup in join mode must feed only its lookup join");
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
-    } else {
+    } else if (input->Kind == EOperator::TableEffect) {
+        auto tableEffect = CastOperator<TOpTableEffect>(input);
+
+        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx));
+        const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+
+        input->Props.StageId = newStageId;
+        props.StageGraph.Connect(inputStageId, newStageId,
+                                 MakeIntrusive<TUnionAllConnection>(outputIndex));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages table effects";
+    }
+    else {
         Y_ENSURE(false, TStringBuilder() << "Unknown operator encountered: " << input->GetExplainName());
     }
 

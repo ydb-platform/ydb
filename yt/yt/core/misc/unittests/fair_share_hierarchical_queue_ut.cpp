@@ -429,18 +429,18 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
 
     const NLogging::TLogger Logger("StressTest");
 
-    constexpr int seedBase = 142857;
-    std::mt19937 controlThreadRandomGenerator(seedBase);
+    constexpr int SeedBase = 142857;
+    std::mt19937 controlThreadRandomGenerator(SeedBase);
     auto createThreadRandomGenerator = [] (int threadIndex) {
-        return std::mt19937(seedBase + threadIndex + 1);
+        return std::mt19937(SeedBase + threadIndex + 1);
     };
 
-    auto splitSegment = [] (int n, int m, std::mt19937& randomGenerator) {
+    auto splitSegment = [] (int n, int m, std::mt19937* randomGenerator) {
         std::uniform_int_distribution<> dist(1, n - 1);
 
         std::vector<int> points;
         for (int i = 0; i < m - 1; ++i) {
-            points.push_back(dist(randomGenerator));
+            points.push_back(dist(*randomGenerator));
         }
 
         std::sort(points.begin(), points.end());
@@ -449,7 +449,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
         points.push_back(n);
 
         std::vector<int> lengths;
-        for (size_t i = 1; i < points.size(); ++i) {
+        for (int i = 1; i < std::ssize(points); ++i) {
             lengths.push_back(points[i] - points[i - 1]);
         }
 
@@ -491,7 +491,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
     THashMap<int, THashMap<TTestTag, double>> tagHierarchy;
 
     for (int i = 0; i < std::ssize(tagHierarchyCounts); ++i) {
-        std::vector<int> lengths = splitSegment(100, tagHierarchyCounts[i], controlThreadRandomGenerator);
+        auto lengths = splitSegment(100, tagHierarchyCounts[i], &controlThreadRandomGenerator);
         for (int j = 0; j < tagHierarchyCounts[i]; ++j) {
             auto tag = Format("tag_%v_%v", i, j);
             tagHierarchy[i].emplace(tag, lengths[j]);
@@ -561,14 +561,14 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
     const std::vector<TFairShareHierarchicalSlotQueuePtr<TTestTag>> queues = rawQueues;
 
     auto keys = GetKeys(stats);
-    auto createRandomRequest = [&] (int queueIndex, std::mt19937& randomGenerator) mutable {
+    auto createRandomRequest = [&] (int queueIndex, std::mt19937* randomGenerator) {
         auto queue = queues[queueIndex];
-        size_t tagListIndex = randomGenerator() % keys.size();
+        int tagListIndex = (*randomGenerator)() % std::ssize(keys);
         auto tagsKey = keys[tagListIndex];
         auto& stat = stats[tagsKey];
         auto tags = stats[tagsKey].Levels;
 
-        i64 size = sizeDist(randomGenerator);
+        i64 size = sizeDist(*randomGenerator);
 
         auto memoryResource = New<TMockFairShareResource>(memoryResourceHolders[queueIndex], size);
         auto queueSizeResource = New<TMockFairShareResource>(queueSizeResourceHolders[queueIndex], 1);
@@ -635,7 +635,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
         }
     };
 
-    auto dequeueFromQueue = [&] (int queueIndex) mutable {
+    auto dequeueFromQueue = [&] (int queueIndex) {
         TFairShareHierarchicalSlotQueueSlotPtr<TTestTag> slot;
         auto queue = queues[queueIndex];
         i64 requestSize = 0;
@@ -691,11 +691,11 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
     std::vector<TFuture<void>> futures;
     for (int i = 0; i < numQueues; ++i) {
         for (int j = 0; j < numThreadsPerQueue; ++j) {
-            auto future = BIND([&, index = i, queue = queues[i]](std::mt19937 randomGenerator) {
+            auto future = BIND([&, index = i] (std::mt19937 randomGenerator) {
                 for (int k = 0; k < numRequestsPerThread; ++k) {
                     int action = randomGenerator() % 100;
                     if (action < enqueuePercent) {
-                        createRandomRequest(index, randomGenerator);
+                        createRandomRequest(index, &randomGenerator);
                     } else {
                         dequeueFromQueue(index);
                     }

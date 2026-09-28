@@ -4,29 +4,16 @@ import pytest
 from ydb.tests.functional.nbs.lib.fixtures.base import NbsCase
 from ydb.tests.functional.nbs.lib.fixtures.geometry import (
     BLOCK_SIZE_MATRIX_DISK_BYTES,
-    DEFAULT_BLOCK_SIZE,
     SUPPORTED_BLOCK_SIZES,
     blocks_for_bytes,
 )
-from ydb.tests.functional.nbs.lib.fixtures.markers import known_bug
-
-
-def _block_size_params():
-    reason = 'Non 4 KiB block size fails IO'
-    params = []
-    for block_size in SUPPORTED_BLOCK_SIZES:
-        if block_size == DEFAULT_BLOCK_SIZE:
-            params.append(pytest.param(block_size))
-        else:
-            params.append(pytest.param(block_size, marks=known_bug(reason)))
-    return params
 
 
 class TestF1_13BlockSizes(NbsCase):
     """F1.13 — create a 512 GiB disk at every supported block size and verify IO."""
 
     @pytest.mark.timeout(120, func_only=True)
-    @pytest.mark.parametrize('block_size', _block_size_params())
+    @pytest.mark.parametrize('block_size', SUPPORTED_BLOCK_SIZES)
     def test_block_sizes(self, block_size):
         blocks_count = blocks_for_bytes(BLOCK_SIZE_MATRIX_DISK_BYTES, block_size)
         disk = self.make_disk(blocks_count=blocks_count, block_size=block_size)

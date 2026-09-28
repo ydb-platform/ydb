@@ -9,7 +9,6 @@ bool TPushSimpleJoinFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input
 }
 
 bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::Join) {
@@ -27,6 +26,13 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         return false;
     }
 
+    // Inner with empty join keys is cross.
+    const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.empty());
+    const bool usingBlockCrossJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    if (isRealCrossJoin && usingBlockCrossJoin) {
+        join->JoinKind = "Cross";
+    }
+
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
@@ -34,12 +40,15 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     TVector<TExpression> pushRight;
     TVector<TExpression> remainingFilters;
 
-    bool canPushRight = join->JoinKind == "Inner";
+    // A join filter comes from the ON clause, so we can follow it semantics.
+    const bool canPushRight = join->JoinKind == "Inner" || join->JoinKind == "Cross" || join->JoinKind == "Left" ||
+                              join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly";
+    const bool canPushLeft = join->JoinKind == "Inner" || join->JoinKind == "Cross" || join->JoinKind == "LeftSemi";
 
     for (const auto& filter : join->JoinFilters) {
-        if (IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
+        if (canPushLeft && IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
             pushLeft.push_back(filter);
-        } else if (IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty() && canPushRight) {
+        } else if (canPushRight && IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty()) {
             pushRight.push_back(filter);
         } else {
             remainingFilters.push_back(filter);
@@ -65,10 +74,10 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         for (const auto& expr : pushLeft) {
             if (expr.MaybeConstantCondition()) {
                 auto iu = expr.GetInputIUs()[0];
-                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& cond)
-                    {return iu == cond.first;}); it != join->JoinKeys.end()) {
+                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const TJoinKey& cond)
+                    {return iu == cond.Left;}); it != join->JoinKeys.end()) {
                     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapping;
-                    mapping.insert({iu, it->second});
+                    mapping.insert({iu, it->Right});
                     auto rightExpr = expr.ApplyRenames(mapping);
                     pushConstantCondsRight.push_back(rightExpr);
                 }
@@ -78,10 +87,10 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         for (const auto& expr : pushRight) {
             if (expr.MaybeConstantCondition()) {
                 auto iu = expr.GetInputIUs()[0];
-                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& cond)
-                    {return iu == cond.second;}); it != join->JoinKeys.end()) {
+                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const TJoinKey& cond)
+                    {return iu == cond.Right;}); it != join->JoinKeys.end()) {
                     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapping;
-                    mapping.insert({iu, it->first});
+                    mapping.insert({iu, it->Left});
                     auto leftExpr = expr.ApplyRenames(mapping);
                     pushConstantCondsLeft.push_back(leftExpr);
                 }

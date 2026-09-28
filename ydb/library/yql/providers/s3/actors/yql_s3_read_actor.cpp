@@ -54,6 +54,7 @@
 #include <util/system/fstat.h>
 
 #include <algorithm>
+#include <atomic>
 #include <queue>
 
 #undef THROW
@@ -177,10 +178,10 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    // It's very important to keep here std::string instead of TString 
+    // It's very important to keep here std::string instead of TString
     // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
     // This behaviour can be found in the getInputFormat call
-    std::string Format;  
+    std::string Format;
     TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
@@ -433,7 +434,10 @@ public:
             if (!delay) {
                 break;
             }
-            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, now + *delay);
+
+            // A delivered event means the scheduler woke us up.
+            const auto resumeEv = WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessEventWhileAcquiringSlot, now + *delay);
+            Work->NotifyResumed(/* byScheduler = */ static_cast<bool>(resumeEv));
         }
         Working = true;
     }
@@ -503,20 +507,25 @@ public:
         );
 
         while (true) {
-            StartUnit();
+            bool isCancelled = false;
+            {
+                StartUnit();
+                // Stop-only, no pause toggle — StopUnit does not yield, so this
+                // Y_DEFER is safe during exception unwind (e.g. stream->read()
+                // throwing on malformed input).
+                Y_DEFER { StopUnit(); };
 
-            NDB::Block batch = stream->read();
-            if (!batch) {
-                StopUnit();
-                break;
-            }
+                NDB::Block batch = stream->read();
+                if (!batch) {
+                    break;
+                }
 
-            if (SourceContext->Add(batch.bytes(), SelfActorId)) {
-                SetDownstreamPause(true);
+                if (SourceContext->Add(batch.bytes(), SelfActorId)) {
+                    SetDownstreamPause(true);
+                }
+                isCancelled = StopIfConsumedEnough(batch.rows());
+                Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             }
-            const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
-            StopUnit();
 
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
@@ -765,10 +774,11 @@ public:
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
+            TMissingColumns missingColumns;
 
-            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
-            // select count(*) case - single reader is enough
+            // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
@@ -841,7 +851,7 @@ public:
                     readyGroupIndex = ReadyRowGroups.top();
                     ReadyRowGroups.pop();
                 } else {
-                    // select count(*) case - no columns, no download, just fetch meta info instantly
+                    // no columns to read (select count(*) or all requested columns are absent in file) - no download, just fetch meta info instantly
                     readyGroupIndex = readyGroupCount;
                 }
                 SourceContext->DecChunkCount();
@@ -874,7 +884,7 @@ public:
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
                     StartUnit();
                     Y_DEFER { StopUnit(); };
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
                     if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
@@ -907,7 +917,7 @@ public:
                 if (isCancelled) {
                     LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                SourceContext->GetDownloadedBytes() << " bytes");
-                    break;        
+                    break;
                 }
             }
         }
@@ -936,8 +946,9 @@ public:
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
+        TMissingColumns missingColumns;
 
-        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
         for (int group = 0; group < fileReader->num_row_groups(); group++) {
 
@@ -962,7 +973,7 @@ public:
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                 auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                 decodedBytes += size;
                 if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
@@ -1207,7 +1218,7 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize,
         bool asyncDecompressing,
-        IDqSchedulerContextPtr schedulerContext)
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1225,8 +1236,8 @@ public:
         , HttpDataRps(httpDataRps)
         , RawInflightSize(rawInflightSize)
         , AsyncDecompressing(asyncDecompressing)
-        , SchedulerContext(std::move(schedulerContext))
-        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
+        , WorkFactory(std::move(workFactory))
+        , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
     {}
 
     ~TS3ReadCoroImpl() override {
@@ -1281,12 +1292,12 @@ private:
     }
 
     void Run() final {
-        LOG_CORO_D("Run start: SchedulerContext=" << (SchedulerContext ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
+        LOG_CORO_D("Run start: WorkFactory=" << (WorkFactory ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
         if (Work) {
             Work->RegisterForResume(SelfActorId);
         }
         if (AsyncDecompressing) {
-            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, SchedulerContext));
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory));
         }
 
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
@@ -1372,6 +1383,18 @@ private:
         return StateFunc(ev);
     }
 
+    // Process events while waiting for a slot to start a unit of work.
+    // The event processing MUST NOT re-enter StartUnit / ReconcileWorking —
+    // that would double-acquire the slot.
+    void ProcessEventWhileAcquiringSlot(TAutoPtr<IEventHandle> ev) {
+        if (ev->GetTypeRewrite() == TEvS3Provider::TEvContinue::EventType) {
+            // CA is ready to process data
+            DownstreamPaused = false;
+            return;
+        }
+        StateFunc(ev);
+    }
+
     TString GetLastDataAsText() {
         if (LastData.empty()) {
             return "[]";
@@ -1441,7 +1464,7 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     const ::NMonitoring::TDynamicCounters::TCounterPtr RawInflightSize;
     const bool AsyncDecompressing;
-    const IDqSchedulerContextPtr SchedulerContext;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
     bool Working = false;            // holds HDRF slot — allowed to consume CPU
 };
@@ -1491,7 +1514,7 @@ public:
         bool asyncDecoding,
         bool asyncDecompressing,
         bool allowLocalFiles,
-        IDqSchedulerContextPtr schedulerContext)
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -1521,7 +1544,7 @@ public:
         , AsyncDecoding(asyncDecoding)
         , AsyncDecompressing(asyncDecompressing)
         , AllowLocalFiles(allowLocalFiles)
-        , SchedulerContext(std::move(schedulerContext)) {
+        , WorkFactory(std::move(workFactory)) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1555,11 +1578,11 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3StreamReadActor", "Bootstrap SchedulerContext=" << (SchedulerContext ? "set" : "null"));
+        LOG_D("TS3StreamReadActor", "Bootstrap WorkFactory=" << (WorkFactory ? "set" : "null"));
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted
-        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
+        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight, /* isOptional = */ false)) {
             TIssues issues;
             issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << ReadActorFactoryCfg.DataInflight << "b read buffer"});
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED);
@@ -1602,9 +1625,9 @@ public:
                 PatternVariant,
                 ES3PatternType::Wildcard,
                 AllowLocalFiles,
-                SchedulerContext));
+                WorkFactory));
         }
-        FileQueueEvents.Init(TxId, SelfId(), SelfId());
+        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
             FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
@@ -1639,7 +1662,7 @@ public:
         if (ReadSpec->ParallelDownloadCount && splitCount >= ReadSpec->ParallelDownloadCount) {
             // explicit limit
             return false;
-        } 
+        }
         if (splitCount && DownloadSize * SourceContext->Ratio() > ReadActorFactoryCfg.DataInflight * 2) {
             // dynamic limit
             return false;
@@ -1686,7 +1709,7 @@ public:
             HttpDataRps,
             RawInflightSize,
             AsyncDecompressing,
-            SchedulerContext
+            WorkFactory
         );
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
@@ -1823,7 +1846,7 @@ private:
             TryRegisterCoro();
         } while (!Blocks.empty() && free > 0LL && GetBlockSize(Blocks.front()) <= size_t(free));
 
-        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !FileQueueEvents.RemoveConfirmedEvents();
+        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !IsWaitingFileQueueResponse;
         if (finished) {
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -1851,7 +1874,7 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
-            LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
+            LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
             FileQueueEvents.Unsubscribe();
 
             ClearMkqlData();
@@ -1874,6 +1897,7 @@ private:
         hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
@@ -2008,9 +2032,15 @@ private:
             }
         }
     }
-    
+
     void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
+    }
+
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
+        if (FileQueueEvents.Heartbeat()) {
+            FileQueueEvents.Send(new TEvS3Provider::TEvAck());
+        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
@@ -2029,7 +2059,11 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
-        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
+        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            return;
+        }
+        FileQueueEvents.Unsubscribe();
+        if (!(IsFileQueueEmpty && IsConfirmedFileQueueFinish && !IsWaitingFileQueueResponse)) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
@@ -2131,7 +2165,7 @@ private:
     const bool AsyncDecoding;
     const bool AsyncDecompressing;
     const bool AllowLocalFiles;
-    const IDqSchedulerContextPtr SchedulerContext;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2296,7 +2330,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ::NMonitoring::TDynamicCounterPtr taskCounters,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     bool allowLocalFiles,
-    IDqSchedulerContextPtr schedulerContext)
+    IDqSchedulableWorkFactoryPtr workFactory)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2514,7 +2548,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(schedulerContext));
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory));
 
         return {actor, actor};
     }

@@ -51,7 +51,11 @@ struct TKeeperParams {
     bool SeparateCommonLog = true;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    // EnableTightPDiskSpaceColors uses 30 (3%) and TightSpaceColorFloors.
     ui32 ChunkBaseLimit = 130;
+
+    // When true, chunk colors use max(percent, MinChunks) instead of percent + addend.
+    bool TightSpaceColorFloors = false;
 
     // Upper bound for the total chunk reserve of static group owners, in permille of the user chunk pool.
     // 0 disables the reserve.

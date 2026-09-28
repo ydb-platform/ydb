@@ -50,6 +50,47 @@ public:
             return TPublishResult(TStatus(status));
         });
     }
+
+    TAsyncCancelPublicationResult CancelPublication(const TDeferredPublication& publication, const TCancelPublicationSettings& settings) final {
+        Y_VALIDATE(publication.IntPublicationId > 0, "Internal publication id must be positive");
+
+        TEvCancelPublicationRequest::TRequest request;
+        request.set_int_publication_id(publication.IntPublicationId);
+
+        return DoLocalRpcRequest<TEvCancelPublicationRequest, TCancelPublicationSettings>(std::move(request), settings, &DoCancelPublicationRequest).Apply([](const NThreading::TFuture<TLocalRpcOperationResult>& f) {
+            const auto& [status, _] = f.GetValue();
+            return TCancelPublicationResult(TStatus(status));
+        });
+    }
+
+    TAsyncListPublicationsResult ListPublications(const TListPublicationsSettings& settings) final {
+        TEvListPublicationsRequest::TRequest request;
+
+        if (const auto& writerId = settings.WriterIdentity_) {
+            Y_VALIDATE(writerId->size() <= TDeferredPublication::MaxExtPublicationIdLength, "Writer identity is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got " << writerId->size());
+            request.set_writer_identity(*writerId);
+        }
+
+        return DoLocalRpcRequest<TEvListPublicationsRequest, TListPublicationsSettings>(std::move(request), settings, &DoListPublicationsRequest).Apply([](const NThreading::TFuture<TLocalRpcOperationResult>& f) {
+            const auto& [status, response] = f.GetValue();
+            Ydb::Topic::DeferredPublish::ListPublicationsResult result;
+            response.UnpackTo(&result);
+
+            std::vector<TPublicationSummary> publications;
+            publications.reserve(result.publications_size());
+            for (const auto& publication : result.publications()) {
+                TPublicationSummary summary;
+                summary.IntPublicationId = publication.int_publication_id();
+                summary.ExtPublicationId = publication.ext_publication_id();
+                if (publication.has_writer_identity()) {
+                    summary.WriterIdentity = publication.writer_identity();
+                }
+                publications.emplace_back(std::move(summary));
+            }
+
+            return TListPublicationsResult(TStatus(status), std::move(publications));
+        });
+    }
 };
 
 } // anonymous namespace

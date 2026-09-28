@@ -108,11 +108,13 @@ private:
     TBatchLimiter CurrentBatchLimiter_;
 
     ETimerState TimerState_ = ETimerState::Initial;
+    TInstant TimerStartTime_;
     std::deque<TBatch> Batches_;
     std::deque<TPromise<TBatch>> Promises_;
     TDelayedExecutorCookie BatchFlushCookie_;
     ui64 FlushGeneration_ = 0;
 
+    void SetBatchDuration(TGuard<NThreading::TSpinLock>& guard, TDuration batchDuration);
     void ResetTimer(TGuard<NThreading::TSpinLock>& guard);
     void StartTimer(TGuard<NThreading::TSpinLock>& guard);
     bool IsFlushNeeded(TGuard<NThreading::TSpinLock>& guard) const;

@@ -6,6 +6,21 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TInlineSimpleInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+    if (input->Kind != EOperator::Filter || props.Subplans.Empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        const auto type = props.Subplans.At(iu).Type;
+        if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool TInlineSimpleInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter;
 }
@@ -75,12 +90,12 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || useDependentJoin) {
         TIntrusivePtr<IOperator> leftJoinInput = filter->GetInput();
         auto joinKind = negated ? "LeftOnly" : "LeftSemi";
-        TVector<std::pair<TInfoUnit, TInfoUnit>> tupleJoinKeys;
+        TVector<TJoinKey> tupleJoinKeys;
 
         auto planIUs = GetSubplanResultIUs(subplan);
 
         for (size_t i = 0; i < subplanEntry->Tuple.size(); i++) {
-            tupleJoinKeys.push_back(std::make_pair(subplanEntry->Tuple[i], planIUs[i]));
+            tupleJoinKeys.emplace_back(subplanEntry->Tuple[i], planIUs[i]);
         }
 
         if (useDependentJoin) {
@@ -104,10 +119,10 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
                 }
             }
 
-            TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+            TVector<TJoinKey> joinKeys;
             // Add domain keys for join keys.
             for (const auto& dependency : subplanEntry->DependentIUs) {
-                joinKeys.push_back(std::make_pair(dependency, dependency));
+                joinKeys.emplace_back(dependency, dependency);
             }
             joinKeys = MakeNullSafeJoinKeys(leftJoinInput, rightInput, joinKeys, filter->Pos, ctx, props, usedIUs);
             joinKeys.insert(joinKeys.end(), tupleJoinKeys.begin(), tupleJoinKeys.end());
@@ -142,7 +157,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
         mapElements.emplace_back(compareResult, comparePredicate);
         auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
 
         conjuncts[conjunctIdx] = MakeColumnAccess(compareResult, filter->Pos, &ctx.ExprCtx, &props);

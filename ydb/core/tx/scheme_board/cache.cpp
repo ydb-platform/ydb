@@ -756,6 +756,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             NotNullColumns.clear();
             SetNotNullInProgressColumns.clear();
             Indexes.clear();
+            MultiColumnStatistics.clear();
             Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TPartitioning>();
@@ -811,7 +812,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     const auto& generated = columnDesc.GetDefaultFromExpression();
                     column.DefaultExpression.ConstructInPlace();
                     column.DefaultExpression->ExprText = generated.GetExprText();
-                    column.DefaultExpression->Context = generated.GetContext();
                     column.DefaultExpression->Stored = generated.GetStored();
                     column.DefaultExpression->Dependencies.assign(
                         generated.GetDependencyColumnNames().begin(),

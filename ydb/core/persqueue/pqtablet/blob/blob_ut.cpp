@@ -1462,4 +1462,117 @@ Y_UNIT_TEST_SUITE(PartitionedBlob) {
     }
 }
 
+Y_UNIT_TEST_SUITE(FindFirstOffsetAtOrAfterTimestamp) {
+    Y_UNIT_TEST(FindsMessageInTheMiddleOfABlob) {
+        const TVector<TClientBlob> blobs = {
+            MakeSimpleBlob("a", 1, "m1"),
+            MakeSimpleBlob("a", 2, "m2"),
+            MakeSimpleBlob("a", 3, "m3"),
+        };
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(101), 10, blobs), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(102), 10, blobs), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(102) + TDuration::MilliSeconds(1), 10, blobs), 12u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(103), 10, blobs), 12u);
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(104), 10, blobs).Defined());
+    }
+
+    Y_UNIT_TEST(KafkaBatchIsAtomic) {
+        const TVector<TClientBlob> blobs = {
+            MakeSimpleBlob("a", 1, "before"),
+            MakeSimpleBlob("k", 2, "batch", 3, true),
+            MakeSimpleBlob("a", 3, "after"),
+        };
+        // Batch occupies offsets 11,12,13. Do not unpack: either first of the batch or first after it.
+        // Interior offsets 12/13 are never returned.
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(102), 10, blobs), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(102) + TDuration::MilliSeconds(1), 10, blobs), 14u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(103), 10, blobs), 14u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(101), 10, blobs), 10u); // before first
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(104), 10, blobs).Defined()); // after last
+    }
+
+    Y_UNIT_TEST(BeforeFirstAndAfterLastMessage) {
+        const TVector<TClientBlob> blobs = {
+            MakeSimpleBlob("a", 1, "m1"),
+            MakeSimpleBlob("a", 2, "m2"),
+        };
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(50), 10, blobs), 10u);
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(TInstant::Seconds(200), 10, blobs).Defined());
+    }
+
+    Y_UNIT_TEST(MultipartMessageUsesFirstPartTimestamp) {
+        auto ts = TInstant::Seconds(50);
+        TClientBlob part0(TString("s"), 1, TString("p0"), TPartData(0, 2, 10), ts, ts, 0, TString(), TString());
+        TClientBlob part1(TString("s"), 1, TString("p1"), TPartData(1, 2, 10), ts, ts, 0, TString(), TString());
+        TClientBlob next = MakeSimpleBlob("s", 2, "next");
+        const TVector<TClientBlob> blobs = {part0, part1, next};
+        UNIT_ASSERT_VALUES_EQUAL(*FindFirstOffsetAtOrAfterTimestamp(ts, 0, blobs), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(ts + TDuration::MilliSeconds(1), 0, blobs), 1u);
+    }
+
+    TClientBlob MakeBlobAt(TString data, ui64 seqNo, TInstant ts) {
+        return TClientBlob(
+            TString("s"), seqNo, std::move(data), TMaybe<TPartData>(),
+            ts, ts, 0, TString(), TString());
+    }
+
+    void AppendPackedBatch(TString& blob, TBatch& batch) {
+        batch.Pack();
+        batch.SerializeTo(blob);
+    }
+
+    Y_UNIT_TEST(OffsetGapsBetweenBatches) {
+        const auto tsEarly = TInstant::Seconds(100);
+        const auto tsLate = TInstant::Seconds(200);
+
+        TBatch first(10, 0);
+        first.AddBlob(MakeBlobAt("a", 1, tsEarly));
+        TBatch second(20, 0);
+        second.AddBlob(MakeBlobAt("b", 2, tsLate));
+
+        const TVector<TBatch> batches = {first, second};
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsEarly, 10, batches), 10u);
+        // Gap 11..19 must not be treated as a message at offset 11.
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsEarly + TDuration::MilliSeconds(1), 10, batches), 20u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsLate, 10, batches), 20u);
+        UNIT_ASSERT(!FindFirstOffsetAtOrAfterTimestamp(tsLate + TDuration::MilliSeconds(1), 10, batches).Defined());
+    }
+
+    Y_UNIT_TEST(OffsetGapsBetweenPackedBatches) {
+        const auto tsEarly = TInstant::Seconds(100);
+        const auto tsLate = TInstant::Seconds(200);
+
+        TString blob;
+        TBatch first(10, 0);
+        first.AddBlob(MakeBlobAt("a", 1, tsEarly));
+        AppendPackedBatch(blob, first);
+
+        TBatch second(20, 0);
+        second.AddBlob(MakeBlobAt("b", 2, tsLate));
+        AppendPackedBatch(blob, second);
+
+        auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), 10, 0, 2, 0);
+        auto batches = GetUnpackedBatches(key, blob);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsEarly + TDuration::MilliSeconds(1), 10, batches), 20u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            *FindFirstOffsetAtOrAfterTimestamp(tsLate, 10, batches), 20u);
+    }
+}
+
 } // namespace NKikimr::NPQ

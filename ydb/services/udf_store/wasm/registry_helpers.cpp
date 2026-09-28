@@ -23,20 +23,46 @@ namespace {
 //
 // Heap starts above a reserved low region so UDF data segments (e.g. at 1024)
 // are not clobbered by the first malloc used for argument/result marshalling.
+//
+// malloc goes through "sbrk" rather than bumping the heap global directly,
+// because the host moves that same break past regions it pins into linear
+// memory (see IWebAssemblyCompartment::ReserveGuestHeapBelow). A stub without
+// "sbrk" would let the resident cache and malloc hand out the same bytes.
+//
+// That fence leaves the break at the top of linear memory, so "sbrk" has to
+// grow memory itself before handing anything out -- a pure pointer bump would
+// return an offset the guest cannot store to. Real libc sbrk does the same.
 constexpr TStringBuf DefaultRegistrySdkWast = R"WAST(
 (module
     (import "env" "memory" (memory i64 8 2097152))
     (global $heap (mut i64) (i64.const 65536))
-    (func $malloc (param $n i64) (result i64)
+    (func $sbrk (param $n i64) (result i64)
         (local $p i64)
+        (local $break i64)
+        (local $pages i64)
         (local.set $p (global.get $heap))
-        (global.set $heap
+        (local.set $break
             (i64.and
                 (i64.add (i64.add (local.get $p) (local.get $n)) (i64.const 7))
                 (i64.const -8)))
+        (local.set $pages
+            (i64.sub
+                (i64.shr_u
+                    (i64.add (local.get $break) (i64.const 65535))
+                    (i64.const 16))
+                (memory.size)))
+        (if (i64.gt_s (local.get $pages) (i64.const 0))
+            (then
+                (if (i64.eq (memory.grow (local.get $pages)) (i64.const -1))
+                    (then (return (i64.const -1))))))
+        (global.set $heap (local.get $break))
         (local.get $p)
     )
+    (func $malloc (param $n i64) (result i64)
+        (call $sbrk (local.get $n))
+    )
     (func $free (param $p i64))
+    (export "sbrk" (func $sbrk))
     (export "malloc" (func $malloc))
     (export "free" (func $free))
 )
@@ -59,46 +85,6 @@ NYdb::NWasm::TModuleBytecode MakeDefaultRegistrySdkBytecode() {
 namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYdb::NWasm;
-
-EUdfValueType ParseValueType(TStringBuf type) {
-    if (type == "int64") {
-        return EUdfValueType::Int64;
-    }
-    if (type == "uint64") {
-        return EUdfValueType::Uint64;
-    }
-    if (type == "double") {
-        return EUdfValueType::Double;
-    }
-    if (type == "boolean" || type == "bool") {
-        return EUdfValueType::Boolean;
-    }
-    if (type == "string") {
-        return EUdfValueType::String;
-    }
-    if (type == "null") {
-        return EUdfValueType::Null;
-    }
-    ythrow yexception() << "Unsupported wasm UDF descriptor type: " << type;
-}
-
-const char* ValueTypeToString(EUdfValueType type) {
-    switch (type) {
-        case EUdfValueType::Null:
-            return "null";
-        case EUdfValueType::Int64:
-            return "int64";
-        case EUdfValueType::Uint64:
-            return "uint64";
-        case EUdfValueType::Double:
-            return "double";
-        case EUdfValueType::Boolean:
-            return "boolean";
-        case EUdfValueType::String:
-            return "string";
-    }
-    return "unknown";
-}
 
 NYdb::NWasm::TModuleBytecode MakeModuleBytecode(
     TStringBuf wasmData,
@@ -159,13 +145,6 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
     return compartment;
 }
 
-TUnversionedValue MakeEmptyValue() {
-    TUnversionedValue value{};
-    value.Type = EAbiValueType::Null;
-    value.Flags = EAbiValueFlags::None;
-    return value;
-}
-
 ui32 CheckedAbiLength(size_t size, TStringBuf what) {
     if (size > std::numeric_limits<ui32>::max()) {
         ythrow yexception()
@@ -173,11 +152,6 @@ ui32 CheckedAbiLength(size_t size, TStringBuf what) {
             << " exceeds ABI ui32 limit (" << std::numeric_limits<ui32>::max() << ")";
     }
     return static_cast<ui32>(size);
-}
-
-void StoreValue(IWebAssemblyCompartment* compartment, uintptr_t offset, const TUnversionedValue& value) {
-    auto* destination = PtrFromVM(compartment, std::bit_cast<TUnversionedValue*>(offset));
-    *destination = value;
 }
 
 TCurrentCompartmentGuard::TCurrentCompartmentGuard(IWebAssemblyCompartment* compartment)
@@ -273,8 +247,69 @@ void InvokeUdfExport(
         args);
 }
 
-THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
-    THashSet<TString> exports;
+namespace {
+
+EWasmExportValueType ConvertExportValueType(WAVM::IR::ValueType type) {
+    switch (type) {
+        case WAVM::IR::ValueType::i32:
+            return EWasmExportValueType::I32;
+        case WAVM::IR::ValueType::i64:
+            return EWasmExportValueType::I64;
+        case WAVM::IR::ValueType::f32:
+            return EWasmExportValueType::F32;
+        case WAVM::IR::ValueType::f64:
+            return EWasmExportValueType::F64;
+        default:
+            return EWasmExportValueType::Other;
+    }
+}
+
+void CollectFunctionExports(
+    const WAVM::IR::Module& module,
+    THashMap<TString, TWasmExportSignature>& exports)
+{
+    for (const auto& exportItem : module.exports) {
+        if (exportItem.kind != WAVM::IR::ExternKind::function) {
+            continue;
+        }
+        // Function exports index the joint import+definition space; the type
+        // they name is an index into the module's type section.
+        const auto& functionType = module.types[module.functions.getType(exportItem.index).index];
+        TWasmExportSignature signature{
+            .ParamCount = functionType.params().size(),
+            .ResultCount = functionType.results().size(),
+        };
+        signature.ParamTypes.reserve(signature.ParamCount);
+        for (const auto param : functionType.params()) {
+            signature.ParamTypes.push_back(ConvertExportValueType(param));
+        }
+        exports[TString(exportItem.name)] = std::move(signature);
+    }
+}
+
+} // namespace
+
+const char* WasmExportValueTypeAsStr(EWasmExportValueType type) {
+    switch (type) {
+        case EWasmExportValueType::I32:
+            return "i32";
+        case EWasmExportValueType::I64:
+            return "i64";
+        case EWasmExportValueType::F32:
+            return "f32";
+        case EWasmExportValueType::F64:
+            return "f64";
+        case EWasmExportValueType::Other:
+            return "<unsupported>";
+    }
+    return "<unsupported>";
+}
+
+THashMap<TString, TWasmExportSignature> CollectWasmExports(
+    TStringBuf bytes,
+    EBytecodeFormat format)
+{
+    THashMap<TString, TWasmExportSignature> exports;
 
     using namespace WAVM;
     using namespace WAVM::IR;
@@ -288,11 +323,7 @@ THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
         if (!WAST::parseModule(bytes.data(), bytes.size() + 1, module, errors)) {
             ythrow yexception() << "Failed to parse WAST module";
         }
-        for (const auto& exportItem : module.exports) {
-            if (exportItem.kind == ExternKind::function) {
-                exports.insert(TString(exportItem.name));
-            }
-        }
+        CollectFunctionExports(module, exports);
         return exports;
     }
 
@@ -311,12 +342,7 @@ THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
     {
         ythrow yexception() << "Failed to load wasm binary module: " << loadError.message;
     }
-    const auto& irModule = Runtime::getModuleIR(wasmModule);
-    for (const auto& exportItem : irModule.exports) {
-        if (exportItem.kind == ExternKind::function) {
-            exports.insert(TString(exportItem.name));
-        }
-    }
+    CollectFunctionExports(Runtime::getModuleIR(wasmModule), exports);
     return exports;
 }
 

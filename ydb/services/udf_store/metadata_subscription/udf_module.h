@@ -25,14 +25,19 @@ enum class ECompileStatus {
 
 class TUdfModule: public NMetadata::NModifications::TObject<TUdfModule> {
 public:
-    static inline const TString UidColName = "uid"; // Utf8 (PK)
+    // A module is identified by its name: for a WASM UDF that is the manifest's
+    // module_name, i.e. the name YQL queries call it by, and for a library it is
+    // the library name. md5 is only a checksum of the uploaded body.
+    static inline const TString NameColName = "name"; // Utf8 (PK)
+    static inline const TString UidColName = "uid"; // Utf8
     static inline const TString Md5ColName = "md5"; // Utf8
     static inline const TString SizeColName = "size"; // Uint64
-    static inline const TString NameColName = "name"; // Utf8
     static inline const TString TypeColName = "type"; // Utf8 (EUdfType)
     static inline const TString ManifestColName = "manifest"; // Json
     static inline const TString VersionColName = "version"; // Uint64
     static inline const TString ChunkCountColName = "chunk_count"; // Uint64
+    // Kept temporarily for the existing .sys/udf_modules contract. Compilation
+    // state is no longer written here; authoritative state lives in artifacts.
     static inline const TString CompileStatusColName = "compile_status"; // Utf8
     static inline const TString CompileErrorColName = "compile_error"; // Utf8
     static inline const TString CreatedAtColName = "created_at"; // Timestamp
@@ -48,11 +53,7 @@ private:
     YDB_ACCESSOR_DEF(TString, Manifest);
     YDB_ACCESSOR_DEF(ui64, Version);
     YDB_ACCESSOR_DEF(ui64, ChunkCount);
-    YDB_ACCESSOR_DEF(ECompileStatus, CompileStatus);
-    YDB_ACCESSOR_DEF(TString, CompileError);
     YDB_ACCESSOR_DEF(TInstant, CreatedAt);
-    YDB_ACCESSOR_DEF(TInstant, CompileStartedAt);
-    YDB_ACCESSOR_DEF(TInstant, CompileFinishedAt);
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TVector<NKikimrSchemeOp::TColumnDescription> GetColumnDescription();
@@ -69,11 +70,7 @@ public:
         YDB_ACCESSOR(i32, ManifestIdx, -1);
         YDB_ACCESSOR(i32, VersionIdx, -1);
         YDB_ACCESSOR(i32, ChunkCountIdx, -1);
-        YDB_ACCESSOR(i32, CompileStatusIdx, -1);
-        YDB_ACCESSOR(i32, CompileErrorIdx, -1);
         YDB_ACCESSOR(i32, CreatedAtIdx, -1);
-        YDB_ACCESSOR(i32, CompileStartedAtIdx, -1);
-        YDB_ACCESSOR(i32, CompileFinishedAtIdx, -1);
 
     public:
         TDecoder(const Ydb::ResultSet& rawData);
@@ -92,10 +89,10 @@ public:
     TString SerializeToString() const;
 
     bool operator<(const TUdfModule& other) const {
-        return Uid < other.Uid;
+        return Name < other.Name;
     }
     bool operator==(const TUdfModule& other) const {
-        return Uid == other.Uid;
+        return Name == other.Name;
     }
 };
 

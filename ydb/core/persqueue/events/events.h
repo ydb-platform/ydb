@@ -9,9 +9,11 @@ enum class EServices {
     GLOBAL = 0,
     INTERNAL = 1,
     DESCRIBER_SERVICE = 2,
+    RU_QUOTER = 3,
     MLP = 4,
     CLOUD_EVENTS = 6,
     SCHEMA = 7,
+    RESET_OFFSET = 8,
     END
 };
 

@@ -14,6 +14,13 @@ constexpr TStringBuf MESSAGE_ATTRIBUTE_DEDUPLICATION_ID = "message_deduplication
 constexpr TStringBuf MESSAGE_ATTRIBUTE_ATTRIBUTES = "__message_attributes";
 constexpr TStringBuf MESSAGE_ATTRIBUTE_DELAY_SECONDS = "__delay_seconds";
 
+// Database user-attribute keys for the serverless rate limiter and billing ids.
+constexpr TStringBuf RL_COORDINATION_NODE_ATTR = "serverless_rt_coordination_node_path";
+constexpr TStringBuf RL_TOPIC_RESOURCE_ATTR = "serverless_rt_topic_resource_ru";
+constexpr TStringBuf CLOUD_ID_ATTR = "cloud_id";
+constexpr TStringBuf FOLDER_ID_ATTR = "folder_id";
+constexpr TStringBuf DATABASE_ID_ATTR = "database_id";
+
 constexpr ui32 METRICS_LEVEL_DISABLED = 0;
 constexpr ui32 METRICS_LEVEL_DATABASE = 1;
 constexpr ui32 METRICS_LEVEL_OBJECT = 2;
@@ -21,6 +28,7 @@ constexpr ui32 METRICS_LEVEL_DETAILED = 3;
 
 constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS = TDuration::Days(16).MilliSeconds();
 constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
+constexpr ui64 MAX_TOPIC_PARTITIONS = 35'000;
 constexpr i32 MAX_READ_RULES_COUNT = 3000;
 constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
 constexpr ui64 DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND = 1024 * 1024;

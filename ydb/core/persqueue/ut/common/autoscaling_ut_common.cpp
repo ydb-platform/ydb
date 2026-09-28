@@ -703,7 +703,7 @@ THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTe
 ui64 GetPQRBTabletId(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic) {
     CreateDescriberActor(runtime, database, topic);
     auto result = GetDescriberResponse(runtime);
-    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::Success);
     return result->Topics[topic].Info->Description.GetBalancerTabletID();
 }
 

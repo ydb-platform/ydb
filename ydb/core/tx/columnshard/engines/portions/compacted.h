@@ -26,6 +26,10 @@ private:
         return true;
     }
 
+    virtual bool IsAborted() const override {
+        return false;
+    }
+
 public:
     using TBase::TBase;
 

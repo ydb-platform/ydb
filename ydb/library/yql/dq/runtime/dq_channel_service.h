@@ -43,7 +43,7 @@ public:
 
     TDataChunk(TChunkedBuffer&& buffer, ui64 rows, NDqProto::EDataTransportVersion transportVersion,
         NKikimr::NMiniKQL::EValuePackerVersion packerVersion, bool finished)
-        : Buffer(buffer)
+        : Buffer(std::move(buffer))
         , Rows(rows)
         , TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
@@ -53,7 +53,7 @@ public:
     }
 
     TDataChunk(TChunkedBuffer&& buffer, ui64 rows, bool finished)
-        : Buffer(buffer)
+        : Buffer(std::move(buffer))
         , Rows(rows)
         , Finished(finished) {
         Bytes = Buffer.Size() + 1;
@@ -133,7 +133,7 @@ inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
 }
 
 struct TDqChannelLimits {
-    // Node level memory back pressure: report IMemoryQuotaManager::IsReasonableToUseSpilling of the
+    // Node level memory back pressure: report a negative IMemoryQuotaManager::GetMemoryAvailability of the
     // receiver side to the sender and keep the channel at the cold inflight window while it is set.
     // Off by default, the cold window is then used only until the 1st peer pop, as before.
     bool EnableSpillingChannelBackpressure = false;

@@ -366,7 +366,6 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         if (cMeta.IsDefaultFromExpression()) {
             auto& generated = *columnDesc.MutableDefaultFromExpression();
             generated.SetExprText(cMeta.DefaultExpression->ExprText);
-            generated.SetContext(cMeta.DefaultExpression->Context);
             generated.SetStored(cMeta.DefaultExpression->Stored);
             for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
                 generated.AddDependencyColumnNames(dependency);
@@ -3589,6 +3588,7 @@ public:
 
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
+            analyzeTx.SetSampleRate(settings.SampleRate);
             for (const auto& column: settings.Columns) {
                 *analyzeTx.AddColumns() = column;
             }

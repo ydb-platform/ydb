@@ -1,0 +1,35 @@
+Since llvm-23, libunwind provides the canonical definition of the
+`__cpp_exception` tag itself. This goes together with the removal of
+WasmException::endModule() in llvm-22, which used to emit that definition
+from the backend.
+
+Arcadia builds wasm targets with an older clang, whose backend still emits it,
+so the definition below collides with the backend one:
+
+    error: symbol '__cpp_exception' is already defined
+
+Keep the libunwind-side definition for llvm-22 and newer only.
+
+--- contrib/libs/libunwind/src/Unwind-wasm.c
++++ contrib/libs/libunwind/src/Unwind-wasm.c
+@@ -75,6 +75,12 @@ _Unwind_RaiseException(_Unwind_Exception *exception_object) {
+ // definition for this API and it's required for users to ensure that there's
+ // only one copy of `libunwind` within a wasm module to ensure this is only
+ // defined once and exactly once.
++//
++// Up to LLVM 21 the backend emitted this definition on its own from
++// WasmException::endModule(), so with an older toolchain defining it here as
++// well makes the assembler fail with
++//   error: symbol '__cpp_exception' is already defined
++#if !defined(__clang_major__) || __clang_major__ >= 22
+ __asm__(".globl __cpp_exception\n"
+ #if defined(__wasm32__)
+         ".tagtype __cpp_exception i32\n"
+@@ -84,6 +90,7 @@ _Unwind_RaiseException(_Unwind_Exception *exception_object) {
+ #error "Unsupported Wasm architecture"
+ #endif
+         "__cpp_exception:\n");
++#endif
+ 
+ /// Called by __cxa_end_catch.
+ _LIBUNWIND_EXPORT void

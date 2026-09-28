@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:23:21: Error: library/cpp/regex/hyperscan/hyperscan.cpp:92: Failed to compile regex: ^*$. Error message (hyperscan): Invalid repeat at index 1.
+	$match = Hyperscan::Match("*");
+	                    ^

@@ -98,7 +98,7 @@ namespace sparse
 
         inline size_type size() const { return base::size(); }
 
-        inline size_type eccentricity() const { return eccen; }
+        inline int eccentricity() const { return eccen; }
         inline value_type spouse() const { return w; }
 
     protected:
@@ -122,7 +122,7 @@ namespace sparse
         inline reverse_iterator rbegin() { return this->c.rbegin(); }
         inline iterator end() { return this->c.end(); }
         inline reverse_iterator rend() { return this->c.rend(); }
-        inline Tp& operator[](int n) { return this->c[n]; }
+        inline Tp& operator[](size_type n) { return this->c[n]; }
         inline size_type size() { return this->c.size(); }
 
     protected:

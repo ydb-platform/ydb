@@ -9,6 +9,8 @@ SRCS(
     analyze_actor.cpp
     column_statistic_eval.h
     column_statistic_eval.cpp
+    key_range_predicate.h
+    key_range_predicate.cpp
     schema.h
     schema.cpp
     select_builder.h
@@ -31,12 +33,17 @@ PEERDIR(
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/protos
+    ydb/core/scheme
+    ydb/core/ydb_convert
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/statistics/database
+    ydb/library/query_actor
     ydb/library/yql/udfs/statistics_internal
+    ydb/public/sdk/cpp/src/client/params
     yql/essentials/core/histogram
     yql/essentials/core/minsketch
+    yql/essentials/types/dynumber
 )
 
 YQL_LAST_ABI_VERSION()

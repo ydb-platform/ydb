@@ -5,10 +5,10 @@ namespace NYql {
 namespace {
 
 TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResult& resolveResult,
-    const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted)
+                                                             const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted)
 {
-    THashMap<TString, size_t> importIndex; // module => Imports index
-    THashMap<TString, size_t> packageIndex; // package => Imports index
+    THashMap<TString, size_t> importIndex;                   // module => Imports index
+    THashMap<TString, size_t> packageIndex;                  // package => Imports index
     THashMap<TString, TVector<TFunctionInfo>> functionIndex; // package => vector of functions
     for (size_t i = 0; i < resolveResult.ImportsSize(); ++i) {
         auto& import = resolveResult.GetImports(i);
@@ -85,7 +85,7 @@ void AddResolveResultToRegistry(const TResolveResult& resolveResult, const TMap<
     registry.RegisterResources(resources, mode);
 }
 
-}
+} // namespace
 
 TUdfIndex::TUdfIndex() = default;
 
@@ -255,27 +255,27 @@ void TUdfIndex::RegisterResource(const TResourceInfo::TPtr& resource, EOverrideM
     // detect conflict first
     if (ContainsAnyModule(resource->Modules)) {
         switch (mode) {
-        case EOverrideMode::PreserveExisting:
-            return;
+            case EOverrideMode::PreserveExisting:
+                return;
 
-        case EOverrideMode::RaiseError:
-            // todo: specify module name(s) in intersection
-            ythrow yexception() << "Conflict during resource " << resource->Link.Path << " registration";
+            case EOverrideMode::RaiseError:
+                // todo: specify module name(s) in intersection
+                ythrow yexception() << "Conflict during resource " << resource->Link.Path << " registration";
 
-        case EOverrideMode::ReplaceWithNew: {
-            // we have to find resources and remove all related modules:
-            // 1. find resources by newModules
-            // 2. remove all functions related to found resources
+            case EOverrideMode::ReplaceWithNew: {
+                // we have to find resources and remove all related modules:
+                // 1. find resources by newModules
+                // 2. remove all functions related to found resources
 
-            auto existingResources = FindResourcesByModules(resource->Modules);
-            Y_ENSURE(!existingResources.empty());
+                auto existingResources = FindResourcesByModules(resource->Modules);
+                Y_ENSURE(!existingResources.empty());
 
-            for (auto& r : existingResources) {
-                UnregisterResource(r);
+                for (auto& r : existingResources) {
+                    UnregisterResource(r);
+                }
+
+                break;
             }
-
-            break;
-        }
         } // switch
     }
 
@@ -314,8 +314,8 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString
 }
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks,
-    bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage,
-    NUdf::ELogLevel logLevel, const TVector<TStringBuf>& aliases)
+                                bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage,
+                                NUdf::ELogLevel logLevel, const TVector<TStringBuf>& aliases)
 {
     TVector<TUserDataBlock> blocksResolve;
     blocksResolve.reserve(blocks.size());
@@ -329,23 +329,22 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUse
         TString path;
         TString md5;
         switch (b.Type) {
-        case EUserDataType::URL:
-            if (!b.FrozenFile) {
-                ythrow yexception() << "DataBlock for " << b.Data << " is not frozen";
-            }
-            path = b.FrozenFile->GetPath().GetPath();
-            md5 = b.FrozenFile->GetMd5();
-            break;
-        case EUserDataType::PATH:
-        {
-            if (b.FrozenFile) {
+            case EUserDataType::URL:
+                if (!b.FrozenFile) {
+                    ythrow yexception() << "DataBlock for " << b.Data << " is not frozen";
+                }
+                path = b.FrozenFile->GetPath().GetPath();
                 md5 = b.FrozenFile->GetMd5();
+                break;
+            case EUserDataType::PATH: {
+                if (b.FrozenFile) {
+                    md5 = b.FrozenFile->GetMd5();
+                }
+                path = b.Data;
+                break;
             }
-            path = b.Data;
-            break;
-        }
-        default:
-            ythrow yexception() << "Unsupport data block type for " << b.Data;
+            default:
+                ythrow yexception() << "Unsupport data block type for " << b.Data;
         }
 
         TUserDataBlock br;
@@ -368,7 +367,7 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUse
 }
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel, const TStringBuf& aliases) {
-    TVector<TUserDataBlock> blocks({ block });
+    TVector<TUserDataBlock> blocks({block});
     const bool isTrusted = false;
     LoadRichMetadataToUdfIndex(resolver, blocks, isTrusted, mode, registry, storage, logLevel, {aliases});
 }

@@ -6,12 +6,14 @@ Main resources:
 
 - [{#T}](getting-started.md)
 - [{#T}](example-app/index.md)
+- [{#T}](sqlc-ydb.md)
 - [{#T}](yql-tutorial/index.md)
 - Choosing a primary key for:
 
   - [Row-oriented tables](primary-key/row-oriented.md)
   - [Column-oriented tables](primary-key/column-oriented.md)
 
+- [{#T}](tables/index.md)
 - [{#T}](secondary-indexes.md)
 - [{#T}](batch-upload.md)
 - [{#T}](paging.md)

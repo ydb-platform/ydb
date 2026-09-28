@@ -31,6 +31,7 @@ namespace NKikimr {
         MaxLogoBlobDataSize = MaxVDiskBlobSize;
         HullSstSizeInChunksFresh = 1;
         HullSstSizeInChunksLevel = 1;
+        HeapAllocatorMaxSstInBytes = 1u << 20u;
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;
@@ -117,6 +118,7 @@ namespace NKikimr {
         SkeletonFrontWakeupPeriod = TDuration::Seconds(1);
         SkeletonFrontRequestTimeout = TDuration::Seconds(10);
         SkeletonFrontQueueBackpressureCheckMsgId = true;
+        SpaceReportPeriodSeconds = 0;
 
         WindowCostChangeToRecalculatePercent = 2;                   // 2%
         WindowMinLowWatermarkPercent = 2;                           // 2%

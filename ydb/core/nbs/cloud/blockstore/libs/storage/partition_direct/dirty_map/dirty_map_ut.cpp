@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
@@ -15,7 +16,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 
 TVChunkConfig MakeTestVChunkConfig()
 {
@@ -23,6 +24,29 @@ TVChunkConfig MakeTestVChunkConfig()
         0,   // VChunkIndex
         DirectBlockGroupHostCount,
         DefaultPrimaryCount);
+}
+
+std::shared_ptr<TBlocksDirtyMap> MakeUntouchedDirtyMap(
+    const TVChunkConfig& vchunkConfig)
+{
+    return std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
+        vchunkConfig,
+        false,
+        TDirtyMapStateProto{},
+        DefaultBlockSize,
+        GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+}
+
+std::shared_ptr<TBlocksDirtyMap> MakeDirtyMap(const TVChunkConfig& vchunkConfig)
+{
+    return std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
+        vchunkConfig,
+        true,
+        TDirtyMapStateProto{},
+        DefaultBlockSize,
+        GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -76,30 +100,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldKeepTotalPBufferCountersAfterRelease)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         constexpr THostIndex Host = 0;
         constexpr size_t ByteCount = 4096;
+        const auto pBufferKey = MakeKey(123);
+        const auto range = TBlockRange16::MakeClosedInterval(0, 0);
 
-        dirtyMap->DataToPBufferAdded(
-            Host,
-            IReadyQueue::EPBufferCounter::Total,
-            ByteCount);
-        dirtyMap->DataToPBufferAdded(
-            Host,
-            IReadyQueue::EPBufferCounter::Locked,
-            ByteCount);
-        dirtyMap->DataFromPBufferReleased(
-            Host,
-            IReadyQueue::EPBufferCounter::Locked,
-            ByteCount);
-        dirtyMap->DataFromPBufferReleased(
-            Host,
-            IReadyQueue::EPBufferCounter::Total,
-            ByteCount);
+        for (const auto host: MakePrimaryHosts()) {
+            dirtyMap->RestorePBuffer(pBufferKey, range, host);
+        }
+        dirtyMap->LockPBuffer(pBufferKey);
+        dirtyMap->UnlockPBuffer(pBufferKey);
+        FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+        EraseAll(dirtyMap->MakeEraseHint(1), *dirtyMap);
 
         const auto& counters = dirtyMap->GetPBufferCounters(Host);
         UNIT_ASSERT_VALUES_EQUAL(0, counters.Current.Count);
@@ -115,10 +129,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadWithoutWrites)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
@@ -131,16 +142,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // We should be able to get read hints (default DesiredDDisks =
         // primary).
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Disable host 0
         vchunkConfig.DisableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -149,14 +160,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldResizeHosts)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         vchunkConfig.AppendHost();
         const auto newIdx = static_cast<THostIndex>(5);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         UNIT_ASSERT_VALUES_EQUAL(
             0u,
@@ -171,43 +179,64 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST(ShouldRespectWatermarksWhenConstruct)
+    Y_UNIT_TEST(ShouldStartExistingDDisksFull)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
-        vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
-
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Fresh+,30};"
+            "H0*{Operational,32768};"
             "H1*{Operational,32768};"
-            "H2*{Fresh+,40};"
+            "H2*{Operational,32768};"
             "H3+{Disabled,0};"
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST(ShouldRespectWatermarksForAddedDDisks)
+    Y_UNIT_TEST(ShouldOmitPersistedStateWithoutFreshDDisks)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            dirtyMap->GetStateForPersist().DDiskStatesSize());
 
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
-        vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            vchunkConfig.GetHostCount(),
+            dirtyMap->GetStateForPersist().DDiskStatesSize());
+    }
+
+    Y_UNIT_TEST(ShouldStartAddedDDiskFullWhenUntouched)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
+
+        vchunkConfig.PromoteHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig, false);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
             "H2*{Operational,32768};"
-            "H3*{Fresh+,40};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST(ShouldStartAddedDDiskBehindWhenTouched)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        vchunkConfig.PromoteHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Fresh+,0};"
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
     }
@@ -218,99 +247,76 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Offline H1
         vchunkConfig.EvacuateHost(1);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1-{Disabled,0};"
             "H2*{Operational,32768};"
-            "H3*{Fresh+,0};"
+            "H3*{Operational,32768};"
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
 
         // Offline H0
         vchunkConfig.EvacuateHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1-{Disabled,0};"
             "H2*{Operational,32768};"
-            "H3*{Fresh+,0};"
-            "H4*{Fresh+,0};",
-            dirtyMap->DebugPrintDDiskState());
-
-        // Can't switch H2 offline
-        vchunkConfig.EvacuateHost(2);
-        dirtyMap->UpdateConfig(vchunkConfig);
-        UNIT_ASSERT_VALUES_EQUAL(
-            "H0-{Disabled,0};"
-            "H1-{Disabled,0};"
-            "H2-{Operational,32768};"
-            "H3*{Fresh+,0};"
+            "H3*{Operational,32768};"
             "H4*{Fresh+,0};",
             dirtyMap->DebugPrintDDiskState());
 
         // Offline H3
-        vchunkConfig.EvacuateHost(3);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        vchunkConfig.DisableHost(3);
+        vchunkConfig.DemoteHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1-{Disabled,0};"
-            "H2-{Operational,32768};"
+            "H2*{Operational,32768};"
             "H3-{Disabled,0};"
             "H4*{Fresh+,0};",
             dirtyMap->DebugPrintDDiskState());
 
         // Offline H4
-        vchunkConfig.EvacuateHost(4);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        vchunkConfig.DisableHost(4);
+        vchunkConfig.DemoteHost(4);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1-{Disabled,0};"
-            "H2-{Operational,32768};"
+            "H2*{Operational,32768};"
             "H3-{Disabled,0};"
             "H4-{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
 
         // Enable H4
         vchunkConfig.EnableHost(4);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1-{Disabled,0};"
-            "H2-{Operational,32768};"
+            "H2*{Operational,32768};"
             "H3-{Disabled,0};"
             "H4*{Fresh+,0};",
             dirtyMap->DebugPrintDDiskState());
 
         // Enable H0
         vchunkConfig.EnableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,0};"
             "H1-{Disabled,0};"
-            "H2-{Operational,32768};"
+            "H2*{Operational,32768};"
             "H3-{Disabled,0};"
             "H4*{Fresh+,0};",
             dirtyMap->DebugPrintDDiskState());
 
         // Enable H1
         vchunkConfig.EnableHost(1);
-        dirtyMap->UpdateConfig(vchunkConfig);
-        UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Fresh+,0};"
-            "H1+{Disabled,0};"
-            "H2-{Operational,32768};"
-            "H3-{Disabled,0};"
-            "H4*{Fresh+,0};",
-            dirtyMap->DebugPrintDDiskState());
-
-        // Enable H2
-        vchunkConfig.EnableHost(2);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,0};"
             "H1+{Disabled,0};"
@@ -321,22 +327,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable H3
         vchunkConfig.EnableHost(3);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,0};"
             "H1+{Disabled,0};"
             "H2*{Operational,32768};"
-            "H3+{Disabled,0};"
-            "H4*{Fresh+,0};",
-            dirtyMap->DebugPrintDDiskState());
-
-        // Can't switch H2 offline
-        vchunkConfig.EvacuateHost(2);
-        dirtyMap->UpdateConfig(vchunkConfig);
-        UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Fresh+,0};"
-            "H1+{Disabled,0};"
-            "H2-{Operational,32768};"
             "H3+{Disabled,0};"
             "H4*{Fresh+,0};",
             dirtyMap->DebugPrintDDiskState());
@@ -345,14 +340,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldNotReadFromFresh)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-
-        vchunkConfig.SetWatermark(THostIndex{0}, 30 * DefaultBlockSize);
-        vchunkConfig.SetWatermark(THostIndex{2}, 40 * DefaultBlockSize);
-
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 30 * DefaultBlockSize);
+        dirtyMap->SetReadablePrefixDebugOnly(2, 40 * DefaultBlockSize);
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,30};"
@@ -362,27 +352,27 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
 
-        // Read below fresh watermark
+        // Read below the first Behind range
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
-        // Read crossed fresh watermark
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(25, 10));
+        // Read crosses the first Behind range
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(25, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][25..34][0..9]};",
             readHint.DebugPrint());
 
-        // Read above fresh watermark
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(30, 10));
+        // Read above the readable prefix
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(30, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][30..39][0..9]};",
             readHint.DebugPrint());
 
-        // Read above fresh watermark
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(40, 10));
+        // Read above the readable prefix
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(40, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1][40..49][0..9]};",
             readHint.DebugPrint());
@@ -391,33 +381,30 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadAfterWriteFinished)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         // After write, we should be able to get read hints (read from
         // confirmed PBuffers — hosts {0, 1, 2}).
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Disable host 0.
         vchunkConfig.DisableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         // WriteConfirmed mask is {0, 1, 2}; host 0 is disabled, so it is
         // excluded from the read mask.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -442,41 +429,38 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadAfterWriteFinishedFromLastLsn)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(124),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakeHostMask(true, true, false, true, false),
             MakeHostMask(true, true, false, true, false));
 
         // After write, we should be able to get read hints
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:124{[H0,H1,H3][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Disable host 0
         vchunkConfig.DisableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:124{[H1,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -514,10 +498,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldWriteAndFlushAndErase)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap->MakeFlushHint(1);
@@ -530,10 +511,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // number of write operations.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -545,10 +526,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
-            TBlockRange64::WithLength(20, 10));
+            TBlockRange16::WithLength(20, 10));
         dirtyMap->WriteFinished(
             MakeKey(124),
-            TBlockRange64::WithLength(20, 10),
+            TBlockRange16::WithLength(20, 10),
             requested,
             confirmed);
 
@@ -656,15 +637,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReportSafeBarrierForErase)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
-        const auto range1 = TBlockRange64::WithLength(10, 10);
-        const auto range2 = TBlockRange64::WithLength(20, 10);
+        const auto range1 = TBlockRange16::WithLength(10, 10);
+        const auto range2 = TBlockRange16::WithLength(20, 10);
 
         // No inflight writes mean no safe barrier.
         UNIT_ASSERT(!dirtyMap->GetSafeBarrierForErase().has_value());
@@ -728,12 +706,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldNotHoldSafeBarrierForSubQuorumWrite)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
-        const auto range = TBlockRange64::WithLength(10, 10);
+        const auto range = TBlockRange16::WithLength(10, 10);
 
         // A registered (pending) write holds the barrier.
         dirtyMap->RegisterInflightWrite(MakeKey(123), range);
@@ -760,12 +735,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldIgnoreLateEraseAckForForgottenLsn)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
-        const auto range = TBlockRange64::WithLength(10, 10);
+        const auto range = TBlockRange16::WithLength(10, 10);
         dirtyMap->RegisterInflightWrite(MakeKey(100), range);
         dirtyMap->WriteFinished(
             MakeKey(100),
@@ -796,12 +768,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldIgnoreLateEraseAckAfterHostDisabled)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
-        const auto range = TBlockRange64::WithLength(10, 10);
+        const auto range = TBlockRange16::WithLength(10, 10);
         dirtyMap->RegisterInflightWrite(MakeKey(100), range);
         dirtyMap->WriteFinished(
             MakeKey(100),
@@ -825,7 +794,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // The host gets disabled; the re-queued erase is confirmed on its
         // behalf and the record leaves the inflight map.
         vchunkConfig.DisableHost(2);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         auto retryHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT(retryHints.Empty());
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
@@ -838,15 +807,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Promote hand-off H3 to primary.
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -862,10 +828,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -889,24 +855,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     }
 
     // A Fresh DDisk has range tracking enabled. When a write is flushed to it,
-    // FlushCompleted must propagate the completion down to the DDisk state so
-    // the flushed range is recorded in the DDisk's Ahead field (data that is
-    // already up-to-date above the operational watermark and needs no sync).
+    // FlushCompleted must remove the up-to-date range from Behind.
     // Operational DDisks have tracking disabled, so they record nothing.
-    Y_UNIT_TEST(ShouldTrackAheadRangeOnFreshDDiskAfterFlush)
+    Y_UNIT_TEST(ShouldRemoveFlushedRangeFromBehindOnFreshDDisk)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
-        // Promote hand-off H3 to primary and make it Fresh with a low
-        // watermark so tracking is enabled and writes above the watermark are
-        // recorded as "ahead".
+        // Promote hand-off H3 to primary and leave only a short readable
+        // prefix.
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -916,19 +876,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // The unsynced tail is tracked as Behind before the flush.
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [5..32767]\n",
             dirtyMap->DebugPrintBehind());
 
-        // Write above the fresh watermark to all four DDisks.
+        // Write above the readable prefix to all four DDisks.
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             requested);
 
@@ -937,11 +896,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
 
-        // FlushCompleted recorded the flushed range in the Fresh DDisk's Ahead
-        // field. Only the Fresh host H3 tracks; the Operational hosts do not.
-        UNIT_ASSERT_VALUES_EQUAL(
-            "  H3: [10..19]\n",
-            dirtyMap->DebugPrintAhead());
+        // Only the Fresh host H3 updates its Behind map; the Operational hosts
+        // do not track completed flushes.
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [5..9][20..32767]\n",
             dirtyMap->DebugPrintBehind());
@@ -961,12 +917,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         TString error;
         vchunkConfig.EvacuateHost(0);
         UNIT_ASSERT_VALUES_EQUAL("", error);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
-
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -975,10 +927,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -1011,13 +963,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.EvacuateHost(1);
         UNIT_ASSERT_VALUES_EQUAL("", error);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
-        vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
-
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(4, DefaultBlockSize * 1024);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1-{Disabled,0};"
@@ -1033,10 +981,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -1063,12 +1011,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
         vchunkConfig.EvacuateHost(0);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1*{Operational,32768};"
@@ -1085,10 +1030,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -1111,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
 
-    Y_UNIT_TEST(ShouldFlushOverWriteWatermark)
+    Y_UNIT_TEST(ShouldFlushAcrossReadablePrefix)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Disable DDisks H2
@@ -1119,66 +1064,180 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Available DDisks is enough for a quorum.
         vchunkConfig.DisableHost(2);
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(3, 100);
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, 100);
 
         const THostMask requested =
             MakeHostMask(true, true, false, true, false);
         const THostMask confirmed = requested;
 
-        // Range below write watermark. Should be flushed to 3 enabled ddisks.
+        // Range below readable prefix. Should be flushed to 3 enabled ddisks.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
-        // Range cross write watermark. Should be flushed to 3 enabled ddisks.
+        // Range crosses readable prefix. Should be flushed to 3 enabled ddisks.
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
-            TBlockRange64::WithLength(95, 10));
+            TBlockRange16::WithLength(95, 10));
         dirtyMap->WriteFinished(
             MakeKey(124),
-            TBlockRange64::WithLength(95, 10),
+            TBlockRange16::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should be flushed to 3 enabled ddisks.
+        // Range beyond readable prefix. Should be flushed to 3 enabled ddisks.
+        // Because it overlaps 124, this record must be flushed after 124.
         dirtyMap->RegisterInflightWrite(
             MakeKey(125),
-            TBlockRange64::WithLength(100, 10));
+            TBlockRange16::WithLength(100, 10));
         dirtyMap->WriteFinished(
             MakeKey(125),
-            TBlockRange64::WithLength(100, 10),
+            TBlockRange16::WithLength(100, 10),
             requested,
             confirmed);
 
         auto flushHint = dirtyMap->MakeFlushHint(3);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:1:123[10..19],1:124[95..104],1:125[100..109];"
-            "H1->H1:1:123[10..19],1:124[95..104],1:125[100..109];"
-            "H3->H3:1:123[10..19],1:124[95..104],1:125[100..109];",
+            "H0->H0:1:123[10..19],1:124[95..104];"
+            "H1->H1:1:123[10..19],1:124[95..104];"
+            "H3->H3:1:123[10..19],1:124[95..104];",
             flushHint.DebugPrint());
+
+        FlushAll(flushHint, *dirtyMap);
+
+        auto deferredHint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0->H0:1:125[100..109];"
+            "H1->H1:1:125[100..109];"
+            "H3->H3:1:125[100..109];",
+            deferredHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldNotFlushWhileOlderOverlappingWriteIsNotFlushed)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto disjointRange = TBlockRange16::WithLength(100, 10);
+
+        dirtyMap->RegisterInflightWrite(MakeKey(10), range);
+        dirtyMap->RegisterInflightWrite(MakeKey(20), range);
+        dirtyMap->WriteFinished(
+            MakeKey(20),
+            range,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        dirtyMap->RegisterInflightWrite(MakeKey(30), disjointRange);
+        dirtyMap->WriteFinished(
+            MakeKey(30),
+            disjointRange,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        auto hint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_C(
+            hint.DebugPrint().find(":20[") == TString::npos,
+            "newer overlapping write got a flush hint while the older one is "
+            "not flushed: "
+                << hint.DebugPrint());
+        UNIT_ASSERT_C(
+            hint.DebugPrint().find(":30[") != TString::npos,
+            "disjoint write must not be affected by the ordering gate: "
+                << hint.DebugPrint());
+
+        dirtyMap->WriteFinished(
+            MakeKey(10),
+            range,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+        auto olderHint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_C(
+            olderHint.DebugPrint().find(":10[") != TString::npos,
+            "older write must flush once it reaches the quorum: "
+                << olderHint.DebugPrint());
+        UNIT_ASSERT_C(
+            olderHint.DebugPrint().find(":20[") == TString::npos,
+            "newer write must wait until the older one is flushed, not just "
+            "requested: "
+                << olderHint.DebugPrint());
+
+        FlushAll(olderHint, *dirtyMap);
+        auto newerHint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_C(
+            newerHint.DebugPrint().find(":20[") != TString::npos,
+            "newer write must flush after the older one landed: "
+                << newerHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldEraseOverlappingWritesInAscendingOrder)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto overlappingRange = TBlockRange16::WithLength(15, 10);
+        const auto disjointRange = TBlockRange16::WithLength(100, 10);
+
+        auto writeAndFlush = [&](ui64 lsn, TBlockRange16 writeRange)
+        {
+            dirtyMap->RegisterInflightWrite(MakeKey(lsn), writeRange);
+            dirtyMap->WriteFinished(
+                MakeKey(lsn),
+                writeRange,
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
+            FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+        };
+        writeAndFlush(5, range);
+        writeAndFlush(12, overlappingRange);
+        writeAndFlush(20, disjointRange);
+
+        // The newer overlapping record is not put into the same batch.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:5,1:20;"
+            "H1:1:5,1:20;"
+            "H2:1:5,1:20;",
+            eraseHints.DebugPrint());
+
+        // The newer overlapping record waits while the older one is being
+        // erased.
+        dirtyMap->EraseFinished(THostIndex{0}, {MakeKey(5), MakeKey(20)}, {});
+        dirtyMap->EraseFinished(THostIndex{1}, {MakeKey(5), MakeKey(20)}, {});
+        dirtyMap->EraseFinished(THostIndex{2}, {MakeKey(20)}, {MakeKey(5)});
+        UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap->GetInflightCount());
+
+        // The failed erase is retried, the newer overlapping record still
+        // waits.
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL("H2:1:5;", eraseHints.DebugPrint());
+
+        dirtyMap->EraseFinished(THostIndex{2}, {MakeKey(5)}, {});
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:12;"
+            "H1:1:12;"
+            "H2:1:12;",
+            eraseHints.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldLockPBuffer)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
@@ -1204,23 +1263,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldLockDDisk)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
         const THostMask mask = MakePrimaryHosts();
 
         // Lock range on DDisk (for reading).
         auto lockHandle =
-            dirtyMap->LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
+            dirtyMap->LockDDiskRange(TBlockRange16::WithLength(5, 10), mask);
 
         // User write to overlapped with locked range.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
@@ -1239,22 +1295,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldRestoreCompletePBuffer)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{0});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{1});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{2});
 
         // Flush hints should be generated when has quorum PBuffers.
@@ -1271,27 +1324,24 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldRestoreOverCompletePBuffer)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Block written to four PBuffers
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{0});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{1});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{2});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{3});
 
         // Flush hints should be generated when has quorum PBuffers.
@@ -1305,7 +1355,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             flushHint.DebugPrint());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H0,H1,H2,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -1324,23 +1374,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldFlushFromHandOff)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Block written to two primary PBuffers and one hand-off PBuffer
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{1});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{2});
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{3});
 
         // Flush hints should be generated when has quorum PBuffers.
@@ -1354,7 +1401,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             flushHint.DebugPrint());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H1,H2,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -1363,17 +1410,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadFromDDiskIfRangeIsNotCoveredByInflightRange)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(0, 100));
+            TBlockRange16::WithLength(0, 100));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(0, 100),
+            TBlockRange16::WithLength(0, 100),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
@@ -1396,10 +1440,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(124),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
@@ -1409,7 +1453,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // overlapped [10..19]. Reading the whole range from DDisk would
         // return stale data for [10..19].
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(0, 100));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 100));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2][0..9][0..9]};"
             "1:124{[H0,H1,H2][10..19][10..19]};"
@@ -1420,35 +1464,32 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ReadShouldWaitPBufferRestore)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{0});
         auto readHint1 =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint1.DebugPrint());
         UNIT_ASSERT_VALUES_EQUAL(false, readHint1.WaitReady.IsReady());
 
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{1});
         auto readHint2 =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint2.DebugPrint());
         UNIT_ASSERT_VALUES_EQUAL(false, readHint2.WaitReady.IsReady());
 
         dirtyMap->RestorePBuffer(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             THostIndex{2});
         auto readHint3 =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H0,H1,H2][10..19][0..9]};",
             readHint3.DebugPrint());
@@ -1460,31 +1501,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsTwoSequentialNonOverlappingInflightRanges)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(30, 10));
+            TBlockRange16::WithLength(30, 10));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(30, 10),
+            TBlockRange16::WithLength(30, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(0, 50));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 50));
 
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1499,31 +1537,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsTwoFullyOverlappingInflightRanges)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 41));
+            TBlockRange16::WithLength(10, 41));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 41),
+            TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(20, 11));
+            TBlockRange16::WithLength(20, 11));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(20, 11),
+            TBlockRange16::WithLength(20, 11),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 41));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
 
         UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1534,13 +1569,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
-            TBlockRange64::WithLength(0, 50));
+            TBlockRange16::WithLength(0, 50));
         dirtyMap->WriteFinished(
             MakeKey(300),
-            TBlockRange64::WithLength(0, 50),
+            TBlockRange16::WithLength(0, 50),
             MakePrimaryHosts(),
             MakePrimaryHosts());
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(5, 40));
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(5, 40));
 
         UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1551,31 +1586,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsTwoPartiallyOverlappingInflightRanges)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 21));
+            TBlockRange16::WithLength(10, 21));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 21),
+            TBlockRange16::WithLength(10, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(25, 21));
+            TBlockRange16::WithLength(25, 21));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(25, 21),
+            TBlockRange16::WithLength(25, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 36));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 36));
 
         UNIT_ASSERT_VALUES_EQUAL(2, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1587,40 +1619,37 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsThreeOverlappingInflightRanges)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 41));
+            TBlockRange16::WithLength(10, 41));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 41),
+            TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(150),
-            TBlockRange64::WithLength(20, 21));
+            TBlockRange16::WithLength(20, 21));
         dirtyMap->WriteFinished(
             MakeKey(150),
-            TBlockRange64::WithLength(20, 21),
+            TBlockRange16::WithLength(20, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(30, 6));
+            TBlockRange16::WithLength(30, 6));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(30, 6),
+            TBlockRange16::WithLength(30, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 41));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
 
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1635,22 +1664,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsRangeWithEdgesOfRequest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
 
         UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1661,31 +1687,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsRangeWithSameStart)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 100));
+            TBlockRange16::WithLength(10, 100));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 100),
+            TBlockRange16::WithLength(10, 100),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(10, 40));
+            TBlockRange16::WithLength(10, 40));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(10, 40),
+            TBlockRange16::WithLength(10, 40),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(0, 100));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 100));
 
         UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1698,25 +1721,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsManyConsecutiveRanges)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const int lsnsCount = 100;
         for (int i = 1; i <= lsnsCount; ++i) {
             dirtyMap->RegisterInflightWrite(
                 MakeKey(i),
-                TBlockRange64::WithLength(i, 1));
+                TBlockRange16::WithLength(i, 1));
             dirtyMap->WriteFinished(
                 MakeKey(i),
-                TBlockRange64::WithLength(i, 1),
+                TBlockRange16::WithLength(i, 1),
                 MakePrimaryHosts(),
                 MakePrimaryHosts());
         }
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(0, lsnsCount + 1));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, lsnsCount + 1));
 
         UNIT_ASSERT_VALUES_EQUAL(lsnsCount + 1, readHint.RangeHints.size());
 
@@ -1738,40 +1758,37 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsStaircaseWithOverlappedRanges)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 21));
+            TBlockRange16::WithLength(10, 21));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 21),
+            TBlockRange16::WithLength(10, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(25, 21));
+            TBlockRange16::WithLength(25, 21));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(25, 21),
+            TBlockRange16::WithLength(25, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
-            TBlockRange64::WithLength(40, 21));
+            TBlockRange16::WithLength(40, 21));
         dirtyMap->WriteFinished(
             MakeKey(300),
-            TBlockRange64::WithLength(40, 21),
+            TBlockRange16::WithLength(40, 21),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 51));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 51));
 
         UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1784,40 +1801,37 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsFewRangesInsideOfDDiskData)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 6));
+            TBlockRange16::WithLength(10, 6));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 6),
+            TBlockRange16::WithLength(10, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(25, 6));
+            TBlockRange16::WithLength(25, 6));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(25, 6),
+            TBlockRange16::WithLength(25, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
-            TBlockRange64::WithLength(45, 6));
+            TBlockRange16::WithLength(45, 6));
         dirtyMap->WriteFinished(
             MakeKey(300),
-            TBlockRange64::WithLength(45, 6),
+            TBlockRange16::WithLength(45, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(0, 61));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 61));
 
         UNIT_ASSERT_VALUES_EQUAL(7, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1834,49 +1848,46 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsFewBiggerLsnsInsideOfOneSmaller)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 91));
+            TBlockRange16::WithLength(10, 91));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 91),
+            TBlockRange16::WithLength(10, 91),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(20, 6));
+            TBlockRange16::WithLength(20, 6));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(20, 6),
+            TBlockRange16::WithLength(20, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
-            TBlockRange64::WithLength(40, 6));
+            TBlockRange16::WithLength(40, 6));
         dirtyMap->WriteFinished(
             MakeKey(300),
-            TBlockRange64::WithLength(40, 6),
+            TBlockRange16::WithLength(40, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(400),
-            TBlockRange64::WithLength(70, 6));
+            TBlockRange16::WithLength(70, 6));
         dirtyMap->WriteFinished(
             MakeKey(400),
-            TBlockRange64::WithLength(70, 6),
+            TBlockRange16::WithLength(70, 6),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 91));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 91));
 
         UNIT_ASSERT_VALUES_EQUAL(7, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1893,18 +1904,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadHintsReturnDDiskWhenNoQuorum)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         auto inflightCounterBeforeWrite = dirtyMap->GetInflightCount();
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 41));
+            TBlockRange16::WithLength(10, 41));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 41),
+            TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
             MakeHostMask(true, true, false, false, false));
 
@@ -1914,7 +1922,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->GetInflightCount());
 
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 41));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
 
         UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1923,14 +1931,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(10, 41));
+            TBlockRange16::WithLength(10, 41));
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(10, 41),
+            TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
             MakeHostMask(true, true, true, false, false));
         auto readHint1 =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 41));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
         UNIT_ASSERT_VALUES_EQUAL(1, readHint1.RangeHints.size());
         UNIT_ASSERT_VALUES_EQUAL(
             "1:200{[H0,H1,H2][10..50][0..40]};",
@@ -1940,20 +1948,17 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadFromDDiskDuringPendingWrite)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Register a pending write (no PBuffer acknowledgement yet).
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
 
         // A read during pending write should see DDisk data (Lsn=0),
         // not the unacknowledged PBuffer data.
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -1962,11 +1967,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Complete the write. Now reads should see PBuffer data.
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -1975,31 +1980,28 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadFromPBufferDuringPendingWriteWithExistingInflight)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // First write completes normally.
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
         // Second write overlaps and is pending.
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
 
         // Actually, the pending write (Lsn=200) overlaps the completed one
         // (Lsn=100) — the latest Lsn wins, and since Lsn 200 is in
         // PBufferPendingWrite state, it returns PBuffer read.
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:100{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -2007,11 +2009,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Complete the second write.
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
-        readHint = dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:200{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -2020,20 +2022,17 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldEraseDisabledHostsAutomatically)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2043,7 +2042,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Disable host 0 before erase.
         vchunkConfig.DisableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         // Erase hints should only include enabled hosts.
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -2061,10 +2060,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldHandleSafeBarrierWithPendingWrite)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // No writes yet — no barrier.
         UNIT_ASSERT(!dirtyMap->GetSafeBarrierForErase().has_value());
@@ -2072,7 +2068,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Pending write holds the barrier from the moment of registration.
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             MakeKey(100).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
@@ -2080,7 +2076,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Second pending write — barrier stays at 100.
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
-            TBlockRange64::WithLength(20, 10));
+            TBlockRange16::WithLength(20, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             MakeKey(100).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
@@ -2088,7 +2084,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Completing write 100 with sub-quorum drops it.
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
             MakeHostMask(true, true, false, false, false));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2098,7 +2094,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Completing write 200 with quorum keeps it until erased.
         dirtyMap->WriteFinished(
             MakeKey(200),
-            TBlockRange64::WithLength(20, 10),
+            TBlockRange16::WithLength(20, 10),
             MakePrimaryHosts(),
             MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2109,20 +2105,17 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldCleanupInflightWhenHostEvacuatedDuringFlush)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2151,7 +2144,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // DDisk set changes from {0, 1, 2} to {0, 2, 3}, making host 1
         // "removed".
         vchunkConfig.EvacuateHost(1);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         // Flush to promoted host requested.
         flushHint = dirtyMap->MakeFlushHint(1);
@@ -2178,20 +2171,17 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldCleanupInflightWhenHostEvacuatedDuringErase)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2219,7 +2209,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Evacuate host 1
         vchunkConfig.EvacuateHost(1);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         // The inflight item should be fully erased and removed from the map.
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
@@ -2228,20 +2218,17 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReleasePBufferCountersOnHostEvacuation)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2253,7 +2240,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0, 1, 3}.
         vchunkConfig.EvacuateHost(2);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         // Hosts counters should be unchanged.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2275,10 +2262,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldIgnoreOutdatedFlushResponseAfterInflightRemoved)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -2287,10 +2271,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // item for lsn 123 is removed from the map.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2330,10 +2314,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReleaseEvacuatedHostOnWriteFinished)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();   // {0, 1, 2}
         const THostMask confirmed = MakePrimaryHosts();   // {0, 1, 2}
@@ -2341,7 +2322,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Register a pending write across all three primary hosts.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // Host 0 is evacuated after the write is registered but before the
@@ -2350,14 +2331,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // still pending (WriteRequested is empty), so UpdateConfig's
         // RemoveHosts is a no-op and the inflight item survives.
         vchunkConfig.EvacuateHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // The write response finally arrives, confirming all three hosts,
         // including the now-evacuated host 0.
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2379,7 +2360,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Reads only see the remaining confirmed hosts, never the evacuated
         // one.
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -2392,10 +2373,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldKeepTemporarilyDisabledDDiskOnWriteFinished)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();   // {0, 1, 2}
         const THostMask confirmed = MakePrimaryHosts();   // {0, 1, 2}
@@ -2403,20 +2381,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Register a pending write across all three primary hosts.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // Host 0 is only temporarily disabled: it stays in the DDisk set, so
         // DesiredDDisks is unchanged and UpdateConfig runs no RemoveHosts.
         vchunkConfig.DisableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // The write response finally arrives, confirming all three hosts,
         // including the temporarily-disabled host 0.
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
 
@@ -2437,7 +2415,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Reads still exclude the disabled host from the hint mask, but the
         // data remains on its PBuffer for when it comes back online.
         auto readHint =
-            dirtyMap->MakeReadHint(TBlockRange64::WithLength(10, 10));
+            dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "1:123{[H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
@@ -2450,15 +2428,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 partially fresh: only the first 30 blocks are up to date.
-        vchunkConfig.SetWatermark(THostIndex{0}, 30 * DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 30 * DefaultBlockSize);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-
-        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+        const ui64 totalBlocks =
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
 
         // A fully operational DDisk has no fresh range to sync.
         UNIT_ASSERT_EQUAL(std::nullopt, dirtyMap->GetFreshRange(THostIndex{1}));
@@ -2476,7 +2450,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto freshRange = dirtyMap->GetFreshRange(THostIndex{0});
         UNIT_ASSERT(freshRange.has_value());
         UNIT_ASSERT_VALUES_EQUAL(
-            TBlockRange64::MakeClosedInterval(30, totalBlocks - 1),
+            TBlockRange16::MakeClosedInterval(30, totalBlocks - 1),
             *freshRange);
 
         // Operational DDisks still have no fresh range.
@@ -2486,20 +2460,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldAdvanceFreshRangeAfterRangeSynced)
     {
-        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+        const ui64 totalBlocks =
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
 
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 completely fresh (nothing synced yet).
-        vchunkConfig.SetWatermark(THostIndex{0}, 0);
-
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
             *dirtyMap->GetFreshRange(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,0};"
@@ -2513,14 +2483,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // to 256 and the fresh range should shrink accordingly.
         auto freshRange = dirtyMap->GetFreshRange(THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(
-            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
             *freshRange);
-        auto syncRange = TBlockRange64::MakeClosedInterval(0, 255);
+        auto syncRange = TBlockRange16::MakeClosedInterval(0, 255);
         auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
         dirtyMap->EndRangeSync(syncHint.SyncId, true);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            TBlockRange64::MakeClosedInterval(256, totalBlocks - 1),
+            TBlockRange16::MakeClosedInterval(256, totalBlocks - 1),
             *dirtyMap->GetFreshRange(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,256};"
@@ -2532,7 +2502,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Sync the remaining blocks. The DDisk becomes fully operational and no
         // longer reports a fresh range.
-        syncRange = TBlockRange64::MakeClosedInterval(256, totalBlocks - 1);
+        syncRange = TBlockRange16::MakeClosedInterval(256, totalBlocks - 1);
         syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
         dirtyMap->EndRangeSync(syncHint.SyncId, true);
 
@@ -2550,15 +2520,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 completely fresh.
-        vchunkConfig.SetWatermark(THostIndex{0}, 0);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-
-        const auto range = TBlockRange64::MakeClosedInterval(0, 255);
+        const auto range = TBlockRange16::MakeClosedInterval(0, 255);
 
         // With no overlapping inflight flush, the sync start trigger should be
         // ready immediately.
@@ -2577,23 +2542,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldNotAdvanceFreshRangeWhenRangeSyncFailed)
     {
-        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+        const ui64 totalBlocks =
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
 
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 completely fresh (nothing synced yet).
-        vchunkConfig.SetWatermark(THostIndex{0}, 0);
-
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
-            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
             *dirtyMap->GetFreshRange(THostIndex{0}));
 
-        const auto syncRange = TBlockRange64::MakeClosedInterval(0, 255);
+        const auto syncRange = TBlockRange16::MakeClosedInterval(0, 255);
         auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
 
         // A failed sync must be removed from the in-flight sync map, but it
@@ -2603,7 +2564,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintInflightSync());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
             *dirtyMap->GetFreshRange(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,0};"
@@ -2616,25 +2577,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     // Exercises the full persist lifecycle:
     //   - NeedPersist() starts false and generation is 0.
-    //   - After a flush that populates a fresh DDisk's Ahead field,
+    //   - After a flush that changes a fresh DDisk's Behind field,
     //     NeedPersist() becomes true and generation advances.
     //   - GetStateForPersist() captures the generation and correct DDisk count.
     //   - StatePersisted() resets NeedPersist() to false.
-    //   - Only Behind data (not Ahead) can block MakeEraseHint().
-    Y_UNIT_TEST(PersistLifecycleAndEraseNotBlockedByAheadData)
+    //   - Behind data blocks MakeEraseHint() until it is persisted.
+    Y_UNIT_TEST(PersistLifecycleAndEraseBlockedByBehindData)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H3 is fresh; successful writes remove ranges from Behind.
         // H1 is lagging; writes populate Behind field.
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         vchunkConfig.DisableHost(1);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
@@ -2643,14 +2601,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         dirtyMap->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             requested);
 
-        // Flush all DDIsks; H3's Ahead field changes → generation increments.
+        // Flush all DDisks; H3's Behind field changes → generation increments.
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
@@ -2659,20 +2617,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL("", eraseHints.DebugPrint());
 
-        // GetStateForPersist captures current generation.
-        // Saves one entry per host slot (DirectBlockGroupHostCount = 5).
+        // GetStateForPersist saves one entry per host slot
+        // (DirectBlockGroupHostCount = 5).
         UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
         const ui32 gen = dirtyMap->GetCurrentGeneration();
         UNIT_ASSERT(gen > 0);
         auto state = dirtyMap->GetStateForPersist();
-        UNIT_ASSERT_VALUES_EQUAL(gen, state.GetStateGeneration());
         UNIT_ASSERT_VALUES_EQUAL(5, state.DDiskStatesSize());
 
         // StatePersisted() resets the persist flag.
         dirtyMap->StatePersisted(gen);
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
 
-        // Only Behind blocks erase; Ahead does not.
+        // Persisted Behind state no longer blocks erase.
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n"
             "  H3: [5..9][20..32767]\n",
@@ -2685,39 +2642,35 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             eraseHints.DebugPrint());
     }
 
-    // Load() restores the per-DDisk Ahead/Behind state captured by
+    // Load() restores the per-DDisk Behind state captured by
     // GetStateForPersist() into a freshly constructed dirty map.
     Y_UNIT_TEST(ShouldLoadPersistedDDiskState)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H3 is fresh; successful writes remove ranges from Behind.
         // H1 is lagging; writes populate Behind field.
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         vchunkConfig.DisableHost(1);
 
-        auto source = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto source = MakeDirtyMap(vchunkConfig);
+        source->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         source->RegisterInflightWrite(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         source->WriteFinished(
             MakeKey(100),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             requested);
 
-        // Flush all DDisks so H3's Ahead field records the flushed range.
+        // Flush all DDisks so H3's Behind field drops the flushed range.
         auto flushHint = source->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *source);
 
-        UNIT_ASSERT_VALUES_EQUAL("  H3: [10..19]\n", source->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n"
             "  H3: [5..9][20..32767]\n",
@@ -2726,47 +2679,94 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const auto persisted = source->GetStateForPersist();
         UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
 
-        // Load into a freshly constructed dirty map with the same config.
         auto target = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
             vchunkConfig,
+            true,
+            persisted,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
-        // Before load the target contains the unsynced fresh tail.
-        UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "  H3: [5..32767]\n",
-            target->DebugPrintBehind());
-
-        target->Load(persisted);
-
-        // After load the target mirrors the source's Ahead/Behind fields.
-        UNIT_ASSERT_VALUES_EQUAL(
-            source->DebugPrintAhead(),
-            target->DebugPrintAhead());
+        // After load the target mirrors the source's Behind fields.
         UNIT_ASSERT_VALUES_EQUAL(
             source->DebugPrintBehind(),
             target->DebugPrintBehind());
     }
 
-    // Loading a default-constructed (empty) proto must be a no-op: no DDisk
-    // states are present, so the target keeps its freshly constructed state
-    // with no tracked Ahead/Behind ranges.
-    Y_UNIT_TEST(ShouldLoadEmptyStateAsNoOp)
+    Y_UNIT_TEST(ShouldBuildDirtyStateForConfigPersistWithoutApplyingConfig)
+    {
+        const auto currentConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(currentConfig);
+
+        auto nextConfig = currentConfig;
+        nextConfig.PromoteHost(3);
+
+        const auto persisted = dirtyMap->MakeFutureState(nextConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
+
+        auto restored = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            nextConfig,
+            true,
+            persisted,
+            DefaultBlockSize,
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [0..32767]\n",
+            restored->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+    }
+
+    // A default-constructed proto keeps the initial DDisk state derived from
+    // the VChunk config.
+    Y_UNIT_TEST(ShouldConstructFromEmptyState)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
 
         const auto before = dirtyMap->DebugPrintDDiskState();
 
-        dirtyMap->Load(TDirtyMapStateProto());
-
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
         UNIT_ASSERT_VALUES_EQUAL(before, dirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST(ShouldMakeFlushHintsWithoutTouchedState)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+
+        const auto pBufferKey = MakeKey(123);
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto requested = MakePrimaryHosts();
+        dirtyMap->RegisterInflightWrite(pBufferKey, range);
+        dirtyMap->WriteFinished(pBufferKey, range, requested, requested);
+
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->MakeFlushHint(1).Empty());
+    }
+
+    Y_UNIT_TEST(ShouldInitializeAddedDDiskFromTouchedState)
+    {
+        const auto initialConfig = MakeTestVChunkConfig();
+        auto untouched = MakeUntouchedDirtyMap(initialConfig);
+        auto touched = MakeDirtyMap(initialConfig);
+
+        auto nextConfig = initialConfig;
+        nextConfig.PromoteHost(3);
+        untouched->UpdateConfig(nextConfig, false);
+        touched->UpdateConfig(nextConfig, true);
+
+        UNIT_ASSERT(!untouched->GetFreshRange(3));
+
+        const auto freshRange = touched->GetFreshRange(3);
+        UNIT_ASSERT(freshRange);
+        UNIT_ASSERT_VALUES_EQUAL(0, freshRange->Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize),
+            freshRange->End + 1);
     }
 
     Y_UNIT_TEST(ShouldNotEraseUntaggedLsn)
@@ -2775,17 +2775,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Promote hand-off H3 to a primary DDisk so we have 4 desired DDisks.
         vchunkConfig.PromoteHost(3);
-        vchunkConfig.SetWatermark(3, std::nullopt);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            vchunkConfig,
-            DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Disable H3 while it stays a desired DDisk -> it starts lagging and
         // will record ranges it misses as Behind.
         vchunkConfig.DisableHost(3);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
         UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap->GetCurrentGeneration());
@@ -2797,10 +2793,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeHostMask(true, true, true, false, false);
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10));
+            TBlockRange16::WithLength(10, 10));
         dirtyMap->WriteFinished(
             MakeKey(123),
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             requested,
             requested);
 

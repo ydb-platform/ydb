@@ -160,6 +160,36 @@ namespace NKikimr {
         Y_UNIT_TEST(AllocFreeRestartAllocTest) {
             AllocFreeRestartAlloc(8);
         }
+
+        Y_UNIT_TEST(CompactSpaceStatTracksLockedSlots) {
+            TChain chain("vdisk", 4, 100, false);
+            NPrivate::TChunkSlot slot;
+            chain.Allocate(&slot, 7);
+
+            auto stat = chain.GetSpaceStat();
+            UNIT_ASSERT_VALUES_EQUAL(stat.SlotSize, 100);
+            UNIT_ASSERT_VALUES_EQUAL(stat.SlotsPerChunk, 4);
+            UNIT_ASSERT_VALUES_EQUAL(stat.ChunkCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(stat.AllocatedSlots, 1);
+            UNIT_ASSERT_VALUES_EQUAL(stat.FreeSlots, 3);
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedFreeSlots, 0);
+
+            UNIT_ASSERT(chain.LockChunkForAllocation(7));
+            stat = chain.GetSpaceStat();
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedChunkCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedFreeSlots, 3);
+
+            const TFreeRes free = chain.Free(slot);
+            UNIT_ASSERT_VALUES_EQUAL(free.ChunkId, 7);
+            UNIT_ASSERT(free.InLockedChunks);
+            stat = chain.GetSpaceStat();
+            UNIT_ASSERT_VALUES_EQUAL(stat.ChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.AllocatedSlots, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.FreeSlots, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedFreeSlots, 0);
+        }
     }
 
     Y_UNIT_TEST_SUITE(TChainLayoutBuilder) {

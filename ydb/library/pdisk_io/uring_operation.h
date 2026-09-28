@@ -35,19 +35,20 @@ public:
     virtual ~TUringOperationBase();
 
 public:
-    // Callbacks
+    // TUringRouter invokes exactly one terminal callback for every operation
+    // accepted by Submit().
 
     // Called from the dedicated I/O thread outside actor system,
     // thus MUST NOT use TActivationContext, instead should use actorSystem->Send().
     // After OnComplete() returns, TUringRouter will not access object anymore.
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept = 0;
 
-    // Cleanup callback for abortive/failure teardown paths. Graceful
-    // TUringRouter::Stop() drains every accepted operation through OnComplete.
-    // Use this to release operation-owned memory/resources if an owner must
-    // explicitly abandon an operation after a terminal router failure.
+    // Called from the dedicated I/O thread when shutdown drops an accepted
+    // operation before kernel submission. Use this to release
+    // operation-owned memory/resources. Use the supplied actor system for messages;
+    // TActivationContext is unavailable here too.
     // After OnDrop() returns, TUringRouter will not access object anymore.
-    virtual void OnDrop() noexcept = 0;
+    virtual void OnDrop(NActors::TActorSystem*) noexcept = 0;
 
 public:
     // Prepare a single-buffer I/O.
@@ -75,7 +76,7 @@ public:
     ui16 GetBufIndex() const { return BufIndex; }
 
     // Returns the number of bytes remaining in the current (possibly partially
-    // advanced) iovec window — used by OnComplete to detect short I/O.
+    // advanced) iovec window. This is zero after a successful logical completion.
     // Invariant: GetOperationBytes() == TotalSize - BytesProcessed.
     size_t GetOperationBytes() const {
 #if defined(__linux__)
@@ -85,8 +86,17 @@ public:
 #endif
     }
 
-    void SetResult(i32 result) { Result = result; }
-    i32 GetResult() const { return Result; }
+    // Logical terminal result: the total requested byte count on success,
+    // or -errno on failure.
+    void SetResult(i64 result) { Result = result; }
+    i64 GetResult() const { return Result; }
+
+    // Transfer accumulated short-I/O accounting to the completion consumer.
+    ui64 TakeShortIoCount() {
+        const ui64 count = ShortIoCount;
+        ShortIoCount = 0;
+        return count;
+    }
 
     ui64 GetTotalSize() const { return TotalSize; }
 
@@ -108,6 +118,8 @@ public:
     void ResetSubmissionState() {
         SubmitCycles = 0;
         Result = 0;
+        ShortIoCount = 0;
+        IsContinuation = false;
         OperationType = ENOT_SET;
         TotalSize = 0;
         DiskOffset = 0;
@@ -137,8 +149,13 @@ private:
         BufIndex = bufIndex;
     }
 
-    // Filled by TUringRouter on completion
-    i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
+    // Filled by TUringRouter at logical completion, across all physical CQEs.
+    i64 Result = 0;
+
+    ui64 ShortIoCount = 0;
+
+    // Router-owned continuation of an operation that has already made progress.
+    bool IsContinuation = false;
 
     // Submission metadata for non-fixed Read/Write operations.
 
@@ -163,10 +180,10 @@ private:
     TStackVec<struct iovec, MAX_STACK_IOVS> Iov;
 
     // Index into Iov of the first not-yet-completed iovec.
-    // Advanced by AdvanceIov() on short I/O retries.
+    // Advanced by AdvanceIov() on successful physical completions.
     size_t IovBegin = 0;
 
-    // Cumulative bytes consumed by AdvanceIov() across short-I/O retries.
+    // Cumulative bytes consumed by AdvanceIov() across physical completions.
     // GetOperationBytes() == TotalSize - BytesProcessed (remaining window).
     ui64 BytesProcessed = 0;
 #endif

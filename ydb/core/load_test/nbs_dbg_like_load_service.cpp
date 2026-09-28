@@ -639,7 +639,7 @@ private:
                 // Tablet was previously created by Hive but we don't know whether
                 // its TEvNbsLoadTabletAllocateGroups succeeded. Bypass TEvTabletCreationResult
                 // (Hive only sends that on first boot) and try the idempotent
-                // tablet handler directly. Phase 1.2 spec §23.10 case 1.
+                // tablet handler directly.
                 WaitingForTabletCreation = false;
                 LOG_N("Tablet already exists OwnerIdx# " << OwnerIdx
                     << " TabletId# " << TabletId);
@@ -1217,7 +1217,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         "<input id='" + p + "trials' class='form-control' type='number' min='1' step='2' value='1' />" +
                         "<p class='help-block'>1 = single run. Values &gt; 1 must be odd.</p></div></div>" +
                       "<div class='col-sm-4'><div class='form-group'><label>MaxInFlight" + perTablet + " (single run):</label>" +
-                        "<input id='" + p + "max-inflight' class='form-control' type='number' min='1' step='1' value='32' /></div></div>" +
+                        "<input id='" + p + "max-inflight' class='form-control' type='number' min='1' step='1' value='2048' /></div></div>" +
                     "</div>" +
                     "<div class='row'>" +
                       "<div class='col-sm-4'><div class='form-group'><label>InFlightFrom" + perTablet + " (sweep start):</label>" +
@@ -1238,10 +1238,13 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                       "<div class='col-sm-4'><div class='form-group'><label>MaxInflightLsns:</label>" +
                         "<div class='input-group'>" +
                           "<span class='input-group-btn'><button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(\"" + inst + "\",0.5)' title='Halve'>&divide;2</button></span>" +
-                          "<input id='" + p + "max-inflight-lsns' class='form-control' type='number' min='1' step='1' value='4096' />" +
+                          "<input id='" + p + "max-inflight-lsns' class='form-control' type='number' min='1' step='1' value='65536' />" +
                           "<span class='input-group-btn'><button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(\"" + inst + "\",2)' title='Double'>&times;2</button></span>" +
                         "</div></div></div>" +
                     "</div>" +
+                    "<div class='form-group'><div class='checkbox'><label>" +
+                      "<input id='" + p + "enable-checksums' type='checkbox' checked /> Enable checksums" +
+                    "</label></div></div>" +
                     "<div class='form-group'><div class='checkbox'><label>" +
                       "<input id='" + p + "sequential' type='checkbox' /> Sequential (round-robin address space instead of random)" +
                     "</label></div></div>" +
@@ -1388,7 +1391,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         read_write_size_kib:     ctx.val("size-kib") || "4",
                         sequential:              ctx.checked("sequential") ? "1" : "0",
                         num_dbg_to_use:          ctx.val("num-dbg") || "0",
-                        max_inflight_lsns:       ctx.val("max-inflight-lsns") || "4096",
+                        max_inflight_lsns:       ctx.val("max-inflight-lsns") || "65536",
+                        enable_checksums:        ctx.checked("enable-checksums") ? "1" : "0",
                         disable_replication:     disableRepl ? "1" : "0"
                     };
                     // Route every run (single- and multi-tablet) through the
@@ -2313,7 +2317,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
 
                 const fromVal = ctx.val("inflight-from");
                 const toVal   = ctx.val("inflight-to");
-                const single  = ctx.val("max-inflight") || "32";
+                const single  = ctx.val("max-inflight") || "2048";
                 const sweepValues = nbsTabletBuildSweepValues(fromVal, toVal, single);
 
                 const durationSec = parseInt(ctx.val("duration")) || 0;
@@ -2505,7 +2509,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 </div>
                                 <div class='form-group'>
                                     <label for='nbs-tablet-create-num-dbg'>NumDirectBlockGroups:</label>
-                                    <input id='nbs-tablet-create-num-dbg' class='form-control nbs-tablet-builder' type='number' min='1' step='1' value='1' />
+                                    <input id='nbs-tablet-create-num-dbg' class='form-control nbs-tablet-builder' type='number' min='1' step='1' value='32' />
                                 </div>
                                 <div class='form-group'>
                                     <label for='nbs-tablet-create-hosts-per-dbg'>HostsPerDbg:</label>

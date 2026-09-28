@@ -9,7 +9,7 @@
 
 #include <boost/fusion/support/config.hpp>
 #include <boost/fusion/view/transform_view.hpp>
-#include <boost/functional/identity.hpp>
+#include <boost/core/identity.hpp>
 #include <boost/utility/result_of.hpp>
 
 namespace boost { namespace fusion {

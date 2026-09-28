@@ -1844,8 +1844,9 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                     auto valueFuture = cookie.GetValue();
                     ASSERT_TRUE(static_cast<bool>(valueFuture));
                     if (valueFuture.IsSet()) {
-                        ASSERT_TRUE(WaitForFast(valueFuture).IsOK());
-                        auto value = WaitForFast(valueFuture).Value();
+                        const auto& valueOrError = valueFuture.GetOrCrash();
+                        ASSERT_TRUE(valueOrError.IsOK());
+                        const auto& value = valueOrError.Value();
                         ASSERT_EQ(lastInsertedValues[value->GetKey()].Lock(), value);
                     } else {
                         // The value insertion is in progress, so lastInsertedValues must contain nullptr

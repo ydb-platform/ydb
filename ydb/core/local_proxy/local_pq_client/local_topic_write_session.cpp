@@ -443,8 +443,9 @@ public:
         if (!InitSeqNoPromise) {
             InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
 
-            Y_VALIDATE(WriteSessionActor, "Cannot get init seq no, session already closed");
-            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
+            if (WriteSessionActor) {
+                ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
+            }
         }
 
         return InitSeqNoPromise->GetFuture();
@@ -454,7 +455,6 @@ public:
         Y_VALIDATE(!tx && !message.Tx_, "Transaction is not supported for local topic write session");
         Y_VALIDATE(!message.GetPartition(), "Partition is not supported for local topic write session");
         Y_VALIDATE(!message.GetKey(), "Key is not supported for local topic write session");
-        Y_VALIDATE(WriteSessionActor, "Cannot write message, session already closed");
 
         if (message.SeqNo_) {
             UseManualSeqNo();
@@ -462,7 +462,9 @@ public:
             UseAutoSeqNo();
         }
 
-        ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        if (WriteSessionActor) {
+            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        }
     }
 
     void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {

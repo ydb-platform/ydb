@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -33,6 +35,9 @@ struct TKqpProxyRequest {
     ui32 EventType;
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
+    NWilson::TSpan Span;
+    NWilson::TSpan RedirectSpan;
+    bool QueryDispatched = false;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)
@@ -66,6 +71,10 @@ public:
     }
 
     const TKqpProxyRequest* FindPtr(ui64 requestId) const {
+        return PendingRequests.FindPtr(requestId);
+    }
+
+    TKqpProxyRequest* FindPtr(ui64 requestId) {
         return PendingRequests.FindPtr(requestId);
     }
 
@@ -447,6 +456,11 @@ public:
         return LocalSessions.FindPtr(sessionId);
     }
 
+    const TKqpSessionInfo* FindPtr(const TActorId& workerId) const {
+        const auto* sessionId = TargetIdIndex.FindPtr(workerId);
+        return sessionId ? FindPtr(*sessionId) : nullptr;
+    }
+
     const THashSet<const TKqpSessionInfo*>& FindSessions(const TNodeId& nodeId) const {
         auto it = AttachedNodesIndex.find(nodeId);
         if (it == AttachedNodesIndex.end()) {
@@ -454,17 +468,6 @@ public:
             return empty;
         }
         return it->second;
-    }
-
-    std::pair<TNodeId, TActorId> Erase(const TActorId& targetId) {
-        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
-
-        auto it = TargetIdIndex.find(targetId);
-        if (it != TargetIdIndex.end()){
-            result = Erase(it->second);
-        }
-
-        return result;
     }
 
     template<typename TCb>

@@ -142,7 +142,7 @@ IDataProvider* TCallableTransformerParsers::ParseMaterialize(const TExprNode& in
 }
 
 IDataProvider* TCallableTransformerParsers::ParseConfigure(const TExprNode& input, TExprContext& ctx, bool& isUniversal) {
-    isUniversal= false;
+    isUniversal = false;
     if (!EnsureMinArgsCount(input, 2, ctx)) {
         return nullptr;
     }

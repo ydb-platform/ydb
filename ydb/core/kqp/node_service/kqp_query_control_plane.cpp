@@ -10,6 +10,9 @@
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
+#include <atomic>
+#include <util/generic/bitops.h>
+
 namespace NKikimr::NKqp {
 
 // for CA/task, is NOT thread safe
@@ -34,16 +37,19 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         });
     }
 
-    bool AllocateExtraQuota(ui64 extraSize) override {
+    bool AllocateExtraQuota(ui64 extraSize, bool isOptional) override {
         auto result = ResourceManager->AllocateResources(*Tx, TaskId,
-            NRm::TKqpResourcesRequest{.Memory = extraSize});
+            NRm::TKqpResourcesRequest{.Memory = extraSize, .Optional = isOptional});
 
         if (!result) {
-            YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
-                {"problem", "cannot_allocate_memory"},
-                {"txId", Tx->TxId},
-                {"taskId", TaskId},
-                {"memory", extraSize});
+            // an optional refusal is the spilling signal, the caller logs it
+            if (!isOptional) {
+                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                    {"problem", "cannot_allocate_memory"},
+                    {"txId", Tx->TxId},
+                    {"taskId", TaskId},
+                    {"memory", extraSize});
+            }
 
             return false;
         }
@@ -55,8 +61,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
+    i64 GetExtraMemoryAvailability() const override {
+        return Tx->GetMemoryAvailability();
     }
 
     TString MemoryConsumptionDetails() const override {
@@ -86,7 +92,9 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     , Limit(limit)
     , DataMemoryLimit(limit)
     , AllocationStep(step)
-    {}
+    {
+        Y_ABORT_UNLESS(IsPowerOf2(AllocationStep), "the allocation step must be a power of two"); // it is used as an alignment mask
+    }
 
     ~TChannelQuotaManager() {
         ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
@@ -95,7 +103,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         });
     }
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
         i64 quota = AvailableQuota.fetch_sub(memorySize);
 
         if (static_cast<i64>(memorySize) > quota) {
@@ -103,17 +111,23 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
             memoryRequired += AllocationStep - 1;
             memoryRequired &= ~(AllocationStep - 1);
 
-            auto result = ResourceManager->AllocateResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memoryRequired});
+            // the resource manager refuses an optional request at the spilling threshold
+            auto result = ResourceManager->AllocateResources(*Tx, 0,
+                NRm::TKqpResourcesRequest{.Memory = memoryRequired, .Optional = isOptional});
             if (result) {
                 AvailableQuota.fetch_add(memoryRequired);
                 Limit.fetch_add(memoryRequired);
             } else {
-                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
-                    {"problem", "cannot_allocate_memory"},
-                    {"txId", Tx->TxId},
-                    {"taskId", 0},
-                    {"memory", memoryRequired});
-                if (memoryRequired >= AllocationStep * 10) {
+                if (!isOptional) {
+                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                        {"problem", "cannot_allocate_memory"},
+                        {"txId", Tx->TxId},
+                        {"taskId", 0},
+                        {"memory", memoryRequired});
+                }
+                // a little over-quoting is tolerated for mandatory requests only: the caller of an optional
+                // request can do without the memory, it must not get what the resource manager refused
+                if (isOptional || memoryRequired >= AllocationStep * 10) {
                     AvailableQuota.fetch_add(memorySize);
                     return false;
                 }
@@ -124,10 +138,11 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
-    // Node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling.
-    // Channels do not spill on it, but propagate it as back pressure, see TInputDescriptor::MemoryPressure
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
+    // Node level memory availability of the tx (see NRm::TTxState::GetMemoryAvailability) plus the locally
+    // prepaid quota. Channels do not spill on a negative value, but propagate it as back pressure,
+    // see TInputDescriptor::MemoryPressure.
+    i64 GetMemoryAvailability() const override {
+        return NYql::NDq::CombineMemoryAvailability(AvailableQuota.load(), Tx->GetMemoryAvailability());
     }
 
     void FreeQuota(ui64 memorySize) override {
@@ -218,7 +233,8 @@ public:
     }
 
     void HandleStart(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan createTasksSpan(TWilsonKqp::KqpNodeCreateTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.CreateTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan createTasksSpan(TWilsonKqp::KqpNodeCreateTasks, NWilson::TTraceId(ev->TraceId), "Start tasks", NWilson::EFlags::AUTO_END);
+        createTasksSpan.Attribute("ydb.actor.type", TString("TKqpQueryManager"));
         NHPTimer::STime workHandlerStart = ev->SendTime;
         Counters_->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
 
@@ -444,7 +460,7 @@ public:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(m.TraceId), cpuLimits,
                     msg.GetUseBatchPool()));
             }
         }

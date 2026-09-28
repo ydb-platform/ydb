@@ -89,7 +89,8 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     NNet::IListenerPtr listener,
     NConcurrency::IPollerPtr poller,
-    NConcurrency::IPollerPtr acceptor);
+    NConcurrency::IPollerPtr acceptor,
+    IInvokerPtr compressionInvoker = nullptr);
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller);
@@ -106,7 +107,8 @@ IServerPtr CreateServer(
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller,
-    IInvokerPtr invoker);
+    IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

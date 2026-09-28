@@ -1,11 +1,13 @@
---- contrib/python/aiohttp/aiohttp/resolver.py	(index)
-+++ contrib/python/aiohttp/aiohttp/resolver.py	(working tree)
-@@ -35,7 +35,7 @@ class ThreadedResolver(AbstractResolver):
-             port,
-             type=socket.SOCK_STREAM,
-             family=family,
--            flags=_AI_ADDRCONFIG,
-+            # flags=_AI_ADDRCONFIG,
-         )
- 
-         hosts = []
+diff --git a/aiohttp/resolver.py b/aiohttp/resolver.py
+index 28a5cbb..d9bd8ce 100644
+--- a/aiohttp/resolver.py
++++ b/aiohttp/resolver.py
+@@ -49,7 +49,7 @@ class ThreadedResolver(AbstractResolver):
+                 port,
+                 type=socket.SOCK_STREAM,
+                 family=family,
+-                flags=_AI_ADDRCONFIG,
++                # flags=_AI_ADDRCONFIG,
+             )
+         except socket.gaierror:
+             if not _is_windows_localhost(host):

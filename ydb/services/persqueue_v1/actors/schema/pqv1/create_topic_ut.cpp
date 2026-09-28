@@ -1,5 +1,6 @@
 #include "actors.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
@@ -125,7 +126,7 @@ Y_UNIT_TEST(SharedConsumer) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     auto config = topic.Info->Description.GetPQTabletConfig();
     const auto* consumer = NPQ::GetConsumer(config, "test_consumer");
@@ -173,11 +174,36 @@ Y_UNIT_TEST(MessageWriteBurstDefaultsToSpeed) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     const auto& partitionConfig = topic.Info->Description.GetPQTabletConfig().GetPartitionConfig();
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetWriteSpeedInMessagesPerSecond(), 777);
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetBurstSizeInMessages(), 777);
+}
+
+Y_UNIT_TEST(RejectsTooManyPartitions) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path("/Root/test_db/topic_too_many_parts");
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(static_cast<i32>(NPQ::MAX_TOPIC_PARTITIONS + 1));
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        "/Root/test_db/topic_too_many_parts"
+    );
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::BAD_REQUEST, result->Issues.ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToString(), "less than");
 }
 
 Y_UNIT_TEST(CreateTopicWithNameEqDB) {
@@ -198,6 +224,107 @@ Y_UNIT_TEST(CreateTopicWithNameEqDB) {
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);
     UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SCHEME_ERROR, result->Issues.ToString());
+}
+
+void EnableFederation(NActors::TTestActorRuntime& runtime) {
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+    runtime.GetAppData().PQConfig.SetRoot("/Root/PQ");
+}
+
+void FillBaseCreateSettings(Ydb::PersQueue::V1::TopicSettings& settings) {
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+}
+
+void FillRemoteMirrorRule(Ydb::PersQueue::V1::TopicSettings& settings) {
+    auto* rmr = settings.mutable_remote_mirror_rule();
+    rmr->set_endpoint("sas.logbroker.yandex.net:2135");
+    rmr->set_topic_path("account/topic");
+    rmr->set_consumer_name("shared/mirror-from-dc2-to-dc1");
+    rmr->mutable_credentials()->set_oauth_token("oauth-token");
+}
+
+NKikimrPQ::TPQTabletConfig DescribePqTabletConfig(
+    NActors::TTestActorRuntime& runtime,
+    const TString& path,
+    const TString& database
+) {
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(runtime.AllocateEdgeActor(), database, {path}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+    auto topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL_C(topic.Status, NPQ::NDescriber::EStatus::Success, NPQ::NDescriber::Description(path, topic.Status));
+    UNIT_ASSERT(topic.Info);
+
+    return topic.Info->Description.GetPQTabletConfig();
+}
+
+Y_UNIT_TEST(FederationRemoteCopyWithRemoteMirrorRule) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    EnableFederation(runtime);
+
+    const TString path = "/Root/PQ/rt3.dc2--account--remote-copy";
+    const TString database = "/Root";
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path(path);
+
+    auto& settings = *request.mutable_settings();
+    FillBaseCreateSettings(settings);
+    settings.set_client_write_disabled(true);
+    FillRemoteMirrorRule(settings);
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        path,
+        database
+    );
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+    UNIT_ASSERT(!result->Issues.ToString().Contains("Local cluster is not correct"));
+
+    const auto config = DescribePqTabletConfig(runtime, path, database);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetLocalDC(), false);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetDC(), "dc2");
+    UNIT_ASSERT(config.GetPartitionConfig().HasMirrorFrom());
+}
+
+Y_UNIT_TEST(FederationLocalDcMirrorWithRemoteMirrorRule) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    EnableFederation(runtime);
+
+    const TString path = "/Root/PQ/rt3.dc1--account--local-mirror";
+    const TString database = "/Root";
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path(path);
+
+    auto& settings = *request.mutable_settings();
+    FillBaseCreateSettings(settings);
+    FillRemoteMirrorRule(settings);
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        path,
+        database
+    );
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+
+    const auto config = DescribePqTabletConfig(runtime, path, database);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetLocalDC(), true);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetDC(), "dc1");
+    UNIT_ASSERT(config.GetPartitionConfig().HasMirrorFrom());
 }
 
 Y_UNIT_TEST(ContentBasedDeduplication) {
@@ -225,7 +352,7 @@ Y_UNIT_TEST(ContentBasedDeduplication) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     auto config = topic.Info->Description.GetPQTabletConfig();
     UNIT_ASSERT_VALUES_EQUAL(config.GetContentBasedDeduplication(), true);

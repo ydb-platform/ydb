@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -71,7 +73,7 @@ struct TDetailedMetricsTableInfo {
  * the very same layout as the node wide "tablets" group.
  *
  */
-class TNodeDatabaseMetricsAggregator : public TThrRefBase {
+class TNodeDatabaseMetricsAggregator : public NSysView::IDbDetailedCounters {
 public:
     /**
      * @param[in] now Used to differentiate the cumulative counters into per second rates

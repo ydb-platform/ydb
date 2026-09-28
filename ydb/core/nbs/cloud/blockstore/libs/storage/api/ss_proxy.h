@@ -11,6 +11,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
+#include <memory>
+
 namespace NYdb::NBS::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -287,5 +289,16 @@ struct TEvSSProxy
 ////////////////////////////////////////////////////////////////////////////////
 
 NActors::TActorId MakeSSProxyServiceId();
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Builds an AlterBlockStoreVolume ModifyScheme that SSProxy will wait to
+// completion for. `version` is the path version used in ApplyIf.
+std::unique_ptr<TEvSSProxy::TEvModifySchemeRequest>
+CreateModifySchemeRequestForAlterVolume(
+    TString path,
+    ui64 pathId,
+    ui64 version,
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
 }   // namespace NYdb::NBS::NStorage

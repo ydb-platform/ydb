@@ -66,6 +66,8 @@ struct TExecutionOptions {
     std::vector<TString> PoolIds;
     std::vector<TString> UserSIDs;
     std::vector<TDuration> Timeouts;
+    std::vector<Ydb::Table::QueryStatsCollection_Mode> StatsCollectionModes;
+
     std::vector<std::optional<TVector<NACLib::TSID>>> GroupSIDs;
     std::vector<TString> StreamingQueriesNames;
     ui64 ResultsRowsLimit = 0;
@@ -136,7 +138,8 @@ struct TExecutionOptions {
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .QueryId = queryId,
             .Params = Params,
-            .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt)
+            .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt),
+            .StatsCollectionMode = GetValue(index, StatsCollectionModes, Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE),
         };
     }
 
@@ -176,6 +179,7 @@ private:
         checker(UserSIDs.size(), "user SIDs");
         checker(Timeouts.size(), "timeouts");
         checker(GroupSIDs.size(), "group SIDs");
+        checker(StatsCollectionModes.size(), "stats modes");
         checker(runnerOptions.ScriptQueryAstOutputs.size(), "ast output files");
         checker(runnerOptions.ScriptQueryPlanOutputs.size(), "plan output files");
         checker(runnerOptions.ScriptQueryTimelineFiles.size(), "timeline files");
@@ -514,6 +518,24 @@ protected:
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
+            });
+
+        options.AddLongOption("stats-mode", "Statistics collection mode (none, basic, debug, profile)")
+            .RequiredArgument("mode")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const auto& value = option->CurValOrDef();
+                auto &statsMode = ExecutionOptions.StatsCollectionModes.emplace_back();
+                if (value == "none") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+                } else if (value == "basic") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                } else if (value == "full") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+                } else if (value == "profile") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+                } else {
+                    throw yexception() << "Unknown stattistics collection mode" << value;
+                }
             });
 
         options.AddLongOption("sql", "Script query SQL text to execute (typically DML query)")

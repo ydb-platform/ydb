@@ -207,7 +207,7 @@ TExprNode::TPtr TStreamLookupConnection::BuildConnection(TExprNode::TPtr inputSt
 }
 
 ui32 TStageGraph::AddStage() {
-    ui32 newStageId = StageIds.size();
+    ui32 newStageId = StageCounter++;
     StageIds.push_back(newStageId);
     StageInputs[newStageId] = TVector<ui32>();
     StageOutputs[newStageId] = TVector<ui32>();

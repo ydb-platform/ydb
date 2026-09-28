@@ -103,7 +103,7 @@ def preprocess_args(args):
                     tar.extractall(path=args.output_root)
         else:
             srcs.append(f)
-    args.srcs = srcs
+    args.srcs = list(dict.fromkeys(srcs))
 
     assert args.mode == 'test' or args.test_srcs is None and args.xtest_srcs is None
     # add lexical oreder by basename for go sources

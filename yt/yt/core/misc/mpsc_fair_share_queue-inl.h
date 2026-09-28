@@ -198,9 +198,10 @@ void TMpscFairShareQueue<TPoolId, TItem, TFairShareTag>::TruncatePoolExcessTime(
         return;
     }
 
+    const auto minExcessTime = minPool->ExcessTime;
     for (const auto& pool : Pools_) {
         if (pool) {
-            pool->ExcessTime = std::max<TCpuDuration>(0, pool->ExcessTime - minPool->ExcessTime);
+            pool->ExcessTime = std::max<TCpuDuration>(0, pool->ExcessTime - minExcessTime);
         }
     }
 }

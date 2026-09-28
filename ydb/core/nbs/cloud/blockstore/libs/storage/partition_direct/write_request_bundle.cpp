@@ -24,7 +24,7 @@ TWriteRequestBundle::TWriteRequestBundle(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     const NWilson::TTraceId& traceId,
     TCallContextPtr callContext,
-    TBlockRange64 vchunkRange)
+    TBlockRange16 vchunkRange)
     : WriteClient(std::move(writeClient))
     , Request(std::move(request))
     , SgList(Request->Sglist.CreateDepender())
@@ -91,7 +91,7 @@ TBlockRange64 TWriteRequestBundle::GetRange() const
     return Request->Headers.Range;
 }
 
-TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
+TBlockRange16 TWriteRequestBundle::GetVChunkRange() const
 {
     return VChunkRange;
 }

@@ -403,6 +403,8 @@ struct TOperation
 
     NYson::TYsonString ControllerFeatures;
 
+    NYson::TYsonString CumulativeSpecPatch;
+
     NYTree::IAttributeDictionaryPtr OtherAttributes;
 };
 

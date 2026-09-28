@@ -11,605 +11,598 @@
 
 #include <utility>
 
-
 namespace NYql {
 
 namespace {
-    template<typename TOptimizer>
-    struct TOptimizationContext : IOptimizationContext {
-        TOptimizer Optimizer;
-        TExprContext& Expr;
-        const TOptimizeExprSettings& Settings;
-        TNodeOnNodeOwnedMap Memoization;
-        const TNodeOnNodeOwnedMap* Replaces;
-        ui64 LastNodeId;
-        bool HasRemaps;
-        TMaybe<TFunctionStack> FunctionStack;
+template <typename TOptimizer>
+struct TOptimizationContext: IOptimizationContext {
+    TOptimizer Optimizer;
+    TExprContext& Expr;
+    const TOptimizeExprSettings& Settings;
+    TNodeOnNodeOwnedMap Memoization;
+    const TNodeOnNodeOwnedMap* Replaces;
+    ui64 LastNodeId;
+    bool HasRemaps;
+    TMaybe<TFunctionStack> FunctionStack;
 
-        TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
-            : Optimizer(std::move(optimizer))
-            , Expr(expr)
-            , Settings(settings)
-            , Replaces(replaces)
-            , LastNodeId(expr.NextUniqueId)
-            , HasRemaps(false)
-        {
-            if (settings.TrackFrames) {
-                FunctionStack.ConstructInPlace();
-            }
-        }
-
-        void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) final {
-            YQL_ENSURE(fromNode.UniqueId() <= LastNodeId);
-            YQL_ENSURE(toNode->UniqueId() > LastNodeId);
-            Memoization[&fromNode] = toNode;
-            HasRemaps = true;
-            if (Settings.ProcessedNodes) {
-                Settings.ProcessedNodes->erase(fromNode.UniqueId());
-            }
-        }
-    };
-
-    TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizer>& ctx, const TExprNode::TPtr& node) {
-        return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, ctx.Expr);
-    }
-
-    TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizerEx>& ctx, const TExprNode::TPtr& node) {
-        return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, ctx.Expr, ctx);
-    }
-
-    TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizerFast>& ctx, bool& changed, const TExprNode::TPtr& node) {
-        return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, changed, ctx.Expr);
-    }
-
-    template<typename TContext>
-    TExprNode::TPtr ApplyRemaps(const TExprNode::TPtr& node, TContext& ctx) {
-        const auto memoization = ctx.Memoization.find(node.Get());
-        if (ctx.Memoization.cend() != memoization && memoization->second && memoization->second != node) {
-            return memoization->second;
-        }
-
-        TExprNode::TListType newChildren;
-        bool hasRemaps = false;
-        for (const auto& child : node->Children()) {
-            auto newChild = ApplyRemaps(child, ctx);
-            YQL_ENSURE(newChild);
-
-            if (newChild != child) {
-                hasRemaps = true;
-            }
-
-            newChildren.emplace_back(std::move(newChild));
-        }
-
-        return hasRemaps ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : node;
-    }
-
-    void AddExpected(const TExprNode& src, const TExprNode& dst, TExprContext& ctx, const TOptimizeExprSettings& settings) {
-        if (!src.GetTypeAnn() || !settings.Types) {
-            return;
-        }
-
-        if (src.Type() == TExprNode::Argument || src.Type() == TExprNode::Arguments) {
-            return;
-        }
-
-        settings.Types->ExpectedTypes[dst.UniqueId()] = src.GetTypeAnn();
-        if (src.GetState() >= TExprNode::EState::ConstrComplete) {
-            settings.Types->ExpectedConstraints[dst.UniqueId()] = src.GetAllConstraints();
-        } else {
-            settings.Types->ExpectedConstraints.erase(dst.UniqueId());
-        }
-        auto columnOrder = settings.Types->LookupColumnOrder(src);
-        if (columnOrder) {
-            settings.Types->ExpectedColumnOrders[dst.UniqueId()] = *columnOrder;
-        } else {
-            settings.Types->ExpectedColumnOrders.erase(dst.UniqueId());
-        }
-
-        if (dst.GetTypeAnn()) {
-            // we should check expected types / constraints / column order immediately
-            // TODO: check constraints
-            CheckExpectedTypeAndColumnOrder(dst, ctx, *settings.Types);
-        }
-    }
-
-    template<typename TContext>
-    TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, TContext& ctx, size_t level) {
-        if (ctx.FunctionStack) {
-            ctx.FunctionStack->EnterFrame(*node, ctx.Expr);
-        }
-
-        Y_DEFER {
-            if (ctx.FunctionStack) {
-                ctx.FunctionStack->LeaveFrame(*node, ctx.Expr);
-            }
-        };
-
-        if ((!ctx.Replaces && node->Type() == TExprNode::Argument) || node->Type() == TExprNode::Atom ||
-            node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
-            return node;
-        }
-
-        if (!ctx.Settings.VisitStarted && node->StartsExecution()) {
-            return node;
-        }
-
-        if (ctx.Settings.VisitChecker && !ctx.Settings.VisitChecker(*node)) {
-            return node;
-        }
-
-        if (level >= 3000U) {
-            throw TErrorException(0) << "Too deep graph!";
-        }
-
-        if (ctx.Settings.ProcessedNodes) {
-            if (ctx.Settings.ProcessedNodes->find(node->UniqueId()) != ctx.Settings.ProcessedNodes->cend()) {
-                return node;
-            }
-        }
-
-        const auto it = ctx.Memoization.find(node.Get());
-        if (it != ctx.Memoization.cend()) {
-            return it->second ? it->second : node;
-        }
-
-        TExprNode::TPtr current = node;
-        if (ctx.Replaces) {
-            const auto it = ctx.Replaces->find(node.Get());
-            if (it != ctx.Replaces->cend()) {
-                current = it->second;
-            }
-        }
-
-        TExprNode::TPtr ret;
-        if (current->Type() == TExprNode::Lambda) {
-            ret = current;
-
-            if (ctx.Settings.VisitLambdas) {
-                TExprNode::TListType newBody;
-                newBody.reserve(node->ChildrenSize() - 1U);
-                bool bodyChanged = false;
-                for (ui32 i = 1U; i < node->ChildrenSize(); ++i) {
-                    const auto& oldNode = node->ChildPtr(i);
-                    auto newNode = OptimizeNode(oldNode, ctx, level + 1);
-                    if (!newNode) {
-                        return nullptr;
-                    }
-                    bodyChanged = bodyChanged || newNode != oldNode;
-                    if (newNode->ForDisclosing()) {
-                        auto list = newNode->ChildrenList();
-                        std::move(list.begin(), list.end(), std::back_inserter(newBody));
-                    } else {
-                        newBody.emplace_back(std::move(newNode));
-                    }
-                }
-                if (bodyChanged) {
-                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
-                        ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
-                    } else {
-                        ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
-                    }
-                    AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
-                }
-            }
-        } else {
-            TExprNode::TListType newChildren;
-            newChildren.reserve(current->ChildrenSize());
-            bool hasRenames = false;
-            for (auto& child : current->Children()) {
-                auto newChild = OptimizeNode(child, ctx, level + 1);
-                if (!newChild) {
-                    return nullptr;
-                }
-
-                if (newChild != child) {
-                    hasRenames = true;
-                }
-
-                if (newChild->ForDisclosing()) {
-                    auto list = newChild->ChildrenList();
-                    std::move(list.begin(), list.end(), std::back_inserter(newChildren));
-                } else {
-                    newChildren.emplace_back(std::move(newChild));
-                }
-            }
-
-            auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*current, std::move(newChildren)) : TExprNode::TPtr();
-            newChildren.clear();
-
-            if (!ctx.Settings.VisitChanges && hasRenames && ctx.Settings.CustomInstantTypeTransformer) {
-                auto root = renamedNode ? renamedNode : current;
-                ctx.Settings.CustomInstantTypeTransformer->Rewind();
-                auto status = InstantTransform(*ctx.Settings.CustomInstantTypeTransformer, root, ctx.Expr);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
-
-                YQL_ENSURE(root->GetTypeAnn());
-                if (status.HasRestart) {
-                    ret = std::move(root);
-                } else {
-                    renamedNode = std::move(root);
-                    hasRenames = false;
-                }
-            }
-
-            if (!ret) {
-                const auto& nextNode = renamedNode ? renamedNode : current;
-                const bool visitTuples = ctx.Settings.VisitTuples && nextNode->Type() == TExprNode::List;
-                if ((nextNode->Type() != TExprNode::Callable && !visitTuples) || (hasRenames && !ctx.Settings.VisitChanges) || !ctx.Optimizer) {
-                    ret = nextNode;
-                } else {
-                    ret = RunOptimizer(ctx, nextNode);
-                    if (!ret) {
-                        return nullptr;
-                    }
-                }
-            }
-
-            AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
-        }
-
-        if (node == ret && ctx.Settings.ProcessedNodes) {
-            ctx.Settings.ProcessedNodes->insert(node->UniqueId());
-        }
-
-        if (node == ret) {
-            YQL_ENSURE(ctx.Memoization.emplace(node.Get(), TExprNode::TPtr()).second);
-        } else {
-            if (!node->Unique()) {
-                YQL_ENSURE(ctx.Memoization.emplace(node.Get(), ret).second);
-            }
-            if (current != node && current != ret) {
-                ctx.Memoization.emplace(current.Get(), ret);
-            }
-        }
-        return ret;
-    }
-
-    TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, bool& changed, TOptimizationContext<TCallableOptimizerFast>& ctx, size_t level) {
-        if (node->Type() == TExprNode::Atom || node->Type() == TExprNode::Argument ||
-            node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
-            return node;
-        }
-
-        if (ctx.Settings.VisitChecker && !ctx.Settings.VisitChecker(*node)) {
-            return node;
-        }
-
-        const auto it = ctx.Memoization.find(node.Get());
-        if (it != ctx.Memoization.cend()) {
-            changed = changed || bool(it->second);
-            return it->second ? it->second : node;
-        }
-
-        if (level >= 3000U) {
-            throw TErrorException(0) << "Too deep graph!";
-        }
-
-        TExprNode::TPtr ret;
-        if (node->Type() == TExprNode::Lambda) {
-            ret = node;
-
-            if (ctx.Settings.VisitLambdas) {
-                TExprNode::TListType newBody;
-                newBody.reserve(node->ChildrenSize() - 1U);
-                bool bodyChanged = false;
-                for (ui32 i = 1U; i < node->ChildrenSize(); ++i) {
-                    auto newNode = OptimizeNode(node->ChildPtr(i), bodyChanged, ctx, level + 1);
-                    if (!newNode) {
-                        return nullptr;
-                    }
-                    if (newNode->ForDisclosing()) {
-                        auto list = newNode->ChildrenList();
-                        std::move(list.begin(), list.end(), std::back_inserter(newBody));
-                    } else {
-                        newBody.emplace_back(std::move(newNode));
-                    }
-                }
-
-                if (bodyChanged) {
-                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
-                        ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
-                    } else {
-                        ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));
-                    }
-                    changed = true;
-                }
-            }
-        } else {
-            TExprNode::TListType newChildren;
-            newChildren.reserve(node->ChildrenSize());
-            bool hasRenames = false;
-
-            for (auto& child : node->Children()) {
-                bool childChanged = false;
-                auto newChild = OptimizeNode(child, childChanged, ctx, level + 1);
-
-                if (!newChild) {
-                    return nullptr;
-                }
-
-                hasRenames = hasRenames || childChanged;
-                if (newChild->ForDisclosing()) {
-                    auto list = newChild->ChildrenList();
-                    std::move(list.begin(), list.end(), std::back_inserter(newChildren));
-                } else {
-                    newChildren.emplace_back(std::move(newChild));
-                }
-            }
-
-            auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : TExprNode::TPtr();
-            newChildren.clear();
-
-            changed = changed || hasRenames;
-
-            const auto& nextNode = renamedNode ? renamedNode : node;
-            if (nextNode->Type() != TExprNode::Callable && (nextNode->Type() != TExprNode::List || !ctx.Settings.VisitTuples)) {
-                ret = nextNode;
-            } else {
-                bool optimized = false;
-                ret = RunOptimizer(ctx, optimized, nextNode);
-                if (!ret) {
-                    return nullptr;
-                }
-                changed = changed || optimized;
-            }
-        }
-
-        if (!node->Unique()) {
-            YQL_ENSURE(ctx.Memoization.emplace(node.Get(), ret == node ? TExprNode::TPtr() : ret).second);
-        }
-        return ret;
-    }
-
-    void VisitExprInternal(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
-        const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes)
+    TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
+        : Optimizer(std::move(optimizer))
+        , Expr(expr)
+        , Settings(settings)
+        , Replaces(replaces)
+        , LastNodeId(expr.NextUniqueId)
+        , HasRemaps(false)
     {
-        if (!visitedNodes.emplace(node.Get()).second) {
-            return;
-        }
-
-        if (!preFunc || preFunc(node)) {
-            for (const auto& child : node->Children()) {
-                VisitExprInternal(child, preFunc, postFunc, visitedNodes);
-            }
-        }
-
-        if (postFunc) {
-            postFunc(node);
+        if (settings.TrackFrames) {
+            FunctionStack.ConstructInPlace();
         }
     }
 
-    void VisitExprLambdasLastInternal(const TExprNode::TPtr& node,
-        const TExprVisitPtrFunc& preLambdaFunc,
-        const TExprVisitPtrFunc& postLambdaFunc,
-        TNodeSet& visitedNodes)
-    {
-        if (!visitedNodes.emplace(node.Get()).second) {
-            return;
-        }
-
-        for (auto child : node->Children()) {
-            if (!child->IsLambda()) {
-                VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
-            }
-        }
-
-        preLambdaFunc(node);
-
-        for (auto child : node->Children()) {
-            if (child->IsLambda()) {
-                VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
-            }
-        }
-
-        postLambdaFunc(node);
-    }
-
-    void VisitExprInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
-        const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes)
-    {
-        if (!visitedNodes.emplace(&node).second) {
-            return;
-        }
-
-        if (!preFunc || preFunc(node)) {
-            node.ForEachChild([&](const TExprNode& child) {
-                VisitExprInternal(child, preFunc, postFunc, visitedNodes);
-            });
-        }
-
-        if (postFunc) {
-            postFunc(node);
+    void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) final {
+        YQL_ENSURE(fromNode.UniqueId() <= LastNodeId);
+        YQL_ENSURE(toNode->UniqueId() > LastNodeId);
+        Memoization[&fromNode] = toNode;
+        HasRemaps = true;
+        if (Settings.ProcessedNodes) {
+            Settings.ProcessedNodes->erase(fromNode.UniqueId());
         }
     }
+};
 
-    void VisitExprByFirstInternal(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
-        const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes, TNodeOnNodeOwnedMap& worldMap)
-    {
-        if (!visitedNodes.emplace(node.Get()).second) {
-            return;
-        }
+TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizer>& ctx, const TExprNode::TPtr& node) {
+    return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, ctx.Expr);
+}
 
-        if (node->IsArgument()) {
-            if (auto it = worldMap.find(node.Get()); it != worldMap.end()) {
-                VisitExprByFirstInternal(it->second, preFunc, postFunc, visitedNodes, worldMap);
-                return;
-            }
-        }
-        if (!preFunc || preFunc(node)) {
-            if (node->ChildrenSize() > 0) {
-                if (node->Content() == SyncName) {
-                    for (const auto& child : node->Children()) {
-                        VisitExprByFirstInternal(child, preFunc, postFunc, visitedNodes, worldMap);
-                    }
-                }
-                else if (node->Content() == SeqName) {
-                    if (node->ChildrenSize()) {
-                        auto world = node->HeadPtr();
-                        for (size_t i = 1; i < node->ChildrenSize(); ++i) {
-                            if (node->Child(i)->IsLambda()) {
-                                worldMap[&node->Child(i)->Head().Head()] = world;
-                                world = node->Child(i)->TailPtr();
-                            }
-                        }
-                        VisitExprByFirstInternal(world, preFunc, postFunc, visitedNodes, worldMap);
-                    }
-                }
-                else {
-                    VisitExprByFirstInternal(node->HeadPtr(), preFunc, postFunc, visitedNodes, worldMap);
-                }
-            }
-        }
+TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizerEx>& ctx, const TExprNode::TPtr& node) {
+    return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, ctx.Expr, ctx);
+}
 
-        if (postFunc) {
-            postFunc(node);
-        }
+TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizerFast>& ctx, bool& changed, const TExprNode::TPtr& node) {
+    return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, changed, ctx.Expr);
+}
+
+template <typename TContext>
+TExprNode::TPtr ApplyRemaps(const TExprNode::TPtr& node, TContext& ctx) {
+    const auto memoization = ctx.Memoization.find(node.Get());
+    if (ctx.Memoization.cend() != memoization && memoization->second && memoization->second != node) {
+        return memoization->second;
     }
 
-    void VisitExprByFirstInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
-        const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes, TNodeOnNodeOwnedMap& worldMap)
-    {
-        if (!visitedNodes.emplace(&node).second) {
-            return;
+    TExprNode::TListType newChildren;
+    bool hasRemaps = false;
+    for (const auto& child : node->Children()) {
+        auto newChild = ApplyRemaps(child, ctx);
+        YQL_ENSURE(newChild);
+
+        if (newChild != child) {
+            hasRemaps = true;
         }
 
-        if (node.IsArgument()) {
-            if (auto it = worldMap.find(&node); it != worldMap.end()) {
-                VisitExprByFirstInternal(*it->second, preFunc, postFunc, visitedNodes, worldMap);
-                return;
-            }
-        }
-
-        if (!preFunc || preFunc(node)) {
-            if (node.ChildrenSize() > 0) {
-                if (node.Content() == SyncName) {
-                    for (const auto& child : node.Children()) {
-                        VisitExprByFirstInternal(*child, preFunc, postFunc, visitedNodes, worldMap);
-                    }
-                }
-                else if (node.Content() == SeqName) {
-                    if (node.ChildrenSize()) {
-                        auto world = node.HeadPtr();
-                        for (size_t i = 1; i < node.ChildrenSize(); ++i) {
-                            if (node.Child(i)->IsLambda()) {
-                                worldMap[&node.Child(i)->Head().Head()] = world;
-                                world = node.Child(i)->TailPtr();
-                            }
-                        }
-                        VisitExprByFirstInternal(*world, preFunc, postFunc, visitedNodes, worldMap);
-                    }
-                }
-                else {
-                    VisitExprByFirstInternal(node.Head(), preFunc, postFunc, visitedNodes, worldMap);
-                }
-            }
-        }
-
-        if (postFunc) {
-            postFunc(node);
-        }
+        newChildren.emplace_back(std::move(newChild));
     }
 
-    void VisitExprByPrimaryBranch(const TExprNode::TPtr& node, const TExprVisitPtrFunc& predicate, bool& primary, TNodeSet& visitedNodes)
-    {
-        if (!visitedNodes.emplace(node.Get()).second) {
-            return;
-        }
+    return hasRemaps ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : node;
+}
 
-        if (!predicate(node) || !node->ChildrenSize()) {
-            return;
-        }
-
-        if (node->IsCallable({"If", "IfPresent", "And", "Or", "Xor", "Coalesce"})) {
-            VisitExprByPrimaryBranch(node->HeadPtr(), predicate, primary, visitedNodes);
-        } else {
-            for (ui32 i = 0U; i < node->ChildrenSize(); ++i) {
-                VisitExprByPrimaryBranch(node->ChildPtr(i), predicate, primary, visitedNodes);
-            }
-            return;
-        }
-
-        primary = false;
-        for (ui32 i = 1U; i < node->ChildrenSize(); ++i) {
-            VisitExprByPrimaryBranch(node->ChildPtr(i), predicate, primary, visitedNodes);
-        }
+void AddExpected(const TExprNode& src, const TExprNode& dst, TExprContext& ctx, const TOptimizeExprSettings& settings) {
+    if (!src.GetTypeAnn() || !settings.Types) {
+        return;
     }
 
-    template<typename TOptimizer>
-    IGraphTransformer::TStatus OptimizeExprInternal(TExprNode::TPtr input, TExprNode::TPtr& output, TOptimizer optimizer,
-        const TNodeOnNodeOwnedMap* replaces, TExprContext& ctx, const TOptimizeExprSettings& settings) try
-    {
-        YQL_ENSURE(&input != &output);
-        TOptimizationContext<TOptimizer> optCtx(optimizer, replaces, ctx, settings);
-        output = OptimizeNode(input, optCtx, 0U);
-
-        if (!output) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (optCtx.HasRemaps) {
-            output = ApplyRemaps(output, optCtx);
-            if (settings.ProcessedNodes) {
-                settings.ProcessedNodes->clear();
-            }
-        }
-
-        if (!settings.VisitChanges && (output != input)) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
-        }
-
-        return IGraphTransformer::TStatus::Ok;
-    } catch (const std::exception& e) {
-        ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
-        return IGraphTransformer::TStatus::Error;
+    if (src.Type() == TExprNode::Argument || src.Type() == TExprNode::Arguments) {
+        return;
     }
 
-    IGraphTransformer::TStatus OptimizeExprInternal(TExprNode::TPtr input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
-        TExprContext& ctx, const TOptimizeExprSettings& settings) try
-    {
-        YQL_ENSURE(optimizer);
-        TOptimizationContext<TCallableOptimizerFast> optCtx(optimizer, /*replaces=*/nullptr, ctx, settings);
-        bool changed = false;
-        output = OptimizeNode(input, changed, optCtx, 0U);
+    settings.Types->ExpectedTypes[dst.UniqueId()] = src.GetTypeAnn();
+    if (src.GetState() >= TExprNode::EState::ConstrComplete) {
+        settings.Types->ExpectedConstraints[dst.UniqueId()] = src.GetAllConstraints();
+    } else {
+        settings.Types->ExpectedConstraints.erase(dst.UniqueId());
+    }
+    auto columnOrder = settings.Types->LookupColumnOrder(src);
+    if (columnOrder) {
+        settings.Types->ExpectedColumnOrders[dst.UniqueId()] = *columnOrder;
+    } else {
+        settings.Types->ExpectedColumnOrders.erase(dst.UniqueId());
+    }
 
-        if (!output) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (changed) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
-        }
-
-        return IGraphTransformer::TStatus::Ok;
-    } catch (const std::exception& e) {
-        ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
-        return IGraphTransformer::TStatus::Error;
+    if (dst.GetTypeAnn()) {
+        // we should check expected types / constraints / column order immediately
+        // TODO: check constraints
+        CheckExpectedTypeAndColumnOrder(dst, ctx, *settings.Types);
     }
 }
 
+template <typename TContext>
+TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, TContext& ctx, size_t level) {
+    if (ctx.FunctionStack) {
+        ctx.FunctionStack->EnterFrame(*node, ctx.Expr);
+    }
+
+    Y_DEFER {
+        if (ctx.FunctionStack) {
+            ctx.FunctionStack->LeaveFrame(*node, ctx.Expr);
+        }
+    };
+
+    if ((!ctx.Replaces && node->Type() == TExprNode::Argument) || node->Type() == TExprNode::Atom ||
+        node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
+        return node;
+    }
+
+    if (!ctx.Settings.VisitStarted && node->StartsExecution()) {
+        return node;
+    }
+
+    if (ctx.Settings.VisitChecker && !ctx.Settings.VisitChecker(*node)) {
+        return node;
+    }
+
+    if (level >= 3000U) {
+        throw TErrorException(0) << "Too deep graph!";
+    }
+
+    if (ctx.Settings.ProcessedNodes) {
+        if (ctx.Settings.ProcessedNodes->find(node->UniqueId()) != ctx.Settings.ProcessedNodes->cend()) {
+            return node;
+        }
+    }
+
+    const auto it = ctx.Memoization.find(node.Get());
+    if (it != ctx.Memoization.cend()) {
+        return it->second ? it->second : node;
+    }
+
+    TExprNode::TPtr current = node;
+    if (ctx.Replaces) {
+        const auto it = ctx.Replaces->find(node.Get());
+        if (it != ctx.Replaces->cend()) {
+            current = it->second;
+        }
+    }
+
+    TExprNode::TPtr ret;
+    if (current->Type() == TExprNode::Lambda) {
+        ret = current;
+
+        if (ctx.Settings.VisitLambdas) {
+            TExprNode::TListType newBody;
+            newBody.reserve(node->ChildrenSize() - 1U);
+            bool bodyChanged = false;
+            for (ui32 i = 1U; i < node->ChildrenSize(); ++i) {
+                const auto& oldNode = node->ChildPtr(i);
+                auto newNode = OptimizeNode(oldNode, ctx, level + 1);
+                if (!newNode) {
+                    return nullptr;
+                }
+                bodyChanged = bodyChanged || newNode != oldNode;
+                if (newNode->ForDisclosing()) {
+                    auto list = newNode->ChildrenList();
+                    std::move(list.begin(), list.end(), std::back_inserter(newBody));
+                } else {
+                    newBody.emplace_back(std::move(newNode));
+                }
+            }
+            if (bodyChanged) {
+                if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
+                } else {
+                    ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
+                }
+                AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
+            }
+        }
+    } else {
+        TExprNode::TListType newChildren;
+        newChildren.reserve(current->ChildrenSize());
+        bool hasRenames = false;
+        for (auto& child : current->Children()) {
+            auto newChild = OptimizeNode(child, ctx, level + 1);
+            if (!newChild) {
+                return nullptr;
+            }
+
+            if (newChild != child) {
+                hasRenames = true;
+            }
+
+            if (newChild->ForDisclosing()) {
+                auto list = newChild->ChildrenList();
+                std::move(list.begin(), list.end(), std::back_inserter(newChildren));
+            } else {
+                newChildren.emplace_back(std::move(newChild));
+            }
+        }
+
+        auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*current, std::move(newChildren)) : TExprNode::TPtr();
+        newChildren.clear();
+
+        if (!ctx.Settings.VisitChanges && hasRenames && ctx.Settings.CustomInstantTypeTransformer) {
+            auto root = renamedNode ? renamedNode : current;
+            ctx.Settings.CustomInstantTypeTransformer->Rewind();
+            auto status = InstantTransform(*ctx.Settings.CustomInstantTypeTransformer, root, ctx.Expr);
+            if (status.Level == IGraphTransformer::TStatus::Error) {
+                return nullptr;
+            }
+
+            YQL_ENSURE(root->GetTypeAnn());
+            if (status.HasRestart) {
+                ret = std::move(root);
+            } else {
+                renamedNode = std::move(root);
+                hasRenames = false;
+            }
+        }
+
+        if (!ret) {
+            const auto& nextNode = renamedNode ? renamedNode : current;
+            const bool visitTuples = ctx.Settings.VisitTuples && nextNode->Type() == TExprNode::List;
+            if ((nextNode->Type() != TExprNode::Callable && !visitTuples) || (hasRenames && !ctx.Settings.VisitChanges) || !ctx.Optimizer) {
+                ret = nextNode;
+            } else {
+                ret = RunOptimizer(ctx, nextNode);
+                if (!ret) {
+                    return nullptr;
+                }
+            }
+        }
+
+        AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
+    }
+
+    if (node == ret && ctx.Settings.ProcessedNodes) {
+        ctx.Settings.ProcessedNodes->insert(node->UniqueId());
+    }
+
+    if (node == ret) {
+        YQL_ENSURE(ctx.Memoization.emplace(node.Get(), TExprNode::TPtr()).second);
+    } else {
+        if (!node->Unique()) {
+            YQL_ENSURE(ctx.Memoization.emplace(node.Get(), ret).second);
+        }
+        if (current != node && current != ret) {
+            ctx.Memoization.emplace(current.Get(), ret);
+        }
+    }
+    return ret;
+}
+
+TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, bool& changed, TOptimizationContext<TCallableOptimizerFast>& ctx, size_t level) {
+    if (node->Type() == TExprNode::Atom || node->Type() == TExprNode::Argument ||
+        node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
+        return node;
+    }
+
+    if (ctx.Settings.VisitChecker && !ctx.Settings.VisitChecker(*node)) {
+        return node;
+    }
+
+    const auto it = ctx.Memoization.find(node.Get());
+    if (it != ctx.Memoization.cend()) {
+        changed = changed || bool(it->second);
+        return it->second ? it->second : node;
+    }
+
+    if (level >= 3000U) {
+        throw TErrorException(0) << "Too deep graph!";
+    }
+
+    TExprNode::TPtr ret;
+    if (node->Type() == TExprNode::Lambda) {
+        ret = node;
+
+        if (ctx.Settings.VisitLambdas) {
+            TExprNode::TListType newBody;
+            newBody.reserve(node->ChildrenSize() - 1U);
+            bool bodyChanged = false;
+            for (ui32 i = 1U; i < node->ChildrenSize(); ++i) {
+                auto newNode = OptimizeNode(node->ChildPtr(i), bodyChanged, ctx, level + 1);
+                if (!newNode) {
+                    return nullptr;
+                }
+                if (newNode->ForDisclosing()) {
+                    auto list = newNode->ChildrenList();
+                    std::move(list.begin(), list.end(), std::back_inserter(newBody));
+                } else {
+                    newBody.emplace_back(std::move(newNode));
+                }
+            }
+
+            if (bodyChanged) {
+                if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
+                } else {
+                    ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));
+                }
+                changed = true;
+            }
+        }
+    } else {
+        TExprNode::TListType newChildren;
+        newChildren.reserve(node->ChildrenSize());
+        bool hasRenames = false;
+
+        for (auto& child : node->Children()) {
+            bool childChanged = false;
+            auto newChild = OptimizeNode(child, childChanged, ctx, level + 1);
+
+            if (!newChild) {
+                return nullptr;
+            }
+
+            hasRenames = hasRenames || childChanged;
+            if (newChild->ForDisclosing()) {
+                auto list = newChild->ChildrenList();
+                std::move(list.begin(), list.end(), std::back_inserter(newChildren));
+            } else {
+                newChildren.emplace_back(std::move(newChild));
+            }
+        }
+
+        auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : TExprNode::TPtr();
+        newChildren.clear();
+
+        changed = changed || hasRenames;
+
+        const auto& nextNode = renamedNode ? renamedNode : node;
+        if (nextNode->Type() != TExprNode::Callable && (nextNode->Type() != TExprNode::List || !ctx.Settings.VisitTuples)) {
+            ret = nextNode;
+        } else {
+            bool optimized = false;
+            ret = RunOptimizer(ctx, optimized, nextNode);
+            if (!ret) {
+                return nullptr;
+            }
+            changed = changed || optimized;
+        }
+    }
+
+    if (!node->Unique()) {
+        YQL_ENSURE(ctx.Memoization.emplace(node.Get(), ret == node ? TExprNode::TPtr() : ret).second);
+    }
+    return ret;
+}
+
+void VisitExprInternal(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
+                       const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes)
+{
+    if (!visitedNodes.emplace(node.Get()).second) {
+        return;
+    }
+
+    if (!preFunc || preFunc(node)) {
+        for (const auto& child : node->Children()) {
+            VisitExprInternal(child, preFunc, postFunc, visitedNodes);
+        }
+    }
+
+    if (postFunc) {
+        postFunc(node);
+    }
+}
+
+void VisitExprLambdasLastInternal(const TExprNode::TPtr& node,
+                                  const TExprVisitPtrFunc& preLambdaFunc,
+                                  const TExprVisitPtrFunc& postLambdaFunc,
+                                  TNodeSet& visitedNodes)
+{
+    if (!visitedNodes.emplace(node.Get()).second) {
+        return;
+    }
+
+    for (auto child : node->Children()) {
+        if (!child->IsLambda()) {
+            VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
+        }
+    }
+
+    preLambdaFunc(node);
+
+    for (auto child : node->Children()) {
+        if (child->IsLambda()) {
+            VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
+        }
+    }
+
+    postLambdaFunc(node);
+}
+
+void VisitExprInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
+                       const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes)
+{
+    if (!visitedNodes.emplace(&node).second) {
+        return;
+    }
+
+    if (!preFunc || preFunc(node)) {
+        node.ForEachChild([&](const TExprNode& child) {
+            VisitExprInternal(child, preFunc, postFunc, visitedNodes);
+        });
+    }
+
+    if (postFunc) {
+        postFunc(node);
+    }
+}
+
+void VisitExprByFirstInternal(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
+                              const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes, TNodeOnNodeOwnedMap& worldMap)
+{
+    if (!visitedNodes.emplace(node.Get()).second) {
+        return;
+    }
+
+    if (node->IsArgument()) {
+        if (auto it = worldMap.find(node.Get()); it != worldMap.end()) {
+            VisitExprByFirstInternal(it->second, preFunc, postFunc, visitedNodes, worldMap);
+            return;
+        }
+    }
+    if (!preFunc || preFunc(node)) {
+        if (node->ChildrenSize() > 0) {
+            if (node->Content() == SyncName) {
+                for (const auto& child : node->Children()) {
+                    VisitExprByFirstInternal(child, preFunc, postFunc, visitedNodes, worldMap);
+                }
+            } else if (node->Content() == SeqName) {
+                if (node->ChildrenSize()) {
+                    auto world = node->HeadPtr();
+                    for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+                        if (node->Child(i)->IsLambda()) {
+                            worldMap[&node->Child(i)->Head().Head()] = world;
+                            world = node->Child(i)->TailPtr();
+                        }
+                    }
+                    VisitExprByFirstInternal(world, preFunc, postFunc, visitedNodes, worldMap);
+                }
+            } else {
+                VisitExprByFirstInternal(node->HeadPtr(), preFunc, postFunc, visitedNodes, worldMap);
+            }
+        }
+    }
+
+    if (postFunc) {
+        postFunc(node);
+    }
+}
+
+void VisitExprByFirstInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
+                              const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes, TNodeOnNodeOwnedMap& worldMap)
+{
+    if (!visitedNodes.emplace(&node).second) {
+        return;
+    }
+
+    if (node.IsArgument()) {
+        if (auto it = worldMap.find(&node); it != worldMap.end()) {
+            VisitExprByFirstInternal(*it->second, preFunc, postFunc, visitedNodes, worldMap);
+            return;
+        }
+    }
+
+    if (!preFunc || preFunc(node)) {
+        if (node.ChildrenSize() > 0) {
+            if (node.Content() == SyncName) {
+                for (const auto& child : node.Children()) {
+                    VisitExprByFirstInternal(*child, preFunc, postFunc, visitedNodes, worldMap);
+                }
+            } else if (node.Content() == SeqName) {
+                if (node.ChildrenSize()) {
+                    auto world = node.HeadPtr();
+                    for (size_t i = 1; i < node.ChildrenSize(); ++i) {
+                        if (node.Child(i)->IsLambda()) {
+                            worldMap[&node.Child(i)->Head().Head()] = world;
+                            world = node.Child(i)->TailPtr();
+                        }
+                    }
+                    VisitExprByFirstInternal(*world, preFunc, postFunc, visitedNodes, worldMap);
+                }
+            } else {
+                VisitExprByFirstInternal(node.Head(), preFunc, postFunc, visitedNodes, worldMap);
+            }
+        }
+    }
+
+    if (postFunc) {
+        postFunc(node);
+    }
+}
+
+void VisitExprByPrimaryBranch(const TExprNode::TPtr& node, const TExprVisitPtrFunc& predicate, bool& primary, TNodeSet& visitedNodes)
+{
+    if (!visitedNodes.emplace(node.Get()).second) {
+        return;
+    }
+
+    if (!predicate(node) || !node->ChildrenSize()) {
+        return;
+    }
+
+    if (node->IsCallable({"If", "IfPresent", "And", "Or", "Xor", "Coalesce"})) {
+        VisitExprByPrimaryBranch(node->HeadPtr(), predicate, primary, visitedNodes);
+    } else {
+        for (ui32 i = 0U; i < node->ChildrenSize(); ++i) {
+            VisitExprByPrimaryBranch(node->ChildPtr(i), predicate, primary, visitedNodes);
+        }
+        return;
+    }
+
+    primary = false;
+    for (ui32 i = 1U; i < node->ChildrenSize(); ++i) {
+        VisitExprByPrimaryBranch(node->ChildPtr(i), predicate, primary, visitedNodes);
+    }
+}
+
+template <typename TOptimizer>
+IGraphTransformer::TStatus OptimizeExprInternal(TExprNode::TPtr input, TExprNode::TPtr& output, TOptimizer optimizer,
+                                                const TNodeOnNodeOwnedMap* replaces, TExprContext& ctx, const TOptimizeExprSettings& settings) try {
+    YQL_ENSURE(&input != &output);
+    TOptimizationContext<TOptimizer> optCtx(optimizer, replaces, ctx, settings);
+    output = OptimizeNode(input, optCtx, 0U);
+
+    if (!output) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (optCtx.HasRemaps) {
+        output = ApplyRemaps(output, optCtx);
+        if (settings.ProcessedNodes) {
+            settings.ProcessedNodes->clear();
+        }
+    }
+
+    if (!settings.VisitChanges && (output != input)) {
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+} catch (const std::exception& e) {
+    ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
+    return IGraphTransformer::TStatus::Error;
+}
+
+IGraphTransformer::TStatus OptimizeExprInternal(TExprNode::TPtr input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
+                                                TExprContext& ctx, const TOptimizeExprSettings& settings) try {
+    YQL_ENSURE(optimizer);
+    TOptimizationContext<TCallableOptimizerFast> optCtx(optimizer, /*replaces=*/nullptr, ctx, settings);
+    bool changed = false;
+    output = OptimizeNode(input, changed, optCtx, 0U);
+
+    if (!output) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (changed) {
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+} catch (const std::exception& e) {
+    ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
+    return IGraphTransformer::TStatus::Error;
+}
+} // namespace
+
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
-    TExprContext& ctx, const TOptimizeExprSettings& settings)
+                                        TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
     return OptimizeExprInternal(input, output, optimizer, /*replaces=*/nullptr, ctx, settings);
 }
 
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
-    TExprContext& ctx, const TOptimizeExprSettings& settings)
+                                          TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
     return OptimizeExprInternal(input, output, optimizer, /*replaces=*/nullptr, ctx, settings);
 }
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
-    TExprContext& ctx, const TOptimizeExprSettings& settings)
+                                        TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
     return OptimizeExprInternal(input, output, optimizer, ctx, settings);
 }
 
 IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TNodeOnNodeOwnedMap& remaps,
-    TExprContext& ctx, const TOptimizeExprSettings& settings)
+                                     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
     return OptimizeExprInternal<TCallableOptimizer>(input, output, {}, &remaps, ctx, settings);
 }
@@ -707,14 +700,14 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
             ui32 count = 0;
             if (!TryFromString(node->Child(1)->Content(), count)) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()),
-                    TStringBuilder() << "Failed to convert to integer: " << node->Child(1)->Content()));
+                                    TStringBuilder() << "Failed to convert to integer: " << node->Child(1)->Content()));
                 return nullptr;
             }
 
             if (count > node->Child(0)->Child(0)->ChildrenSize()) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()),
-                    TStringBuilder() << "Too many optional arguments: " << count
-                    << ", lambda has only: " << node->Child(0)->Child(0)->ChildrenSize()));
+                                    TStringBuilder() << "Too many optional arguments: " << count
+                                                     << ", lambda has only: " << node->Child(0)->Child(0)->ChildrenSize()));
                 return nullptr;
             }
 
@@ -752,7 +745,7 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
 
             if (providedArgs < minArgs || providedArgs > maxArgs) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Minimum arguments count: "
-                    << minArgs << ", maximum arguments count: " << maxArgs << ", but provided " << providedArgs));
+                                                                                   << minArgs << ", maximum arguments count: " << maxArgs << ", but provided " << providedArgs));
                 return nullptr;
             }
 
@@ -774,7 +767,7 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
                 ret = ctx.ReplaceNodes(lambda.TailPtr(), replaces);
             }
             changed = true;
-        }  else if (node->Content() == "NamedApply") {
+        } else if (node->Content() == "NamedApply") {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;
             }
@@ -807,7 +800,7 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
             const auto totalArgs = depArgs + node->Child(1)->ChildrenSize();
             if (totalArgs < args.ChildrenSize() - optionalArgsCount) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Too few arguments, lambda has "
-                    << args.ChildrenSize() << " arguments with optional "<< optionalArgsCount << " arguments, but got: " << totalArgs));
+                                                                                   << args.ChildrenSize() << " arguments with optional " << optionalArgsCount << " arguments, but got: " << totalArgs));
                 return nullptr;
             }
 
@@ -957,7 +950,7 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
                 changed = true;
                 return node->Tail().ChildPtr(index);
             } else if (node->Content() == "SubqueryExtend" || node->Content() == "SubqueryUnionAll" ||
-                node->Content() == "SubqueryMerge" || node->Content() == "SubqueryUnionMerge") {
+                       node->Content() == "SubqueryMerge" || node->Content() == "SubqueryUnionMerge") {
                 if (!EnsureMinArgsCount(*node, 1, ctx)) {
                     return nullptr;
                 }
@@ -978,8 +971,8 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
                         commonArgs = lambdaArgs.ChildrenSize();
                     } else if (*commonArgs != lambdaArgs.ChildrenSize()) {
                         ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()),
-                            TStringBuilder() << "Mismatch of arguments count in subquery, got: "
-                                << (lambdaArgs.ChildrenSize() - 1) << ", but expected: " << (*commonArgs - 1)));
+                                            TStringBuilder() << "Mismatch of arguments count in subquery, got: "
+                                                             << (lambdaArgs.ChildrenSize() - 1) << ", but expected: " << (*commonArgs - 1)));
                         return nullptr;
                     }
                 }
@@ -1001,7 +994,7 @@ IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNo
                     inputs.push_back(ctx.ReplaceNodes(lambda->TailPtr(), replaces));
                 }
 
-                auto body = ctx.NewCallable(node->Pos(), node->Content().substr(8), std::move(inputs) );
+                auto body = ctx.NewCallable(node->Pos(), node->Content().substr(8), std::move(inputs));
                 auto args = ctx.NewArguments(node->Pos(), std::move(argItems));
                 auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
                 changed = true;
@@ -1049,12 +1042,12 @@ TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap
     Sort(sortedList, [](const TPair& x, const TPair& y) { return x.second < y.second; });
     for (auto x : sortedList) {
         if (x.first->IsCallable(RightName)) {
-            auto world = ctx.NewCallable(main->Pos(), LeftName, { x.first->HeadPtr() });
+            auto world = ctx.NewCallable(main->Pos(), LeftName, {x.first->HeadPtr()});
             syncChildren.push_back(world);
         } else if (x.first->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
             syncChildren.push_back(x.first);
         } else {
-            auto world = ctx.NewCallable(main->Pos(), LeftName, { x.first });
+            auto world = ctx.NewCallable(main->Pos(), LeftName, {x.first});
             syncChildren.push_back(world);
         }
     }
@@ -1140,7 +1133,7 @@ void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func
 
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate) {
     TExprNode::TPtr result;
-    VisitExpr(root, [&result, &predicate] (const TExprNode::TPtr& node) {
+    VisitExpr(root, [&result, &predicate](const TExprNode::TPtr& node) {
         if (result) {
             return false;
         }
@@ -1158,7 +1151,7 @@ TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& p
 
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& filter, const TExprVisitPtrFunc& predicate) {
     TExprNode::TPtr result;
-    VisitExpr(root, filter, [&result, &predicate] (const TExprNode::TPtr& node) {
+    VisitExpr(root, filter, [&result, &predicate](const TExprNode::TPtr& node) {
         if (result) {
             return false;
         }
@@ -1176,7 +1169,7 @@ TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& f
 
 TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate) {
     TExprNode::TListType result;
-    VisitExpr(root, [&result, &predicate] (const TExprNode::TPtr& node) {
+    VisitExpr(root, [&result, &predicate](const TExprNode::TPtr& node) {
         if (predicate(node)) {
             result.emplace_back(node);
         }
@@ -1189,7 +1182,7 @@ TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrF
 
 TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrFunc& filter, const TExprVisitPtrFunc& predicate) {
     TExprNode::TListType result;
-    VisitExpr(root, filter, [&result, &predicate] (const TExprNode::TPtr& node) {
+    VisitExpr(root, filter, [&result, &predicate](const TExprNode::TPtr& node) {
         if (predicate(node)) {
             result.emplace_back(node);
         }
@@ -1204,7 +1197,7 @@ std::pair<TExprNode::TPtr, bool> FindSharedNode(const TExprNode::TPtr& firstRoot
 {
     TNodeSet nodes;
     TNodeSet visited;
-    VisitExpr(firstRoot, [&nodes, &predicate] (const TExprNode::TPtr& node) {
+    VisitExpr(firstRoot, [&nodes, &predicate](const TExprNode::TPtr& node) {
         if (predicate(node)) {
             nodes.insert(node.Get());
         }
@@ -1214,7 +1207,7 @@ std::pair<TExprNode::TPtr, bool> FindSharedNode(const TExprNode::TPtr& firstRoot
 
     TExprNode::TPtr result;
     bool primary = true;
-    VisitExprByPrimaryBranch(secondRoot, [&nodes, &result] (const TExprNode::TPtr& node) {
+    VisitExprByPrimaryBranch(secondRoot, [&nodes, &result](const TExprNode::TPtr& node) {
         if (result) {
             return false;
         }
@@ -1249,4 +1242,4 @@ TExprNode::TPtr CloneCompleteFlow(TExprNode::TPtr&& node, TExprContext& ctx) {
     return original ? ctx.ReplaceNode(std::move(node), *original, std::move(copy)) : std::move(node);
 }
 
-}
+} // namespace NYql

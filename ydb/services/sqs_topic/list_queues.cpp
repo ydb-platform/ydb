@@ -36,8 +36,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/services/sqs_topic/statuses.h>
-
 namespace NKikimr::NSqsTopic::V1 {
 
     using namespace NGRpcService;
@@ -58,9 +56,10 @@ namespace NKikimr::NSqsTopic::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev);
         void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
+        ui64 GetRUCost() override;
+        void OnRequestUnitsCharged(const TActorContext& ctx);
 
     private:
         const TProtoRequest& Request() const {
@@ -70,6 +69,7 @@ namespace NKikimr::NSqsTopic::V1 {
     private:
         TString DatabaseName_;
         TActorId DescriberActorId;
+        Ydb::Ymq::V1::ListQueuesResult Result_;
     };
 
     TListQueuesActor::TListQueuesActor(NKikimr::NGRpcService::IRequestOpCtx* request)
@@ -139,7 +139,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TVector<TTopicConsumerPair> tc(Reserve(topicsMap.size()));
 
         for (const auto& [name, describeResult] : topicsMap) {
-            if (describeResult.Status != NPQ::NDescriber::EStatus::SUCCESS) {
+            if (describeResult.Status != NPQ::NDescriber::EStatus::Success) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Description of topic \"{}\" is unsuccessful", name.ConstRef())));
             }
             const auto& info = describeResult.Info;
@@ -193,21 +193,25 @@ namespace NKikimr::NSqsTopic::V1 {
             };
             result.add_queue_urls(MakeQueueUrl(queueUrl, Request_.get()));
         }
-        return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        Result_ = std::move(result);
+        this->ChargeRequestUnits(ctx);
+    }
+
+    ui64 TListQueuesActor::GetRUCost() {
+        return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+    }
+
+    void TListQueuesActor::OnRequestUnitsCharged(const TActorContext& ctx) {
+        return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
     }
 
     void TListQueuesActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
             hFunc(TEvPQ::TEvListAllTopicsResponse, Handle);
             HFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
             default:
                 TBase::StateWork(ev);
         }
-    }
-
-    void TListQueuesActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        Y_UNUSED(ev);
     }
 
     std::unique_ptr<NActors::IActor> CreateListQueuesActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

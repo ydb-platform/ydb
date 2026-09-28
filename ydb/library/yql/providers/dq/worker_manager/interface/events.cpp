@@ -95,6 +95,11 @@ namespace NYql::NDqs {
         Record.SetIsForwarded(false);
     }
 
+    TEvJobStopResponse::TEvJobStopResponse(const TString& error, bool retryable) {
+        Record.SetError(error);
+        Record.SetRetryable(retryable);
+    }
+
     TEvOperationStop::TEvOperationStop(const Yql::DqsProto::OperationStopRequest& request) {
         *Record.MutableRequest() = request;
         Record.SetIsForwarded(false);

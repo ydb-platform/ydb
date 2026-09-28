@@ -67,6 +67,7 @@ struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
     size_t AuthorizeTicketRequests = 0;
     size_t AuthorizeTicketSuccesses = 0;
     size_t AuthorizeTicketFails = 0;
+    TString CapturedRequestId;
     TVector<TString> GroupSIDs;
 
     STFUNC(StateFunc) {

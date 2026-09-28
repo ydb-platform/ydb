@@ -390,7 +390,6 @@ void TUserTable::AlterSchema() {
         partConfig.AddStorageRooms()->CopyFrom(*room.second);
     }
 
-    // FIXME: these generated column families are incorrect!
     partConfig.ClearColumnFamilies();
     for (const auto& f : Families) {
         const TUserFamily& family = f.second;
@@ -398,9 +397,11 @@ void TUserTable::AlterSchema() {
         columnFamily->SetId(f.first);
         columnFamily->SetName(family.GetName());
         columnFamily->SetStorage(family.Storage);
-        columnFamily->SetColumnCodec(family.ColumnCodec);
+        columnFamily->SetColumnCodec(family.Codec == NTable::NPage::ECodec::Plain
+            ? NKikimrSchemeOp::ColumnCodecPlain : NKikimrSchemeOp::ColumnCodecLZ4);
         columnFamily->SetColumnCache(family.ColumnCache);
         columnFamily->SetColumnCacheMode(family.ColumnCacheMode);
+        columnFamily->MutableStorageConfig()->CopyFrom(family.StorageConfig);
         columnFamily->SetRoom(family.GetRoomId());
     }
 

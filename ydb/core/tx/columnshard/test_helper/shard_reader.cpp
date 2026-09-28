@@ -5,13 +5,18 @@ namespace NKikimr::NTxUT {
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent() const {
     auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(PathId);
+    if (TablePath) {
+        ev->Record.SetTablePath(TablePath);
+    }
     ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
     ev->Record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());
 
     ev->Record.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
     ev->Record.SetTxId(Snapshot.GetTxId());
 
-    ev->Record.SetReverse(Reverse);
+    if (Reverse) {
+        ev->Record.SetReverse(*Reverse);
+    }
     ev->Record.SetItemsLimit(Limit);
 
     ev->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);

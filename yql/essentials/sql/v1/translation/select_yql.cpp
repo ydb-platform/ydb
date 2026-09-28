@@ -1,9 +1,11 @@
 #include "select_yql.h"
 
 #include "context.h"
+#include "source.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/scope.h>
+#include <util/stream/output.h>
 
 namespace NSQLTranslationV1 {
 
@@ -36,7 +38,7 @@ public:
         TNodePtr source = BuildDataSource();
         TNodePtr key = BuildKey(ctx);
 
-        if (!source->Init(ctx, src) || !key->Init(ctx, src)) {
+        if (!key || !source->Init(ctx, src) || !key->Init(ctx, src)) {
             return false;
         }
 
@@ -74,6 +76,10 @@ private:
 
         auto cluster = ToDeferredAtom(Cluster, ctx);
         auto key = ToDeferredAtom(Key, ctx);
+        if (!View.empty()) {
+            TNodePtr tableKey = BuildTableKey(Pos_, Service, cluster, key, View);
+            return tableKey->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
+        }
 
         TNodePtr prefixed = ctx.GetPrefixedPath(Service, cluster, key);
         YQL_ENSURE(prefixed);
@@ -281,7 +287,7 @@ public:
 
         TNodePtr item = Y();
         {
-            TNodePtr items = BuildYqlResultItems(*projection);
+            TNodePtr items = BuildYqlResultItems(*projection, ctx);
             if (!items) {
                 return false;
             }
@@ -333,6 +339,9 @@ public:
 
         if (GroupBy) {
             item->Add(Q(Y(Q("group_by"), Q(BuildGroupBy(*GroupBy)))));
+            if (GroupBy->IsCompact) {
+                item->Add(Q(Y(Q("group_by_compact"))));
+            }
         }
 
         if (Having) {
@@ -547,23 +556,26 @@ private:
         }
     }
 
-    TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection) const {
+    TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection, TContext& ctx) const {
         if (projection.empty()) {
-            return BuildYqlResultItems(TPlainAsterisk());
+            return BuildYqlResultItems(TPlainAsterisk(), ctx);
         }
 
         TNodePtr items = Y();
         for (const auto& [term, isSynthetic] : projection) {
-            items->Add(BuildYqlResultItem(term->GetLabel(), isSynthetic, term));
+            items->Add(BuildYqlResultItem(isSynthetic, term, ctx));
         }
         return items;
     }
 
-    TNodePtr BuildYqlResultItems(const TPlainAsterisk&) const {
-        return Y(BuildYqlResultItem(/*name=*/"", /*isSynthetic=*/false, Y("YqlStar")));
+    TNodePtr BuildYqlResultItems(const TPlainAsterisk&, TContext& ctx) const {
+        return Y(BuildYqlResultItem(/*isSynthetic=*/false, Y("YqlStar"), ctx));
     }
 
-    TNodePtr BuildYqlResultItem(TString name, bool isSynthetic, TNodePtr term) const {
+    TNodePtr BuildYqlResultItem(bool isSynthetic, TNodePtr term, TContext& ctx) const {
+        const TString name = term->GetLabel();
+        const bool isImplicitlyLabeled = term->IsImplicitLabel();
+
         TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
 
         TNodePtr item = Y("YqlResultItem");
@@ -571,6 +583,9 @@ private:
         item = L(std::move(item), Y("Void"));
         if (isSynthetic) {
             item = L(std::move(item), Q(Y(Q(Y(Q("synthetic"))))));
+        }
+        if (isImplicitlyLabeled && ctx.WarnOnAnsiAliasShadowing) {
+            item = L(std::move(item), Q(Y(Q(Y(Q("warnShadow"))))));
         }
         item = L(std::move(item), Y("lambda", Q(Y()), std::move(term)));
         return item;
@@ -1313,11 +1328,8 @@ TNodePtr BuildYqlStatement(TNodePtr node) {
 
 } // namespace NSQLTranslationV1
 
-template <>
-void Out<NSQLTranslationV1::EYqlSetOp>(
-    IOutputStream& out,
-    NSQLTranslationV1::EYqlSetOp value)
-{
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLTranslationV1::EYqlSetOp, out, value) {
     switch (value) {
         case NSQLTranslationV1::EYqlSetOp::Push:
             out << "push";

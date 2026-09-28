@@ -73,6 +73,7 @@ PEERDIR(
     yql/essentials/udfs/common/set
     yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/string
+    ydb/core/formats/arrow/program/olap_kernels
     yql/essentials/udfs/common/top
     yql/essentials/udfs/common/topfreq
     yql/essentials/udfs/common/unicode_base

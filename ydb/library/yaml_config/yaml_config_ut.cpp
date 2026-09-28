@@ -1389,6 +1389,31 @@ config:
 }
 
 Y_UNIT_TEST_SUITE(YamlConfig) {
+    Y_UNIT_TEST(BlobStorageExecutorIsConvertedToProto) {
+        auto doc = NFyaml::TDocument::Parse(R"(
+actor_system_config:
+  executor:
+  - name: BS0
+    type: BASIC
+    threads: 2
+    placement: 1
+  - name: BS1
+    type: BASIC
+    threads: 2
+    placement: 3
+  blob_storage_executor: [0, 1]
+)");
+
+        const auto config = NYamlConfig::YamlToProto(doc.Root(), false, false);
+
+        const auto& actorSystemConfig = config.GetActorSystemConfig();
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.BlobStorageExecutorSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.GetBlobStorageExecutor(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.GetBlobStorageExecutor(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.GetExecutor(0).GetPlacement(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.GetExecutor(1).GetPlacement(), 3);
+    }
+
     Y_UNIT_TEST(InterconnectSessionExecutorIsConvertedToProto) {
         auto doc = NFyaml::TDocument::Parse(R"(
 actor_system_config:

@@ -24,6 +24,16 @@ namespace NKikimr {
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER)");
 
         struct TEvAuthorizeTicket : TEventLocal<TEvAuthorizeTicket, EvAuthorizeTicket> {
+            struct TTraceContext {
+                TString PeerName;
+                TString RequestId;
+
+                TTraceContext(TString peerName, TString requestId)
+                    : PeerName(std::move(peerName))
+                    , RequestId(std::move(requestId))
+                {}
+            };
+
             struct TPermission {
                 TString Permission;
                 bool Required = false;
@@ -67,7 +77,7 @@ namespace NKikimr {
 
             const TString Database;
             const TString Ticket;
-            const TString PeerName;
+            const TTraceContext TraceContext;
 
             // if two identical permissions with different attributies are specified,
             // only one of them will be processed. Which one is not guaranteed
@@ -88,27 +98,27 @@ namespace NKikimr {
             struct TInitializationFieldsWithTicket {
                 TString Ticket;
                 TString Database;
-                TString PeerName;
+                TTraceContext TraceContext;
                 std::vector<TEntry> Entries;
             };
             struct TInitializationFieldsWithSignature {
                 TAccessKeySignature Signature;
                 TString Database;
-                TString PeerName;
+                TTraceContext TraceContext;
                 std::vector<TEntry> Entries;
             };
 
             TEvAuthorizeTicket(TInitializationFieldsWithTicket&& init)
                 : Database(std::move(init.Database))
                 , Ticket(std::move(init.Ticket))
-                , PeerName(std::move(init.PeerName))
+                , TraceContext(std::move(init.TraceContext))
                 , Entries(std::move(init.Entries))
             {
             }
 
             TEvAuthorizeTicket(TInitializationFieldsWithSignature&& init)
                 : Database(std::move(init.Database))
-                , PeerName(std::move(init.PeerName))
+                , TraceContext(std::move(init.TraceContext))
                 , Entries(std::move(init.Entries))
                 , Signature(std::move(init.Signature))
             {

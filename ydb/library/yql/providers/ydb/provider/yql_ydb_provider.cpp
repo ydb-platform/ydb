@@ -32,6 +32,7 @@ TDataProviderInitializer GetYdbDataProviderInitializer(
         auto state = MakeIntrusive<TYdbState>();
 
         state->Types = typeCtx.Get();
+        state->Configuration = MakeIntrusive<TYdbConfiguration>(typeCtx->StrictConfigValidation);
         state->FunctionRegistry = functionRegistry;
         state->CredentialsFactory = credentialsFactory;
         state->DbResolver = dbResolver;

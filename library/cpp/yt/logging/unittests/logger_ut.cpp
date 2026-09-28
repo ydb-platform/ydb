@@ -9,6 +9,7 @@
 #include <library/cpp/yt/yson_string/string.h>
 
 #include <atomic>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -104,6 +105,22 @@ NYson::TYsonString MakeMapFragment(TStringBuf yson)
     return NYson::TYsonString(yson, NYson::EYsonType::MapFragment);
 }
 
+struct TThrowingTagValue
+{ };
+
+void FormatValue(TStringBuilderBase* builder, const TThrowingTagValue& /*value*/, TStringBuf /*spec*/)
+{
+    builder->AppendString("partial");
+    throw std::runtime_error("Failed to format tag");
+}
+
+void LogThrowingTagValue(const TLogger& Logger)
+{
+    YT_TLOG_INFO("Message")
+        .With("Kept", 1)
+        .With("Value", TThrowingTagValue{});
+}
+
 TStringBuf GetStructuredYson(const TLogEvent& event)
 {
     return GetYsonFromStructuredPayload(std::get<TStructuredLogEventPayload>(event.Payload)).AsStringBuf();
@@ -178,6 +195,19 @@ TEST(TTaggedApiTest, Tags)
     ASSERT_EQ(decoded.Tags.size(), 2u);
     EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Arg1"), std::string("123")));
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("Arg2"), std::string("test")));
+}
+
+TEST(TTaggedApiTest, FormattingFailureKeepsPayloadWellFormed)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    EXPECT_THROW(LogThrowingTagValue(Logger), std::runtime_error);
+
+    auto decoded = DecodeSingleEvent(manager);
+    EXPECT_EQ(decoded.Message, "Message");
+    ASSERT_EQ(decoded.Tags.size(), 1u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("1")));
 }
 
 TEST(TTaggedApiTest, DynamicAnchor)
@@ -310,6 +340,25 @@ TEST(TTaggedApiTest, WithFormatIf)
     ASSERT_EQ(decoded.Tags.size(), 2u);
     EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("MyService.MyMethod")));
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
+}
+
+TEST(TTaggedApiTest, WithIfLazy)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    int calls = 0;
+    YT_TLOG_INFO("Message")
+        .WithIf(true, "Kept", YT_LAZY((++calls, 1)))
+        .WithIf(false, "Dropped", YT_LAZY((++calls, 2)))
+        .WithFormatIf(true, "KeptFormat", "%v.%v", YT_LAZY((++calls, "MyService")), "MyMethod")
+        .WithFormatIf(false, "DroppedFormat", "%v", YT_LAZY((++calls, 3)));
+
+    EXPECT_EQ(calls, 2);
+
+    auto decoded = DecodeSingleEvent(manager);
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("1")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("KeptFormat"), std::string("MyService.MyMethod")));
 }
 
 TEST(TTaggedApiTest, TagList)

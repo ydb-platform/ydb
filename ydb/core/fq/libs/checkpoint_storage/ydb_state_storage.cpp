@@ -9,6 +9,8 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
@@ -36,6 +38,25 @@ enum class EStateType {
     Snapshot = 1,
     Increment = 2
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString CompressBlob(const TString& blob) {
+    TString result;
+    TStringOutput output(result);
+    {
+        TZstdCompress compress(&output, /* quality */ 3);   // ZSTD_CLEVEL_DEFAULT
+        compress.Write(blob.data(), blob.size());
+        compress.Finish();
+    }
+    return result;
+}
+
+TString DecompressBlob(const TString& blob) {
+    TStringInput input(blob);
+    TZstdDecompress decompress(&input);
+    return decompress.ReadAll();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -184,6 +205,7 @@ struct TContext : public TThrRefBase {
         size_t CurrentProcessingRow = 0;
         std::list<TString> Rows;
         EStateType Type = EStateType::Snapshot;
+        bool IsCompressed = false;
         std::list<TStateInfo> ListOfStatesForReading;     // ordered by desc
         std::list<NYql::NDq::TComputeActorState> States;
     };
@@ -223,11 +245,13 @@ struct TContext : public TThrRefBase {
         const TCheckpointId& checkpointId,
         TMaybe<ISession::TPtr> session = {},
         const std::list<TString>& rows = {},
-        EStateType type = EStateType::Snapshot)
+        EStateType type = EStateType::Snapshot,
+        bool isCompressed = false)
         : TContext(actorSystem, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
     {
         Tasks[0].Rows = rows;
         Tasks[0].Type = type;
+        Tasks[0].IsCompressed = isCompressed;
     }
 };
 
@@ -270,6 +294,7 @@ TStatus ProcessRowState(
             return;
         }
         taskInfo.Rows.push_back(*parser.ColumnParser("blob").GetOptionalString());
+        taskInfo.IsCompressed = parser.ColumnParser("is_compressed").GetOptionalBool().value_or(false);
     };
     parse();
 
@@ -360,7 +385,8 @@ private:
 
     size_t SerializeState(
         const NYql::NDq::TComputeActorState& state,
-        std::list<TString>& outSerializedState);
+        std::list<TString>& outSerializedState,
+        bool& outIsCompressed);
 
     EStateType DeserializeState(
         const TContextPtr& context,
@@ -398,6 +424,7 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .AddNullableColumn("blob", EPrimitiveType::String)
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
+        .AddNullableColumn("is_compressed", EPrimitiveType::Bool)
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
         .BeginPartitioningSettings()
             .SetPartitioningBySize(true)
@@ -432,6 +459,16 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
         blob += *it;
         it = taskInfo.Rows.erase(it);
     }
+
+    if (taskInfo.IsCompressed) {
+        YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState: decompressing blob",
+            {"graphId", context->GraphId},
+            {"checkpointId", context->CheckpointId},
+            {"taskId", taskInfo.TaskId},
+            {"compressedBlobSize", blob.size()});
+        blob = DecompressBlob(blob);
+    }
+
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
@@ -448,25 +485,36 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
 
 size_t TStateStorage::SerializeState(
     const NYql::NDq::TComputeActorState& state,
-    std::list<TString>& outSerializedState) {
+    std::list<TString>& outSerializedState,
+    bool& outIsCompressed) {
     outSerializedState.clear();
+    outIsCompressed = false;
 
     TString serializedState;
     if (!state.SerializeToString(&serializedState)) {
         return 0;
     }
 
-    auto size = serializedState.size();
-    size_t result = size;
+    auto originalSize = serializedState.size();
+
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
+    if (rowLimit && originalSize > rowLimit && Config.GetEnableCompression()) {
+        TString compressed = CompressBlob(serializedState);
+        if (compressed.size() < serializedState.size()) {
+            serializedState = std::move(compressed);
+            outIsCompressed = true;
+        }
+    }
+
+    size_t remaining = serializedState.size();
     size_t offset = 0;
-    while (size) {
-        size_t chunkSize = (rowLimit && (size > rowLimit)) ? rowLimit : size;
+    while (remaining) {
+        size_t chunkSize = (rowLimit && (remaining > rowLimit)) ? rowLimit : remaining;
         outSerializedState.push_back(serializedState.substr(offset, chunkSize));
         offset += chunkSize;
-        size -= chunkSize;
+        remaining -= chunkSize;
     }
-    return result;
+    return originalSize;
 }
 
 TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
@@ -477,11 +525,12 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
 
     std::list<TString> serializedState;
     EStateType type = EStateType::Snapshot;
+    bool isCompressed = false;
     size_t size = 0;
 
     try {
         type = TIncrementLogic::GetStateType(state);
-        size = SerializeState(state, serializedState);
+        size = SerializeState(state, serializedState, isCompressed);
         if (!size || serializedState.empty()) {
             return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
         }
@@ -497,7 +546,8 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
         checkpointId,
         TMaybe<ISession::TPtr>(),
         serializedState,
-        type);
+        type,
+        isCompressed);
 
     auto promise = NewPromise<TSaveStateResult>();
     auto future = UpsertRow(context);
@@ -987,7 +1037,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
         DECLARE $seq_no AS Uint64;
         DECLARE $blob_seq_num AS Uint64;
 
-        SELECT task_id, blob, type
+        SELECT task_id, blob, type, is_compressed
         FROM %s
         WHERE task_id = $task_id AND graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND (blob_seq_num = $blob_seq_num %s);
     )",
@@ -1021,6 +1071,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
             paramsBuilder->AddParam("$blob").String(taskInfo.Rows.front()).Build();
             paramsBuilder->AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
             paramsBuilder->AddParam("$type").Uint8(static_cast<ui8>(taskInfo.Type)).Build();
+            paramsBuilder->AddParam("$is_compressed").Bool(taskInfo.IsCompressed).Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -1033,9 +1084,10 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
                 declare $blob as string;
                 declare $blob_seq_num as Uint64;
                 declare $type as Uint8;
+                declare $is_compressed as Bool;
 
-                UPSERT INTO %s (task_id, graph_id, coordinator_generation, seq_no, blob, blob_seq_num, type) VALUES
-                    ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob, $blob_seq_num, $type);
+                UPSERT INTO %s (task_id, graph_id, coordinator_generation, seq_no, blob, blob_seq_num, type, is_compressed) VALUES
+                    ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob, $blob_seq_num, $type, $is_compressed);
             )", context->TablePathPrefix.c_str(), StatesTable);
 
             Y_ENSURE(context->Session, "Session is empty");

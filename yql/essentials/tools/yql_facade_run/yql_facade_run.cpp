@@ -486,7 +486,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
-    if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
+    if (EQPlayerMode::Replay != QPlayerMode && ProgramFile.empty()) {
         throw yexception() << "Either program or replay option should be specified";
     }
     if (GatewaysPatch && EQPlayerMode::Replay != QPlayerMode) {
@@ -814,6 +814,10 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
+    if (!RunOptions_.UdfBridgePath.empty()) {
+        factory.SetUdfBridgeBinaryPath(RunOptions_.UdfBridgePath);
+    }
+
     int result = DoRun(factory);
     if (result == 0 && EQPlayerMode::Capture == RunOptions_.QPlayerMode) {
         RunOptions_.QPlayerContext.GetWriter()->Commit().GetValueSync();
@@ -842,7 +846,6 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
-    program->SetBridgeBinaryPath(RunOptions_.UdfBridgePath);
     if (RunOptions_.EnableLineage) {
         program->SetEnableLineage();
     }
@@ -868,6 +871,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.ClusterMapping = ClusterMapping_;
         ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
+        settings.Syntax = RunOptions_.Syntax;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;

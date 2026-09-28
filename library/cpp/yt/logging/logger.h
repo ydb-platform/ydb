@@ -330,10 +330,23 @@ void LogStructuredEvent(
 #define YT_LOG_ALERT_IF(condition, ...)        if (condition)    YT_LOG_ALERT(__VA_ARGS__)
 #define YT_LOG_ALERT_UNLESS(condition, ...)    if (!(condition)) YT_LOG_ALERT(__VA_ARGS__)
 
-#define YT_LOG_FATAL(...)                                                     \
-    do {                                                                      \
-        YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Fatal, __VA_ARGS__); \
-        Y_UNREACHABLE();                                                      \
+// Not #YT_LOG_EVENT: a fatal event must not be skipped, so it needs no level check nor an
+// anchor to be suppressed by.
+#define YT_LOG_FATAL(...)                                                                \
+    do {                                                                                 \
+         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */  \
+        const auto& logger__ = (Logger)();                                               \
+        auto loggingContext__ = ::NYT::NLogging::GetLoggingContext();                    \
+        auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(                      \
+            loggingContext__,                                                            \
+            logger__,                                                                    \
+            __VA_ARGS__);                                                                \
+        ::NYT::NLogging::NDetail::LogFatalEventAndAbort(                                 \
+            loggingContext__,                                                            \
+            logger__,                                                                    \
+            __LOCATION__,                                                                \
+            std::move(message__.Payload));                                               \
+         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */    \
     } while(false)
 #define YT_LOG_FATAL_IF(condition, ...)        if (Y_UNLIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
 #define YT_LOG_FATAL_UNLESS(condition, ...)    if (!Y_LIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
@@ -593,12 +606,15 @@ void LogStructuredEvent(
 // -- because the logging library must not depend on the error library. The guard's
 // |Commit| logs the alert (when enabled) and returns the rendered event -- tags included,
 // so they survive in the |"message"| attribute.
+// As in #YT_TLOG_FATAL, the |for| deliberately has no condition: the step throws, so the
+// loop has no normal exit and the expansion is noreturn. A condition here would trip
+// -Wreturn-type in callers that end a non-void function with this macro.
 #define YT_TLOG_ALERT_AND_THROW(message)                                       \
     for (::NYT::NLogging::NDetail::TTaggedThrowingLoggingGuard loggingGuard__( \
             Logger(),                                                          \
             YT_TLOG_STATIC_ANCHOR_REF(),                                       \
             (message));                                                        \
-        loggingGuard__.TryEnter();                                             \
+        /*no condition*/;                                                      \
         THROW_ERROR_EXCEPTION(                                                 \
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \

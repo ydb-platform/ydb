@@ -10,6 +10,8 @@ SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(sql_grammar ${antlr_output}/SQLv1Antlr4.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
+SET(ANTLR_AST_NAME TSQLv1ParserAST)
+SET(ANTLR_PARSER_NAME SQLv1Antlr4Parser)
 SET(PROTOBUF_HEADER_PATH yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4)
 SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 

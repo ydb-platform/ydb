@@ -39,9 +39,8 @@ private:
 
     TFileLinkPtr RegisterLink(const TUserDataBlock& block, TFileLinkPtr link);
 
-
     TFileStoragePtr FileStorage_;
     TMap<TUserDataBlock, TFileLinkPtr, TDataLess> Links_;
 };
 
-}
+} // namespace NYql

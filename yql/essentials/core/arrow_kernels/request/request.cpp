@@ -37,6 +37,7 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
         case EUnaryOp::Size:
         case EUnaryOp::Minus:
         case EUnaryOp::Abs:
+        case EUnaryOp::ToString:
             Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, {arg}));
             break;
     }

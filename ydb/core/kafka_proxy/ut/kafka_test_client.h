@@ -99,7 +99,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TProduceResponseData> ReadLastResult(i32 customCorrelationId = -1);
 
-        TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
+        TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic, i8 isolationLevel = 0);
 
         TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout = 1000000, bool emptyMetadata = false);
 
@@ -136,7 +136,7 @@ class TKafkaTestClient {
         TMessagePtr<TFindCoordinatorResponseData> FindCoordinator(const TString& key, i8 keyType = 0);
 
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset = 0);
-        TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
+        TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0, i8 isolationLevel = 0);
         void ValidateNoDataInTopics(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
 
         TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);

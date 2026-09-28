@@ -485,6 +485,9 @@ private:
         std::vector<TJoinColumn> joinCondById;
         for (const auto& edge: edges) {
             for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+                if (IsEqualNullsKey(lhs, rhs)) {
+                    continue;
+                }
                 joinCondById.push_back(lhs);
                 joinCondById.push_back(rhs);
             }
@@ -500,6 +503,9 @@ private:
         TDisjointSets connectedComponents(joinCondById.size());
         for (const auto& edge: edges) {
             for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+                if (IsEqualNullsKey(lhs, rhs)) {
+                    continue;
+                }
                 connectedComponents.UnionSets(idByJoinCond[lhs], idByJoinCond[rhs]);
             }
         }

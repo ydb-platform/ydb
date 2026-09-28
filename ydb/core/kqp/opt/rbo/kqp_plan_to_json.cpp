@@ -358,9 +358,24 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
+void RemoveOperatorIds(NJson::TJsonValue& planNode) {
+    auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (auto& op : operators->second.GetArraySafe()) {
+            op.EraseValue("OperatorId");
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (auto& child : plans->second.GetArraySafe()) {
+            RemoveOperatorIds(child);
+        }
+    }
+}
+
 } // anonymous namespace
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     // First construct the ResultSet
@@ -380,7 +395,6 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
     THashMap<int, TVector<TIntrusivePtr<IOperator>>> stageOpMap;
     std::set<int> stages;
-    ui32 operatorId = 0;
 
     for (const auto& it : *this) {
         auto & currOp = it.Current;
@@ -393,7 +407,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
         if (currOp->Kind != EOperator::EmptySource) {
             // This map defines which operators can be correlated across execution and simplified plans.
-            operatorIds.insert({currOp.Get(), operatorId++});
+            operatorIds.insert({currOp.Get(), operatorIdx++});
 
             YQL_CLOG(TRACE, CoreDq) << "Adding operator to explain json: " << currOp->GetExplainName() << ", stageId: " << stageId;
 
@@ -505,6 +519,12 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 
     queryPlan["meta"] = meta;
 
+    //OperatorId is needed while correlating ANALYZE stats, but has no meaning in a published plan.
+    RemoveOperatorIds(txPlan["SimplifiedPlan"]);
+    for (auto& plan : txPlan["Plans"].GetArraySafe()) {
+        RemoveOperatorIds(plan);
+    }
+
     queryPlan["SimplifiedPlan"] = txPlan.GetMapSafe().at("SimplifiedPlan");
     txPlan.EraseValue("SimplifiedPlan");
 
@@ -524,6 +544,9 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
     Y_UNUSED(queryStats);
     Y_UNUSED(poolId);
+
+    YQL_CLOG(TRACE, CoreDq) << "Serialize analyze plan";
+
 
     if (txPlans.empty()) {
         return "";

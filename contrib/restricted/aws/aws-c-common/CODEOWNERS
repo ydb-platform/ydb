@@ -1,0 +1,5 @@
+# Code owners for aws-c-common.
+# See https://docs.github.com/articles/about-code-owners
+#
+# Owned by the AWS Common Runtime (CRT) team.
+* @awslabs/aws-sdk-common-runtime-team

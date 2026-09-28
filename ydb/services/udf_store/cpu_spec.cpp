@@ -1,7 +1,7 @@
 #include "cpu_spec.h"
 #include "metadata_subscription/storage_paths.h"
 
-#include <contrib/restricted/wavm/Include/WAVM/LLVMJIT/LLVMJIT.h>
+#include <WAVM/LLVMJIT/LLVMJIT.h>
 
 namespace NKikimr::NUdfStore {
 

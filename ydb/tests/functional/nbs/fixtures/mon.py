@@ -115,9 +115,23 @@ def parse_dbg_hosts(html):
     return hosts
 
 
+# ``node:pdisk:slot`` as rendered by TDDiskId::ToString.
+_SLOT_ID_RE = re.compile(r'(\d+:\d+:\d+)')
+
+
+def _parse_slot_id(cell):
+    match = _SLOT_ID_RE.search(cell or '')
+    return match.group(1) if match else ''
+
+
 def parse_dbg_connections(html):
-    """Parse the DBG detail Connections table (node / PDisk / DDisk ids)."""
-    headers, rows = find_table(html, 'DDisk id')
+    """Parse the DBG detail Connections table (node / PDisk / DDisk ids).
+
+    Current HTML (``mon_render.cpp`` Connections table) is three columns:
+    Host, DDisk, PBuffer. Each DDisk / PBuffer cell packs the
+    ``node:pdisk:slot`` id with optional ``connected`` and the DDisk session.
+    """
+    headers, rows = find_table(html, 'DDisk')
     if headers is None:
         return []
     connections = []
@@ -126,8 +140,10 @@ def parse_dbg_connections(html):
         match = re.search(r'H(\d+)', label)
         if not match:
             continue
-        ddisk_id = _cell(headers, row, 'DDisk id')
-        pbuffer_id = _cell(headers, row, 'PBuffer id')
+        ddisk_cell = _cell(headers, row, 'DDisk')
+        pbuffer_cell = _cell(headers, row, 'PBuffer')
+        ddisk_id = _parse_slot_id(ddisk_cell)
+        pbuffer_id = _parse_slot_id(pbuffer_cell)
         node_id = None
         pdisk_id = None
         pbuffer_node_id = None
@@ -138,6 +154,15 @@ def parse_dbg_connections(html):
         pb_parts = pbuffer_id.split(':')
         if len(pb_parts) >= 1 and pb_parts[0].isdigit():
             pbuffer_node_id = int(pb_parts[0])
+        ddisk_session = re.sub(
+            r'\bconnected\b',
+            '',
+            _SLOT_ID_RE.sub('', ddisk_cell, count=1),
+            flags=re.IGNORECASE,
+        ).strip()
+        pbuffer_connected = (
+            'connected' if re.search(r'\bconnected\b', pbuffer_cell, re.I) else ''
+        )
         connections.append(
             {
                 'index': int(match.group(1)),
@@ -146,8 +171,8 @@ def parse_dbg_connections(html):
                 'node_id': node_id,
                 'pdisk_id': pdisk_id,
                 'pbuffer_node_id': pbuffer_node_id,
-                'ddisk_session': _cell(headers, row, 'DDisk session'),
-                'pbuffer_connected': _cell(headers, row, 'PBuffer connected'),
+                'ddisk_session': ddisk_session,
+                'pbuffer_connected': pbuffer_connected,
             }
         )
     return connections

@@ -1,0 +1,8 @@
+{
+  "grpc_status": "OK",
+  "response_present": false,
+  "status": "UNAUTHORIZED",
+  "ydb_log": [
+    "GRPC_SERVER DEBUG: issuing response Name# NKikimrClient.TGRpcServer/ConsoleRequest data# Status { Code: UNAUTHORIZED Reason: \"Cannot get node config. Access denied. Node is not authorized\" }  peer# <peer>"
+  ]
+}

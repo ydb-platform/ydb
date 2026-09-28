@@ -23,6 +23,7 @@
 #include <util/random/random.h>
 #include <util/system/rusage.h>
 
+
 using namespace NActors;
 
 namespace NYql::NDqs {
@@ -52,12 +53,18 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         }
     }
 
-    bool AllocateExtraQuota(ui64 extraSize) override {
+    // TResourceQuoter has no spilling threshold: it refuses an optional request exactly where it refuses a mandatory
+    // one (GetMemoryAvailability() < extraSize)
+    bool AllocateExtraQuota(ui64 extraSize, bool /* isOptional */) override {
         return NodeQuoter->Allocate(TxId, 0, extraSize);
     }
 
     void FreeExtraQuota(ui64 extraSize) override {
         NodeQuoter->Free(TxId, 0, extraSize);
+    }
+
+    i64 GetExtraMemoryAvailability() const override {
+        return NodeQuoter->GetMemoryAvailability(); // a lock-free snapshot, unlimited for a quoter without a limit
     }
 
     std::shared_ptr<NDq::TResourceQuoter> NodeQuoter;
@@ -200,6 +207,8 @@ private:
     void WakeUp() {
         auto currentRusage = TRusage::Get();
         TRusage delta;
+        // MaxRss is a peak, not a delta; AddRusageDelta merges it with Max.
+        delta.MaxRss = currentRusage.MaxRss;
         delta.Utime = currentRusage.Utime - Rusage.Utime;
         delta.Stime = currentRusage.Stime - Rusage.Stime;
         delta.MajorPageFaults = currentRusage.MajorPageFaults - Rusage.MajorPageFaults;

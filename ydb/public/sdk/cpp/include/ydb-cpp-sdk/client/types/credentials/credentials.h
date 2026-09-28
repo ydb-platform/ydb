@@ -38,11 +38,9 @@ using TCredentialsProviderCreator = std::function<TCredentialsProviderPtr()>;
 class TOwningFacilityCredentialsProvider final : public ICredentialsProvider {
 public:
     TOwningFacilityCredentialsProvider(std::shared_ptr<ICoreFacility> facility,
-                                       TCredentialsProviderPtr inner,
-                                       bool forwardAsync = false)
+                                       TCredentialsProviderPtr inner)
         : Facility_(std::move(facility))
         , Inner_(std::move(inner))
-        , ForwardAsync_(forwardAsync)
     {}
 
     std::string GetAuthInfo() const override {
@@ -50,7 +48,7 @@ public:
     }
 
     NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
-        return ForwardAsync_ ? Inner_->GetAuthInfoAsync() : ICredentialsProvider::GetAuthInfoAsync();
+        return Inner_->GetAuthInfoAsync();
     }
 
     bool IsValid() const override {
@@ -61,7 +59,6 @@ private:
     // Reverse destruction keeps Facility_ alive while Inner_ stops.
     std::shared_ptr<ICoreFacility> Facility_;
     TCredentialsProviderPtr Inner_;
-    const bool ForwardAsync_;
 };
 
 // Process-wide weak cache for no-argument factory paths whose providers own their facilities.

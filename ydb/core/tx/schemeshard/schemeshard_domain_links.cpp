@@ -2,6 +2,10 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -32,6 +36,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
         .TenantSysViewProcessor = ui64(rootSubdomain->GetTenantSysViewProcessorID()),
         .TenantStatisticsAggregator = ui64(rootSubdomain->GetTenantStatisticsAggregatorID()),
         .TenantGraphShard = ui64(rootSubdomain->GetTenantGraphShardID()),
+        .TenantWasmCompileController = ui64(rootSubdomain->GetTenantWasmCompileControllerID()),
         .RootACL = rootPath->ACL
     });
     return THolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
@@ -42,10 +47,10 @@ void TParentDomainLink::SendSync(const TActorContext &ctx) {
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Send TEvSyncTenantSchemeShard"
-               << ", to parent: " << Self->ParentDomainId
-               << ", from: " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "Send TEvSyncTenantSchemeShard, from tenant to root",
+        {"rootSubdomainId", Self->ParentDomainId},
+        {"schemeshard", Self->TabletID()},
+    );
 
     if (!Pipe) {
         Pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, Self->ParentDomainId.OwnerId, PipeClientConfig));
@@ -91,10 +96,10 @@ bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, 
         TLink& link = ActiveLink.at(pathId);
 
         if (link.Generation > generation) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Ignore TEvSyncTenantSchemeShard with obsolete generation"
-                       << ", msg: " << record.ShortDebugString()
-                       << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_INFO_CTX(ctx, "Ignore TEvSyncTenantSchemeShard with obsolete generation",
+                {"message", record.ShortDebugString()},
+                {"schemeshard", Self->TabletID()},
+            );
             return false;
         }
     }
@@ -115,6 +120,7 @@ void TSubDomainsLinks::TLink::Out(IOutputStream& stream) const {
            << ", TenantSysViewProcessor: " << TenantSysViewProcessor
            << ", TenantStatisticsAggregator: " << TenantStatisticsAggregator
            << ", TenantGraphShard: " << TenantGraphShard
+           << ", TenantWasmCompileController: " << TenantWasmCompileController
            << ", TenantRootACL: " << TenantRootACL
            << "}";
 }
@@ -133,7 +139,11 @@ TSubDomainsLinks::TLink::TLink(const NKikimrScheme::TEvSyncTenantSchemeShard &re
         TTabletId(record.GetTenantStatisticsAggregator()) : InvalidTabletId)
     , TenantGraphShard(record.HasTenantGraphShard() ?
         TTabletId(record.GetTenantGraphShard()) : InvalidTabletId)
+    , TenantWasmCompileController(record.HasTenantWasmCompileController() ?
+        TTabletId(record.GetTenantWasmCompileController()) : InvalidTabletId)
     , TenantRootACL(record.GetTenantRootACL())
 {}
 
 }}
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

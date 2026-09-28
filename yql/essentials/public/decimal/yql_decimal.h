@@ -50,7 +50,70 @@ constexpr bool IsComparable(TInt128 value) {
     return value <= Inf() && value >= -Inf();
 }
 
+constexpr TUint128 GetDivider(ui8 scale);
+
+constexpr bool IsNan(TInt128 value);
+
+constexpr bool IsInf(TInt128 value);
+
+constexpr bool IsNormal(TInt128 value, ui8 precision);
+
+constexpr TInt128 GetIntegralAddSubOverflowThreshold(ui8 precision, ui8 scale) {
+    return static_cast<TInt128>(GetDivider(precision - scale)) * TInt128(2);
+}
+
 namespace NDetail {
+
+enum class EDecimalAdditiveOperation {
+    Add,
+    Subtract,
+};
+
+template <EDecimalAdditiveOperation Operation, typename TRight>
+class TDecimalAdditive {
+public:
+    TDecimalAdditive(ui8 precision, ui8 scale)
+        : Precision_(precision)
+        , IntegralOverflowThreshold_(GetIntegralAddSubOverflowThreshold(precision, scale))
+        , ScaleMultiplier_(GetDivider(scale))
+    {
+    }
+
+    TInt128 Do(TInt128 left, TRight right) const {
+        if (IsNan(left)) {
+            return Nan();
+        }
+        if (IsInf(left)) {
+            return left;
+        }
+
+        const TInt128 extendedRight = static_cast<TInt128>(right);
+        if (extendedRight <= -IntegralOverflowThreshold_ || extendedRight >= IntegralOverflowThreshold_) {
+            return GetUnavoidableOverflow(extendedRight);
+        }
+
+        const TInt128 decimalRight = extendedRight * ScaleMultiplier_;
+        const TInt128 result = Operation == EDecimalAdditiveOperation::Add
+                                   ? left + decimalRight
+                                   : left - decimalRight;
+        if (IsNormal(result, Precision_)) {
+            return result;
+        }
+        return result > 0 ? Inf() : -Inf();
+    }
+
+private:
+    static TInt128 GetUnavoidableOverflow(TInt128 right) {
+        if constexpr (Operation == EDecimalAdditiveOperation::Subtract) {
+            return right > 0 ? -Inf() : Inf();
+        }
+        return right > 0 ? Inf() : -Inf();
+    }
+
+    const ui8 Precision_;
+    const TInt128 IntegralOverflowThreshold_;
+    const TInt128 ScaleMultiplier_;
+};
 
 inline constexpr auto DividersTable = []() {
     std::array<TUint128, MaxPrecision + 1> arr{};
@@ -448,6 +511,12 @@ public:
         return IsNan(mul) ? Nan() : (mul > 0 ? +Inf() : -Inf());
     }
 };
+
+template <typename TRight>
+using TDecimalAdd = NDetail::TDecimalAdditive<NDetail::EDecimalAdditiveOperation::Add, TRight>;
+
+template <typename TRight>
+using TDecimalSub = NDetail::TDecimalAdditive<NDetail::EDecimalAdditiveOperation::Subtract, TRight>;
 
 template <typename TRight>
 class TDecimalDivisor {

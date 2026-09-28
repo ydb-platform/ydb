@@ -80,6 +80,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("aws-region", "AWS region.")
             .Optional()
             .StoreResult(&Scenario.AwsRegion);
+        config.Opts->AddLongOption("aws-sdk-log", "Enable AWS SDK debug logs.")
+            .DefaultValue(false)
+            .StoreTrue(&Scenario.AwsSdkLog);
         config.Opts->AddLongOption("with-messages-order", "Write messages with order (validation can be enabled in run read command).")
             .DefaultValue(false)
             .StoreTrue(&Scenario.ValidateMessagesOrder);

@@ -10,19 +10,19 @@
 
 namespace NKikimr::NPQ::NDescriber {
 
-enum EEv : ui32 {
+enum class EEv : ui32 {
     EvDescribeTopicsResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::DESCRIBER_SERVICE),
     EvEnd
 };
 
 enum class EStatus {
-    SUCCESS,
-    NOT_FOUND,
-    NOT_TOPIC,
-    UNAUTHORIZED,
-    UNAUTHORIZED_WITH_DESCRIBE_ACCESS,
-    BAD_REQUEST,
-    UNKNOWN_ERROR
+    Success,
+    NotFound,
+    NotTopic,
+    Unauthorized,
+    UnauthorizedWithDescribeAccess,
+    BadRequest,
+    UnknownError
 };
 
 
@@ -45,7 +45,7 @@ struct TAccessRights {
 };
 
 struct TTopicInfo {
-    EStatus Status = EStatus::NOT_FOUND;
+    EStatus Status = EStatus::NotFound;
 
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
@@ -58,7 +58,7 @@ struct TTopicInfo {
     TIntrusivePtr<TSecurityObject> SecurityObject;
 };
 
-struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
+struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, static_cast<ui32>(EEv::EvDescribeTopicsResponse)> {
 
     TEvDescribeTopicsResponse(absl::flat_hash_map<TString, TTopicInfo>&& topics, bool usedSyncVersion)
         : Topics(std::move(topics))

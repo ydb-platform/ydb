@@ -42,14 +42,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
     template <class TEvRequest>
     class TNotImplementedRequestActor
-        : public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest>
-        , public NActors::IActorExceptionHandler
+        : public TGrpcActorBase<TNotImplementedRequestActor<TEvRequest>, TEvRequest>
     {
-        using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
+        using TBase = TGrpcActorBase<TNotImplementedRequestActor, TEvRequest>;
 
     public:
         TNotImplementedRequestActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-            : TBase(request)
+            : TBase(request, TString())
         {
         }
         ~TNotImplementedRequestActor() = default;
@@ -61,22 +60,8 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Die(ctx);
         }
 
-        bool OnUnhandledException(const std::exception& exc) override {
-            const auto& ctx = this->ActorContext();
-            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::SQS, "Unhandled exception in SQS topic actor",
-                {"typeName", TypeName(exc)},
-                {"exception", exc.what()},
-                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
-
-            const auto error = MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Internal error");
-            NYql::TIssue issue(error.GetMessage());
-            issue.SetCode(
-                NSQS::TErrorClass::GetId(error.GetErrorCode()),
-                NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-            this->Request_->RaiseIssue(issue);
-            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
-            this->Die(ctx);
-            return true;
+        ui64 GetRUCost() override {
+            return 0;
         }
     };
 } // namespace NKikimr::NSqsTopic::V1

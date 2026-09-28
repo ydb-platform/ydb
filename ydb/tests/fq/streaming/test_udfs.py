@@ -84,7 +84,8 @@ def get_all_cgi_params(url):
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_precompute_recovery(self, kikimr_udfs, local_topics, entity_name):
         inp, out, endpoint = self.get_io_names(kikimr_udfs, "test_precompute_recovery", local_topics, entity_name)
-        path = f"/Root/{entity_name('test_precompute_recovery_query')}"
+        name = f"{entity_name('test_precompute_recovery_query')}"
+        path = f"{kikimr_udfs.endpoint.database}/{name}"
 
         test_table = entity_name("test_table")
         kikimr_udfs.ydb_client.query(f"""
@@ -141,14 +142,14 @@ def get_all_cgi_params(url):
             assert len(json.loads(row.PreviousExecutionIds)) == min(previous_ids, 3)
 
             if suffix is not None:
-                self.wait_completed_checkpoints(kikimr_udfs, path)
+                self.wait_completed_checkpoints(kikimr_udfs, name)
                 self.write_stream_with_message_metadata(kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint)
                 assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == f"test_data{suffix}"
 
         tests_count = 20
         for i in range(tests_count):
             sql = f"""
-                CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
+                CREATE OR REPLACE STREAMING QUERY `{name}` AS DO BEGIN
                     -- Revision {i}
                     INSERT INTO {out} SELECT Data || "{i}" FROM {inp}
                 END DO
@@ -157,16 +158,16 @@ def get_all_cgi_params(url):
 
             validate_query(sql, i, suffix=str(i))
 
-        self.wait_completed_checkpoints(kikimr_udfs, path)
+        self.wait_completed_checkpoints(kikimr_udfs, name)
         kikimr_udfs.ydb_client.query(f"""
-            ALTER STREAMING QUERY `{path}` SET (RUN = FALSE)
+            ALTER STREAMING QUERY `{name}` SET (RUN = FALSE)
         """)
         self.write_stream_with_message_metadata(kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint)
         logger.info("Stopped simple query")
 
         # Start query with heavy precompute
         precompute_sql = f"""
-CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
+CREATE OR REPLACE STREAMING QUERY `{name}` AS DO BEGIN
 $script = @@#py
 import time
 
@@ -202,7 +203,7 @@ END DO
         kikimr_udfs.ydb_client = kikimr_udfs._setup_ydb_client(kikimr_udfs.endpoint, enable_discovery=False)
 
         time.sleep(5)
-        second_node = list(kikimr_udfs.cluster.nodes.values())[1]
+        second_node = list(kikimr_udfs.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         logger.info("Checking query state after restart")
 
@@ -210,7 +211,7 @@ END DO
         logger.info("Hanging query validated after restart")
 
         sql = f"""
-            CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
+            CREATE OR REPLACE STREAMING QUERY `{name}` AS DO BEGIN
                 -- Revision FINAL
                 INSERT INTO {out} SELECT Data || "_final" FROM {inp}
             END DO

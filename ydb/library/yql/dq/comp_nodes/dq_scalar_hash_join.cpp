@@ -265,8 +265,8 @@ private:
                 Buffer_ = std::move(flush);
                 BufferPos_ = 0;
             };
-            return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink,
-                                                            PairFilter_ ? &*PairFilter_ : nullptr);
+            return RunPackedHashJoinBatch(*JoinCtx_, Join_, Output_, flushSink,
+                                          PairFilter_ ? &*PairFilter_ : nullptr);
         }
 
     private:
@@ -278,7 +278,6 @@ private:
         std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
-        static constexpr i64 OutputThreshold_ = 10000;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -343,10 +342,11 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto parsed = ParseCommonHashJoinArgs(callable);
     const auto joinKind = parsed.Kind;
+    const bool isGrid = parsed.KeyColumns.Build.empty();
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
 
-    if (joinKind != EJoinKind::Cross) {
+    if (!isGrid) {
         MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
         MKQL_ENSURE(!leftFlowComponents.empty(), "Expected at least one column");
         MKQL_ENSURE(!rightFlowComponents.empty(), "Expected at least one column");
@@ -367,8 +367,9 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
 
     return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
-        joinKind, ESide::Probe, "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables,
-        std::move(meta), flows, ParseJoinFilters(ctx, callable, BaseInputs));
+        joinKind, ESide::Probe, isGrid,
+        "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables, std::move(meta), flows,
+        ParseJoinFilters(ctx, callable, BaseInputs));
 }
 
 } // namespace NKikimr::NMiniKQL

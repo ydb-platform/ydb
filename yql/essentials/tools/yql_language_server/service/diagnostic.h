@@ -1,7 +1,8 @@
 #pragma once
 
+#include "text_document.h"
+
 #include <yql/essentials/tools/yql_language_server/lsp/message/diagnostic.h>
-#include <yql/essentials/tools/yql_language_server/lsp/support/synchronization.h>
 
 namespace NLsp::NYql {
 
@@ -10,7 +11,7 @@ public:
     using TPtr = TIntrusivePtr<IDiagnosticService>;
 
     virtual TDocumentDiagnosticReport Analyze(
-        TTextDocumentItemPtr textDocument,
+        TTextDocument::TPtr textDocument,
         TMaybe<TString> previousResultId) = 0;
 };
 

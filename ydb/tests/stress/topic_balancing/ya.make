@@ -1,6 +1,7 @@
 PROGRAM(workload_topic_balancing)
 
 SRCS(
+    auto_partitioning.cpp
     main.cpp
 )
 

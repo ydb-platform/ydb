@@ -27,7 +27,7 @@ $sr_items = (
                     FROM
                         `/Root/test/ds/date_dim`
                     WHERE
-                        d_date IN (
+                        CAST(d_date AS Date) IN (
                             CAST('1998-01-02' AS Date),
                             CAST('1998-10-15' AS Date),
                             CAST('1998-11-10' AS Date)
@@ -63,7 +63,7 @@ $cr_items = (
                     FROM
                         `/Root/test/ds/date_dim`
                     WHERE
-                        d_date IN (
+                        CAST(d_date AS Date) IN (
                             CAST('1998-01-02' AS Date),
                             CAST('1998-10-15' AS Date),
                             CAST('1998-11-10' AS Date)
@@ -99,7 +99,7 @@ $wr_items = (
                     FROM
                         `/Root/test/ds/date_dim`
                     WHERE
-                        d_date IN (
+                        CAST(d_date AS Date) IN (
                             CAST('1998-01-02' AS Date),
                             CAST('1998-10-15' AS Date),
                             CAST('1998-11-10' AS Date)

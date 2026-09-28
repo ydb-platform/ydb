@@ -1,6 +1,16 @@
+* Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.
+
+* Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
+
+* Added `Float16` and `BFloat16` vector index types.
+
+## v3.23.0
+
+* Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
+
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
-# v3.22.0
+## v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
 

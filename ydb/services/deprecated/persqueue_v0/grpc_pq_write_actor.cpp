@@ -226,6 +226,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         return;
     }
     PeerName = event->PeerName;
+    RequestId = event->RequestId;
     if (!event->Database.empty()) {
         Database = CanonizePath(event->Database);
     }
@@ -448,7 +449,7 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = ticket,
             .Database = Database,
-            .PeerName = PeerName,
+            .TraceContext = {PeerName, RequestId},
             .Entries = entries
         }));
 }

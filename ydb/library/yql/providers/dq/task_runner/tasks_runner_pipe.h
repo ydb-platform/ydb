@@ -3,6 +3,8 @@
 #include "tasks_runner_proxy.h"
 #include "file_cache.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 
@@ -18,6 +20,7 @@ struct TPipeFactoryOptions {
     TString ContainerName;
     TString PortoCtlPath = "/usr/bin/porto";
     TMaybe<TString> Revision; // revision override for tests
+    NMonitoring::TDynamicCounterPtr Counters;
 };
 
 IProxyFactory::TPtr CreatePipeFactory(const TPipeFactoryOptions& options);

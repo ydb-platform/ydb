@@ -108,15 +108,51 @@ class Cursor:
         parameters: Any = None,
         settings: dict[str, Any] | None = None,
         query_formats: dict[str, str] | None = None,
+        *,
+        pyformat_encoded: bool = True,
     ) -> None:
-        if not parameters and isinstance(operation, str):
+        Cursor._execute(
+            self,
+            operation,
+            parameters,
+            settings,
+            query_formats,
+            pyformat_encoded=pyformat_encoded,
+            internal=False,
+        )
+
+    def _execute(
+        self,
+        operation: str,
+        parameters: Any = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        *,
+        pyformat_encoded: bool = True,
+        internal: bool = False,
+    ) -> None:
+        if pyformat_encoded and not parameters and isinstance(operation, str):
             # Per PEP 249 pyformat paramstyle, callers (e.g. SQLAlchemy) escape
             # literal percent signs as %% in operation strings.  When there are
             # parameters, Python's % operator in finalize_query handles the
             # unescaping automatically.  When there are no parameters,
             # finalize_query short-circuits, so we must unescape here.
             operation = operation.replace("%%", "%")
-        query_result = self.client.query(operation, parameters, settings=settings, query_formats=query_formats)
+        if internal:
+            # Dialect metadata statements decode with the Python codec in every native_codec mode.
+            context = self.client.create_query_context(
+                query=operation, parameters=parameters, settings=settings, query_formats=query_formats
+            )
+            context.internal = True
+            query_result = self.client.query(
+                operation,
+                parameters,
+                settings=settings,
+                query_formats=query_formats,
+                context=context,
+            )
+        else:
+            query_result = self.client.query(operation, parameters, settings=settings, query_formats=query_formats)
         self.data = query_result.result_set
         self._rowcount = len(self.data)
         self._summary.append(query_result.summary)

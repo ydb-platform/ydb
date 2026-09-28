@@ -414,8 +414,11 @@ TRuntimeNode BuildDqYtInputCall(
 
     call.Add(ctx.ProgramBuilder.NewDataLiteral(inflight));
     call.Add(ctx.ProgramBuilder.NewDataLiteral(timeout));
-    if constexpr (NeedPartitionRanges)
-        call.Add(ctx.ProgramBuilder.NewVoid());
+    call.Add(ctx.ProgramBuilder.NewDataLiteral(NeedPartitionRanges));
+    const TString optLLVM = state->Configuration->PassOptLLVMToDqCodecs.Get(clusterName).GetOrElse(DEFAULT_PASS_OPT_LLVM_TO_DQ_CODECS)
+        ? state->Types->OptLLVM.GetOrElse(TString())
+        : TString();
+    call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(optLLVM));
 
     return TRuntimeNode(call.Build(), false);
 }
@@ -586,7 +589,7 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
         });
 
     compiler.AddCallable(TYtDqWideWrite::CallableName(),
-        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+        [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             const auto write = TYtDqWideWrite(&node);
             const auto outType = ctx.BuildType(write.Ref(), *write.Ref().GetTypeAnn());
             const auto arg = MkqlBuildExpr(write.Input().Ref(), ctx);
@@ -610,6 +613,10 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
             call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(table));
             call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(outSpec));
             call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(writerOptions));
+            const TString optLLVM = state->Configuration->PassOptLLVMToDqCodecs.Get(NCommon::ALL_CLUSTERS).GetOrElse(DEFAULT_PASS_OPT_LLVM_TO_DQ_CODECS)
+                ? state->Types->OptLLVM.GetOrElse(TString())
+                : TString();
+            call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(optLLVM));
 
             return TRuntimeNode(call.Build(), false);
         });

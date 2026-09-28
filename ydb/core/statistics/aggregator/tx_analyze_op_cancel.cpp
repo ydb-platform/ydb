@@ -72,7 +72,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
         rec.SetStatus(Ydb::StatusIds::SUCCESS);
         ctx.Send(Request->Sender, response.Release(), 0, Request->Cookie);
 
-        if (IsActive) {
+        if (IsActive && Self->ForceTraversalOperationId == operationId) {
             Self->DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
         }
     }

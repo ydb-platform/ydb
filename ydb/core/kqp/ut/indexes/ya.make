@@ -20,6 +20,12 @@ PEERDIR(
     ydb/library/yql/udfs/common/knn
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/adapters/issue
+
+    # for ANALYZE
+    ydb/core/statistics/ut_common
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/hyperloglog
+    ydb/library/yql/udfs/statistics_internal
 )
 
 YQL_LAST_ABI_VERSION()
@@ -27,6 +33,7 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    all_flags
     common
     compact
     fulltext

@@ -212,6 +212,7 @@ class KikimrConfigGenerator(object):
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
+            lb_user_database_root=None,
             shutdown_config=None,
             replication_config=None,
     ):
@@ -410,6 +411,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
             self.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = False
+        if lb_user_database_root:
+            self.yaml_config['pqconfig'].setdefault('pqdiscovery_config', {})['lb_user_database_root'] = lb_user_database_root
         if pq_client_service_types:
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:

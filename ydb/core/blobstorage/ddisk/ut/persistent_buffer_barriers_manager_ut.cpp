@@ -32,6 +32,153 @@ static constexpr ui32 MaxRawLsns = TPersistentBufferFastErases::ErasesBufferSize
 
 Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
+    Y_UNIT_TEST(RestoreKeepsFastEraseVersionWithoutRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferFastErases oldHeader{};
+        oldHeader.Header.Flags = TPersistentBufferHeader::IS_ERASE;
+        oldHeader.Header.RecordLsn = 100;
+        oldHeader.TabletId = 100;
+        oldHeader.Generation = 1;
+        const ui64 oldLsns[] = {1, 2};
+        memcpy(oldHeader.CompactLsns, oldLsns, sizeof(oldLsns));
+        UNIT_ASSERT(mgr.AddErase(&oldHeader.Header, 0, 10));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        mgr.RestoreErases(buffers, alloc);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetFreeSpace(), 1023);
+
+        std::vector<ui64> newLsns = {564, 565};
+        auto update = mgr.Erase(100, 1, newLsns, alloc);
+        UNIT_ASSERT(update);
+        UNIT_ASSERT_VALUES_EQUAL(update->Header.Header.RecordLsn, 101);
+        UNIT_ASSERT_VALUES_EQUAL(update->OldChunkIdx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(update->OldSectorIdx, 10);
+
+        // Freed sectors retain valid old headers until overwritten. Recovery must
+        // choose the newer erase even when it encounters the stale header last.
+        auto recovered = MakeManager();
+        auto recoveredAlloc = MakeAllocator();
+        UNIT_ASSERT(recovered.AddErase(&update->Header.Header, update->ChunkIdx, update->SectorIdx));
+        UNIT_ASSERT(!recovered.AddErase(&oldHeader.Header, 0, 10));
+        buffers[{100, 1}].Records[564] = {};
+        buffers[{100, 1}].Records[565] = {};
+        recovered.RestoreErases(buffers, recoveredAlloc);
+        UNIT_ASSERT(buffers.empty());
+    }
+
+    Y_UNIT_TEST(RestoreKeepsBarriersWithoutRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 0, 0, 1};
+        header.Barriers[1] = {100, 3, 42, 2};
+        header.Barriers[2] = {100, Max<ui32>(), Max<ui64>(), 3};
+        UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        mgr.RestoreBarriers(buffers, alloc);
+
+        UNIT_ASSERT_VALUES_EQUAL(mgr.PersistentBufferBarriersLocation.size(), 3);
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Generation, 3);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, 42);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 3).Generation, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 3).Lsn, Max<ui64>());
+        UNIT_ASSERT(mgr.PersistentBufferBarrierHoles.empty());
+
+        // Allocating another namespace must not overwrite a recovered empty namespace.
+        mgr.MoveBarrier(200, 1, 1, MakeSector(0, 2));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.PersistentBufferBarriersLocation.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, 42);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 3).Lsn, Max<ui64>());
+    }
+
+    Y_UNIT_TEST(RestoreKeepsBarrierAcrossRestartsAfterLastRecordErased) {
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 2, 10, 0};
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        buffers[{100, 2}].Records[5] = {};
+
+        for (ui32 restart = 0; restart != 2; ++restart) {
+            auto mgr = MakeManager();
+            auto alloc = MakeAllocator();
+            UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+            mgr.RestoreBarriers(buffers, alloc);
+            UNIT_ASSERT(buffers.empty());
+            UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100).Generation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100).Lsn, 10);
+            UNIT_ASSERT(mgr.PersistentBufferBarrierHoles.empty());
+        }
+    }
+
+    Y_UNIT_TEST(RestoreKeepsOwnershipMarkersWithoutRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 0, 0, 1};
+        // A deleted slot must not hide subsequent ownership markers.
+        header.Barriers[2] = {100, Max<ui32>(), Max<ui64>(), 2};
+        UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        mgr.RestoreBarriers(buffers, alloc);
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 1}));
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Generation, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, Max<ui64>());
+        mgr.MoveBarrier(200, 0, 0, MakeSector(0, 2));
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, Max<ui64>());
+    }
+
+    Y_UNIT_TEST(RestoreBarrierDoesNotEraseNewerGeneration) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 1, 100, 0};
+        UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        buffers[{100, 2}].Records[1] = {};
+        mgr.RestoreBarriers(buffers, alloc);
+        UNIT_ASSERT(buffers.contains({100, 2}));
+        UNIT_ASSERT(buffers.at({100, 2}).Records.contains(1));
+    }
+
+    Y_UNIT_TEST(RemovedBarrierDoesNotReappearAndKeepsFollowingEntries) {
+        auto mgr = MakeManager();
+        mgr.MoveBarrier(100, Max<ui32>(), Max<ui64>(), MakeSector(0, 1), 1);
+        auto [unusedChunk, unusedSector, before] =
+            mgr.MoveBarrier(100, 0, 0, MakeSector(0, 2), 2);
+        const auto oldHeader = before.Header;
+        auto [oldChunk, oldSector, after] = mgr.RemoveBarrier(100, MakeSector(0, 3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(oldChunk, 0);
+        UNIT_ASSERT_VALUES_EQUAL(oldSector, 2);
+        UNIT_ASSERT(!mgr.HasBarrier(100, 1));
+        UNIT_ASSERT(mgr.HasBarrier(100, 2));
+        for (bool reverse : {false, true}) {
+            auto restored = MakeManager();
+            auto alloc = MakeAllocator();
+            // Recovery can discover both physical copies in either order.
+            if (reverse) {
+                restored.AddBarrier(&after.Header.Header, 0, 3);
+                restored.AddBarrier(&oldHeader.Header, 0, 2);
+            } else {
+                restored.AddBarrier(&oldHeader.Header, 0, 2);
+                restored.AddBarrier(&after.Header.Header, 0, 3);
+            }
+            std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+            restored.RestoreBarriers(buffers, alloc);
+            UNIT_ASSERT(!restored.HasBarrier(100, 1));
+            UNIT_ASSERT(restored.HasBarrier(100, 2));
+        }
+    }
+
     Y_UNIT_TEST(CompactDoesNotSetFlagWhenFitsRaw) {
         auto mgr = MakeManager();
 
@@ -723,9 +870,9 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             "Erase must reset accumulated LSNs when generation increases");
     }
 
-    // RestoreErases must discard erase records whose generation does not match
-    // any entry in persistentBuffers (old-generation records already cleaned up).
-    Y_UNIT_TEST(RestoreErasesDropsRecordForMissingGeneration) {
+    // RestoreErases must preserve metadata for a generation without live records
+    // without applying its erases to another generation.
+    Y_UNIT_TEST(RestoreErasesKeepsMetadataForMissingGeneration) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
 
@@ -760,9 +907,10 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         mgr.RestoreErases(pbs, alloc);
 
-        // The erase record for generation 1 must be dropped because there is no
-        // {tabletId, 1} entry in persistentBuffers.
+        // Keep the generation-1 erase metadata even without live records.
+        // Its version must survive until a replacement is persisted.
         // The generation-2 record must remain untouched.
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
         auto pbIt = pbs.find({tabletId, 2});
         UNIT_ASSERT_C(pbIt != pbs.end(), "Generation-2 record must survive");
         UNIT_ASSERT_C(pbIt->second.Records.count(5), "LSN 5 in generation 2 must not be erased");

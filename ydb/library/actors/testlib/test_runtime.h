@@ -710,6 +710,9 @@ namespace NActors {
             return future.ExtractValue();
         }
 
+        // Called with the node index before constructing each node actor system.
+        std::function<void(ui32, TActorSystemSetup*)> SetupNodeSubSystems;
+
     protected:
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {

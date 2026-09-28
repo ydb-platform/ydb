@@ -27,6 +27,7 @@ local-ydb:
       warmup: 10
       duration: 30
       repetitions: 3
+      verification-repetitions: 3
     affinity:
       ydb-cli:
         mode: pack-numa-pack-chiplet-spread-core

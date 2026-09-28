@@ -55,9 +55,9 @@ namespace NKikimr {
             : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->LogoBlobs, hugeKeeperId))
             , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx,
-                        skeletonId, runHandoff, hullDs->Blocks, TActorId()))
+                        skeletonId, runHandoff, hullDs->Blocks, hugeKeeperId))
             , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx,
-                        skeletonId, runHandoff, hullDs->Barriers, TActorId()))
+                        skeletonId, runHandoff, hullDs->Barriers, hugeKeeperId))
             , LsnMngr(std::move(lsnMngr))
             , ActorSystem(as)
             , BarrierValidation(barrierValidation)
@@ -269,16 +269,19 @@ namespace NKikimr {
             && writeSource != TWriteSource::SkeletonForceBlock;
     }
 
-    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 version,
+    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, std::optional<ui32> version,
             TWriteSource writeSource, ui32 *actGen, TLsnSeg *seg, bool *versionChanged) {
         const TBlocksCache::TBlockedGen g(gen, issuerGuid);
         auto res = BlocksCache.IsBlocked(tabletID, g, actGen);
 
-        if (ShouldCheckVersion(tabletID, writeSource)) {
+        // A missing Version field is a legacy client that predates TTabletStorageInfo::Version;
+        // those must still be able to boot against a VDisk that already stores a version. An
+        // explicit Version (including 0) is always checked.
+        if (ShouldCheckVersion(tabletID, writeSource) && version) {
             const auto [actualVersion, lsn] = BlocksCache.FindMax(~tabletID);
-            if (version < actualVersion) {
+            if (*version < actualVersion) {
                 return {NKikimrProto::ERROR, "obsolete tablet storage info version", lsn, lsn != 0, true};
-            } else if (actualVersion < version) {
+            } else if (actualVersion < *version) {
                 if (res.Status != TBlocksCache::EStatus::OK) {
                     // the version may only advance along with the block, so reject the whole command
                     return {NKikimrProto::ERROR, "generation check failed while increasing tablet storage info version",
@@ -294,7 +297,7 @@ namespace NKikimr {
                 ? Fields->LsnMngr->AllocDiscreteLsnBatchForHullAndSyncLog(2)
                 : Fields->LsnMngr->AllocLsnForHullAndSyncLog();
             if (*versionChanged) {
-                BlocksCache.UpdateInFlight(~tabletID, {version, 0}, seg->First);
+                BlocksCache.UpdateInFlight(~tabletID, {*version, 0}, seg->First);
             }
             BlocksCache.UpdateInFlight(tabletID, g, seg->Last);
             return {NKikimrProto::OK, "", false};
@@ -752,6 +755,105 @@ namespace NKikimr {
     void THull::ApplyHugeBlobSize(ui32 minHugeBlobInBytes, const TActorContext& ctx) {
         Fields->MinHugeBlobInBytes = minHugeBlobInBytes;
         ctx.Send(HullDs->LogoBlobs->LIActor, new TEvMinHugeBlobSizeUpdate(minHugeBlobInBytes));
+    }
+
+    template <typename TFunc>
+    void THull::ForEachFreshRecord(const TFreshAdmission& admission, TFunc&& func) const {
+        if (!admission.LogoBlobs.Empty()) {
+            func(*HullDs->LogoBlobs, admission.LogoBlobs, EHullDbType::LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            func(*HullDs->Blocks, admission.Blocks, EHullDbType::Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            func(*HullDs->Barriers, admission.Barriers, EHullDbType::Barriers);
+        }
+    }
+
+    void THull::CompactFreshDbIfRequired(EHullDbType type, const TActorContext& ctx) {
+        switch (type) {
+            case EHullDbType::LogoBlobs:
+                CompactFreshLogoBlobsIfRequired(ctx);
+                break;
+            case EHullDbType::Blocks:
+                CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0,
+                    Fields->BlocksRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+                break;
+            case EHullDbType::Barriers:
+                CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0,
+                    Fields->BarriersRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+                break;
+            default:
+                Y_ABORT("unexpected database type");
+        }
+    }
+
+    bool THull::IsFreshRotationPending(const TFreshAdmission& admission) const {
+        bool pending = false;
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate&, EHullDbType) {
+            pending |= levelIndex.IsFreshRotationPending();
+        });
+        return pending;
+    }
+
+    bool THull::PrepareFreshForAdmission(const TFreshAdmission& admission, const TActorContext& ctx) {
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
+            if (levelIndex.FreshWouldOutgrowSst(record) && levelIndex.CanRotateFreshCur()) {
+                levelIndex.RequestFreshSizeRotation();
+                // starts the compaction that rotates Cur out, unless records are in flight
+                CompactFreshDbIfRequired(type, ctx);
+            }
+        });
+        return !IsFreshRotationPending(admission);
+    }
+
+    TFreshShortfall THull::GetFreshReservationShortfall(const TFreshAdmission& admission) const {
+        TFreshShortfall shortfall;
+        if (!admission.LogoBlobs.Empty()) {
+            shortfall.LogoBlobs = HullDs->LogoBlobs->GetFreshReservationShortfall(admission.LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            shortfall.Blocks = HullDs->Blocks->GetFreshReservationShortfall(admission.Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            shortfall.Barriers = HullDs->Barriers->GetFreshReservationShortfall(admission.Barriers);
+        }
+        return shortfall;
+    }
+
+    void THull::AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks) {
+        Y_VERIFY_S(chunks.size() == split.Total(), HullDs->HullCtx->VCtx->VDiskLogPrefix
+            << "reserved# " << chunks.size() << " requested# " << split.Total());
+        auto it = chunks.begin();
+        auto give = [&](auto& levelIndex, ui64 count) {
+            if (count) {
+                levelIndex->AddFreshReservedChunks(TVector<TChunkIdx>(it, it + count));
+                it += count;
+            }
+        };
+        give(HullDs->LogoBlobs, split.LogoBlobs);
+        give(HullDs->Blocks, split.Blocks);
+        give(HullDs->Barriers, split.Barriers);
+    }
+
+    void THull::AdmitToFresh(const TFreshAdmission& admission) {
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType) {
+            levelIndex.AdmitToFresh(record);
+        });
+    }
+
+    void THull::LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx) {
+        // A compaction that was due and only held off for records in flight is started as soon as they have
+        // landed, rather than at the next scheduled check, since admission waits for it meanwhile. Nothing
+        // else is started here: whether and when a compaction is due stays exactly as without admission (a small
+        // blob, for one, never triggers one on insert).
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
+            const bool pending = levelIndex.IsFreshRotationPending();
+            levelIndex.LandInFresh(record);
+            if (pending) {
+                CompactFreshDbIfRequired(type, ctx);
+            }
+        });
     }
 
     void THull::CompactFreshLogoBlobsIfRequired(const TActorContext& ctx) {

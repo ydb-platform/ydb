@@ -9,6 +9,7 @@ enum ESolomonClusterType {
     CT_UNSPECIFIED = 0;
     CT_SOLOMON = 1;
     CT_MONITORING = 2;
+    CT_MONIUM = 3;
 }
 
 message TToken {

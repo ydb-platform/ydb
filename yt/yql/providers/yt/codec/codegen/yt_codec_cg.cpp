@@ -946,6 +946,7 @@ private:
         case NUdf::TDataType<char*>::Id:
         case NUdf::TDataType<NUdf::TJson>::Id:
         case NUdf::TDataType<NUdf::TYson>::Id:
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
         case NUdf::TDataType<NUdf::TUuid>::Id:
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);

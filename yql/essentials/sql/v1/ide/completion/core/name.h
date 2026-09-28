@@ -1,13 +1,15 @@
 #pragma once
 
+#include <yql/essentials/utils/meta/hash.h>
+
 #include <util/generic/string.h>
-#include <util/generic/hash.h>
 
 namespace NSQLComplete {
 
 enum class EObjectKind {
     Folder,
     Table,
+    View,
     Unknown,
 };
 
@@ -60,9 +62,10 @@ TString NormalizeName(TStringBuf name);
 
 } // namespace NSQLComplete
 
-template <>
-struct THash<NSQLComplete::TTableId> {
-    inline size_t operator()(const NSQLComplete::TTableId& x) const {
-        return THash<std::tuple<TString, TString>>()(std::tie(x.Cluster, x.Path));
-    }
-};
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NSQLComplete::TTableId, (Cluster)(Path));
+
+} // namespace NYql::NReflection
+
+YQL_DERIVE_HASH(NSQLComplete::TTableId);

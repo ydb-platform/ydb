@@ -13,10 +13,13 @@ namespace NKikimr::NBlobDepot {
             TGenStep Soft;
             TGenStep HardGenCtr;
             TGenStep Hard;
-            std::deque<std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>> ProcessingQ;
         };
 
         THashMap<std::tuple<ui64, ui8>, TBarrier> Barriers;
+
+        // Requests that arrived before the data was loaded. They are all handed over to
+        // TTxCollectGarbage in OnDataLoaded and nothing is queued after that.
+        std::deque<std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>> PendingRequests;
 
     private:
         class TTxCollectGarbage;
@@ -32,6 +35,9 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
         void GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const;
         void OnDataLoaded();
+        // Drop the barrier records of a tablet that has been deleted for good -- nothing reads them
+        // any more, and ProcessBarrier stops recording new ones for it.
+        void OnTabletDeleted(ui64 tabletId, NTabletFlatExecutor::TTransactionContext& txc);
 
         void ValidateBlobInvariant(ui64 tabletId, ui8 channel);
 

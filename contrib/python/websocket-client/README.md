@@ -27,7 +27,7 @@ Please see the [contribution guidelines](https://github.com/websocket-client/web
 ## Installation
 
 You can use `pip install websocket-client` to install, or `pip install -e .`
-to install from a local copy of the code. This module is tested on Python 3.9+.
+to install from a local copy of the code. This module is tested on Python 3.10+.
 
 There are several optional dependencies that can be installed to enable
 specific websocket-client features.

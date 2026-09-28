@@ -33,8 +33,6 @@ bool TInlineJoinFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) c
 // Inline join filters. Temporarily inline join filters only of there are no equi-join conditions in the join
 
 TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
     if (input->Kind != EOperator::Join) {
         return input;
     }
@@ -44,13 +42,24 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
+    // Inner with empty keys - cross.
+    const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.empty());
+    const bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
+    const bool usingBlockCrossJoin = usingBlockJoin && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+
+    // Do not inline filters for cross join.
+    if (isRealCrossJoin && usingBlockCrossJoin) {
+        join->JoinKind = "Cross";
+        return join;
+    }
+
     // We inline join filters in the following cases:
     // - There implementation is a lookup join or reverse lookup join
     // - There are no equi-join conditions in the join
     // - We're not using BlockJoin, which supports join filters
 
-    bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
-    bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
+    // Lookup join is not supported for join filters.
+    const bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
     bool containsEquiJoinConditions = !join->JoinKeys.empty();
     for (const auto& f : join->JoinFilters) {
         if (f.MaybeEquiJoinCondition()) {
@@ -58,7 +67,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         }
     }
 
-    if (usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
+    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
         return input;
     }
 
@@ -86,7 +95,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
     AddUsedIUs(usedIUs, join->GetLeftInput()->GetOutputIUs());
     AddUsedIUs(usedIUs, join->GetRightInput()->GetOutputIUs());
-    for (const auto& [leftKey, rightKey] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         usedIUs.insert(leftKey);
         usedIUs.insert(rightKey);
     }
@@ -96,10 +107,11 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     // Build an inner join, but in case of LeftSemi and LeftOnly, the right side may contain duplicate IUs
     // which will break the plan. So we rename them
+    const auto joinKind = join->JoinKeys.empty() ? "Cross" : "Inner";
     auto commonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), join->GetRightInput()->GetOutputIUs());
     auto rightRenameMap = MakeRenameMap(commonIUs, props.InternalVarIdx, usedIUs);
     auto innerJoin = MakeJoinWithRightRenames(
-        join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
+        join->GetLeftInput(), join->GetRightInput(), join->Pos, joinKind, join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
     auto filterExpr = MakeConjunction(join->JoinFilters);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
@@ -122,9 +134,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
     }
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
+    TVector<TJoinKey> newJoinKeys;
     for (const auto & column : keyColumns) {
-        newJoinKeys.push_back(std::make_pair(column, column));
+        newJoinKeys.emplace_back(column, column);
     }
 
     auto result = MakeJoinWithRightRenames(join->GetLeftInput(), newFilter, join->Pos, join->JoinKind, newJoinKeys, {}, renameMap, ctx.ExprCtx, props);

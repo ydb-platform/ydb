@@ -146,7 +146,8 @@ private:
     }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "Dispatch tasks", NWilson::EFlags::AUTO_END);
+        sendTasksSpan.Attribute("ydb.actor.type", TString("TKqpNodeService"));
 
         const auto executerId = ev->Sender;
 
@@ -351,6 +352,7 @@ private:
         auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+        ptr->ColumnShardMaxOperationBytes = settings.GetColumnShardMaxOperationBytes();
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

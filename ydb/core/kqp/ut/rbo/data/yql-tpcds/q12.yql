@@ -25,7 +25,7 @@ WHERE
     ws_item_sk == i_item_sk
     AND i_category IN ('Jewelry', 'Sports', 'Books')
     AND ws_sold_date_sk == d_date_sk
-    AND d_date BETWEEN CAST('2001-01-12' AS Date) AND (
+    AND CAST(d_date AS Date) BETWEEN CAST('2001-01-12' AS Date) AND (
         CAST('2001-01-12' AS Date) + DateTime::IntervalFromDays(30)
     )
 GROUP BY

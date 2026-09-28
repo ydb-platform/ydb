@@ -103,7 +103,7 @@ typedef uint64_t(aws_hash_fn)(const void *key);
  * keys, but note that the same type is used for a function that compares
  * two hash table values in aws_hash_table_eq.
  *
- * Equality functions used in a hash table must be be reflexive (a == a),
+ * Equality functions used in a hash table must be reflexive (a == a),
  * symmetric (a == b => b == a), transitive (a == b, b == c => a == c)
  * and consistent (result does not change with time).
  */

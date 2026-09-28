@@ -17,9 +17,6 @@
 #include <util/string/ascii.h>
 #include <util/string/vector.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
-
-
 namespace NKikimr::NHttpProxy {
 
     using namespace google::protobuf;
@@ -71,7 +68,8 @@ namespace NKikimr::NHttpProxy {
         NActors::TActorId sender,
         NYdb::TDriver* driver,
         std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider)
-        : ServiceConfig(config)
+        : NPQ::TLogPrefix(NKikimrServices::HTTP_PROXY)
+        , ServiceConfig(config)
         , Request(request)
         , Sender(sender)
         , Driver(driver)
@@ -117,8 +115,7 @@ namespace NKikimr::NHttpProxy {
 
     void THttpRequestContext::DoReply(THttpResponseData&& data) {
         auto ctx = TlsActivationContext->AsActorContext();
-        YDB_LOG_INFO_CTX(ctx, "Reply with",
-            {"logPrefix", LogPrefix()},
+        LOG_I("Reply with",
             {"status", data.HttpCode},
             {"message", data.Message});
 
@@ -194,7 +191,9 @@ namespace NKikimr::NHttpProxy {
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_ID_HEADER)) {
                 sourceReqId = header.second;
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_FORWARDED_FOR)) {
-                SourceAddress = header.second;
+                if (TString sourceAddress = NKikimr::NNet::ExtractFirstForwardedForAddress(header.second)) {
+                    SourceAddress = std::move(sourceAddress);
+                }
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_TARGET_HEADER)) {
                 TString requestTarget = TString(header.second);
                 TVector<TString> parts = SplitString(requestTarget, ".");

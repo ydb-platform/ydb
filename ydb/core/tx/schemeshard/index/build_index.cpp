@@ -71,6 +71,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& ev, 
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxBilling(ev), ctx);
 }
@@ -100,7 +104,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
     }
     if (info.IsRebuild) {
         persistedBuildIndex.Update(
-            NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true)
+            NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true),
+            NIceDb::TUpdate<Schema::IndexBuild::RebuildIndexName>(info.RebuildIndexName)
         );
     }
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.

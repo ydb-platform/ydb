@@ -42,6 +42,12 @@ public:
         return false;
     }
 
+    void NotifyCancel(const TLeaderTabletInfo* tablet) {
+        for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+            SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
+        }
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         SideEffects.Reset(Self->SelfId());
 
@@ -76,6 +82,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -86,6 +93,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -104,13 +112,14 @@ public:
             }
 
             TDuration timeSinceLastReassign = ctx.Now() - lastChangeTimestamp;
-            if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign()) {
+            if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign() && !tablet->HasUnconfirmedStorage()) {
                 YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute space reassign too soon, ignored",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", tablet->Id});
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
                 tablet->State = ETabletState::ReadyToWork;
                 tablet->TryToBoot();
+                NotifyCancel(tablet);
                 return true;
             }
         }
@@ -195,6 +204,12 @@ public:
             }
 
             if (!changed) {
+                if (tablet->ConfirmedStorageVersion == Max<ui32>()) {
+                    tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
+                        tablet->ConfirmedStorageVersion);
+                }
+                Y_ABORT_UNLESS(tabletStorageInfo->Version < Max<ui32>());
                 ++tabletStorageInfo->Version;
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
             }
@@ -277,7 +292,8 @@ public:
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute tablet not changed",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id});
-            if (hasEmptyChannel) {
+            NotifyCancel(tablet);
+            if (hasEmptyChannel || tablet->HasUnconfirmedStorage()) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
             } else {
@@ -292,9 +308,6 @@ public:
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
                 }
-                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
-                    SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
-                }
                 newTabletState = ETabletState::ReadyToWork;
             }
         }
@@ -307,6 +320,12 @@ public:
 
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         tablet->State = newTabletState;
+        if (changed && newTabletState == ETabletState::ReadyToWork) {
+            // initial group assignment is considered automatically confirmed
+            tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
+            db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
+                tablet->ConfirmedStorageVersion);
+        }
 
         if (!tabletBootState.empty()) {
             tablet->BootState = tabletBootState;
@@ -315,7 +334,9 @@ public:
         }
 
         if (changed) {
-            tablet->NotifyStorageInfo(SideEffects);
+            if (!tablet->HasUnconfirmedStorage()) {
+                tablet->NotifyStorageInfo(SideEffects);
+            }
             if (tablet->IsReadyToBlockStorage()) {
                 if (!tablet->InitiateBlockStorage(SideEffects)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute failed to initiate storage block",

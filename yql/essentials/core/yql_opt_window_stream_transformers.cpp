@@ -48,7 +48,7 @@ TMaybe<std::pair<TExprNode::TPtr, TNodeTransform>> GetSortedBoundNodeKeyForDedup
     if (!bound.IsFinite()) {
         return {};
     }
-    if (!bound.GetUnderlyingValue().GetColumnCast()){
+    if (!bound.GetUnderlyingValue().GetColumnCast()) {
         return {};
     }
     return std::make_pair(bound.GetUnderlyingValue().GetFrameBound(), *bound.GetUnderlyingValue().GetColumnCast());

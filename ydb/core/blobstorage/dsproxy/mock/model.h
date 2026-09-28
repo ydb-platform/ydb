@@ -80,6 +80,13 @@ namespace NFake {
                 }
             }
 
+            // the tablet has been deleted for good, so this blob is not needed by anyone; a regular put
+            // is already BLOCKED above, an IgnoreBlock one is accepted and dropped right away, which is
+            // what the real group does at its next compaction
+            if (IsTabletDeleted(id.TabletID())) {
+                return new TEvBlobStorage::TEvPutResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
+            }
+
             // check if this blob is not being collected -- writing such blob is a violation of BS contract
             Y_ABORT_UNLESS(!IsCollectedByBarrier(id, msg->IssueKeepFlag), "Id# %s", id.ToString().data());
 
@@ -242,18 +249,20 @@ namespace NFake {
                     return result.release();
                 }
                 ui32& version = BlockVersions[msg->TabletId];
-                if (msg->Version < version) {
-                    result->Status = NKikimrProto::ERROR;
-                    result->IsTabletStorageInfoVersionObsolete = true;
-                    return result.release();
-                }
-                if (msg->Version > version) {
-                    if (const auto it = Blocks.find(msg->TabletId);
-                            it != Blocks.end() && msg->Generation <= it->second) {
+                if (msg->Version) {
+                    if (*msg->Version < version) {
                         result->Status = NKikimrProto::ERROR;
+                        result->IsTabletStorageInfoVersionObsolete = true;
                         return result.release();
                     }
-                    version = msg->Version;
+                    if (*msg->Version > version) {
+                        if (const auto it = Blocks.find(msg->TabletId);
+                                it != Blocks.end() && msg->Generation <= it->second) {
+                            result->Status = NKikimrProto::ERROR;
+                            return result.release();
+                        }
+                        version = *msg->Version;
+                    }
                 }
             }
 
@@ -264,6 +273,12 @@ namespace NFake {
                 status = NKikimrProto::ALREADY;
             } else {
                 it->second = msg->Generation;
+            }
+
+            if (status != NKikimrProto::ALREADY && IsCompleteTabletDeletionBlock(msg->Generation)) {
+                // this block is the tombstone of a complete tablet deletion: none of the tablet's data
+                // is needed any more and the hard barrier Hive sends next may never be observed
+                DoCompleteDeletion(msg->TabletId);
             }
 
             result->Status = status;
@@ -496,8 +511,28 @@ namespace NFake {
             return it != Blocks.end() && generation <= it->second;
         }
 
+        // a block with generation Max<ui32>() is the tombstone Hive writes when it deletes a tablet for
+        // good; afterwards nothing can ever be written for this tablet again and none of its data is
+        // needed, so it is collected without waiting for any barrier
+        bool IsTabletDeleted(TTabletId tabletId) const noexcept {
+            auto it = Blocks.find(tabletId);
+            return it != Blocks.end() && IsCompleteTabletDeletionBlock(it->second);
+        }
+
+        // drop every blob of a completely deleted tablet, on all of its channels at once
+        void DoCompleteDeletion(TTabletId tabletId) {
+            auto it = Blobs.lower_bound(TLogoBlobID(tabletId, 0, 0, 0, 0, 0));
+            while (it != Blobs.end() && it->first.TabletID() == tabletId) {
+                it = Blobs.erase(it);
+            }
+        }
+
         // check if provided blob is under garbage collection by barriers
         bool IsCollectedByBarrier(const TLogoBlobID& id, bool issueKeepFlag = false) const noexcept {
+            if (IsTabletDeleted(id.TabletID())) {
+                return true;
+            }
+
             auto hardIt = HardBarriers.find(std::make_pair(id.TabletID(), id.Channel()));
             if (hardIt != HardBarriers.end() &&
                     std::make_pair(id.Generation(), id.Step()) <= hardIt->second.MakeCollectPair()) {

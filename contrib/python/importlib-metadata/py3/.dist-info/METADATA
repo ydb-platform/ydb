@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: importlib_metadata
-Version: 9.0.0
+Version: 9.0.1
 Summary: Read metadata from Python packages
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: Apache-2.0
@@ -16,7 +16,7 @@ Provides-Extra: test
 Requires-Dist: pytest!=8.1.*,>=6; extra == "test"
 Requires-Dist: packaging; extra == "test"
 Requires-Dist: pyfakefs; extra == "test"
-Requires-Dist: pytest-perf>=0.9.2; extra == "test"
+Requires-Dist: pytest-perf>=0.17; extra == "test"
 Provides-Extra: doc
 Requires-Dist: sphinx>=3.5; extra == "doc"
 Requires-Dist: jaraco.packaging>=9.3; extra == "doc"
@@ -53,7 +53,7 @@ Dynamic: license-file
 .. image:: https://readthedocs.org/projects/importlib-metadata/badge/?version=latest
    :target: https://importlib-metadata.readthedocs.io/en/latest/?badge=latest
 
-.. image:: https://img.shields.io/badge/skeleton-2025-informational
+.. image:: https://img.shields.io/badge/skeleton-2026-informational
    :target: https://blog.jaraco.com/skeleton
 
 .. image:: https://tidelift.com/badges/package/pypi/importlib-metadata

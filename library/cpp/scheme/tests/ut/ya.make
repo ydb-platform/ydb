@@ -16,6 +16,7 @@ SRCS(
     scheme_merge_ut.cpp
     scheme_path_ut.cpp
     scheme_proto_ut.cpp
+    scimpl_lifetime_ut.cpp
     scheme_ut.cpp
     scheme_ut.proto
 )

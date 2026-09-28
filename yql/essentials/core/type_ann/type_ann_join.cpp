@@ -73,6 +73,7 @@ namespace NYql::NTypeAnnImpl {
             auto structType = leftItemType->Cast<TStructExprType>();
             if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
                 output = ctx.Expr.ChangeChild(*input, 0,
+                    // clang-format off
                     ctx.Expr.Builder(input->Child(0)->Pos())
                         .Callable("RemovePrefixMembers")
                             .Add(0, input->ChildPtr(0))
@@ -82,6 +83,7 @@ namespace NYql::NTypeAnnImpl {
                         .Seal()
                         .Build()
                     );
+                    // clang-format on
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
@@ -91,6 +93,7 @@ namespace NYql::NTypeAnnImpl {
             auto structType = rightItemType->Cast<TStructExprType>();
             if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
                 output = ctx.Expr.ChangeChild(*input, 1,
+                    // clang-format off
                     ctx.Expr.Builder(input->Child(1)->Pos())
                         .Callable("RemovePrefixMembers")
                             .Add(0, input->ChildPtr(1))
@@ -100,6 +103,7 @@ namespace NYql::NTypeAnnImpl {
                         .Seal()
                         .Build()
                     );
+                    // clang-format on
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
@@ -1190,11 +1194,13 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto typeString = TStringBuf(resourceTag.data() + BlockStorageResourcePrefix.size(), resourceTag.size() - BlockStorageResourcePrefix.size());
+        // clang-format off
         auto typeNode = ctx.Expr.Builder(resource->Pos())
             .Callable("ParseType")
                 .Atom(0, typeString)
             .Seal()
             .Build();
+        // clang-format on
 
         auto status = ParseTypeWrapper(typeNode, typeNode, ctx);
         if (status == IGraphTransformer::TStatus::Error) {
@@ -1326,11 +1332,13 @@ namespace NYql::NTypeAnnImpl {
         Split(resourceIdentifier, BlockMapJoinIndexResourceSeparator, typeString, keyColumnsString);
         Split(keyColumnsString, ",", keyColumns);
 
+        // clang-format off
         auto resourceTypeNode = ctx.Expr.Builder(resource->Pos())
             .Callable("ParseType")
                 .Atom(0, typeString)
             .Seal()
             .Build();
+        // clang-format on
 
         auto status = ParseTypeWrapper(resourceTypeNode, resourceTypeNode, ctx);
         if (status == IGraphTransformer::TStatus::Error) {

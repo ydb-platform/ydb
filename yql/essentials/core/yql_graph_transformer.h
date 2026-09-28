@@ -16,11 +16,13 @@ namespace NYql {
 class IGraphTransformer {
 public:
     struct TStatus {
+        // clang-format off
 #define YQL_GT_STATUS_MAP(xx) \
-    xx(Ok, 0) \
-    xx(Repeat, 1) \
-    xx(Async, 2) \
+    xx(Ok, 0)                 \
+    xx(Repeat, 1)             \
+    xx(Async, 2)              \
     xx(Error, 3)
+        // clang-format on
 
         enum ELevel {
             YQL_GT_STATUS_MAP(ENUM_VALUE_GEN)
@@ -35,19 +37,19 @@ public:
             };
         };
 
-        bool operator== (const TStatus& other) const {
+        bool operator==(const TStatus& other) const {
             return Raw == other.Raw;
         }
 
-        bool operator!= (const TStatus& other) const {
+        bool operator!=(const TStatus& other) const {
             return Raw != other.Raw;
         }
 
-        bool operator== (ELevel other) const {
+        bool operator==(ELevel other) const {
             return Level == other;
         }
 
-        bool operator!= (ELevel other) const {
+        bool operator!=(ELevel other) const {
             return Level != other;
         }
 
@@ -57,7 +59,8 @@ public:
             : Level(level)
             , HasRestart(hasRestart)
             , Padding(0)
-        {}
+        {
+        }
 
         [[nodiscard]]
         TStatus Combine(TStatus other) const {
@@ -65,7 +68,7 @@ public:
             return TStatus((TStatus::ELevel)Max(Level, other.Level), hasRestart);
         }
 
-        void Out(IOutputStream &out) const {
+        void Out(IOutputStream& out) const {
             out << (TStatus::ELevel)Level;
             if (HasRestart) {
                 out << ", with restart";
@@ -92,10 +95,16 @@ public:
             , NewConstraintNodes(0)
             , Repeats(0)
             , Restarts(0)
-            , Stages() {}
+            , Stages()
+        {
+        }
 
-        static TStatistics NotPresent() { return TStatistics(); }
-        static TStatistics Zero() { return TStatistics(); }
+        static TStatistics NotPresent() {
+            return TStatistics();
+        }
+        static TStatistics Zero() {
+            return TStatistics();
+        }
     };
 
     virtual ~IGraphTransformer() = default;
@@ -105,10 +114,12 @@ public:
     virtual TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual void Rewind() = 0;
 
-    virtual TStatistics GetStatistics() const { return TStatistics::NotPresent(); }
+    virtual TStatistics GetStatistics() const {
+        return TStatistics::NotPresent();
+    }
 };
 
-class TGraphTransformerBase : public IGraphTransformer {
+class TGraphTransformerBase: public IGraphTransformer {
 private:
     class TTransformScope {
     public:
@@ -155,7 +166,9 @@ private:
 public:
     TGraphTransformerBase()
         : Statistics_(TStatistics::Zero())
-        , AsyncStart_() {}
+        , AsyncStart_()
+    {
+    }
 
     TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         TTransformScope scope(Statistics_, &ctx);
@@ -177,8 +190,9 @@ public:
         return scope.HandleStatus(DoApplyAsyncChanges(input, output, ctx));
     }
 
-    TStatistics GetStatistics() const override { return Statistics_; }
-
+    TStatistics GetStatistics() const override {
+        return Statistics_;
+    }
 
     virtual TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) = 0;
@@ -198,25 +212,27 @@ struct TTransformStage {
     EYqlIssueCode IssueCode;
     TString IssueMessage;
 
-    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, TString name, EYqlIssueCode issueCode, TString  issueMessage = {})
+    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, TString name, EYqlIssueCode issueCode, TString issueMessage = {})
         : Name(std::move(name))
         , IssueCode(issueCode)
         , IssueMessage(std::move(issueMessage))
         , RawTransformer_(transformer.Get())
         , Transformer_(transformer)
-    {}
+    {
+    }
 
     TTransformStage(IGraphTransformer& transformer, TString name, EYqlIssueCode issueCode, TString issueMessage = {})
         : Name(std::move(name))
         , IssueCode(issueCode)
         , IssueMessage(std::move(issueMessage))
         , RawTransformer_(&transformer)
-    {}
-
-    IGraphTransformer& GetTransformer() const
     {
+    }
+
+    IGraphTransformer& GetTransformer() const {
         return *RawTransformer_;
     }
+
 private:
     IGraphTransformer* const RawTransformer_;
     const TAutoPtr<IGraphTransformer> Transformer_;
@@ -239,7 +255,7 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
                     std::function<void(const IGraphTransformer::TStatus&)> asyncCallback);
 
 IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
-                                            TExprContext& ctx, bool applyAsyncChanges);
+                                              TExprContext& ctx, bool applyAsyncChanges);
 
 template <typename T>
 void HandleFutureException(const NThreading::TFuture<T>& future) {
@@ -252,7 +268,7 @@ void HandleFutureException(const NThreading::TFuture<T>& future) {
     }
 }
 
-class TSyncTransformerBase : public TGraphTransformerBase {
+class TSyncTransformerBase: public TGraphTransformerBase {
 public:
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         Y_UNUSED(input);
@@ -283,7 +299,9 @@ template <typename TFunctor>
 class TFunctorTransformer: public TSyncTransformerBase {
 public:
     explicit TFunctorTransformer(TFunctor functor)
-        : Functor_(std::move(functor)) {}
+        : Functor_(std::move(functor))
+    {
+    }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         TStatus status = Functor_(input, output, ctx);
@@ -302,10 +320,12 @@ private:
 template <typename TFunctor>
 class TSinglePassFunctorTransformer final: public TFunctorTransformer<TFunctor> {
     using TBase = TFunctorTransformer<TFunctor>;
+
 public:
     explicit TSinglePassFunctorTransformer(TFunctor functor)
         : TFunctorTransformer<TFunctor>(std::move(functor))
-    {}
+    {
+    }
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         if (Pass_) {
@@ -341,7 +361,7 @@ using TAsyncTransformCallback = std::function<IGraphTransformer::TStatus(const T
 using TAsyncTransformCallbackFuture = NThreading::TFuture<TAsyncTransformCallback>;
 
 template <typename TDerived>
-class TAsyncCallbackTransformer : public TGraphTransformerBase {
+class TAsyncCallbackTransformer: public TGraphTransformerBase {
 public:
     // CallbackTransform should return std::pair<TStatus, TAsyncTransformCallbackFuture>
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -380,42 +400,45 @@ private:
 template <bool AlwaysRaiseIssues = true, typename TFuture, typename TCallback>
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapFutureCallback(const TFuture& future, const TCallback& callback, const TString& message = "") {
-    return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
-        [callback, message](const TFuture& completedFuture) {
-            return TAsyncTransformCallback([completedFuture, callback, message](const TExprNode::TPtr& input,
-                TExprNode::TPtr& output, TExprContext& ctx)
-                {
-                    output = input;
-                    const auto& res = completedFuture.GetValue();
+    return std::make_pair(
+        IGraphTransformer::TStatus::Async,
+        future.Apply(
+            [callback, message](const TFuture& completedFuture) {
+                return TAsyncTransformCallback(
+                    [completedFuture, callback, message](
+                        const TExprNode::TPtr& input,
+                        TExprNode::TPtr& output, TExprContext& ctx)
+                    {
+                        output = input;
+                        const auto& res = completedFuture.GetValue();
 
-                    TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                        return MakeIntrusive<TIssue>(
-                            ctx.GetPosition(input->Pos()),
-                            message.empty()
-                                ? TStringBuilder() << "Execution of node: " << input->Content()
-                                : message);
-                    });
+                        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                            return MakeIntrusive<TIssue>(
+                                ctx.GetPosition(input->Pos()),
+                                message.empty()
+                                    ? TStringBuilder() << "Execution of node: " << input->Content()
+                                    : message);
+                        });
 
-                    if constexpr (AlwaysRaiseIssues) {
-                        res.ReportIssues(ctx.IssueManager);
-                    }
-
-                    if (!res.Success()) {
-                        if constexpr (!AlwaysRaiseIssues) {
+                        if constexpr (AlwaysRaiseIssues) {
                             res.ReportIssues(ctx.IssueManager);
                         }
-                        input->SetState(TExprNode::EState::Error);
-                        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
-                    }
-                    else {
-                        if (res.Repeat()) {
-                            input->SetState(TExprNode::EState::ExecutionRequired);
-                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/false);
+
+                        if (!res.Success()) {
+                            if constexpr (!AlwaysRaiseIssues) {
+                                res.ReportIssues(ctx.IssueManager);
+                            }
+                            input->SetState(TExprNode::EState::Error);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
+                        } else {
+                            if (res.Repeat()) {
+                                input->SetState(TExprNode::EState::ExecutionRequired);
+                                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/false);
+                            }
+                            return callback(res, input, output, ctx);
                         }
-                        return callback(res, input, output, ctx);
-                    }
-                });
-        }));
+                    });
+            }));
 }
 
 template <typename TFuture, typename TResultExtractor>
@@ -463,11 +486,11 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
 }
 
 using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;
-}
+} // namespace NYql
 
-template<>
+template <>
 inline void Out<NYql::IGraphTransformer::TStatus>(
-    IOutputStream &out, const NYql::IGraphTransformer::TStatus& value)
+    IOutputStream& out, const NYql::IGraphTransformer::TStatus& value)
 {
     value.Out(out);
 }

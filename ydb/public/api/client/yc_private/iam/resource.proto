@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+// Trimmed copy of yandex/cloud/priv/iam/v1/resource.proto (validation options removed).
+message Resource {
+  // ID of the resource.
+  string id = 1;
+
+  // The type of the resource, e.g. resource-manager.folder, resource-manager.cloud, etc.
+  string type = 2;
+}

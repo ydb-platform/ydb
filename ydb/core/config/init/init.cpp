@@ -843,7 +843,7 @@ void ApplyMainYamlConfig(
             target.emplace(std::move(key), std::move(value));
         }
     }
-    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig);
+    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig, yamlConfigs.AllowUnknownFields);
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
@@ -883,11 +883,18 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
     }
 
     if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
-        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
+        const auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
         if (slot.GetDomainName()) {
             return slot.GetDomainName();
         }
 
+        if (slot.GetTenantName()) {
+            return ToString(ExtractDomain(slot.GetTenantName()));
+        }
+    }
+
+    if (cf.TenantName.GetOrElse("")) {
+        return ToString(ExtractDomain(*cf.TenantName));
     }
 
     return "";

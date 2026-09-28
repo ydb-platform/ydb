@@ -216,9 +216,12 @@ public:
         : Request_(request)
         , FlowControl_(inflightLimitBytes)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
-                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {
-        if (Span_ && AppData()) {
-            Span_.Attribute("database", AppData()->TenantName);
+                "Execute query request", NWilson::EFlags::AUTO_END) {
+        if (Span_) {
+            Span_.Attribute("ydb.actor.type", TString("TExecuteQueryRPC"));
+            if (AppData()) {
+                Span_.Attribute("database", AppData()->TenantName);
+            }
         }
     }
 
@@ -587,6 +590,14 @@ private:
 };
 
 } // namespace
+
+template<>
+template<>
+IActor* TEvExecuteQueryRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    auto* req = dynamic_cast<TEvExecuteQueryRequest*>(msg);
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    return new TExecuteQueryRPC(req, rpcBufferSize);
+}
 
 namespace NQuery {
 

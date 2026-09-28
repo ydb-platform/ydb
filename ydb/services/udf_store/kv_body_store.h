@@ -1,5 +1,6 @@
 #pragma once
 #include "events.h"
+#include "udf_name.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -12,7 +13,6 @@
 #include <util/system/file.h>
 
 namespace NKikimr::NUdfStore {
-
 
 // Actor that reads a UDF body from a KV tablet via the actor system,
 // then saves it to disk and loads it into the function registry.
@@ -29,7 +29,10 @@ private:
     NActors::TActorId ReplyTo;
 
     TString VolumePath;
-    TString Md5Key;
+    //! Identity of the module: KV key, on-disk filename, and the reply.
+    TString Name;
+    //! Checksum of the uploaded body, verified after download. Not an identity.
+    TString Md5;
     TString OutputDir;
     ui64 ExpectedSize = 0;
 
@@ -57,14 +60,16 @@ private:
 
 public:
     TKvBodyReadActor(const NActors::TActorId& replyTo,
-                     const TString& md5Key,
+                     const TString& name,
+                     const TString& md5,
                      const TString& volumePath,
                      const TString& outputDir,
                      TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry,
                      ui64 expectedSize)
         : ReplyTo(replyTo)
         , VolumePath(volumePath)
-        , Md5Key(md5Key)
+        , Name(name)
+        , Md5(md5)
         , OutputDir(outputDir)
         , ExpectedSize(expectedSize)
         , FunctionRegistry(std::move(functionRegistry))

@@ -35,18 +35,20 @@ inline TRenameMap MakeRenameMap(const TVector<TInfoUnit>& ius, int& varIdx) {
     return MakeRenameMap(ius, varIdx, usedIUs);
 }
 
-inline TVector<std::pair<TInfoUnit, TInfoUnit>> RemapRightJoinKeys(
-    const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys,
+inline TVector<TJoinKey> RemapRightJoinKeys(
+    const TVector<TJoinKey>& joinKeys,
     const TRenameMap& renameMap)
 {
-    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
+    TVector<TJoinKey> result;
     result.reserve(joinKeys.size());
 
-    for (const auto& [leftKey, rightKey] : joinKeys) {
+    for (const auto& joinKey : joinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         if (const auto it = renameMap.find(rightKey); it != renameMap.end()) {
-            result.emplace_back(leftKey, it->second);
+            result.emplace_back(leftKey, it->second, joinKey.EqualNulls);
         } else {
-            result.emplace_back(leftKey, rightKey);
+            result.emplace_back(leftKey, rightKey, joinKey.EqualNulls);
         }
     }
 
@@ -78,7 +80,7 @@ inline TIntrusivePtr<TOpJoin> MakeJoinWithRightRenames(
     const TIntrusivePtr<IOperator>& rightInput,
     TPositionHandle pos,
     const TString& joinKind,
-    const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys,
+    const TVector<TJoinKey>& joinKeys,
     const TVector<TExpression>& joinFilters,
     const TRenameMap& rightRenameMap,
     TExprContext& ctx,

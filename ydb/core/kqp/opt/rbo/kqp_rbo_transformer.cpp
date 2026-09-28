@@ -117,11 +117,11 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             // YQL AST rewriting
             if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
                 THashMap<const TExprNode*, TExprNode::TPtr> translated;
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, UniqueColumnIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else if (TKqlTableEffect::Match(node.Get())) {
-                Y_ENSURE(false, "DML functionality not yet supported in new optimizer");
+                return RewriteTableEffect(node, ctx, KqpCtx);
             } else {
                 return node;
             }
@@ -147,15 +147,48 @@ void TKqpRewriteSelectTransformer::Rewind() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    settings.VisitTuples = true;
 
     // At first step convert KqpOps to RBO Ops.
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
-            if (TKqpOpRoot::Match(node.Get())) {
-                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
-                OpRoot->ComputeParents();
+
+            // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
+            if (node->IsList()) {
+                TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> roots;
+                for (const auto& child : node->Children()) {
+                    if (!child->IsList() || child->ChildrenSize()==0) {
+                        continue;
+                    }
+                    TExprNode::TPtr queryColumns;
+                    if (child->ChildrenSize() >=2) {
+                        queryColumns = child->ChildPtr(1);
+                    }
+
+                    if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
+                        roots.push_back(std::make_pair(child->ChildPtr(0)->ChildPtr(0), queryColumns));
+                    }
+                    else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
+                        roots.push_back(std::make_pair(child->ChildPtr(0), queryColumns));
+                    }
+                }
+
+                if (roots.empty()) {
+                    return node;
+                }
+
+                for (const auto& root: roots) {
+                    auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root.first, root.second);
+                    opRoot->ComputeParents();
+                    Roots.push_back(opRoot);
+                }
+
+                if (Roots.size() > 1) {
+                    ResetTypes = true;
+                }
+
                 return node;
             } else {
                 return node;
@@ -246,19 +279,22 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>&
         HistColumnsByTableName[tableName].insert(colName);
     };
 
-    for (const auto& [lhsKey, rhsKey] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& lhsKey = joinKey.Left;
+        const auto& rhsKey = joinKey.Right;
         requestHistogram(lhsKey);
         requestHistogram(rhsKey);
     }
 }
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
-    Y_ENSURE(OpRoot);
     TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-    OpRoot->ComputePlanMetadata(rboCtx);
-    for (const auto& it : *OpRoot) {
-        if (IsSuitableToCollectStatistics(it.Current)) {
-            CollectTablesAndColumnsNames(it.Current);
+    for (auto & root : Roots) {
+        root->ComputePlanMetadata(rboCtx);
+        for (const auto& it : *root) {
+            if (IsSuitableToCollectStatistics(it.Current)) {
+                CollectTablesAndColumnsNames(it.Current);
+            }
         }
     }
 }
@@ -330,17 +366,46 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
-    TOptimizeExprSettings settings(&TypeCtx);
-    Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
+    TOptimizeExprSettings settings(nullptr);
+    if (!ResetTypes) {
+        settings = TOptimizeExprSettings(&TypeCtx);
+    }
+    settings.VisitTuples = true;
+    Y_ENSURE(Roots.size(), "NEW RBO OpRoot is not initialized.");
 
     // Apply optimizations.
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            if (TKqpOpRoot::Match(node.Get())) {
+
+            // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
+            if (node->IsList()) {
+                bool emptyPreamble = false;
+                TVector<TExprNode::TPtr> roots;
+                for (const auto& child : node->Children()) {
+                    if (!child->IsList()) {
+                        continue;
+                    }
+                    if(child->ChildrenSize()==0) {
+                        emptyPreamble = true;
+                        continue;
+                    }
+                    if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
+                        roots.push_back(child->ChildPtr(0));
+                    }
+                    else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
+                        roots.push_back(child->ChildPtr(0));
+                    }
+                }
+
+                if (roots.empty()) {
+                    return node;
+                }
+
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+                rboCtx.EmptyPreamble = emptyPreamble;
                 TRBOTraceOutput traceOutput(rboCtx);
-                auto output = RBO.Optimize(*OpRoot, rboCtx);
+                auto output = RBO.Optimize(Roots, rboCtx);
                 traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;
@@ -430,7 +495,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/false));
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/true));
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
         rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
         rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ false));
@@ -438,16 +503,37 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
         rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/false));
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/true));
         rules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
         rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };
 
-    // Initial stages.
+    // Prune unused outputs before any rules that require type information.
+    TVector<std::unique_ptr<IRule>> earlyPruningRules;
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/true));
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/true));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Early pruning", std::move(earlyPruningRules)));
+
     // Expand aggregation.
     TVector<std::unique_ptr<IRule>> expandAggregationRules;
+    expandAggregationRules.emplace_back(std::make_unique<TExpandGroupingSetsRule>());
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
+
+    // Rewrite all right joins into left joins
+    TVector<std::unique_ptr<IRule>> rewriteRightJoinsStageRules;
+    rewriteRightJoinsStageRules.emplace_back(std::make_unique<TRewriteRightJoinRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Rewrite right joins", std::move(rewriteRightJoinsStageRules)));
+
+    // Push predicates before inlining.
+    TVector<std::unique_ptr<IRule>> earlyPushFilterRules;
+    earlyPushFilterRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Push filters before inlining", std::move(earlyPushFilterRules)));
 
     // Subplan inlining. For correlated subqueries we create dependent join.
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
@@ -474,11 +560,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughJoinRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TDependentJoinNotSupportedRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Decorrelation", std::move(decorrelationStageRules)));
-
-    // Rewrite all right joins into left joins
-    TVector<std::unique_ptr<IRule>> rewriteRightJoinsStageRules;
-    rewriteRightJoinsStageRules.emplace_back(std::make_unique<TRewriteRightJoinRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Rewrite right joins", std::move(rewriteRightJoinsStageRules)));
 
     // Normalize aliases and simple maps before the broader logical rewrites start.
     TVector<std::unique_ptr<IRule>> mapAliasRules;
@@ -550,6 +631,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TFuseFiltersRule>());
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+        inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
         RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters after CBO", std::move(inlineJoinFiltersAfterCBORules)));
 
         TVector<std::unique_ptr<IRule>> pruningStage_II_Rules;

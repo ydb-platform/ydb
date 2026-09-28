@@ -63,10 +63,26 @@ class YdbLogWorkload(WorkloadBase):
             '--len', '200',
         ]
 
+    def prepare(self):
+        self.cmd_run(
+            self.get_command_prefix(subcmds=['init']) + self.get_insert_command_params() + [
+                '--store', self.store_type,
+                '--min-partitions', '100',
+                '--partition-size', '10',
+                '--auto-partition', '0',
+            ],
+        )
+        self.cmd_run(
+            self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator'])
+            + self.get_insert_command_params()
+            + ['--rows', '100000']
+        )
+
+    def clean(self):
+        self.cmd_run(self.get_command_prefix(subcmds=['clean']))
+
     def __loop(self):
         upload_commands = [
-            # import command
-            self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator']) + self.get_insert_command_params() + ['--rows', '100000'],
             # bulk upsert workload
             self.get_command_prefix(subcmds=['run', 'bulk-upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
 
@@ -76,21 +92,6 @@ class YdbLogWorkload(WorkloadBase):
             # insert workload
             self.get_command_prefix(subcmds=['run', 'insert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
         ]
-
-        self.cmd_run(
-            self.get_command_prefix(subcmds=['clean'])
-        )
-
-        # init
-
-        self.cmd_run(
-            self.get_command_prefix(subcmds=['init']) + self.get_insert_command_params() + [
-                '--store', self.store_type,
-                '--min-partitions', '100',
-                '--partition-size', '10',
-                '--auto-partition', '0',
-            ],
-        )
 
         with ThreadPoolExecutor() as executor:
             executor.submit(

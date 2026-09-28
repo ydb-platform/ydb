@@ -3,6 +3,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <memory>
+
 namespace NKikimr::NUdfStore::NWasm {
 
 enum class EUdfValueType {
@@ -12,6 +14,14 @@ enum class EUdfValueType {
     Double,
     Boolean,
     String,
+    Int32,
+    Uint32,
+    Float,
+    Utf8,
+    Date,
+    Datetime,
+    Timestamp,
+    Decimal,
 };
 
 enum class EWasmUdfBinding {
@@ -19,11 +29,56 @@ enum class EWasmUdfBinding {
     TypeConfigCallable,
 };
 
+//! Owned recursive descriptor of an exact YQL type.
+struct TWasmTypeNode {
+    enum class EKind {
+        Leaf,
+        Optional,
+        List,
+        Dict,
+        Tuple,
+        Struct,
+        Variant,
+        Resource,
+        Callable,
+    };
+
+    struct TMember {
+        TString Name;
+        std::shared_ptr<TWasmTypeNode> Type;
+    };
+
+    EKind Kind = EKind::Leaf;
+    EUdfValueType Leaf = EUdfValueType::Null;
+    ui8 Precision = 0;
+    ui8 Scale = 0;
+    bool NamedVariant = false;
+    std::shared_ptr<TWasmTypeNode> Item;      // Optional / List
+    std::shared_ptr<TWasmTypeNode> Key;       // Dict
+    std::shared_ptr<TWasmTypeNode> Payload;   // Dict
+    //! Tuple elements (unnamed) or Struct / Variant-over-Struct members.
+    TVector<TMember> Members;
+    //! Resource tag.
+    TString Tag;
+    //! Callable return type.
+    std::shared_ptr<TWasmTypeNode> CallableReturns;
+};
+
+using TWasmTypeNodePtr = std::shared_ptr<TWasmTypeNode>;
+
+inline TWasmTypeNodePtr MakeLeafTypeNode(EUdfValueType leaf) {
+    auto node = std::make_shared<TWasmTypeNode>();
+    node->Kind = TWasmTypeNode::EKind::Leaf;
+    node->Leaf = leaf;
+    return node;
+}
+
 struct TWasmUdfDescriptor {
     TString Name;
-    TVector<EUdfValueType> Args;
-    EUdfValueType Result = EUdfValueType::Null;
+    TVector<TWasmTypeNodePtr> ArgTypes;
+    TWasmTypeNodePtr ResultType;
     EWasmUdfBinding Binding = EWasmUdfBinding::Plain;
+    bool IsObjectConstructor = false;
     // For TypeConfigCallable: create/call/destroy exports (destroy optional).
     TString CreateExport;
     TString CallExport;
@@ -47,8 +102,8 @@ struct TWasmObjectMethodDescriptor {
     TString Name;
     TString Export;
     EWasmUdfBinding Binding = EWasmUdfBinding::TypeConfigCallable;
-    TVector<EUdfValueType> Args;
-    EUdfValueType Result = EUdfValueType::Null;
+    TVector<TWasmTypeNodePtr> ArgTypes;
+    TWasmTypeNodePtr ResultType;
 };
 
 struct TWasmObjectDescriptor {
@@ -61,7 +116,6 @@ struct TWasmObjectDescriptor {
 struct TWasmManifest {
     TString ModuleName;
     TString ModuleExtension;
-    TString CallingConvention;
     TVector<TString> RequiredLibraries;
     TVector<TWasmUdfDescriptor> Functions;
     TVector<TWasmObjectDescriptor> Objects;

@@ -16,7 +16,7 @@ bool IsSuitableToExpandDistinctAggregation(const TIntrusivePtr<IOperator>& input
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "some") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {
@@ -278,7 +278,7 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
 } // anonymous namespace
 
 bool TExpandDistinctAggregationRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Aggregate;
+    return IsSuitableToExpandDistinctAggregation(input);
 }
 
 TIntrusivePtr<IOperator> TExpandDistinctAggregationRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {

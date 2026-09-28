@@ -333,6 +333,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 {
     static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({
         TStatus::DISALLOW_TEMP,
+        TStatus::DISALLOW_TEMP_SYS_TABLET,
         TStatus::ERROR_TEMP,
         TStatus::DISALLOW,
         TStatus::WRONG_REQUEST,
@@ -408,12 +409,15 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             "MaxPermissionCount cap exhausted: complete in-flight actions before requesting new ones");
         response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
     }
+    TVector<const TAction*> sysTabletDeferredActions;
 
-    for (const auto &action : request.GetActions()) {
-        if (capHit) {
-            break;
-        }
+    enum class EActionResult {
+        Ok,
+        Stop,
+        CapHit,
+    };
 
+    auto processAction = [&](const TAction &action, bool allowDefer) -> EActionResult {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -426,6 +430,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         opts.PartialPermissionAllowed = allowPartial;
         opts.Priority = request.GetPriority();
         opts.RequestId = requestId;
+        opts.CapEnabled = allowDefer && capEnabled;
 
         TErrorInfo error;
 
@@ -451,53 +456,97 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             if (capEnabled && static_cast<ui32>(response.PermissionsSize()) >= maxPermissions) {
                 YDB_LOG_DEBUG_CTX(ctx, "MaxPermissionCount cap reached, deferring remaining actions",
                     {"maxPermissions", maxPermissions});
-                capHit = true;
+                return EActionResult::CapHit;
             }
-        } else {
-            YDB_LOG_DEBUG_CTX(ctx, "Result",
-                {"error", ToString(error.Code)},
-                {"reason", error.Reason.GetMessage()});
-
-            if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
-                response.MutableStatus()->SetCode(error.Code);
-                response.MutableStatus()->SetReason(error.Reason.GetMessage());
-                if (error.Code == TStatus::DISALLOW_TEMP
-                    || error.Code == TStatus::ERROR_TEMP)
-                    response.SetDeadline(error.Deadline.GetValue());
-            }
-
-            if (schedule) {
-                auto *scheduledAction = scheduled.AddActions();
-                scheduledAction->CopyFrom(action);
-
-                // Limit stored issues to avoid overloading the local database
-                if (storedIssues < MAX_ISSUES_TO_STORE) {
-                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
-                    ++storedIssues;
-                } else {
-                    scheduledAction->ClearIssue();
-                }
-            }
-
-            if (!allowPartial)
-                break;
+            return EActionResult::Ok;
         }
+
+        if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
+            YDB_LOG_DEBUG_CTX(ctx, "Result: DISALLOW_TEMP_SYS_TABLET",
+                {"deferringAction", action.ShortDebugString().data()});
+            sysTabletDeferredActions.push_back(&action);
+            return EActionResult::Ok;
+        }
+
+        YDB_LOG_DEBUG_CTX(ctx, "Result",
+            {"error", ToString(error.Code)},
+            {"reason", error.Reason.GetMessage()});
+
+        if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
+            response.MutableStatus()->SetCode(error.Code);
+            response.MutableStatus()->SetReason(error.Reason.GetMessage());
+            if (error.Code == TStatus::DISALLOW_TEMP
+                || error.Code == TStatus::ERROR_TEMP)
+                response.SetDeadline(error.Deadline.GetValue());
+        }
+
+        if (schedule) {
+            auto *scheduledAction = scheduled.AddActions();
+            scheduledAction->CopyFrom(action);
+
+            // Limit stored issues to avoid overloading the local database
+            if (storedIssues < MAX_ISSUES_TO_STORE) {
+                *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
+                ++storedIssues;
+            } else {
+                scheduledAction->ClearIssue();
+            }
+        }
+
+        return allowPartial ? EActionResult::Ok : EActionResult::Stop;
+    };
+
+    for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            break;
+        }
+
+        const EActionResult result = processAction(action, /* allowDefer = */ true);
+        if (result == EActionResult::Stop) {
+            break;
+        }
+        if (result == EActionResult::CapHit) {
+            capHit = true;
+        }
+
         ++processedActions;
     }
+
+    while (capEnabled && !capHit && !sysTabletDeferredActions.empty()) {
+        const TAction *deferredAction = sysTabletDeferredActions.back();
+        sysTabletDeferredActions.pop_back();
+        const EActionResult result = processAction(*deferredAction, /* allowDefer = */ false);
+        if (result == EActionResult::Stop) {
+            break;
+        }
+        if (result == EActionResult::CapHit) {
+            capHit = true;
+        }
+    }
+
     ClusterInfo->RollbackLocks(point);
+
+    auto scheduleTail = [&](const TAction &action) {
+        auto* scheduledAction = scheduled.MutableActions()->Add();
+        scheduledAction->CopyFrom(action);
+        scheduledAction->ClearIssue();
+    };
 
     if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
         const auto& allActions = request.GetActions();
         auto* mutableActions = scheduled.MutableActions();
-        const size_t from = processedActions;
-
-        mutableActions->Reserve(mutableActions->size() + (allActions.size() - from));
-        std::for_each(allActions.begin() + from, allActions.end(), [mutableActions](const auto& action) {
-            auto* scheduledAction = mutableActions->Add();
-            scheduledAction->CopyFrom(action);
-            scheduledAction->ClearIssue();
-        });
+        mutableActions->Reserve(mutableActions->size() + (allActions.size() - processedActions));
+        std::for_each(allActions.begin() + processedActions, allActions.end(), scheduleTail);
         processedActions = allActions.size();
+    }
+
+    if (schedule && !sysTabletDeferredActions.empty()) {
+        auto* mutableActions = scheduled.MutableActions();
+        mutableActions->Reserve(mutableActions->size() + sysTabletDeferredActions.size());
+        std::for_each(sysTabletDeferredActions.begin(), sysTabletDeferredActions.end(),
+            [&scheduleTail](const TAction *deferredAction) {
+                scheduleTail(*deferredAction);
+            });
     }
 
     // Handle partial permission and reject cases. Partial permission requires
@@ -960,9 +1009,13 @@ void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
     auto *actions = request.MutableActions();
-    std::partition(actions->begin(), actions->end(),
+    auto pivot = std::partition(actions->begin(), actions->end(),
         [this](const TAction &action) {
             return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
+    std::partition(pivot, actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasRunningSystemTablet(action.GetHost());
         });
 }
 
@@ -987,6 +1040,16 @@ bool TCms::TryToLockNode(const TAction& action,
     {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+        return false;
+    }
+
+    if (opts.CapEnabled
+        && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId))
+    {
+        error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
+        error.Reason = TReason(
+            TStringBuilder() << "Node " << node.NodeId
+                << " has a running system tablet");
         return false;
     }
 
@@ -2157,65 +2220,73 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     const bool sortDescending = request.GetSortDescending();
     const bool onlyProblems = request.GetOnlyProblems();
 
-    auto countUnavailable = [&](const NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult& state, bool persistentBuffer) {
-        ui32 count = 0;
-        for (const auto& group : state.GetGroups()) {
-            const auto& ids = persistentBuffer ? group.GetPersistentBufferDDiskId() : group.GetDDiskId();
-            for (const auto& id : ids) {
-                // An unallocated DDisk slot is represented by an empty TDDiskId
-                // (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp), not a real
-                // disk; skip it so it isn't counted as an unavailable disk.
-                if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
-                    continue;
-                }
-                if (!IsDDiskAvailable(id)) {
-                    ++count;
-                }
+    struct TItem {
+        ui64 TabletId;
+        const TCmsDDiskInfo* Info;
+        ui32 GroupsCount = 0;
+        ui32 UnavailableDDisk = 0;
+        ui32 UnavailablePersistentBuffer = 0;
+        ui32 Degrade = 0;
+    };
+    // ID/time sorting needs snapshot counts only for the returned page.
+    const bool needsCountsBeforePaging = onlyProblems || request.GetGroupByDegrade()
+        || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE
+        || sortBy == NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT;
+    auto fillCounts = [&](TItem& item) {
+        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+        if (state.ParseFromString(item.Info->State)) {
+            item.GroupsCount = state.GroupsSize();
+            for (const auto& group : state.GetGroups()) {
+                auto countUnavailable = [&](const auto& ids) {
+                    ui32 count = 0;
+                    for (const auto& id : ids) {
+                        // Empty ids represent unallocated slots, not failed disks.
+                        if ((id.GetNodeId() || id.GetPDiskId()) && !IsDDiskAvailable(id)) {
+                            ++count;
+                        }
+                    }
+                    return count;
+                };
+                const ui32 ddisks = countUnavailable(group.GetDDiskId());
+                const ui32 buffers = countUnavailable(group.GetPersistentBufferDDiskId());
+                item.UnavailableDDisk += ddisks;
+                item.UnavailablePersistentBuffer += buffers;
+                item.Degrade = Max(item.Degrade, Max(ddisks, buffers));
             }
         }
-        return count;
     };
-
-    TVector<const std::pair<const ui64, TCmsDDiskInfo>*> items;
+    TVector<TItem> items;
     items.reserve(State->DDiskInfo.size());
-    for (const auto& kv : State->DDiskInfo) {
-        if (!filter.empty() && !ToString(kv.first).Contains(filter)) {
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        if (!filter.empty() && !ToString(tabletId).Contains(filter)) {
             continue;
         }
-        if (onlyProblems) {
-            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-            if (!state.ParseFromString(kv.second.State) ||
-                (countUnavailable(state, false) == 0 && countUnavailable(state, true) == 0))
-            {
-                continue;
-            }
+        TItem item{tabletId, &info};
+        if (needsCountsBeforePaging) {
+            fillCounts(item);
         }
-        items.push_back(&kv);
+        if (!onlyProblems || item.Degrade) {
+            items.push_back(item);
+        }
     }
 
-    using TItemPtr = const std::pair<const ui64, TCmsDDiskInfo>*;
-    // Precompute the sort key for each item exactly once: computing it inside
-    // the comparator would call ParseFromString() O(N log N) times for
-    // DDISK_TABLET_SORT_BY_GROUPS_COUNT, which is expensive for large
-    // clusters. Use ui64 (rather than i64) for the primary key component so
-    // that tablet ids with the high bit set (e.g. produced by MakeTabletID())
-    // don't wrap to negative values and sort incorrectly.
+    // Keep unsigned keys so tablet ids with the high bit set retain their natural ordering.
     TVector<std::pair<ui64, ui64>> keys;
     keys.reserve(items.size());
-    for (const auto* item : items) {
+    for (const auto& item : items) {
         switch (sortBy) {
             case NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT:
-                keys.emplace_back(static_cast<ui64>(item->second.LastChangedAt.MicroSeconds()), item->first);
+                keys.emplace_back(item.Info->LastChangedAt.MicroSeconds(), item.TabletId);
                 break;
-            case NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT: {
-                NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-                Y_PROTOBUF_SUPPRESS_NODISCARD state.ParseFromString(item->second.State);
-                keys.emplace_back(static_cast<ui64>(state.GroupsSize()), item->first);
+            case NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE:
+                keys.emplace_back(item.Degrade, item.TabletId);
                 break;
-            }
+            case NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT:
+                keys.emplace_back(item.GroupsCount, item.TabletId);
+                break;
             case NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID:
             default:
-                keys.emplace_back(item->first, item->first);
+                keys.emplace_back(item.TabletId, item.TabletId);
                 break;
         }
     }
@@ -2223,15 +2294,11 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     std::iota(order.begin(), order.end(), 0);
     // Sort by the requested key with tablet id as a deterministic tiebreaker.
     std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+        if (request.GetGroupByDegrade() && items[a].Degrade != items[b].Degrade) {
+            return items[a].Degrade > items[b].Degrade;
+        }
         return sortDescending ? keys[b] < keys[a] : keys[a] < keys[b];
     });
-    TVector<TItemPtr> sortedItems;
-    sortedItems.reserve(items.size());
-    for (ui32 i : order) {
-        sortedItems.push_back(items[i]);
-    }
-    items = std::move(sortedItems);
-
     auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     response->Record.SetTotalCount(items.size());
@@ -2242,18 +2309,18 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
     // the ui32 range (e.g. both close to Max<ui32>()).
     const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
     for (ui32 i = offset; i < end; ++i) {
-        const auto* kv = items[i];
-        auto* tablet = response->Record.AddTablets();
-        tablet->SetTabletId(kv->first);
-        tablet->SetRevision(kv->second.Revision);
-        tablet->SetLastChangedAt(kv->second.LastChangedAt.MicroSeconds());
-
-        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
-        if (state.ParseFromString(kv->second.State)) {
-            tablet->SetGroupsCount(state.GroupsSize());
-            tablet->SetUnavailableDDiskCount(countUnavailable(state, false));
-            tablet->SetUnavailablePersistentBufferCount(countUnavailable(state, true));
+        auto& item = items[order[i]];
+        if (!needsCountsBeforePaging) {
+            fillCounts(item);
         }
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(item.TabletId);
+        tablet->SetRevision(item.Info->Revision);
+        tablet->SetLastChangedAt(item.Info->LastChangedAt.MicroSeconds());
+        tablet->SetGroupsCount(item.GroupsCount);
+        tablet->SetUnavailableDDiskCount(item.UnavailableDDisk);
+        tablet->SetUnavailablePersistentBufferCount(item.UnavailablePersistentBuffer);
+        tablet->SetDegrade(item.Degrade);
     }
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);

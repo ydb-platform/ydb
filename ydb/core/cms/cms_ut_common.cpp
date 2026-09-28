@@ -540,9 +540,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig =
-            new TNodeWardenConfig(STRAND_PDISK && !runtime.IsRealThreads()
-                                  ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
-                                  : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
+            new TNodeWardenConfig();
         google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         if (nodeIndex == 0) {
@@ -619,6 +617,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         0);
 
     runtime.LocationCallback = options.NodeLocationCallback;
+    SetupPDiskSubsystem(&runtime, STRAND_PDISK);
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();
     dnsConfig->MaxStaticNodeId = 1000;

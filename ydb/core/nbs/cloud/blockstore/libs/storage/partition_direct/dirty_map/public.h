@@ -6,6 +6,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TInflightInfo;
+
 class TBlocksDirtyMap;
 using TBlocksDirtyMapPtr = std::shared_ptr<TBlocksDirtyMap>;
 

@@ -66,7 +66,9 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     ui64 fileMemUsage,
     ui64 llvmMemUsage,
     bool localRun,
-    const TString& cmdPrefix);
+    const TString& cmdPrefix,
+    NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None,
+    const TString& bridgeBinaryPath = {});
 
 void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
     const TYtSettings::TConstPtr& settings,
@@ -120,7 +122,13 @@ inline void FillUserJobSpec(NYT::TUserJobSpec& spec,
     bool localRun,
     const TString& cmdPrefix = {})
 {
-    FillUserJobSpecImpl(spec, *execCtx, execCtx->Options_.Config(), extraUsage, fileMemUsage, llvmMemUsage, localRun, cmdPrefix);
+    NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None;
+    TString bridgeBinaryPath;
+    if constexpr (::NYql::NPrivate::THasBridgeMode<decltype(execCtx->Options_)>::value) {
+        bridgeMode = execCtx->Options_.BridgeMode();
+        bridgeBinaryPath = execCtx->Options_.BridgeBinaryPath();
+    }
+    FillUserJobSpecImpl(spec, *execCtx, execCtx->Options_.Config(), extraUsage, fileMemUsage, llvmMemUsage, localRun, cmdPrefix, bridgeMode, bridgeBinaryPath);
 }
 
 template <class TExecParamsPtr>

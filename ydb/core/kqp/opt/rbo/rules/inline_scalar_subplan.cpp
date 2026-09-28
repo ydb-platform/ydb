@@ -24,8 +24,8 @@ std::pair<TIntrusivePtr<IOperator>, TInfoUnit> MakeAtMostOneRowPerGroup(const TI
 
     TVector<TOpAggregationTraits> traits;
     traits.emplace_back(rowIU, "count", countIU);
-    // This is need to get the actual value, since we have one value we can use min/max.
-    traits.emplace_back(valueIU, "min", valueStateIU);
+    // This is need to get the actual value, we emit ensure that we get only one row, so can take any.
+    traits.emplace_back(valueIU, "some", valueStateIU);
     auto aggregate = MakeIntrusive<TOpAggregate>(rowMap, traits, groupKeys, EOpPhase::Undefined, /*distinctAll=*/false, pos);
 
     auto atMostOne =
@@ -40,6 +40,20 @@ std::pair<TIntrusivePtr<IOperator>, TInfoUnit> MakeAtMostOneRowPerGroup(const TI
 }
 
 } // anonymous namespace
+
+bool TInlineScalarSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+    if (props.Subplans.Empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        if (props.Subplans.At(iu).Type == ESubplanType::EXPR) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 // Rewrite a single scalar subplan into a cross-join for uncorrelated queries
 // or into a left join for correlated (assuming at most one tuple in the output of each subquery)
@@ -103,9 +117,9 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             }
         }
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         for (const auto& iu : dependencies) {
-            joinKeys.push_back(std::make_pair(iu, iu));
+            joinKeys.emplace_back(iu, iu);
         }
         TIntrusivePtr<IOperator> joinLeftInput = child;
         TIntrusivePtr<IOperator> joinRightInput = rightInput;
@@ -129,7 +143,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         renameElements.emplace_back(scalarIU, checkedResIU, subplan->Pos, &ctx.ExprCtx, &props);
         auto rename = MakeIntrusive<TOpMap>(checkedInput, subplan->Pos, renameElements);
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         auto cross = MakeIntrusive<TOpJoin>(child, rename, subplan->Pos, "Cross", joinKeys);
         unaryOp->SetInput(cross);
     }

@@ -203,9 +203,11 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             }
         }
         if (joinKind != EJoinKind::LeftOnly && joinKind != EJoinKind::LeftSemi) {
+            const int outputOffset =
+                RightSemiOrOnly(joinKind) ? 0 : std::ssize(descr.LeftSource.ColumnTypes);
             for (int colIndex = 0; colIndex < std::ssize(descr.RightSource.ColumnTypes); ++colIndex) {
                 renames.Right.push_back(colIndex);
-                renames.Right.push_back(colIndex + std::ssize(descr.LeftSource.ColumnTypes));
+                renames.Right.push_back(colIndex + outputOffset);
             }
         }
     }
@@ -267,8 +269,12 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(blockWideStreamJoin, args.Entrypoints);
         TComputationContext& ctx = graph->GetContext();
         const int blockSize = descr.BlockSize;
-        auto leftBlocks = ToBlocks(ctx, blockSize, descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList);
-        auto rightBlocks = ToBlocks(ctx, blockSize, descr.RightSource.ColumnTypes, descr.RightSource.ValuesList);
+        auto leftBlocks = descr.InputsAreBlocks
+                              ? descr.LeftSource.ValuesList
+                              : ToBlocks(ctx, blockSize, descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList);
+        auto rightBlocks = descr.InputsAreBlocks
+                               ? descr.RightSource.ValuesList
+                               : ToBlocks(ctx, blockSize, descr.RightSource.ColumnTypes, descr.RightSource.ValuesList);
         if (descr.SliceBlocks) {
             leftBlocks = SliceBlockList(ctx.HolderFactory, leftBlocks, descr.LeftSource.ColumnTypes.size());
             rightBlocks = SliceBlockList(ctx.HolderFactory, rightBlocks, descr.RightSource.ColumnTypes.size());
@@ -312,17 +318,26 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                                                 renames.Left, renames.Right, dqPb.NewFlowType(multiResultType)));
         }
         case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
-            Y_ABORT_IF(descr.RightSource.KeyColumnIndexes.size() > 1,
-                       "composite key types are not supported yet for ScalarMapJoin "
-                       "benchmark");
+            const auto& rightKeyColumns = descr.RightSource.KeyColumnIndexes;
             TRuntimeNode rightDict = pb.ToSortedDict(
                 args.Right, true,
-                [&](TRuntimeNode tuple) { return pb.Nth(tuple, descr.RightSource.KeyColumnIndexes[0]); },
+                [&](TRuntimeNode tuple) {
+                    if (rightKeyColumns.size() == 1) {
+                        return pb.Nth(tuple, rightKeyColumns.front());
+                    }
+                    TRuntimeNode::TList keyTupleElements;
+                    keyTupleElements.reserve(rightKeyColumns.size());
+                    for (ui32 idx : rightKeyColumns) {
+                        keyTupleElements.push_back(pb.Nth(tuple, idx));
+                    }
+                    return pb.NewTuple(keyTupleElements);
+                },
                 [&](TRuntimeNode tuple) {
                     auto types = AS_TYPE(TTupleType, tuple.GetStaticType())->GetElements();
                     TVector<TRuntimeNode> valueTupleElements;
                     for (ui32 idx = 0; idx < std::ssize(types); ++idx) {
-                        if (idx != descr.RightSource.KeyColumnIndexes[0]) {
+                        if (std::find(rightKeyColumns.begin(), rightKeyColumns.end(), idx) ==
+                            rightKeyColumns.end()) {
                             valueTupleElements.push_back(pb.Nth(tuple, idx));
                         }
                     }
@@ -386,12 +401,14 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     return graph;
 }
 
-i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr) {
+i32 ResultColumnCount(ETestedJoinAlgo algo, EJoinKind joinKind, TJoinDescription descr) {
     /*
     +1 in block case because
     yql/essentials/minikql/comp_nodes/mkql_block_map_join.cpp:TBlockJoinState::GetOutputWidth();
      */
-    return IsBlockJoin(algo) + std::ssize(descr.LeftSource.ColumnTypes) + std::ssize(descr.RightSource.ColumnTypes);
+    const i32 leftColumns = RightSemiOrOnly(joinKind) ? 0 : std::ssize(descr.LeftSource.ColumnTypes);
+    const i32 rightColumns = LeftSemiOrOnly(joinKind) ? 0 : std::ssize(descr.RightSource.ColumnTypes);
+    return IsBlockJoin(algo) + leftColumns + rightColumns;
 }
 
 } // namespace NKikimr::NMiniKQL

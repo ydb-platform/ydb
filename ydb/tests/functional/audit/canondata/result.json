@@ -56,5 +56,8 @@
     },
     "test_canonical_records.test_topic": {
         "uri": "file://test_canonical_records.test_topic/audit_log.json"
+    },
+    "test_canonical_records_legacy_dstool.test_dstool_evict_vdisk_legacy_api": {
+        "uri": "file://test_canonical_records_legacy_dstool.test_dstool_evict_vdisk_legacy_api/audit_log.json"
     }
 }

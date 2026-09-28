@@ -110,6 +110,7 @@ public:
         OPTION_FIELD(TString, UserName)
         OPTION_FIELD(TOperationProgressWriter, ProgressWriter)
         OPTION_FIELD(TYqlOperationOptions, OperationOptions)
+        OPTION_FIELD(TCredentials::TPtr, Credentials)
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
@@ -228,6 +229,8 @@ public:
             TYtTableMetaInfo::TPtr Meta;
             TYtTableStatInfo::TPtr Stat;
             bool WriteLock = false;
+            bool SymlinkLock = false;
+            bool ReferenceLock = false;
         };
         TVector<TTableData> Data;
     };
@@ -265,6 +268,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -377,6 +382,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
@@ -407,6 +414,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
@@ -458,6 +467,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
     };
 
     struct TCalcResult : public NCommon::TOperationResult {
@@ -518,10 +529,35 @@ public:
         }
 
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
-        OPTION_FIELD(TVector<TClusterAndPath>, Pathes)
+        OPTION_FIELD(TVector<TClusterAndPath>, Paths)
     };
 
     struct TDropTrackablesResult : public NCommon::TOperationResult {
+    };
+
+    //////////////////////////////////////////////////////////////
+
+    struct TUnlockTablesOptions : public TCommonOptions {
+        using TSelf = TUnlockTablesOptions;
+
+        struct TUnlockTable
+        {
+            TString Cluster;
+            TString Path;
+            ui32 Epoch;
+            bool Anonymous;
+        };
+
+        TUnlockTablesOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TVector<TUnlockTable>, Tables)
+    };
+
+    struct TUnlockTablesResult : public NCommon::TOperationResult {
     };
 
     //////////////////////////////////////////////////////////////
@@ -819,6 +855,8 @@ public:
     virtual NThreading::TFuture<TPublishResult> Publish(const TExprNode::TPtr& node, TExprContext& ctx, TPublishOptions&& options) = 0;
 
     virtual NThreading::TFuture<TCommitResult> Commit(TCommitOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) = 0;
 
     virtual NThreading::TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) = 0;
 

@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <util/folder/path.h>
+#include <util/generic/vector.h>
 
 namespace NKikimrConfig {
 
@@ -41,7 +42,6 @@ namespace NKikimr {
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
         TString StartupConfigYaml;
         std::optional<TString> StartupStorageYaml;
-        TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
         NKikimrBlobStorage::TPDiskConfig PDiskConfigOverlay;
@@ -67,10 +67,11 @@ namespace NKikimr {
 
         std::optional<NYdb::NBS::NProto::TDDiskConfig> DDiskConfig;
         std::optional<NYdb::NBS::NProto::TPBufferConfig> PBufferConfig;
+        TVector<ui32> BlobStorageExecutorPoolIds;
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
-        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory);
+        TNodeWardenConfig();
         ~TNodeWardenConfig();
 
         bool IsCacheEnabled() const {

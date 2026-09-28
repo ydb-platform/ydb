@@ -55,6 +55,10 @@ public:
         return Broken;
     }
 
+    void SetBroken() {
+        Broken = true;
+    }
+
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
@@ -111,7 +115,7 @@ public:
     }
 
     void SetBroken() {
-        SharingInfo->Broken = true;
+        SharingInfo->SetBroken();
     }
 
     bool IsBroken() const {

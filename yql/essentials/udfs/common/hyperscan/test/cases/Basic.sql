@@ -1,4 +1,13 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value: ""|>,
+    <|value: "a"|>,
+    <|value: "aax"|>,
+    <|value: "xaax"|>,
+    <|value: "xaaxaaxaa"|>,
+    <|value: "XAXA"|>,
+    <|value: "7"|>,
+    <|value: "QC transfer task JAVA"|>
+);
 $match = Hyperscan::Match("a.*");
 $grep = Hyperscan::Grep("axa");
 $insensitive_grep = Hyperscan::Grep("(?i)axa");
@@ -30,4 +39,4 @@ SELECT
     $capture_many(value) AS capture_many,
     $replace(value, "b") AS replace,
     $backtracking_grep(value) as backtracking
-FROM Input;
+FROM AS_TABLE($input);

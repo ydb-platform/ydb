@@ -3,6 +3,8 @@
 #include "sqs_workload_stats_collector.h"
 
 #include <aws/core/Aws.h>
+#include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/utils/logging/LogLevel.h>
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/SQSClient.h>
 #include <library/cpp/logger/log.h>
@@ -17,9 +19,9 @@ namespace NYdb::NConsoleClient {
         TDuration TotalSec;
         TDuration WindowSec;
         TDuration WarmupSec;
-        bool Quiet;
-        bool PrintTimestamp;
-        double Percentile;
+        bool Quiet = false;
+        bool PrintTimestamp = false;
+        double Percentile = 80.0;
         std::shared_ptr<Aws::SQS::SQSClient> SqsClient;
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
@@ -32,17 +34,20 @@ namespace NYdb::NConsoleClient {
         TMaybe<TString> AwsAccessKeyId;
         TMaybe<TString> AwsRegion;
         TString Endpoint;
-        ui64 MaxUniqueMessages;
-        ui32 BatchSize;
-        ui32 MessageSize;
-        ui32 GroupsAmount;
-        ui32 WorkersCount;
-        ui32 RequestTimeoutMs;
-        bool UseXmlAPI;
-        bool ValidateMessagesOrder;
+        ui64 MaxUniqueMessages = 0;
+        ui32 BatchSize = 1;
+        ui32 MessageSize = 900;
+        ui32 GroupsAmount = 0;
+        ui32 WorkersCount = 1;
+        ui32 RequestTimeoutMs = 2000;
+        bool AwsSdkLog = false;
+        bool UseXmlAPI = false;
+        bool ValidateMessagesOrder = false;
 
         void InitAwsSdk();
         void DestroyAwsSdk();
+        Aws::Utils::Logging::LogLevel GetAwsSdkLogLevel() const;
+        Aws::Client::ClientConfiguration CreateSqsClientConfiguration() const;
         void InitStatsCollector(size_t writerCount, size_t readerCount);
         void InitSqsClient(const TClientCommand::TConfig& config);
         void DestroySqsClient();

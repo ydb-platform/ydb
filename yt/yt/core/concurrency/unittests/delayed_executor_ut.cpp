@@ -151,13 +151,13 @@ TEST(TDelayedExecutorTest, MakeDelayedAndCancel)
 {
     auto future = TDelayedExecutor::MakeDelayed(TDuration::Seconds(100));
 
-    EXPECT_TRUE(future.Cancel(TError(NYT::EErrorCode::Timeout, "Waited long enough")));
+    EXPECT_TRUE(future.Cancel(TError(EErrorCode::Timeout, "Waited long enough")));
 
     auto error = future.TryGet();
     ASSERT_TRUE(error);
-    EXPECT_EQ(NYT::EErrorCode::Canceled, error->GetCode());
+    EXPECT_EQ(EErrorCode::Canceled, error->GetCode());
     ASSERT_EQ(1, std::ssize(error->InnerErrors()));
-    EXPECT_EQ(NYT::EErrorCode::Timeout, error->InnerErrors()[0].GetCode());
+    EXPECT_EQ(EErrorCode::Timeout, error->InnerErrors()[0].GetCode());
 }
 
 //! OK errors cannot become inner ones and are dropped.
@@ -169,7 +169,7 @@ TEST(TDelayedExecutorTest, MakeDelayedAndCancelWithOKError)
 
     auto error = future.TryGet();
     ASSERT_TRUE(error);
-    EXPECT_EQ(NYT::EErrorCode::Canceled, error->GetCode());
+    EXPECT_EQ(EErrorCode::Canceled, error->GetCode());
     EXPECT_TRUE(error->InnerErrors().empty());
 }
 

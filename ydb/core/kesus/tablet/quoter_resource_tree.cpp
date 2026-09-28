@@ -605,6 +605,22 @@ void TQuoterResourceTree::CalcParameters() {
 
 void TQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
     Counters.SetResourceCounters(std::move(resourceCounters));
+
+    // Counters can be rebound while the resource already has sessions
+    // (e.g. when detailed counters mode is enabled), so initialize the gauges
+    // from the current state instead of relying on Inc/Dec history.
+    size_t activeSessions = 0;
+    for (const auto& [_, session] : Sessions) {
+        if (session->IsActive()) {
+            ++activeSessions;
+        }
+    }
+    if (Counters.Sessions) {
+        Counters.Sessions->Set(Sessions.size());
+    }
+    if (Counters.ActiveSessions) {
+        Counters.ActiveSessions->Set(activeSessions);
+    }
 }
 
 void TQuoterResourceTree::UpdateActiveTime(TInstant now) {

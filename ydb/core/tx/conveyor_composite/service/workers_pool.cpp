@@ -300,7 +300,6 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui64>& workerIdxs, const std
             }
             auto startResult = QueryRegistry->GetStateVerified(identity).TryStart(context.Now);
             if (std::holds_alternative<TMonotonic>(startResult)) {
-                // Do not retry a throttled identity in a lower worker band during this drain.
                 throttledQueries.insert(identity);
                 break;
             }
@@ -326,7 +325,6 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
     THashSet<TSchedulerQueryIdentity> throttledQueries;
     bool newTask = false;
     if (HeavyLimits.empty()) {
-        // Preserve the historical order: take free workers from the back.
         const std::vector<ui64> workers(ActiveWorkersIdx.rbegin(), ActiveWorkersIdx.rend());
         newTask = DrainOnWorkers(workers, candidates, context, throttledQueries);
     } else {

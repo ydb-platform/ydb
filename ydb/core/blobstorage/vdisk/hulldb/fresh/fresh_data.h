@@ -86,8 +86,8 @@ namespace NKikimr {
         bool CompactionInProgress() const { return Old.Get() || WaitForCommit; }
 
         // Chunk reservation. A record is admitted only once Cur holds enough reserved chunks to compact
-        // everything already in it, everything in flight, and the record itself -- and, while unsequenced records
-        // are in flight, enough to compact those apart from the rest, so that a rotation can carry them over. Writers
+        // everything already in it, everything in flight, and the record itself -- and every possible split as
+        // unsequenced records land across rotations, so that a rotation can carry the rest over. Writers
         // that do not go through admission put into Cur all the same: their records are charged like any other and
         // may take Cur past its reservation, in which case its compaction reserves the rest itself.
         bool IsRotationPending() const { return CompactionRotationPending || DregRotationPending; }
@@ -226,9 +226,12 @@ namespace NKikimr {
         total.Merge(carried);
         ui64 needed = total.GetChunks(geometry);
         if (!carried.Empty()) {
-            // Enough to split between Cur and what a rotation carries over (CoversCarry()). Compacting two parts on
-            // their own can take an SST more than compacting them together.
-            needed = Max(needed, sequenced.GetChunks(geometry) + carried.GetChunks(geometry));
+            // Each unsequenced record can land in a separate segment, with a rotation after every completion.
+            // Splitting the combined estimate costs at most one extra SST per split. When Cur and InFlight are
+            // empty, the first record uses the SST already included in total; otherwise all carried records may
+            // need their own. Reserving only the current sequenced/carried split misses future completions.
+            const ui64 splits = carried.GetRecords() - ui64(sequenced.Empty());
+            needed += splits * Max<ui32>(geometry.ChunksPerSst, 1);
         }
         const ui64 held = Cur->GetReservedChunks().size();
         return needed > held ? needed - held : 0;

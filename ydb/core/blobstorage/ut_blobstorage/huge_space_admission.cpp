@@ -7,6 +7,7 @@ namespace {
 
 using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 using TDataKind = NKikimrBlobStorage::TDataKind;
+using TPurpose = NPDisk::EAllocationPurpose;
 
 struct THugeAdmissionEnv {
     static TFeatureFlags Flags() {
@@ -35,10 +36,15 @@ struct THugeAdmissionEnv {
     ui32 HugeWrites = 0;
     ui32 FreshReserves = 0;
     std::vector<TColor::E> HugeReserveBounds;
+    std::vector<TPurpose> FreshReservePurposes;
+    std::vector<TPurpose> HugeWritePurposes;
+    std::vector<TPurpose> HugeReservePurposes;
     bool RejectFresh = false;
     bool HoldHugeReserve = false;
     bool RejectFurtherFresh = false;
     std::unique_ptr<IEventHandle> HeldReserve;
+    ui32 HoldHugeLogStep = 0;
+    std::unique_ptr<IEventHandle> HeldHugeLog;
 
     THugeAdmissionEnv() {
         Env.CreateBoxAndPool(1, 1);
@@ -60,12 +66,23 @@ struct THugeAdmissionEnv {
                     HugeKeeper = ev->Recipient;
                     ++HugeWrites;
                     const auto* msg = ev->Get<TEvHullWriteHugeBlob>();
+                    HugeWritePurposes.push_back(msg->AllocationPurpose);
                     UNIT_ASSERT_C(!msg->FreshAdmission.Empty(), "huge data sent without an index reservation");
                     UNIT_ASSERT(msg->FreshRefuseAtColor);
                     break;
                 }
+                case TEvBlobStorage::EvHullLogHugeBlob:
+                    if (HoldHugeLogStep && ev->Get<TEvHullLogHugeBlob>()->LogoBlobID.Step() == HoldHugeLogStep) {
+                        UNIT_ASSERT(!HeldHugeLog);
+                        HeldHugeLog = std::move(ev);
+                        return false;
+                    }
+                    break;
                 case TEvBlobStorage::EvChunkReserve: {
                     const auto* msg = ev->Get<NPDisk::TEvChunkReserve>();
+                    if (HugeKeeper && ev->Sender.Hint() == HugeKeeper.Hint()) {
+                        HugeReservePurposes.push_back(msg->Purpose);
+                    }
                     if (msg->ForHousekeeping) {
                         break;
                     }
@@ -73,6 +90,7 @@ struct THugeAdmissionEnv {
                     // registers in its own mailbox. Anything else (sync log, chunk keeper) is not ours to count.
                     if (ev->Sender == Skeleton) {
                         ++FreshReserves;
+                        FreshReservePurposes.push_back(msg->Purpose);
                         if (RejectFresh || RejectFurtherFresh) {
                             Reject(std::move(ev), nodeId);
                             return false;
@@ -114,11 +132,12 @@ struct THugeAdmissionEnv {
         return edge;
     }
 
-    void ExpectPut(TActorId edge, NKikimrProto::EReplyStatus status) {
+    TDiskPart ExpectPut(TActorId edge, NKikimrProto::EReplyStatus status) {
         auto result = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge, true,
             Env.Runtime->GetClock() + TDuration::Minutes(1));
         UNIT_ASSERT_C(result, "huge put did not finish");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), status);
+        return result->Get()->WrittenLocation;
     }
 
     void Compact() {
@@ -134,6 +153,57 @@ struct THugeAdmissionEnv {
 } // namespace
 
 Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
+    Y_UNIT_TEST(RewriteUsesMaintenanceReserveForFreshAndHugeData) {
+        for (const bool lockChunk : {false, true}) {
+            THugeAdmissionEnv env;
+            const TDiskPart original = env.ExpectPut(env.SendPut(), NKikimrProto::OK);
+            UNIT_ASSERT(original.ChunkIdx);
+            env.Compact(); // the rewrite must obtain new Fresh credit
+
+            if (lockChunk) {
+                // Defrag locks the source chunk so its free slots cannot serve the rewrite.
+                const TActorId edge = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+                env.Env.Runtime->Send(new IEventHandle(env.HugeKeeper, edge,
+                    new TEvHugeLockChunks(TDefragChunks{{original.ChunkIdx, 0}})), 1);
+                auto result = env.Env.WaitForEdgeActorEvent<TEvHugeLockChunksResult>(edge, true,
+                    env.Env.Runtime->GetClock() + TDuration::Minutes(1));
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->LockedChunks.size(), 1);
+            }
+
+            // Keep physical space available, but put all remaining User headroom into reserves.
+            for (auto& [key, pdisk] : env.Env.PDiskMockStates) {
+                pdisk->SetAllocationReserves(1, env.Env.Settings.PDiskSize / env.Env.Settings.PDiskChunkSize);
+            }
+            const ui32 freshBefore = env.FreshReserves;
+            env.ExpectPut(env.SendPut(TDataKind::USER, true), NKikimrProto::OUT_OF_SPACE);
+            UNIT_ASSERT_VALUES_EQUAL(env.FreshReserves, freshBefore + 1);
+            UNIT_ASSERT(env.FreshReservePurposes.back() == TPurpose::User);
+
+            const size_t hugeReservesBefore = env.HugeReservePurposes.size();
+            const TActorId edge = env.Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            const TLogoBlobID id(1000, 1, 1, 0, 1_MB, 0, 1); // rewrite the seeded blob
+            // Match TDefragRewriter: default USER data, IgnoreBlock and RewriteBlob set, sent to Skeleton.
+            auto rewrite = std::make_unique<TEvBlobStorage::TEvVPut>(id, TRope(TString(1_MB, 'x')),
+                env.Info->GetVDiskId(0), true, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob,
+                false, TWriteSource::DefragRewrite);
+            rewrite->RewriteBlob = true;
+            env.Env.Runtime->Send(new IEventHandle(env.Skeleton, edge, rewrite.release()), 1);
+            const TDiskPart rewritten = env.ExpectPut(edge, NKikimrProto::OK);
+            UNIT_ASSERT(rewritten.ChunkIdx);
+            UNIT_ASSERT(rewritten != original);
+            UNIT_ASSERT_VALUES_EQUAL(env.FreshReserves, freshBefore + 2);
+            UNIT_ASSERT(env.FreshReservePurposes.back() == TPurpose::Maintenance);
+            UNIT_ASSERT(env.HugeWritePurposes.back() == TPurpose::Maintenance);
+            UNIT_ASSERT_VALUES_EQUAL(env.HugeReservePurposes.size(), hugeReservesBefore + lockChunk);
+            if (lockChunk) {
+                UNIT_ASSERT(rewritten.ChunkIdx != original.ChunkIdx);
+                UNIT_ASSERT(env.HugeReservePurposes.back() == TPurpose::Maintenance);
+            }
+            env.Compact();
+        }
+    }
+
     Y_UNIT_TEST(IndexRefusalPrecedesDataAllocation) {
         THugeAdmissionEnv env;
         env.RejectFresh = true;
@@ -183,6 +253,33 @@ Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
         env.HoldHugeReserve = false;
         env.Env.Runtime->Send(env.HeldReserve.release(), 1);
         env.ExpectPut(huge, NKikimrProto::OK);
+        env.Compact();
+    }
+
+    Y_UNIT_TEST(ConcurrentHugeWritesReserveForSeparateFreshSegments) {
+        THugeAdmissionEnv env;
+        env.HoldHugeReserve = true;
+        env.HoldHugeLogStep = 2;
+        const TActorId first = env.SendPut();
+        const TActorId second = env.SendPut();
+        env.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(env.HeldReserve);
+        UNIT_ASSERT_VALUES_EQUAL(env.HugeWrites, 2); // both admitted into an empty Cur
+
+        env.HoldHugeReserve = false;
+        env.Env.Runtime->Send(env.HeldReserve.release(), 1);
+        env.ExpectPut(first, NKikimrProto::OK);
+        env.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(env.HeldHugeLog); // second write still has no LSN
+        const ui32 reserves = env.FreshReserves;
+        env.Compact(); // the first index must compact without waiting for the second
+        UNIT_ASSERT_VALUES_EQUAL(env.FreshReserves, reserves);
+
+        // A pending rotation must not block new writes while the second huge write is delayed.
+        env.ExpectPut(env.SendPut(TDataKind::USER, false, 100), NKikimrProto::OK);
+        env.HoldHugeLogStep = 0;
+        env.Env.Runtime->Send(env.HeldHugeLog.release(), 1);
+        env.ExpectPut(second, NKikimrProto::OK);
         env.Compact();
     }
 
@@ -255,6 +352,10 @@ Y_UNIT_TEST_SUITE(VDiskHugeSpaceAdmission) {
                     ? (unavoidable ? TColor::BLACK : TColor::RED)
                     : (unavoidable ? TColor::RED : TColor::PRE_ORANGE);
                 UNIT_ASSERT_EQUAL(env.HugeReserveBounds.front(), expected);
+                const auto purpose = kind == TDataKind::SYSTEM ? TPurpose::System : TPurpose::User;
+                UNIT_ASSERT(env.FreshReservePurposes.front() == purpose);
+                UNIT_ASSERT(env.HugeWritePurposes.front() == purpose);
+                UNIT_ASSERT(env.HugeReservePurposes.front() == purpose);
                 env.Compact();
             }
         }

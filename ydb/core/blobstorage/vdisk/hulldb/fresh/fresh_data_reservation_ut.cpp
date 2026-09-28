@@ -7,8 +7,8 @@
 namespace NKikimr {
 
     // Chunks reserved in advance for compacting Fresh: a record is admitted only once Cur holds enough to
-    // compact everything already in it, everything in flight, and the record itself; and Cur never rotates
-    // out while anything is in flight, so every record lands in the segment its chunks were held for.
+    // compact everything already in it, everything in flight, and the record itself. Sequenced records hold
+    // rotation back; unsequenced ones carry enough credit to land separately in later segments.
     Y_UNIT_TEST_SUITE(TFreshDataReservation) {
 
         using TFreshData = ::NKikimr::TFreshData<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -279,6 +279,37 @@ namespace NKikimr {
             UNIT_ASSERT(env.Fresh.GetInFlight().Empty());
             UNIT_ASSERT(env.Fresh.GetUnsequenced().Empty());
             UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall(TFreshOutputEstimate()), 0);
+        }
+
+        // Start with an empty Cur, then complete concurrent huge writes one at a time, compacting between them.
+        // The remaining writes must retain enough credit for every later split, not just the first rotation.
+        Y_UNIT_TEST(ConcurrentHugeWritesCanLandAcrossRotations) {
+            for (const bool force : {false, true}) {
+                for (const ui32 count : {2u, 3u}) {
+                    TEnv env;
+                    TVector<TEnv::TRecord> records;
+                    for (ui32 i = 0; i < count; ++i) {
+                        records.push_back(env.MakeHugeRecord());
+                        env.Admit(records.back(), true);
+                    }
+                    UNIT_ASSERT(env.Fresh.Empty());
+
+                    for (ui32 i = 0; i < count; ++i) {
+                        env.Fresh.SequenceInFlight(records[i].Charge);
+                        UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall({}), 0);
+                        env.Replay(records[i]);
+                        UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetUnsequenced().GetRecords(), count - i - 1);
+                        // Cover both forced compaction and the request to release recovery log space.
+                        UNIT_ASSERT(env.Fresh.NeedsCompaction(force ? 0 : Max<ui64>(), force));
+                        UNIT_ASSERT(!env.Fresh.IsRotationPending());
+                        auto old = env.Fresh.FindSegmentForCompaction();
+                        UNIT_ASSERT_VALUES_EQUAL(old->TakeReservedChunks().size(), old->GetOutputChunks());
+                        env.Fresh.CompactionSstCreated(std::move(old));
+                        env.Fresh.CompactionFinished();
+                        UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall({}), 0);
+                    }
+                }
+            }
         }
 
         // Once it has its LSN, the record is in flight like any other, and a rotation waits for it.

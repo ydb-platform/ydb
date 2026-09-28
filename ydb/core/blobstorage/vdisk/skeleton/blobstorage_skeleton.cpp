@@ -1047,6 +1047,11 @@ namespace NKikimr {
         }
 
         void PrivateHandle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
+            // Internal rewrites reclaim space regardless of the original blob's data kind.
+            const auto allocationPurpose = ev->Get()->RewriteBlob
+                ? NPDisk::EAllocationPurpose::Maintenance
+                : ev->Get()->Record.GetDataKind() == NKikimrBlobStorage::TDataKind::SYSTEM
+                    ? NPDisk::EAllocationPurpose::System : NPDisk::EAllocationPurpose::User;
             // Reserve the Fresh index before sending a huge put to HugeKeeper.
             // It stays charged while the data waits for a slot and is written.
             const ESpaceColor freshRefuseAtColor = TOutOfSpaceLogic::FreshRefuseAtColorForPut(
@@ -1073,9 +1078,7 @@ namespace NKikimr {
                     ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space", 0, false}, ev, ctx,
                         TAppData::TimeProvider->Now());
                 };
-                if (!AdmitToFresh(ev, std::move(admission), freshRefuseAtColor, false, ctx, refuse,
-                        ev->Get()->Record.GetDataKind() == NKikimrBlobStorage::TDataKind::SYSTEM
-                            ? NPDisk::EAllocationPurpose::System : NPDisk::EAllocationPurpose::User)) {
+                if (!AdmitToFresh(ev, std::move(admission), freshRefuseAtColor, false, ctx, refuse, allocationPurpose)) {
                     return;
                 }
             }
@@ -1184,8 +1187,7 @@ namespace NKikimr {
                     std::move(result), ev->Get()->RewriteBlob, freshRefuseAtColor);
                 hugeWrite->Orbit = std::move(ev->Get()->Orbit);
                 hugeWrite->FreshAdmission = TakePendingFreshAdmission();
-                hugeWrite->AllocationPurpose = record.GetDataKind() == NKikimrBlobStorage::TDataKind::SYSTEM
-                    ? NPDisk::EAllocationPurpose::System : NPDisk::EAllocationPurpose::User;
+                hugeWrite->AllocationPurpose = allocationPurpose;
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(traceId));
             } else {
                 auto logHuge = std::make_unique<TEvHullLogHugeBlob>(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,

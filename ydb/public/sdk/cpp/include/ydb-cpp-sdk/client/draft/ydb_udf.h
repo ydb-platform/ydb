@@ -59,6 +59,8 @@ struct TPlatformCompileStatus {
     std::string CpuSpec;
     ECompileStatus Status = ECompileStatus::Unspecified;
     std::string CompileError;
+    std::optional<TInstant> CompileStartedAt;
+    std::optional<TInstant> CompileFinishedAt;
 };
 
 struct TUploadModuleSettings: public TOperationRequestSettings<TUploadModuleSettings> {

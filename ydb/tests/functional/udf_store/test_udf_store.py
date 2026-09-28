@@ -701,6 +701,7 @@ def test_ydb_udf_cli_write_preconditions():
 def test_ydb_udf_cli_yaml_preserves_types():
     import concurrent.futures
     import grpc
+    from google.protobuf.timestamp_pb2 import Timestamp
     from ydb.public.api.grpc import ydb_discovery_v1_pb2_grpc as discovery_grpc
     from ydb.public.api.grpc import ydb_udf_v1_pb2_grpc as udf_grpc
     from ydb.public.api.protos import ydb_discovery_pb2 as discovery
@@ -736,7 +737,10 @@ def test_ydb_udf_cli_yaml_preserves_types():
             return response(udf.DescribeModuleResponse, udf.DescribeModuleResult(
                 module_info=module, manifest_json=json.dumps(dict(module_name=module.name)),
                 platforms=[udf.PlatformCompileStatus(cpu_spec="12345", status=udf.FAILED,
-                                                     compile_error='false\n"quoted"\\error')],
+                                                     compile_error='false\n"quoted"\\error',
+                                                     compile_started_at=Timestamp(seconds=123, nanos=456000),
+                                                     compile_finished_at=Timestamp(seconds=789)),
+                           udf.PlatformCompileStatus(cpu_spec="pending", status=udf.PENDING)],
             ))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -752,6 +756,12 @@ def test_ydb_udf_cli_yaml_preserves_types():
                 yaml_value = yaml.safe_load(_run_ydb_udf(
                     "grpc://127.0.0.1:%d" % port, "/Root/test", *command, "--format", "yaml"))
                 assert yaml_value == json_value, (command, yaml_value, json_value)
+                if command[0] == "describe":
+                    ready, pending = json_value["platforms"]
+                    assert ready["compile_started_at"] == "1970-01-01T00:02:03.000456Z"
+                    assert ready["compile_finished_at"] == "1970-01-01T00:13:09.000000Z"
+                    assert "compile_started_at" not in pending
+                    assert "compile_finished_at" not in pending
                 result_modules = yaml_value["modules"] if command[0] == "list" else [yaml_value["module"]]
                 for module in result_modules:
                     assert isinstance(module["name"], str)

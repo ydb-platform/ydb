@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_udf.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
@@ -16,6 +17,18 @@
 
 namespace NYdb::inline Dev::NUdf {
 namespace {
+
+IExecutor& UploadIoExecutor() {
+    // Process lifetime prevents the last session from destroying its pool on
+    // one of the pool's own threads. Never run blocking file I/O on the driver's
+    // shared response executor.
+    static const auto executor = [] {
+        auto result = CreateThreadPoolExecutor(2);
+        result->Start();
+        return result;
+    }();
+    return *executor;
+}
 
 Ydb::Udf::ModuleType ToProto(EModuleType type) {
     return static_cast<Ydb::Udf::ModuleType>(type);
@@ -87,6 +100,12 @@ TPlatformCompileStatus FromProto(const Ydb::Udf::PlatformCompileStatus& proto) {
     status.CpuSpec = proto.cpu_spec();
     status.Status = FromProto(proto.status());
     status.CompileError = proto.compile_error();
+    if (proto.has_compile_started_at()) {
+        status.CompileStartedAt = ProtoTimestampToInstant(proto.compile_started_at());
+    }
+    if (proto.has_compile_finished_at()) {
+        status.CompileFinishedAt = ProtoTimestampToInstant(proto.compile_finished_at());
+    }
     return status;
 }
 
@@ -131,6 +150,24 @@ public:
     {
     }
 
+    TAsyncUploadModuleResult StartFromFile(std::string path) {
+        UploadIoExecutor().Post([self = shared_from_this(), path = std::move(path)] {
+            try {
+                auto input = std::make_shared<std::ifstream>(path, std::ios::binary | std::ios::ate);
+                const auto length = input->tellg();
+                if (!*input || length < 0 || !input->seekg(0)) {
+                    ythrow yexception() << "Cannot read module file: " << path;
+                }
+                self->Input_ = std::move(input);
+                self->Size_ = static_cast<uint64_t>(length);
+                self->Start();
+            } catch (const std::exception& ex) {
+                self->Fail(TPlainStatus::Internal(ex.what()));
+            }
+        });
+        return Promise_.GetFuture();
+    }
+
     TAsyncUploadModuleResult Start() {
         Connections_->StartBidirectionalStream<TService, TRequest, TResponse>(
             [self = shared_from_this()](TPlainStatus status, IProcessor::TPtr processor) {
@@ -149,7 +186,8 @@ private:
     //! under the other. Cancelling it is enough — a write on a cancelled stream
     //! comes straight back with CANCELLED.
     void Fail(TPlainStatus status) {
-        if (Done_.exchange(true)) {
+        auto expected = EState::Writing;
+        if (!State_.compare_exchange_strong(expected, EState::Done)) {
             return;
         }
         if (Processor_) {
@@ -198,13 +236,13 @@ private:
     //! and why it is gone is what the pending read is about to say. Writing just
     //! stops.
     void ScheduleNextData() {
-        Connections_->PostToResponseQueue([self = shared_from_this()] {
+        UploadIoExecutor().Post([self = shared_from_this()] {
             self->WriteNextDataOrDone();
         });
     }
 
     void WriteNextDataOrDone() {
-        if (Done_) {
+        if (State_ != EState::Writing) {
             return;
         }
         TRequest chunk;
@@ -251,33 +289,42 @@ private:
     }
 
     void CompleteFromResponse() {
-        if (Done_.exchange(true)) {
+        auto expected = EState::Writing;
+        if (!State_.compare_exchange_strong(expected, EState::Finishing)) {
             return;
         }
 
-        NYdb::NIssue::TIssues issues;
-        NYdb::NIssue::IssuesFromMessage(Response_.operation().issues(), issues);
-        TPlainStatus plain(
-            static_cast<EStatus>(Response_.operation().status()),
-            std::move(issues));
+        // Receiving a message stops the write chain, but does not establish
+        // transport success. Keep the session alive until the final status.
+        Processor_->Finish([self = shared_from_this()](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+            self->State_ = EState::Done;
+            if (!grpcStatus.Ok()) {
+                self->Promise_.SetValue(TUploadModuleResult(TStatus(TPlainStatus(grpcStatus)), {}));
+                return;
+            }
 
-        Ydb::Udf::UploadModuleResult result;
-        if (Response_.operation().has_result()) {
-            Response_.operation().result().UnpackTo(&result);
-        }
-
-        Promise_.SetValue(TUploadModuleResult(TStatus(std::move(plain)), std::move(result)));
-        // Finishing while the body is still being written is the normal case for
-        // a response the server sent early; the processor half-closes the write
-        // side itself once the write in flight comes back.
-        Processor_->Finish([](NYdbGrpc::TGrpcStatus&&) {});
+            const auto& operation = self->Response_.operation();
+            if (!operation.ready()) {
+                self->Promise_.SetValue(TUploadModuleResult(
+                    TStatus(TPlainStatus::Internal("Upload returned an unfinished operation")), {}));
+                return;
+            }
+            NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::IssuesFromMessage(operation.issues(), issues);
+            TPlainStatus plain(static_cast<EStatus>(operation.status()), std::move(issues));
+            Ydb::Udf::UploadModuleResult result;
+            if (plain.Ok() && (!operation.has_result() || !operation.result().UnpackTo(&result))) {
+                plain = TPlainStatus::Internal("Upload returned an invalid result");
+            }
+            self->Promise_.SetValue(TUploadModuleResult(TStatus(std::move(plain)), std::move(result)));
+        });
     }
 
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections_;
     TDbDriverStatePtr DbDriverState_;
     std::shared_ptr<std::istream> Input_;
-    const uint64_t Size_;
+    uint64_t Size_;
     TUploadModuleSettings Settings_;
     NThreading::TPromise<TUploadModuleResult> Promise_;
     IProcessor::TPtr Processor_;
@@ -285,7 +332,12 @@ private:
     uint64_t Offset_ = 0;
     //! Read by the write callbacks and written by the read callback, which gRPC
     //! may run on different threads at the same time.
-    std::atomic<bool> Done_ = false;
+    enum class EState {
+        Writing,
+        Finishing,
+        Done,
+    };
+    std::atomic<EState> State_ = EState::Writing;
 };
 
 } // namespace
@@ -389,19 +441,9 @@ public:
     }
 
     TAsyncUploadModuleResult UploadModuleFromFile(const std::string& path, const TUploadModuleSettings& settings) {
-        auto input = std::make_shared<std::ifstream>(path, std::ios::binary | std::ios::ate);
-        const auto length = input->tellg();
-        if (!*input || length < 0 || !input->seekg(0)) {
-            NYdb::NIssue::TIssues issues;
-            issues.AddIssue(NYdb::NIssue::TIssue("Cannot read module file: " + path));
-            auto promise = NThreading::NewPromise<TUploadModuleResult>();
-            promise.SetValue(TUploadModuleResult(
-                TStatus(TPlainStatus(EStatus::CLIENT_INTERNAL_ERROR, std::move(issues))), {}));
-            return promise.GetFuture();
-        }
         auto session = std::make_shared<TUploadModuleSession>(
-            Connections_, DbDriverState_, std::move(input), static_cast<uint64_t>(length), settings);
-        return session->Start();
+            Connections_, DbDriverState_, nullptr, 0, settings);
+        return session->StartFromFile(path);
     }
 
     TAsyncStatus DeleteModule(const std::string& name, const TDeleteModuleSettings& settings) {

@@ -446,6 +446,12 @@ int TCommandUdfDescribe::Run(TConfig& config) {
         if (!platform.CompileError.empty()) {
             item["compile_error"] = platform.CompileError;
         }
+        if (platform.CompileStartedAt) {
+            item["compile_started_at"] = platform.CompileStartedAt->ToString();
+        }
+        if (platform.CompileFinishedAt) {
+            item["compile_finished_at"] = platform.CompileFinishedAt->ToString();
+        }
         platforms.AppendValue(std::move(item));
     }
     json["platforms"] = std::move(platforms);

@@ -692,7 +692,8 @@ void TPersQueue::PopTxFromQueue()
         std::tie(ExecStep, ExecTxId) = top;
         PlanStepChanged = true;
 
-        LOG_I("New ExecStep ExecTxId",
+        YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "New ExecStep ExecTxId",
+            {"logPrefix", LogPrefix()},
             {"execStep", ExecStep},
             {"execTxId", ExecTxId});
     }
@@ -703,15 +704,6 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
 {
     PQ_ENSURE(!TxQueue.empty());
 
-<<<<<<< HEAD
-    std::tie(ExecStep, ExecTxId) = TxQueue.front();
-    YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "New ExecStep ExecTxId",
-        {"logPrefix", LogPrefix()},
-        {"execStep", ExecStep},
-        {"execTxId", ExecTxId});
-
-=======
->>>>>>> 804e2c01d93 (Fix TEvPlanStepAccepted ordering in PQ tablet (#52566))
     switch (tx.Kind) {
     case NKikimrPQ::TTransaction::KIND_DATA:
         SendEvTxCalcPredicateToPartitions(ctx, tx);
@@ -4335,36 +4327,11 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     // нельзя. Max<ui64>() означает, что за шагом наших транзакций нет
     ui64 maxPendingTxId = Max<ui64>();
 
-<<<<<<< HEAD
-            if (tx.Step == Max<ui64>()) {
-                auto span = tx.CreatePlanStepSpan(TabletID(), step);
-                tx.BeginWaitRSSpan(TabletID());
-
-                PQ_ENSURE(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
-
-                TxQueue.emplace_back(step, txId);
-                SetTxCompleteLagCounter();
-
-                tx.OnPlanStep(step);
-                TryExecuteTxs(ctx, tx);
-            } else {
-                YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Transaction already planned for step",
-                    {"logPrefix", LogPrefix()},
-                    {"txStep", tx.Step},
-                    {"step", step},
-                    {"txId", txId});
-            }
-
-            lastPlannedTxId = txId;
-        } else {
-            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown transaction TxId Step",
-                {"logPrefix", LogPrefix()},
-=======
     for (ui64 txId : txIds) {
         auto p = Txs.find(txId);
         if (p == Txs.end()) {
-            LOG_W("Unknown transaction TxId Step",
->>>>>>> 804e2c01d93 (Fix TEvPlanStepAccepted ordering in PQ tablet (#52566))
+            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown transaction TxId Step",
+                {"logPrefix", LogPrefix()},
                 {"txId", txId},
                 {"step", step});
             continue;
@@ -4374,7 +4341,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 
         if (tx.Step == step) {
             // повторная доставка шага. подтверждение отправим, когда транзакция выполнится
-            LOG_W("Transaction already planned for step",
+            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Transaction already planned for step",
+                {"logPrefix", LogPrefix()},
                 {"txStep", tx.Step},
                 {"step", step},
                 {"txId", txId});
@@ -4386,7 +4354,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 
         if (tx.Step != Max<ui64>()) {
             // транзакция запланирована на другой шаг. этот шаг нам ничего не должен
-            LOG_W("Transaction already planned for another step",
+            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Transaction already planned for another step",
+                {"logPrefix", LogPrefix()},
                 {"txStep", tx.Step},
                 {"step", step},
                 {"txId", txId});
@@ -4397,7 +4366,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 
         if (tx.State != NKikimrPQ::TTransaction::PREPARED) {
             // транзакция уже удаляется. запоздавший шаг её не воскрешает
-            LOG_W("Transaction is not prepared for planning",
+            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Transaction is not prepared for planning",
+                {"logPrefix", LogPrefix()},
                 {"txState", NKikimrPQ::TTransaction_EState_Name(tx.State)},
                 {"step", step},
                 {"txId", txId});
@@ -4410,7 +4380,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
             // координатор опоздал: транзакция будет удалена по истечению MaxStep. шаг подтверждаем,
             // но транзакцию не планируем. PlanStep такой шаг тоже не двигает: иначе MinStep для новых
             // транзакций уехал бы в то же будущее
-            LOG_W("Transaction planned after MaxStep",
+            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Transaction planned after MaxStep",
+                {"logPrefix", LogPrefix()},
                 {"txId", txId},
                 {"step", step},
                 {"maxStep", tx.MaxStep});
@@ -4433,10 +4404,6 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         TryExecuteTxs(ctx, tx);
     }
 
-<<<<<<< HEAD
-    YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "PlanStep PlanTxId",
-        {"logPrefix", LogPrefix()},
-=======
     if ((step > PlanStep) && lastKnownTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
         PlanStep = step;
@@ -4453,8 +4420,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         .CreatedAtWriteTxsCycle = WriteTxsCycle,
     });
 
-    LOG_D("PlanStep PlanTxId",
->>>>>>> 804e2c01d93 (Fix TEvPlanStepAccepted ordering in PQ tablet (#52566))
+    YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "PlanStep PlanTxId",
+        {"logPrefix", LogPrefix()},
         {"planStep", PlanStep},
         {"planTxId", PlanTxId});
 

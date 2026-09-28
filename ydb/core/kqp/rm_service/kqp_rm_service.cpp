@@ -142,15 +142,13 @@ public:
         return Available() >= amount;
     }
 
-    bool AcquireIfAvailable(ui64 value) {
-        if (!Has(value)) {
-            return false;
-        }
-        ForceAcquire(value);
-        return true;
+    // Whether a request of `value` may be charged: within the limit and, for an optional one, also within the
+    // spilling threshold (see GetMemoryAvailability). Has() goes first, a huge value must not reach the signed check.
+    bool Admits(ui64 value, bool optional) const {
+        return Has(value) && (!optional || GetMemoryAvailability() >= static_cast<i64>(value));
     }
 
-    // The unconditional counterpart of AcquireIfAvailable, for the memory arena: Used may go past Limit, which
+    // The charge itself, after Admits() or unconditionally for the memory arena: Used may go past Limit, which
     // Available() reads as 0 and the cookies as a negative availability.
     void ForceAcquire(ui64 value) {
         Used += value;
@@ -411,21 +409,49 @@ public:
                 return result;
             }
 
-            hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
+            hasScanQueryMemory = TotalMemoryResource->Admits(resources.Memory, resources.Optional);
 
+            TIntrusivePtr<TMemoryResource> poolMemory;
             if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
-                auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
+                poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
                 // the pool limit follows the latest tx that allocates from the pool
                 poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
                 if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
                     poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
                 }
-                if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
+                if (!poolMemory->Admits(resources.Memory, resources.Optional)) {
                     hasScanQueryMemory = false;
-                    TotalMemoryResource->Release(resources.Memory);
-                    poolMemory->RecordDenied();
+                    if (!resources.Optional) {
+                        poolMemory->RecordDenied();
+                    }
                 }
             }
+
+            // charged once both have admitted it, so that a refusal does not charge and release the node total: that would
+            // dip its cookie for a moment
+            if (hasScanQueryMemory) {
+                TotalMemoryResource->ForceAcquire(resources.Memory);
+                if (poolMemory) {
+                    poolMemory->ForceAcquire(resources.Memory);
+                }
+            }
+        }
+
+        // an optional request refused at the spilling threshold is the spilling signal of its caller, not a failure:
+        // not counted as one and not recorded in the tx (its last failed allocation is reported on OOM)
+        if (!hasScanQueryMemory && resources.Optional) {
+            Counters->RmOptionalMemoryRefused->Inc();
+            if (ActorSystem) {
+                YDB_LOG_DEBUG_CTX(*ActorSystem, "Optional memory refused at the spilling threshold",
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"memory", resources.Memory});
+            }
+            TStringBuilder reason;
+            reason << "TxId: " << txId << ", taskId: " << taskId << ". Optional memory refused at the spilling threshold, requested: "
+                << resources.Memory;
+            result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
+            return result;
         }
 
         if (!hasScanQueryMemory) {

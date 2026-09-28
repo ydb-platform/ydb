@@ -125,16 +125,27 @@
 #define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
-#define TRACE_EVENT(component)                                                                                                         \
-    const auto& currentTracer = component;                                                                                             \
-    if (ev->HasEvent()) {                                                                                                              \
-        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s: %s",                                  \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->ToString().substr(0, 1000).data()); \
-    } else {                                                                                                                           \
-        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
+#define TRACE_EVENT(component)                                                              \
+    const auto& currentTracer = component;                                                  \
+    if (ev->HasEvent()) {                                                                   \
+        YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
+            {"function", __FUNCTION__},                                                     \
+            {"eventType", ev->Type},                                                        \
+            {"sender", ev->Sender.ToString()},                                              \
+            {"recipient", SelfId().ToString()},                                             \
+            {"event", ev->ToString().substr(0, 1000)});                                     \
+    } else {                                                                                \
+        YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
+            {"function", __FUNCTION__},                                                     \
+            {"eventType", ev->Type},                                                        \
+            {"sender", ev->Sender.ToString()},                                              \
+            {"recipient", ev->Recipient.ToString()});                                       \
     }
-#define TRACE_EVENT_TYPE(eventType) LOG_TRACE(*TlsActivationContext, currentTracer, "%s, processing event %s", __FUNCTION__, eventType)
+
+#define TRACE_EVENT_TYPE(eventType)                                                         \
+    YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Processing event",        \
+        {"function", __FUNCTION__},                                                         \
+        {"eventType", eventType})
 
 class TLog;
 class TLogBackend;

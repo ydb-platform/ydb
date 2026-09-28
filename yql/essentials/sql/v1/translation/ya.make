@@ -29,6 +29,7 @@ SRCS(
     ddl_backup.cpp
     ddl_identity.cpp
     ddl_resource_pool.cpp
+    ddl_session.cpp
     ddl_symlink.cpp
     join.cpp
     insert.cpp
@@ -48,6 +49,7 @@ SRCS(
     sql_ddl_backup.cpp
     sql_ddl_identity.cpp
     sql_ddl_resource_pool.cpp
+    sql_ddl_session.cpp
     sql_ddl_symlink.cpp
     sql_expression.cpp
     sql_group_by.cpp
@@ -66,7 +68,9 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)
+
 GENERATE_ENUM_SERIALIZATION(node.h)
+
 GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 
 END()

@@ -3,6 +3,7 @@
 #include "sql_ddl_backup.h"
 #include "sql_ddl_identity.h"
 #include "sql_ddl_resource_pool.h"
+#include "sql_ddl_session.h"
 #include "sql_ddl_symlink.h"
 #include "select_yql.h"
 #include "sql_expression.h"
@@ -2018,6 +2019,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore72: {
             auto node = TSymlinkTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core72().GetRule_drop_symlink_stmt1());
+            if (!node) {
+                return false;
+            }
+            AddStatementToBlocks(blocks, node);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore73: {
+            auto node = TSessionTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core73().GetRule_kill_session_stmt1());
             if (!node) {
                 return false;
             }

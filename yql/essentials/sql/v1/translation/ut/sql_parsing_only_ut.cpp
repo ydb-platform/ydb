@@ -1406,6 +1406,54 @@ Y_UNIT_TEST(AlterObjectNoFeatures) {
     UNIT_ASSERT(!res.IsOk());
 }
 
+Y_UNIT_TEST(KillSessionIdentifier) {
+    const auto res = SqlToYql("USE plato; KILL SESSION `ydb://session/3?node_id=1&id=test`;",
+                              /*maxErrors=*/10, TString(NYql::KikimrProviderName));
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), "KiKillSession!");
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), "ydb://session/3?node_id=1&id=test");
+}
+
+Y_UNIT_TEST(KillSessionKeywordsRemainIdentifiers) {
+    for (const auto& query : {
+             "SELECT kill, session FROM plato.Input;",
+             "SELECT value AS kill, value AS session FROM plato.Input;",
+             "SELECT * FROM plato.kill AS session;",
+             "SELECT * FROM plato.session AS kill;",
+             "USE ydb; CREATE TABLE kill (session Uint64, PRIMARY KEY (session));",
+             "USE ydb; CREATE TABLE session (kill Uint64, PRIMARY KEY (kill));"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+    }
+}
+
+Y_UNIT_TEST(KillSessionParameter) {
+    const auto res = SqlToYql("USE plato; DECLARE $session_id AS Utf8; KILL SESSION $session_id;",
+                              /*maxErrors=*/10, TString(NYql::KikimrProviderName));
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), "KiKillSession!");
+    UNIT_ASSERT_VALUES_EQUAL(GetPrettyPrint(res).find("EvaluateAtom"), TString::npos);
+}
+
+Y_UNIT_TEST(KillSessionUnsupportedProvider) {
+    for (const auto provider : {NYql::YtProviderName, NYql::YdbProviderName}) {
+        const auto res = SqlToYql("USE plato; KILL SESSION `session-id`;", /*maxErrors=*/10, TString(provider));
+        UNIT_ASSERT_C(!res.IsOk(), provider);
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "KILL SESSION is supported only for YDB");
+    }
+}
+
+Y_UNIT_TEST(KillSessionRejectsUnsupportedForms) {
+    for (const auto& query : {
+             "USE plato; KILL SESSION \"session-id\";",
+             "USE plato; KILL SESSION `id1`, `id2`;",
+             "USE plato; KILL SESSION ON VALUES (\"id1\");",
+             "USE plato; KILL SESSION ON SELECT SessionId FROM `.sys/query_sessions`;"}) {
+        const auto res = SqlToYql(query, /*maxErrors=*/10, TString(NYql::KikimrProviderName));
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+
 Y_UNIT_TEST(DropObjectNoFeatures) {
     NYql::TAstParseResult res = SqlToYql("USE plato; DROP OBJECT secretId (TYPE SECRET);");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));

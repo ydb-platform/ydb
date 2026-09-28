@@ -25,7 +25,10 @@ Run `workload vector import --help` for available data initializers.
 `run select` reads vector settings from the named index and uses the same query,
 throughput, latency, and optional recall measurements for either index type.
 `--query-table` selects predefined query vectors. `--non-indexed` measures the
-brute-force baseline; `--stale-ro` uses stale reads, including configured replicas.
+brute-force baseline; `--stale-ro` uses stale reads, including configured replicas. Distributed HNSW
+selects use read-only snapshots by default: SerializableRW reads may take locks
+that force scan fallback. Each concurrent worker atomically selects its next
+query vector.
 
 HNSW creation options (stored on the index):
 
@@ -41,3 +44,14 @@ Partitions below `--hnsw-min-rows` use brute-force search. HNSW needs a memory
 controller cache allocation; cold or rebuilding caches can affect performance.
 The HNSW creation options apply only to `distributed_hnsw`. Recreate the index
 with different options to compare HNSW configurations.
+
+With `--hnsw-full-range`, unprefixed, non-overlapping `distributed_hnsw` selects search all posting-table partitions and
+merge their HNSW candidates. This bypasses k-means cluster-range filtering and
+uses the stored HNSW settings; `--kmeans-tree-clusters` applies to k-means and
+prefixed index views, not this full-partition search. `--non-indexed` still
+searches the base table. Prefixed searches retain their index view and prefix
+predicate. Overlapping indexes retain the index view to deduplicate postings.
+
+The default search continues to use the named index view and
+`--kmeans-tree-clusters`. Full-range mode searches more data and can have
+different recall and throughput; report the mode when comparing results.

@@ -63,10 +63,22 @@ std::string MakeSelect(const TVectorWorkloadParams& params, const TString& index
     ret << "DECLARE $Embedding as String;" << "\n";
     if (params.PrefixColumn)
         ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";
-    ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeSearchClusters << "\";" << "\n";
-    ret << "SELECT " << MakeKeyExpression(params, "") << " AS id FROM `" << params.TableOpts.Name << "`\n";
-    if (!indexName.empty())
+    // An unprefixed distributed HNSW search fans out to partition-local graphs.
+    // K-means cluster borders filter graph candidates and can force full scans
+    // when the selected cluster has too few candidates in a shared graph.
+    const bool fullPartitionHnsw = params.HnswFullRange && params.DistributedHnsw && !indexName.empty()
+        && !params.PrefixColumn && !params.HasOverlappingPostings;
+    if (!fullPartitionHnsw) {
+        ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeSearchClusters << "\";" << "\n";
+    }
+    ret << "SELECT " << MakeKeyExpression(params, "") << " AS id FROM `" << params.TableOpts.Name;
+    if (fullPartitionHnsw) {
+        ret << "/" << indexName << "/indexImplPostingTable";
+    }
+    ret << "`\n";
+    if (!indexName.empty() && !fullPartitionHnsw) {
         ret << "VIEW " << indexName << "\n";
+    }
     if (params.PrefixColumn)
         ret << "WHERE " << params.PrefixColumn << " = $PrefixValue" << "\n";
     ret << "ORDER BY Knn::" << functionName << "(" << params.EmbeddingColumn << ", $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";

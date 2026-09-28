@@ -219,9 +219,12 @@ public:
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
     void SetReadyHook(const TDqInputReadyHook& hook) override;
+    void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override;
     void AbortChannelByMemoryLimit(ui64 bytes);
     // under Mutex: marked where data becomes poppable or the buffer finishes, before the input is notified
     TDqInputReadyHook ReadyHook;
+    // under Mutex: incremented where Finished is set, before the output is notified
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     NActors::TActorSystem* ActorSystem;
@@ -337,6 +340,7 @@ public:
     void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
+    void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
     // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
@@ -412,6 +416,8 @@ public:
     mutable TInstant WaitTimestamp;
 
     mutable std::mutex FlowControlMutex;
+    // under FlowControlMutex: incremented where Finished is set, before the output is woken up
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     mutable EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
 
@@ -503,6 +509,9 @@ public:
     void EarlyFinish() override;
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override {
+        Descriptor->SetFinishEpoch(epoch);
+    }
 
     std::shared_ptr<TNodeState> NodeState;
     std::shared_ptr<TOutputDescriptor> Descriptor;
@@ -1156,12 +1165,21 @@ public:
         return IsLocalChannel;
     }
 
+    // the epoch goes to the buffer, and again to the bound buffer which replaces the stub, see Bind
+    bool BindFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override {
+        FinishEpoch = epoch;
+        Serializer->Buffer->SetFinishEpoch(FinishEpoch);
+        (*FinishEpoch)++;
+        return true;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {

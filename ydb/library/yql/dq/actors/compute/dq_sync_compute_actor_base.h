@@ -419,8 +419,12 @@ protected:
             std::tie(transform.Input, transform.Buffer) = *TaskRunner->GetInputTransform(inputIndex);
         }
 
+        // the output channels of a task are all v1 or all v2, and the v2 ones support TDqOutputFinishEpoch
+        const bool useFinishEpoch = this->Task.GetDqChannelVersion() >= 2u && this->RuntimeSettings.ChannelService
+            && this->RuntimeSettings.ChannelService->IsChannelNotificationsEnabled();
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            channel.FinishEpochBound = useFinishEpoch && channel.Channel->BindFinishEpoch(this->OutputFinishEpoch);
             if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
                 channel.Channel->Bind(this->SelfId(), channel.PeerId);
             }

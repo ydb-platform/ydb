@@ -183,6 +183,8 @@ struct TWorkerSettings {
     bool CheckOrder = false;
     // the producer sends the finish only once the test has sent it TEvStep
     bool FinishOnStep = false;
+    // bound to the output buffer of the producer, which increments it when it becomes finished
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
 };
 
 struct TFailureSettings {
@@ -277,6 +279,9 @@ public:
         if (!Started) {
             TChannelFullInfo info(ChannelId, SelfId(), PeerId, 0, 1, TCollectStatsLevel::None);
             Buffer = Service->GetOutputBuffer(info, QuotaManager, nullptr);
+            if (Settings.FinishEpoch) {
+                Buffer->SetFinishEpoch(Settings.FinishEpoch);
+            }
             Started = true;
         }
         if (Buffer->IsFinished()) {
@@ -2140,6 +2145,38 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(EmptyFinish2n) {
         LoadTest(100, false);
+    }
+
+    // Every output finish, the plain one and the early finish asked by the consumer, remote and local, moves the
+    // epoch a compute actor relies on to check its outputs only once one of them has finished. It is moved right
+    // after the finish is set, so it may lag the producer seeing it for a moment.
+    void FinishEpochTest(bool local, bool earlyFinish) {
+        const int count = 20;
+        auto epoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        TWorkerSettings producer{ .MessageCount = 20, .FinishEpoch = epoch };
+        TWorkerSettings consumer{ .MessageCount = earlyFinish ? 10 : 20, .EarlyFinish = earlyFinish };
+        LoadTest(count, local, producer, consumer);
+        auto deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (epoch->load() < count && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(epoch->load() >= count, "the finish epoch moved " << epoch->load() << " time(s) for " << count << " finished channels");
+    }
+
+    Y_UNIT_TEST(FinishEpoch2n) {
+        FinishEpochTest(false, false);
+    }
+
+    Y_UNIT_TEST(FinishEpoch1n) {
+        FinishEpochTest(true, false);
+    }
+
+    Y_UNIT_TEST(EarlyFinishEpoch2n) {
+        FinishEpochTest(false, true);
+    }
+
+    Y_UNIT_TEST(EarlyFinishEpoch1n) {
+        FinishEpochTest(true, true);
     }
 
     Y_UNIT_TEST(SimpleFinish2n) {

@@ -106,7 +106,7 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true)
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true)
                 : Server(MakeConfig(useSimpleProxy, enablePathAliasing), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
@@ -115,14 +115,16 @@ namespace NKikimr::NGRpcService {
                 })
                 , Channel(grpc::CreateChannel(TStringBuilder() << "localhost:" << Server.GetPort(), grpc::InsecureChannelCredentials()))
             {
-                Ydb::Cms::CreateDatabaseRequest request;
-                request.set_path("/Root/kfront");
-                auto* storage = request.mutable_resources()->add_storage_units();
-                storage->set_unit_kind("hdd");
-                storage->set_count(1);
-                Server.Tenants_->CreateTenant(std::move(request));
-                for (const auto node : Server.Tenants_->List("/Root/kfront")) {
-                    Server.GetServer().EnableGRpc(Server.GetPortManager().GetPort(), node, "/Root/kfront");
+                if (createTenant) {
+                    Ydb::Cms::CreateDatabaseRequest request;
+                    request.set_path("/Root/kfront");
+                    auto* storage = request.mutable_resources()->add_storage_units();
+                    storage->set_unit_kind("hdd");
+                    storage->set_count(1);
+                    Server.Tenants_->CreateTenant(std::move(request));
+                    for (const auto node : Server.Tenants_->List("/Root/kfront")) {
+                        Server.GetServer().EnableGRpc(Server.GetPortManager().GetPort(), node, "/Root/kfront");
+                    }
                 }
             }
         };
@@ -188,8 +190,13 @@ namespace NKikimr::NGRpcService {
         }
 
         Y_UNIT_TEST(ListDirectoryRenamesChildForTrailingSlashParent) {
-            TFixture fixture;
+            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false);
             auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+
+            Ydb::Scheme::MakeDirectoryRequest make;
+            // Create the physical child through a different alias than the one under test.
+            make.set_path("/alias");
+            Success(Call(*stub, &TScheme::MakeDirectory, make, "/Root"));
 
             Ydb::Scheme::ListDirectoryRequest list;
             list.set_path("/Root/");

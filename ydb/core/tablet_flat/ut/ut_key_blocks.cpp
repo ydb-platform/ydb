@@ -1897,13 +1897,29 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
             checkChanged([&](auto& changed) { changed.Certain = &bounds; });
         }
 
+        const ui64 resumeKey = chunk.Resume.Key.GetCells()[0].AsValue<ui64>();
+        const TKeyBoundary wrongPositions[] = {
+            {Key64(resumeKey - 1), EBoundarySide::Before},
+            {Key64(resumeKey + 1), EBoundarySide::Before},
+            {chunk.Resume.Key, chunk.Resume.Side == EBoundarySide::Before
+                ? EBoundarySide::After : EBoundarySide::Before},
+        };
+        for (const auto& position : wrongPositions) {
+            const auto result = SplitOnce(subset, request, position);
+            UNIT_ASSERT(result.Stale);
+            UNIT_ASSERT(result.Keys.empty());
+            UNIT_ASSERT(!result.Stopped);
+            UNIT_ASSERT(!result.Truncated);
+        }
+
         // Rejection leaves the checkpoint reusable.
         const auto expected = SplitOnce(subset, request, chunk.Resume);
         UNIT_ASSERT(!expected.Stale);
         UNIT_ASSERT(!expected.Keys.empty());
         const TBounds equivalent{Key64(0), Key64(1), true, false};
         request.Certain = &equivalent;
-        const auto resumed = SplitOnce(subset, request, chunk.Resume);
+        const TKeyBoundary equivalentResume{TSerializedCellVec(chunk.Resume.Key.GetCells()), chunk.Resume.Side};
+        const auto resumed = SplitOnce(subset, request, equivalentResume);
         UNIT_ASSERT(!resumed.Stale);
         AssertSameSplits(expected, resumed);
 

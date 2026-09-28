@@ -130,7 +130,7 @@ namespace NTable {
         bool Stopped = false;
         TKeyBoundary Resume;
         TSplitCheckpoint Carry;
-        // Carry is incompatible with this layout or request; Keys is empty.
+        // Carry mismatch (layout, request or resume position); Keys is empty.
         bool Stale = false;
     };
 

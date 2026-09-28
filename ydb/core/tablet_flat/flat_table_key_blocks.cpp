@@ -334,6 +334,7 @@ struct TSplitCheckpoint::TState {
     double Rate = 1.0;
     ui64 MaxExpectedBytes = 0;
     ui64 MaxIndexPages = 0;
+    TMark Resume;
     TMark End;
     std::optional<TBounds> Certain;
     ui64 PieceUnits = 0;
@@ -701,6 +702,7 @@ struct TKeyBlockIterator::TState {
             || carry.State->Rate != split.Request.Rate
             || carry.State->MaxExpectedBytes != split.Request.MaxExpectedBytes
             || carry.State->MaxIndexPages != split.Request.MaxIndexPages
+            || CmpPos(carry.State->Resume, split.Start, KeyDefaults()) != 0
             || CmpPos(carry.State->End, split.End, KeyDefaults()) != 0
             || carry.State->Certain.has_value() != bool(split.Request.Certain))
         {
@@ -725,6 +727,7 @@ struct TKeyBlockIterator::TState {
         carry->Rate = split.Request.Rate;
         carry->MaxExpectedBytes = split.Request.MaxExpectedBytes;
         carry->MaxIndexPages = split.Request.MaxIndexPages;
+        carry->Resume = split.Walk.Target;
         carry->End = split.End;
         if (split.Request.Certain) {
             carry->Certain = *split.Request.Certain;

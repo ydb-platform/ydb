@@ -358,7 +358,6 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
-[[maybe_unused]]
 void RemoveOperatorIds(NJson::TJsonValue& planNode) {
     auto& planMap = planNode.GetMapSafe();
     if (auto operators = planMap.find("Operators"); operators != planMap.end()) {

@@ -157,7 +157,6 @@ public:
         Y_UNUSED(config);
         Y_UNUSED(typeCtx);
         Y_UNUSED(optCtx);
-        Y_UNUSED(query);
 
         // PlanJson is a plan for a transaction, we need to reshape it into a query plan
         if (TransformCtx->PlanJson.has_value()) {

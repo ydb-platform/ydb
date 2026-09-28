@@ -222,6 +222,62 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         YDB_LOG((prio), "[REQ_JSON]",
             {"requestJson", ss.Str()});
     }
+
+    auto message = YDB_LOG_CREATE_MESSAGE(
+        {"reqId", reqId},
+        {"poolId", poolId},
+        {"sessionId", sessionId},
+        {"userSID", userSID},
+        {"requestissuesStr", requestText},
+        {"issues", issuesStr},
+        {"isStreamingQuery", fields.IsStreamingQuery},
+        {"durationUs", fields.DurationUs},
+        {"resultsSize", fields.ResultsSize}
+    );
+
+    if (!fields.Database.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"database", fields.Database});
+    }
+    if (!fields.DatabaseId.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"databaseId", fields.DatabaseId});
+    }
+    if (!fields.TraceId.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"traceId", fields.TraceId});
+    }
+    if (!fields.QueryId.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"queryId", fields.QueryId});
+    }
+    if (!fields.Action.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"action", fields.Action});
+    }
+    if (!fields.Type.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"type", fields.Type});
+    }
+    if (fields.StartedAt) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"startedAtUs", fields.StartedAt});
+    }
+    if (!fields.Status.empty()) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"status", fields.Status});
+    }
+    if (fields.QueuedTimeUs) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"queuedTimeUs", fields.QueuedTimeUs});
+    }
+    if (fields.HasCompileStats) {
+        YDB_LOG_UPDATE_MESSAGE(message,
+            {"compileFromCache", fields.CompileFromCache},
+            {"compileTimeUs", fields.CompileTimeUs});
+    }
+
+    YDB_LOG((prio), "KQP Request processed", message);
 }
 
 TString GetRequestId(const TKqpQueryState& state) {

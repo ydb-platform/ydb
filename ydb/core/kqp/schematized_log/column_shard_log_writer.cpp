@@ -1,0 +1,215 @@
+#include "column_shard_log_writer.h"
+
+#include <ydb/core/driver_lib/run/run.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+
+namespace NKikimr::NKqp::NSchematizedLog {
+
+TColumnShardLogWriter::TColumnShardLogWriter(
+    TLogMessageFilter filter,
+    TDatabaseSettings settings,
+    TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
+    TKikimrRunner* runner)
+    : TBaseSchematizedLogWriter(std::move(filter), std::move(columns))
+    , Settings(std::move(settings))
+    , Runner(runner)
+{
+}
+
+bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+    if (!TBaseSchematizedLogWriter::Write(message)) {
+        return false;
+    }
+    CurrentBatchSize++;
+    if (Settings.MaxBatchSize.has_value() && CurrentBatchSize == Settings.MaxBatchSize.value()) {
+        Flush();
+    }
+    return true;
+}
+
+void TColumnShardLogWriter::Flush() {
+    TBaseSchematizedLogWriter::Flush();
+    CurrentBatchSize = 0;
+}
+
+TString TColumnShardLogWriter::GetStoreDescription() {
+    TStringBuilder sb;
+    for (const auto& column : Columns) {
+        sb << "Columns{ Name: \"" << column->Name << "\" Type : \"" << column->Type << "\"";
+        if (column->Settings.IsDictionary) {
+            sb << " DataAccessorConstructor{ ClassName: \"DICTIONARY\" } ";
+        }
+        if (column->Settings.IsNotNull) {
+            sb << " NotNull : true";
+        }
+        if (!column->Settings.Extra.empty()) {
+            sb << " " << column->Settings.Extra;
+        }
+        sb << " }";
+    }
+
+    for (const auto& column : Columns) {
+        if (column->Settings.IsPK) {
+            sb << "KeyColumnNames: \"" << column->Name << "\"\n";
+        }
+    }
+
+    return Sprintf(R"(
+        Name: "%s"
+        ColumnShardCount: %d
+        SchemaPresets {
+            Name: "default"
+            Schema {
+                %s
+                }
+            }
+        )", Settings.StoreName.c_str(), Settings.StoreShardsCount, sb.data());
+}
+
+TString TColumnShardLogWriter::GetTableDescription() {
+    TStringBuilder sb;
+    sb << "[";
+    bool first = true;
+    for (const auto& column : Columns) {
+        if (column->Settings.IsShardingKey) {
+            if (!first) {
+                sb << ", ";
+            } else {
+                first = false;
+            }
+            sb << "\"" << column->Name << "\"\n";
+        }
+    }
+    sb << "]";
+
+    return Sprintf(R"(
+        Name: "%s"
+        ColumnShardCount: %d
+        Sharding {
+            HashSharding {
+                Function: %s
+                Columns: %s
+            }
+        })", Settings.TableName.c_str(),
+        Settings.TableShardsCount,
+        NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(Settings.ShardingMethod).c_str(),
+        sb.c_str());
+}
+
+void TColumnShardLogWriter::WaitForSchemeOperation(NActors::TActorId sender, ui64 txId) {
+    auto& server = GetRunner().GetTestServer();
+    auto& runtime = *server.GetRuntime();
+    auto& settings = server.GetSettings();
+    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    request->Record.SetTxId(txId);
+
+    const ui64 mask = static_cast<ui64>(0xff) << 56;
+    ui64 tabletId = Tests::SchemeRoot;
+    ui32 id = settings.Domain;
+    auto tid = (tabletId & ~mask) | static_cast<ui64>(id & 0xff) << 56;
+
+    runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
+    runtime.template GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+}
+
+void TColumnShardLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
+    auto& server = GetRunner().GetTestServer();
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    *request->Record.MutableTransaction()->MutableModifyScheme() = modifyScheme;
+    TActorId sender = server.GetRuntime()->AllocateEdgeActor();
+    server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
+    auto ev = server.GetRuntime()->template GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    auto status = ev->Get()->Record.GetStatus();
+    ui64 txId = ev->Get()->Record.GetTxId();
+    UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
+    WaitForSchemeOperation(sender, txId);
+}
+
+bool TColumnShardLogWriter::CheckStorageExists() const {
+    auto schemeClient = GetRunner().GetSchemeClient();
+
+    const TString storePath = "/Root/" + Settings.StoreName;
+    const auto store = schemeClient.DescribePath(storePath).GetValueSync();
+    if (!store.IsSuccess() || store.GetEntry().Type != NYdb::NScheme::ESchemeEntryType::ColumnStore) {
+        return false;
+    }
+
+    const TString tablePath = storePath + "/" + Settings.TableName;
+    const auto table = schemeClient.DescribePath(tablePath).GetValueSync();
+    return table.IsSuccess() && table.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::ColumnTable;
+}
+
+void TColumnShardLogWriter::CreateStorage() {
+    TString storeScheme = GetStoreDescription();
+    NKikimrSchemeOp::TColumnStoreDescription store;
+    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(storeScheme, &store));
+    NKikimrSchemeOp::TModifyScheme op;
+    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
+    op.SetWorkingDir("/Root");
+    op.MutableCreateColumnStore()->CopyFrom(store);
+    ExecuteModifyScheme(op);
+
+    TString storeOrDirName = Settings.StoreName;
+    TString tableScheme = GetTableDescription();
+    NKikimrSchemeOp::TColumnTableDescription table;
+    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(tableScheme, &table));
+    TString workingDir = "/Root";
+    if (!storeOrDirName.empty()) {
+        workingDir += "/" + storeOrDirName;
+    }
+
+    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+    op.SetWorkingDir(workingDir);
+    op.MutableCreateColumnTable()->CopyFrom(table);
+    ExecuteModifyScheme(op);
+}
+
+void TColumnShardLogWriter::CreateOrUpdateStorage() {
+    if (!CheckStorageExists()) {
+        CreateStorage();
+    }
+    StorageExists = true;
+}
+
+void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+    auto* runtime = GetRunner().GetTestServer().GetRuntime();
+
+    UNIT_ASSERT(batch);
+    UNIT_ASSERT(batch->num_rows());
+    auto data = NKikimr::NArrow::SerializeBatchNoCompression(batch);
+    UNIT_ASSERT(!data.empty());
+    TString serializedSchema = NKikimr::NArrow::SerializeSchema(*batch->schema());
+    UNIT_ASSERT(serializedSchema);
+
+    Ydb::Table::BulkUpsertRequest request;
+    request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
+    request.set_data(data);
+    request.set_table(Sprintf("/Root/%s/%s", Settings.StoreName.c_str(), Settings.TableName.c_str()));
+
+    std::atomic<size_t> responses = 0;
+    using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
+    auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
+    future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) {
+        auto op = f.GetValueSync().operation();
+        TStringBuilder issues;
+        if (op.status() != Ydb::StatusIds::SUCCESS) {
+            for (auto& issue : op.issues()) {
+                issues << issue.message() << " ";
+            }
+            issues << "\n";
+        }
+        Cerr << issues;
+        UNIT_ASSERT_VALUES_EQUAL(op.status(), Ydb::StatusIds::SUCCESS);
+        responses.fetch_add(1);
+    });
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return responses.load() >= 1;
+    };
+
+    runtime->DispatchEvents(options);
+}
+
+} // namespace NKikimr::NKqp::NSchematizedLog

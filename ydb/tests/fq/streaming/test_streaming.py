@@ -2076,7 +2076,7 @@ FROM `{table_name}`"""
                     assert "<= MAX_OF(" in filter
                     assert "1984-01-01" in filter
                     assert "1991-08-19" in filter
-                    # valiadate simplified LIKE
+                    # validate simplified LIKE
                     assert "EndsWith(" in filter
                     assert "StartsWith(" in filter
                     assert "Contains(" in filter

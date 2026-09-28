@@ -147,6 +147,10 @@ public:
         return Interval;
     }
 
+    TDuration GetNextPublishDelay() const {
+        return SequenceNo ? Interval : Min(Interval, TDuration::Seconds(1));
+    }
+
 private:
     TCurrentQueryStats Stats;
     TCurrentQueryStats::TSourceState Source;

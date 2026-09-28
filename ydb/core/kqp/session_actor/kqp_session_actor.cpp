@@ -2553,7 +2553,7 @@ public:
 
     void ScheduleCurrentQueryStatsPublish() {
         if (QueryState->RuntimeStats.SchedulePublish()) {
-            Schedule(QueryState->RuntimeStats.GetInterval(), new TEvents::TEvWakeup(QueryState->QueryId));
+            Schedule(QueryState->RuntimeStats.GetNextPublishDelay(), new TEvents::TEvWakeup(QueryState->QueryId));
         }
     }
 
@@ -2578,7 +2578,7 @@ public:
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,
                 publish->SequenceNo, std::move(publish->Stats)));
             if (publish->ScheduleNextPublish) {
-                Schedule(QueryState->RuntimeStats.GetInterval(), new TEvents::TEvWakeup(QueryState->QueryId));
+                Schedule(QueryState->RuntimeStats.GetNextPublishDelay(), new TEvents::TEvWakeup(QueryState->QueryId));
             }
         }
     }

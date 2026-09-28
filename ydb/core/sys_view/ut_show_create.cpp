@@ -1203,6 +1203,144 @@ Y_UNIT_TEST(TableMetricsLevel) {
     );
 }
 
+Y_UNIT_TEST(TableMetricsLevelAfterAlter) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+    TShowCreateChecker checker(env);
+
+    // RESET leaves no METRICS_LEVEL, and with nothing else set, no WITH at all.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "TABLE"
+            );
+            ALTER TABLE test_show_create RESET (METRICS_LEVEL);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    const std::string createWithOtherSettings = R"(
+        CREATE TABLE test_show_create (
+            Key Uint64 NOT NULL,
+            Value String NOT NULL,
+            Ts Timestamp,
+            PRIMARY KEY (Key)
+        )
+        WITH (
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            READ_REPLICAS_SETTINGS = "PER_AZ:1",
+            METRICS_LEVEL = "PARTITION",
+            KEY_BLOOM_FILTER = ENABLED,
+            TTL = Interval("P1D") ON Ts
+        );
+    )";
+
+    checker.CheckShowCreateTable(createWithOtherSettings, "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                METRICS_LEVEL = 'PARTITION',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+
+    // RESET drops only METRICS_LEVEL, the other settings stay.
+    checker.CheckShowCreateTable(createWithOtherSettings + R"(
+            ALTER TABLE test_show_create RESET (METRICS_LEVEL);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+
+    // SET together with another setting in one ALTER.
+    checker.CheckShowCreateTable(createWithOtherSettings + R"(
+            ALTER TABLE test_show_create SET (METRICS_LEVEL = "TABLE", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                METRICS_LEVEL = 'TABLE',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevelIndexedCreate) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                INDEX idx GLOBAL ON (Value),
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                INDEX `idx` GLOBAL SYNC ON (`Value`),
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'PARTITION');
+        )"
+    );
+}
+
 Y_UNIT_TEST(TableKeyBloomFilter) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 

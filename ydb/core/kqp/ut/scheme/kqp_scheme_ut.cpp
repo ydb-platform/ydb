@@ -1171,6 +1171,81 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(hasTtl());
     }
 
+    Y_UNIT_TEST_TWIN(TableMetricsLevelIndexedCreate, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto create = ExecuteGeneric<UseQueryService>(queryClient, session, R"(
+            CREATE TABLE `/Root/MetricsIndexed` (
+                Key Uint64,
+                Value Utf8,
+                PRIMARY KEY (Key),
+                INDEX ValueIndex GLOBAL ON (Value)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION",
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        // The index table gets the level of its main table.
+        UNIT_ASSERT(GetConfiguredMetricsLevel(session, "/Root/MetricsIndexed") == TMetricsSettings::EMetricsLevel::Partition);
+        UNIT_ASSERT(GetConfiguredMetricsLevel(session, "/Root/MetricsIndexed/ValueIndex/indexImplTable") == TMetricsSettings::EMetricsLevel::Partition);
+
+        auto describe = session.DescribeTable("/Root/MetricsIndexed").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetPartitioningSettings().GetMinPartitionsCount(), 2u);
+    }
+
+    Y_UNIT_TEST(TableMetricsLevelCreateTableAs) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto result = queryClient.ExecuteQuery(R"(
+            CREATE TABLE `/Root/MetricsCtas` (
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION",
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            )
+            AS SELECT Key, Value FROM `/Root/KeyValue`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT(GetConfiguredMetricsLevel(session, "/Root/MetricsCtas") == TMetricsSettings::EMetricsLevel::Partition);
+        {
+            auto describe = session.DescribeTable("/Root/MetricsCtas").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetPartitioningSettings().GetMinPartitionsCount(), 2u);
+        }
+
+        auto select = queryClient.ExecuteQuery(R"(
+            SELECT Key, Value FROM `/Root/MetricsCtas` ORDER BY Key;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(select.GetStatus(), EStatus::SUCCESS, select.GetIssues().ToString());
+        CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(select.GetResultSet(0)));
+
+        auto columnResult = queryClient.ExecuteQuery(R"(
+            CREATE TABLE `/Root/MetricsCtasColumn` (
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN, METRICS_LEVEL = "TABLE")
+            AS SELECT 1u AS Key, "One"u AS Value;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(columnResult.GetStatus(), EStatus::GENERIC_ERROR, columnResult.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(columnResult.GetIssues().ToString(), "METRICS_LEVEL is not supported for column tables");
+        AssertTableMissing(session, "/Root/MetricsCtasColumn");
+    }
+
 
     Y_UNIT_TEST(ColumnTableMultiColumnStatisticsWithoutWithMeansAllTypes) {
         NKikimrConfig::TFeatureFlags featureFlags;

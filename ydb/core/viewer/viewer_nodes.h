@@ -217,6 +217,7 @@ class TJsonNodes : public TViewerPipeClient {
         NKikimrWhiteboard::TNodeStateInfo NetworkStateInfo;
         bool Disconnected = false;
         bool HasDisks = false;
+        bool HasPDiskWhiteboardResponse = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
         bool GotDatabaseFromResourceBoardInfo = false;
         std::optional<int> UptimeSeconds = 0;
@@ -388,7 +389,7 @@ class TJsonNodes : public TViewerPipeClient {
             CalcUptimeSeconds(TInstant::Now());
         }
 
-        void RemapDisks() {
+        void RemapPDisks() {
             if (PDisks.empty() && !SysViewPDisks.empty()) {
                 for (const auto& entry : SysViewPDisks) {
                     const auto& pdisk(entry.GetInfo());
@@ -416,6 +417,10 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
+        }
+
+        void RemapDisks() {
+            RemapPDisks();
             if (VDisks.empty() && !SysViewVDisks.empty()) {
                 for (const auto& entry : SysViewVDisks) {
                     const auto& vdisk(entry.GetInfo());
@@ -2713,6 +2718,11 @@ public:
         if (FieldsNeeded(FieldsPDisks)) {
             for (auto& [nodeId, response] : PDiskViewerResponse) {
                 if (response.IsOk()) {
+                    for (TNodeId respondedNodeId : response.Get()->Record.GetLocationResponded().GetNodeId()) {
+                        if (TNode* node = FindNode(respondedNodeId)) {
+                            node->HasPDiskWhiteboardResponse = true;
+                        }
+                    }
                     auto& pDiskResponse(*(response.Get()->Record.MutablePDiskResponse()));
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
                         TNode* node = FindNode(pDiskState.GetNodeId());
@@ -2728,11 +2738,17 @@ public:
                     const auto& pDiskState(response.Get()->Record);
                     TNode* node = FindNode(nodeId);
                     if (node) {
+                        node->HasPDiskWhiteboardResponse = true;
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {
                             node->PDisks.emplace_back(protoPDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcPDisks();
                     }
+                }
+            }
+            for (TNode* node : NodeView) {
+                if (!node->HasPDiskWhiteboardResponse) {
+                    node->RemapPDisks();
                 }
             }
             FieldsAvailable |= FieldsPDisks;

@@ -1,8 +1,19 @@
 #include <ydb/library/workload/vector/vector_sql.h>
+#include <ydb/library/workload/vector/vector_enums.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdbWorkload {
 Y_UNIT_TEST_SUITE(VectorWorkloadSql) {
+    Y_UNIT_TEST(FullRangeRequiresExplicitStaleReads) {
+        TVectorWorkloadParams params;
+        params.HnswFullRange = true;
+        UNIT_ASSERT_EXCEPTION(params.Validate(TWorkloadParams::ECommandType::Run,
+            static_cast<int>(EWorkloadRunType::Select)), yexception);
+        params.StaleRO = true;
+        params.Validate(TWorkloadParams::ECommandType::Run,
+            static_cast<int>(EWorkloadRunType::Select));
+    }
+
     Y_UNIT_TEST(HnswFullPartitionsAndBruteForceBaseline) {
         TVectorWorkloadParams params;
         params.TableOpts.Name = "vectors";

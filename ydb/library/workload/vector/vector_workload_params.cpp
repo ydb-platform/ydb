@@ -39,6 +39,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .StoreTrue(&Recall);
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
+        opts.AddLongOption("hnsw-full-range", "Search all posting partitions for unprefixed, non-overlapping distributed_hnsw indexes")
+            .StoreTrue(&HnswFullRange);
         opts.AddLongOption("stale-ro", "Read with StaleRO mode")
             .StoreTrue(&StaleRO);
     };
@@ -174,6 +176,7 @@ void TVectorWorkloadParams::Init() {
             Y_ENSURE(index.GetIndexType() == NYdb::NTable::EIndexType::GlobalVectorKMeansTree
                 || index.GetIndexType() == NYdb::NTable::EIndexType::GlobalDistributedHnsw,
                 "Index " << IndexName << " must be vector_kmeans_tree or distributed_hnsw");
+            DistributedHnsw = index.GetIndexType() == NYdb::NTable::EIndexType::GlobalDistributedHnsw;
             indexFound = true;
 
             // Check if we have more than one column (indicating a prefixed index)
@@ -187,6 +190,7 @@ void TVectorWorkloadParams::Init() {
 
             // Extract the distance metric from index settings
             const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
+            HasOverlappingPostings = indexSettings.OverlapClusters > 1;
             Metric = indexSettings.Settings.Metric;
             VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
 

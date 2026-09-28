@@ -6504,6 +6504,62 @@ FROM (
                 )
                 ORDER BY a;
             )"},
+            {"running decimal aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, f,
+                    Sum(f) OVER w AS running_sum,
+                    Avg(f) OVER w AS running_avg,
+                    Min(f) OVER w AS running_min,
+                    Max(f) OVER w AS running_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"whole partition decimal aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, f,
+                    Sum(f) OVER w AS partition_sum,
+                    Avg(f) OVER w AS partition_avg,
+                    Count(f) OVER w AS partition_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range decimal aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, f,
+                    Sum(f) OVER w AS range_sum,
+                    Avg(f) OVER w AS range_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over a decimal order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, f, e,
+                    Sum(e) OVER w AS range_sum,
+                    Count(e) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY f DESC
+                )
+                ORDER BY a;
+            )"},
             {"range frame over a string order key", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -6515,6 +6571,54 @@ FROM (
                     PARTITION BY b
                     ORDER BY g
                 )
+                ORDER BY a;
+            )"},
+            {"range frame over a descending string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, g, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY g DESC
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over two order keys", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, d, e, c,
+                    Sum(c) OVER w AS range_sum,
+                    Count(c) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY d, e
+                )
+                ORDER BY a;
+            )"},
+            {"ranking and range aggregates over two order keys", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, d, e,
+                    Rank() OVER w AS rank_in_group,
+                    DenseRank() OVER w AS dense_rank_in_group,
+                    Sum(c) OVER w AS range_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY d DESC, e
+                )
+                ORDER BY a;
+            )"},
+            {"global range frame over a string order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, g, e,
+                    Sum(e) OVER (ORDER BY g) AS range_sum
+                FROM `/Root/t1`
                 ORDER BY a;
             )"},
             {"ranking over a string order key", R"(
@@ -6732,7 +6836,6 @@ FROM (
         "centred frame",
         "forward looking frame",
         "trailing frame",
-        "range frame over a string order key",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
@@ -6758,6 +6861,50 @@ FROM (
                                                             << JoinSeq("; ", newIssues));
             UNIT_ASSERT_VALUES_EQUAL_C(newResults[i], oldResults[i],
                                        "New RBO returned different rows for '" << name << "' on a " << table << " table");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(WindowSortWithoutBlocksUnderWindowFunctionsV2, WindowFunctionsV2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TString query = TStringBuilder() << R"(
+            PRAGMA YqlSelect = "force";
+            PRAGMA ydb.WindowFunctionsV2 = ")" << (WindowFunctionsV2 ? "true" : "false") << R"(";
+
+            SELECT a, Sum(c) OVER (PARTITION BY b ORDER BY c) AS s
+            FROM `/Root/t1`;
+        )";
+
+        auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetAst(), "AST is not available");
+        const TString ast(*result.GetStats()->GetAst());
+
+        UNIT_ASSERT_C(ast.Contains("WideChopper"), ast);
+        if (WindowFunctionsV2) {
+            UNIT_ASSERT_C(!ast.Contains("WideSortBlocks"), ast);
+            UNIT_ASSERT_C(ast.Contains("(WideSort "), ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("WideSortBlocks"), ast);
         }
     }
 

@@ -263,14 +263,6 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TVector<TIntrusivePtr<TOpRoot>> ro
     rboCtx.ExecutionJson = execJson;
     rboCtx.ExplainJson = explainJson;
 
-    NJsonWriter::TBuf execWriter;
-    execWriter.WriteJsonValue(&execJson, true, PREC_NDIGITS, 17);
-    YQL_CLOG(TRACE, CoreDq) << "Execution plan JSON: " << execWriter.Str();
-
-    NJsonWriter::TBuf explainWriter;
-    explainWriter.WriteJsonValue(&explainJson, true, PREC_NDIGITS, 17);
-    YQL_CLOG(TRACE, CoreDq) << "Explain plan JSON: " << explainWriter.Str();
-
     return ConvertToPhysical(roots, rboCtx);
 }
 } // namespace NKqp

@@ -439,7 +439,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(int rootIdx, const 
             .Args(dqStage.Program().Args())
             .Body(narrowBody)
         .Build()
-        .Settings(NYql::NDq::TDqStageSettings().New().BuildNode(ctx, stage->Pos()))
     .Done().Ptr();
     // clang-format on
 }

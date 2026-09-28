@@ -49,8 +49,6 @@ items:
     path: transfer/toc_p.yaml
 - name: Backup to NFS
   href: nfs-backup/nfs-backup.md
-- name: Import and export data to column tables
-  href: import-export-column-tables.md
 - name: Streaming queries
   href: streaming_queries/index.md
   include:

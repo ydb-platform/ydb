@@ -21,6 +21,8 @@
 
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
 
+#include <ydb/services/workload_manager/gateway_internal.h>
+
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
@@ -412,9 +414,14 @@ public:
 
 class TWorkloadManagerServiceInitializer : public IKikimrServicesInitializer {
 public:
-    TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig);
+    TWorkloadManagerServiceInitializer(
+        const TKikimrRunConfig& runConfig,
+        std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+
+private:
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> Gateway_;
 };
 
 class TKqpServiceInitializer : public IKikimrServicesInitializer {

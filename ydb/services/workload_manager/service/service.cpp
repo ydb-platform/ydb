@@ -15,8 +15,9 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/actors/resource_pools_cache_actor.h>
 #include <ydb/services/workload_manager/common/helpers.h>
-#include <ydb/services/workload_manager/gateway/resource_pools_cache_actor.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 
 namespace NKikimr::NWorkloadManager {
@@ -57,8 +58,9 @@ class TWorkloadService: public TActorBootstrapped<TWorkloadService> {
     };
 
 public:
-    explicit TWorkloadService(NMonitoring::TDynamicCounterPtr counters)
+    TWorkloadService(NMonitoring::TDynamicCounterPtr counters, std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
         : Counters(counters)
+        , Gateway(std::move(gateway))
     {
     }
 
@@ -545,7 +547,7 @@ private:
         ServiceInitialized = true;
 
         LOG_I("Started workload service initialization");
-        CacheActor = Register(CreateResourcePoolsCacheActor(SelfId()));
+        CacheActor = Register(CreateResourcePoolsCacheActor(Gateway));
         Register(CreateCleanupTablesActor());
         RunNodeInfoRequest();
     }
@@ -728,12 +730,14 @@ private:
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
     ui32 NodeCount = 0;
     TActorId CacheActor;
+    std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway;
 };
 
 }   // anonymous namespace
 
-IActor* CreateService(NMonitoring::TDynamicCounterPtr counters) {
-    return new NWorkloadManager::TWorkloadService(counters);
+IActor* CreateService(NMonitoring::TDynamicCounterPtr counters, std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
+{
+    return new NWorkloadManager::TWorkloadService(counters, std::move(gateway));
 }
 
 NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamicCounterPtr rootCounters) {

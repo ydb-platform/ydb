@@ -36,8 +36,8 @@ public:
         Inner->SetRequestState(state, timestamp);
     }
 
-    void SetPoolContext(TString poolId, TString classifiedBy) override {
-        Inner->SetPoolContext(std::move(poolId), std::move(classifiedBy));
+    void SetPoolContext(TPoolContext context) override {
+        Inner->SetPoolContext(std::move(context));
     }
 
     EState GetState() const override {

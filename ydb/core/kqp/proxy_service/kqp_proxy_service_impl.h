@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/session_updater.h>
 #include <ydb/core/protos/kqp.pb.h>
 
@@ -100,33 +101,30 @@ public:
             (state == EState::NONE && NWorkloadManager::IsWmStateQueued(previousState))) {
             TActorId observer;
             ui64 observerCookie;
-            TString poolId;
-            TString classifiedBy;
+            TPoolContext context;
             {
-                TGuard<TAdaptiveLock> guard(PoolIdLock);
-                observer = StateObserver;
-                observerCookie = StateObserverCookie;
-                poolId = PoolId;
-                classifiedBy = ClassifiedBy;
+                TGuard<TAdaptiveLock> guard(ContextLock_);
+                observer = StateObserver_;
+                observerCookie = StateObserverCookie_;
+                context = Context_;
             }
             if (observer) {
                 NActors::TActivationContext::Send(new NActors::IEventHandle(observer, {},
-                    new NWorkloadManager::TEvWmStateChanged(state, std::move(poolId), std::move(classifiedBy)),
+                    new NWorkloadManager::TEvWmStateChanged(state, std::move(context.PoolId), std::move(context.ClassifiedBy)),
                     0, observerCookie));
             }
         }
     }
 
     void SetStateObserver(TActorId observer, ui64 cookie) {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        StateObserver = observer;
-        StateObserverCookie = cookie;
+        TGuard<TAdaptiveLock> guard(ContextLock_);
+        StateObserver_ = observer;
+        StateObserverCookie_ = cookie;
     }
 
-    void SetPoolContext(TString poolId, TString classifiedBy) override {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        PoolId = std::move(poolId);
-        ClassifiedBy = std::move(classifiedBy);
+    void SetPoolContext(TPoolContext context) override {
+        TGuard<TAdaptiveLock> guard(ContextLock_);
+        Context_ = std::move(context);
     }
 
     EState GetState() const override {
@@ -141,25 +139,24 @@ public:
         return TInstant::MicroSeconds(ExitTimeUs.load(std::memory_order_acquire));
     }
 
-    TString GetPoolId() const {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        return PoolId;
+    TPoolContext GetPoolContext() const {
+        TGuard<TAdaptiveLock> guard(ContextLock_);
+        return Context_;
     }
 
     TString GetClassifiedBy() const override {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        return ClassifiedBy;
+        TGuard<TAdaptiveLock> guard(ContextLock_);
+        return Context_.ClassifiedBy;
     }
 
     void Clean() {
         EnterTimeUs.store(0, std::memory_order_release);
         ExitTimeUs.store(0, std::memory_order_release);
         {
-            TGuard<TAdaptiveLock> guard(PoolIdLock);
-            PoolId.clear();
-            ClassifiedBy.clear();
-            StateObserver = {};
-            StateObserverCookie = 0;
+            TGuard<TAdaptiveLock> guard(ContextLock_);
+            Context_ = {};
+            StateObserver_ = {};
+            StateObserverCookie_ = 0;
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -169,11 +166,10 @@ private:
     std::atomic<ui64> EnterTimeUs{0};
     std::atomic<ui64> ExitTimeUs{0};
 
-    mutable TAdaptiveLock PoolIdLock;
-    TString PoolId;
-    TString ClassifiedBy;
-    TActorId StateObserver;
-    ui64 StateObserverCookie = 0;
+    mutable TAdaptiveLock ContextLock_;
+    TPoolContext Context_;
+    TActorId StateObserver_;
+    ui64 StateObserverCookie_ = 0;
 };
 
 template<typename TValue>

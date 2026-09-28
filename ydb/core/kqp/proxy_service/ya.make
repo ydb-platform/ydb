@@ -25,7 +25,7 @@ PEERDIR(
     ydb/core/kqp/script_executions/finalization
     ydb/core/kqp/script_executions/table_queries
     ydb/core/kqp/tracing
-    ydb/services/workload_manager/gateway
+    ydb/services/workload_manager/service
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos

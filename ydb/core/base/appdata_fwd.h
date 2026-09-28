@@ -124,6 +124,10 @@ namespace NKikimr {
     class TDynamicControlBoard;
     class TFeatureFlags;
     class TMetricsConfig;
+
+    namespace NWorkloadManager {
+        class IGateway;
+    }
 }
 
 namespace NKikimr {
@@ -289,6 +293,7 @@ struct TAppData {
     NKikimrConfig::TDataErasureConfig& ShredConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
+    std::shared_ptr<NKikimr::NWorkloadManager::IGateway> WorkloadManagerGateway;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;

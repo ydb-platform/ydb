@@ -36,7 +36,6 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     ydb/core/testlib/basics
-    ydb/services/workload_manager/gateway
     ydb/services/workload_manager/service
     ydb/services/workload_manager/ut/common
     ydb/public/lib/ut_helpers

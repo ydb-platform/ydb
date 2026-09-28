@@ -318,6 +318,41 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 0);
         }
 
+        Y_UNIT_TEST(ShutdownWithPendingTasks) {
+            const auto identity = MakeIdentity(1);
+            auto query = MakeSchedulerQuery(identity);
+            TAtomicCounter executed;
+            std::vector<std::weak_ptr<ITask>> pendingTasks;
+            {
+                TSchedulerRuntimeFixture fixture(BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}}}));
+                fixture.RegisterProcess(1, identity);
+                fixture.SendQueryResponse(query.Query);
+                NActors::TBlockEvents<TEvInternal::TEvTaskProcessedResult> results(fixture.Runtime);
+                fixture.Submit(executed, 1);
+                fixture.WaitFor([&] { return results.size() == 1; });
+                fixture.RegisterProcess(2, MakeIdentity(2)); // Registration remains pending at shutdown.
+                for (ui64 processId : {0, 1, 2}) {
+                    auto task = std::make_shared<TCounterTask>(executed);
+                    pendingTasks.emplace_back(task);
+                    fixture.Runtime.Send(fixture.Distributor, fixture.Sink,
+                                         new TEvExecution::TEvNewTask(std::move(task), ESpecialTaskCategory::Scan, processId));
+                }
+                fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), 1);
+                for (const auto& task : pendingTasks) {
+                    UNIT_ASSERT(!task.expired());
+                }
+                // Stop with a held lease and queues in the default, ready and unready processes.
+            }
+            UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 0);
+            for (const auto& task : pendingTasks) {
+                UNIT_ASSERT(task.expired());
+            }
+        }
+
         Y_UNIT_TEST(RegistrationsAreSharedPerDistributorNotPerProcess) {
             const auto proto = BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}}});
             TSchedulerRuntimeFixture fixture(proto);
@@ -582,9 +617,20 @@ namespace NKikimr::NConveyorComposite {
                     UNIT_ASSERT(completed.emplace(task.GetProcessId()).second);
                 }
                 UNIT_ASSERT_VALUES_EQUAL(completed.size(), processes);
+                TAtomicCounter cancelled;
                 for (ui64 id = 1; id <= processes; ++id) {
+                    std::weak_ptr<ITask> queuedTask;
+                    if (processes == 2 && id == 1) {
+                        auto task = std::make_shared<TCounterTask>(cancelled);
+                        queuedTask = task;
+                        fixture.Runtime.Send(fixture.Distributor, fixture.Sink,
+                                             new TEvExecution::TEvNewTask(std::move(task), ESpecialTaskCategory::Scan, id));
+                        UNIT_ASSERT(!queuedTask.expired());
+                    }
                     fixture.UnregisterProcess(id);
+                    UNIT_ASSERT(queuedTask.expired());
                 }
+                UNIT_ASSERT_VALUES_EQUAL(cancelled.Val(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(executed.Val(), processes);
                 UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], 0);
@@ -621,7 +667,14 @@ namespace NKikimr::NConveyorComposite {
                 fixture.SetLocalSchedulerEnabled(true);
                 fixture.RegisterProcess(1, identity);
                 fixture.RegisterProcess(2, identity);
+                TAtomicCounter cancelled;
+                auto task = std::make_shared<TCounterTask>(cancelled);
+                const std::weak_ptr<ITask> queuedTask = task;
+                fixture.Runtime.Send(fixture.Distributor, fixture.Sink,
+                                     new TEvExecution::TEvNewTask(std::move(task), ESpecialTaskCategory::Scan, 1));
+                UNIT_ASSERT(!queuedTask.expired());
                 fixture.UnregisterProcess(1);
+                UNIT_ASSERT(queuedTask.expired());
                 if (stateAtReply != 1) {
                     fixture.UnregisterProcess(2);
                 }
@@ -662,6 +715,7 @@ namespace NKikimr::NConveyorComposite {
                 fixture.SendQueryResponse(query.Query);
                 fixture.UnregisterProcess(4);
                 fixture.WaitFor([&] { return fixture.Removes[identity.QueryId] == (NullResponse ? 1 : 2); });
+                UNIT_ASSERT_VALUES_EQUAL(cancelled.Val(), 0);
             }
         }
 

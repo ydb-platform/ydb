@@ -45,6 +45,7 @@
 #include <util/system/types.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimr {
 namespace NTable {
@@ -116,9 +117,9 @@ namespace NTable {
         ui64 MaxIndexPages = 0;
         // Maximum units examined per call; 0 = unlimited.
         ui64 MaxUnitsPerCall = 0;
-        // From a Paused result; borrowed for this call.
+        // From a Paused result; owns the continuation state.
         // Only MaxUnitsPerCall may change on resume.
-        const TSplitContinuation* Continuation = nullptr;
+        std::optional<TSplitContinuation> Continuation;
         // Optional selected interval, clipped and charged at rate 1; valid during the call.
         const TBounds* Certain = nullptr;
     };

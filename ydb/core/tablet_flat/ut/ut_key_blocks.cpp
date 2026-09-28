@@ -234,11 +234,11 @@ TSplitResult SplitOnce(const TSubset& subset, const TSplitRequest& request,
 TSplitResult SplitInChunks(const TSubset& subset, TSplitRequest request) {
     TSplitResult result;
     TSplitResult previous;
+    request.Continuation.reset();
     for (ui32 step = 0; step < 100; ++step) {
         // Rebuild the iterator as a new Execute would.
         const TKeyBoundary resumeAt = previous.Paused ? previous.ResumeAt
             : TKeyBoundary{{}, EBoundarySide::Before};
-        request.Continuation = previous.Paused ? &previous.Continuation : nullptr;
         auto chunk = SplitOnce(subset, request, resumeAt);
         UNIT_ASSERT(!chunk.Stale);
         result.Keys.insert(result.Keys.end(), chunk.Keys.begin(), chunk.Keys.end());
@@ -247,6 +247,7 @@ TSplitResult SplitInChunks(const TSubset& subset, TSplitRequest request) {
             result.Truncated = chunk.Truncated;
             return result;
         }
+        request.Continuation = chunk.Continuation;
         previous = std::move(chunk);
     }
     UNIT_FAIL("chunked walk did not finish");
@@ -1869,7 +1870,7 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         UNIT_ASSERT(chunk.Paused);
         UNIT_ASSERT(chunk.Keys.empty());
         request.MaxUnitsPerCall = 0;
-        request.Continuation = &chunk.Continuation;
+        request.Continuation = chunk.Continuation;
 
         const auto checkChanged = [&](auto change) {
             auto changed = request;
@@ -1919,18 +1920,20 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         const TBounds equivalent{Key64(0), Key64(1), true, false};
         request.Certain = &equivalent;
         const TKeyBoundary equivalentResumeAt{TSerializedCellVec(chunk.ResumeAt.Key.GetCells()), chunk.ResumeAt.Side};
+        // The request remains valid after the source result is discarded.
+        chunk = {};
         const auto resumed = SplitOnce(subset, request, equivalentResumeAt);
         UNIT_ASSERT(!resumed.Stale);
         AssertSameSplits(expected, resumed);
 
-        request.Continuation = nullptr;
+        request.Continuation.reset();
         request.MaxUnitsPerCall = 2;
         request.MaxIndexPages = 1;
         request.Certain = nullptr;
         chunk = SplitOnce(subset, request);
         UNIT_ASSERT(chunk.Paused);
         UNIT_ASSERT(!chunk.Truncated);
-        request.Continuation = &chunk.Continuation;
+        request.Continuation = chunk.Continuation;
         request.MaxUnitsPerCall = 0;
         checkChanged([](auto& changed) { changed.MaxIndexPages = Max<ui64>(); });
         checkChanged([&](auto& changed) { changed.Certain = &certain; });
@@ -1951,19 +1954,17 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         UNIT_ASSERT(chunk.Keys.empty());
 
         request.MaxUnitsPerCall = 0;
-        request.Continuation = &chunk.Continuation;
+        request.Continuation = chunk.Continuation;
         const auto expected = SplitOnce(subset, request, chunk.ResumeAt);
         UNIT_ASSERT(!expected.Keys.empty());
-        const TSplitContinuation empty;
-        const std::pair<ui32, const TSplitContinuation*> cases[] = {
-            {1, &chunk.Continuation}, {1, &empty}, {2, &chunk.Continuation},
+        const std::tuple<ui32, TSplitContinuation, bool> cases[] = {
+            {1, chunk.Continuation, true}, {1, {}, false}, {2, chunk.Continuation, false},
         };
-        for (const auto& [cookie, continuation] : cases) {
+        for (const auto& [cookie, continuation, valid] : cases) {
             auto replacement = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, cookie), TEpoch::FromIndex(1), 16);
             TSubset changed(TEpoch::FromIndex(1), scheme, TVector<TPartView>{replacement});
             request.Continuation = continuation;
             const auto resumed = SplitOnce(changed, request, chunk.ResumeAt);
-            const bool valid = cookie == 1 && continuation == &chunk.Continuation;
             UNIT_ASSERT_VALUES_EQUAL(resumed.Stale, !valid);
             UNIT_ASSERT(!resumed.Paused);
             UNIT_ASSERT(!resumed.Truncated);
@@ -1971,7 +1972,7 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
                 AssertSameSplits(expected, resumed);
             } else {
                 UNIT_ASSERT(resumed.Keys.empty());
-                request.Continuation = nullptr;
+                request.Continuation.reset();
                 const auto restarted = SplitOnce(changed, request);
                 UNIT_ASSERT(!restarted.Stale);
                 UNIT_ASSERT(!restarted.Keys.empty());

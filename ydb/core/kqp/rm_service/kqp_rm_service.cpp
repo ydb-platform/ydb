@@ -143,15 +143,21 @@ public:
     }
 
     bool AcquireIfAvailable(ui64 value) {
-        if (Available() >= value) {
-            Used += value;
-            UpdateCookie();
-            if (Sensors) {
-                Sensors.Allocated->Set(Used);
-            }
-            return true;
+        if (!Has(value)) {
+            return false;
         }
-        return false;
+        ForceAcquire(value);
+        return true;
+    }
+
+    // The unconditional counterpart of AcquireIfAvailable, for the memory arena: Used may go past Limit, which
+    // Available() reads as 0 and the cookies as a negative availability.
+    void ForceAcquire(ui64 value) {
+        Used += value;
+        UpdateCookie();
+        if (Sensors) {
+            Sensors.Allocated->Set(Used);
+        }
     }
 
     bool HasSensors() const {
@@ -265,6 +271,7 @@ struct TEvPrivate {
         EvSchedulePublishResources,
         EvTakeResourcesSnapshot,
         EvWarmupDeadline,
+        EvAdjustArena,
     };
 
     struct TEvPublishResources : public TEventLocal<TEvPublishResources, EEv::EvPublishResources> {
@@ -274,6 +281,9 @@ struct TEvPrivate {
     };
 
     struct TEvWarmupDeadline : public TEventLocal<TEvWarmupDeadline, EEv::EvWarmupDeadline> {
+    };
+
+    struct TEvAdjustArena : public TEventLocal<TEvAdjustArena, EEv::EvAdjustArena> {
     };
 };
 
@@ -369,6 +379,7 @@ public:
         TKqpRMAllocateResult result;
         if (resources.ExecutionUnits) {
             if (!AllocateExecutionUnits(resources.ExecutionUnits)) {
+                Counters->RmNotEnoughComputeActors->Inc();
                 TStringBuilder error;
                 error << "TxId: " << txId << ", NodeId: " << SelfId.NodeId() << ", not enough compute actors resource.";
                 result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_EXECUTION_UNITS, error);
@@ -376,25 +387,17 @@ public:
             }
         }
 
-        if (resources.ExternalMemory) {
-            ExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
-        }
-
+        // the arena never refuses, and its demand is applied after everything that can fail has succeeded: no rollback
         if (Y_UNLIKELY(resources.Memory == 0)) {
             tx.Allocated(resources);
+            ApplyArenaDemand(resources, /* allocate */ true);
             return result;
         }
 
         Y_DEFER {
-            if (!result) {
-                if (resources.ExecutionUnits) {
-                    // return allocated resource to free pool
-                    ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
-                }
-                if (resources.ExternalMemory) {
-                    // decrease amount of external memory allocated
-                    ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
-                }
+            if (!result && resources.ExecutionUnits) {
+                // return allocated resource to free pool
+                ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
             }
         };
 
@@ -435,9 +438,6 @@ public:
             return result;
         }
 
-        ui64 rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
-        TString rbTaskName = TStringBuilder() << "kqp-" << txId << '-' << taskId << '-' << rbTaskId;
-
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
@@ -454,8 +454,11 @@ public:
             }
         };
 
+        ui64 rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
+        TString rbTaskName = TStringBuilder() << "kqp-" << txId << '-' << taskId << '-' << rbTaskId;
+
         bool allocated = ResourceBroker->SubmitTaskInstant(
-            TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, resources.Memory}, "kqp_query", 0, {}),
+            TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, resources.Memory}, NLocalDb::KqpResourceManagerTaskName, 0, {}),
             SelfId);
 
         if (!allocated) {
@@ -477,6 +480,8 @@ public:
             bool merged = ResourceBroker->MergeTasksInstant(currentRbTaskId, rbTaskId, SelfId);
             Y_ABORT_UNLESS(merged);
         }
+
+        ApplyArenaDemand(resources, /* allocate */ true);
 
         if (ActorSystem) {
             YDB_LOG_DEBUG_CTX(*ActorSystem, "Allocated",
@@ -500,13 +505,6 @@ public:
             Y_DEBUG_ABORT_UNLESS(reduced);
         }
 
-        if (resources.ExecutionUnits) {
-            ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
-        }
-
-        auto prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
-        Y_DEBUG_ABORT_UNLESS(prev >= resources.ExternalMemory);
-
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
@@ -519,12 +517,19 @@ public:
             }
         }
 
+        // before the execution units go back, so that their next taker is not counted in the arena together with them
+        ApplyArenaDemand(resources, /* allocate */ false);
+
+        if (resources.ExecutionUnits) {
+            ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
+        }
+
         if (ActorSystem) {
             YDB_LOG_DEBUG_CTX(*ActorSystem, "Released resources, Free",
                 {"txId", tx.TxId},
                 {"taskId", taskId},
                 {"memory", resources.Memory},
-                {"tier", resources.ExternalMemory},
+                {"externalMemory", resources.ExternalMemory},
                 {"executionUnits", resources.ExecutionUnits});
         }
 
@@ -589,7 +594,7 @@ public:
         with_lock (Lock) {
             result.ExecutionUnits = ExecutionUnitsResource.load();
             result.Memory = TotalMemoryResource->Available();
-            result.ExternalMemory = ExternalDataQueryMemory.load();
+            result.ExternalMemory = ArenaExternalMemory.load();
         }
 
         return result;
@@ -648,6 +653,14 @@ public:
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
         MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
+        EnableMemoryArena.store(config.GetEnableMemoryArena());
+        ExecutionUnitMemory.store(config.GetExecutionUnitMemory());
+        // the thresholds are compared and summed as signed values, and a max below the min would make the arena
+        // oscillate between growing and shrinking
+        constexpr ui64 thresholdLimit = static_cast<ui64>(Max<i64>()) / 4;
+        const ui64 minFree = Min(config.GetMemoryArenaMinFreeSize(), thresholdLimit);
+        MemoryArenaMinFreeSize.store(minFree);
+        MemoryArenaMaxFreeSize.store(Max(minFree, Min(config.GetMemoryArenaMaxFreeSize(), thresholdLimit)));
     }
 
     ui32 GetNodeId() override {
@@ -698,6 +711,269 @@ public:
         return Counters && ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableResourcePoolsCounters();
     }
 
+    // The memory arena (issue #53093): one long lived kqp_query task of the resource broker backs the external
+    // memory and the execution units in use. The demand is always satisfied and tracked lock-free. The periodic
+    // pass resizes the arena to Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band; a demand
+    // that overruns the arena by more than MaxFree grows it right away, on the allocation path. The footprint
+    // Max(Size, Used) as of the last resize is charged to the node total, so Memory admission, the spilling cookies
+    // and the published resources count it. A Memory request that the free part keeps out is refused: the pass
+    // shrinks the arena once its free part exceeds MaxFree, or the node total no longer leaves room for it.
+
+    ui64 ArenaUsed() const {
+        return ArenaExternalMemory.load() + ArenaExecutionUnits.load() * ExecutionUnitMemory.load();
+    }
+
+    // execution units are granted as a ui32 count (AllocateExecutionUnits) and a transaction holds them as one,
+    // so the arena prices that count and not the untruncated request
+    static ui32 ArenaUnitsOf(const TKqpResourcesRequest& resources) {
+        return static_cast<ui32>(resources.ExecutionUnits);
+    }
+
+    bool ArenaActiveLocked() const {
+        return EnableMemoryArena.load() && !Arena.Stopped;
+    }
+
+    ui64 ArenaDeficitLocked(ui64 used) const {
+        const ui64 size = Arena.Size.load();
+        return ArenaActiveLocked() && used > size ? used - size : 0;
+    }
+
+    // Returns true when the charge moved.
+    bool ReconcileArenaLocked() {
+        const ui64 used = ArenaUsed();
+        const ui64 size = Arena.Size.load();
+        const ui64 footprint = ArenaActiveLocked() ? Max(size, used) : 0;
+        const bool changed = footprint != Arena.Charged;
+        if (footprint > Arena.Charged) {
+            TotalMemoryResource->ForceAcquire(footprint - Arena.Charged);
+        } else if (footprint < Arena.Charged) {
+            TotalMemoryResource->Release(Arena.Charged - footprint);
+        }
+        Arena.Charged = footprint;
+        // only what moved: an idle resource manager must not publish over a busy one
+        if (used != Arena.ShownUsed) {
+            Counters->RmArenaUsed->Set(used);
+            Arena.ShownUsed = used;
+        }
+        if (size != Arena.ShownSize) {
+            Counters->RmArenaSize->Set(size);
+            Arena.ShownSize = size;
+        }
+        if (const ui64 deficit = ArenaDeficitLocked(used); deficit != Arena.ShownDeficit) {
+            Counters->RmArenaDeficit->Set(deficit);
+            Arena.ShownDeficit = deficit;
+        }
+        return changed;
+    }
+
+    ui64 ArenaTargetLocked(ui64 used) const {
+        // An arena backing nothing is given back rather than kept for the next query: its task would otherwise
+        // hold the resource broker's count of running tasks above zero for good, and the broker admits work that
+        // exceeds its own total limit only while nothing is running at all.
+        if (!EnableMemoryArena.load() || used == 0) {
+            return 0;
+        }
+        const i64 minFree = MemoryArenaMinFreeSize.load();
+        const i64 maxFree = MemoryArenaMaxFreeSize.load();
+        const i64 free = static_cast<i64>(Arena.Size.load()) - static_cast<i64>(used);
+        if (free < minFree || free > maxFree) {
+            return used + static_cast<ui64>((minFree + maxFree) / 2);
+        }
+        // in band: a trickle of small queries costs no resource broker call
+        return Arena.Size.load();
+    }
+
+    // What the node total leaves for the arena once the transactions have taken their share. The resource broker
+    // grants the first task of an idle queue whatever its size, so this is the limit the arena respects instead;
+    // the demand beyond it stays a charged deficit.
+    ui64 ArenaSizeCapLocked() const {
+        const ui64 limit = TotalMemoryResource->GetLimit();
+        const ui64 used = TotalMemoryResource->GetUsed();
+        const ui64 others = used > Arena.Charged ? used - Arena.Charged : 0; // the charge is part of the node total
+        return limit > others ? limit - others : 0;
+    }
+
+    // The size the arena should be resized to, its size when it should not.
+    ui64 ArenaPlanLocked(ui64 used) const {
+        const ui64 size = Arena.Size.load();
+        if (!ResourceBroker) {
+            return size;
+        }
+        const ui64 cap = ArenaSizeCapLocked();
+        // The arena may hold what it backs and, beyond that, only what the node total leaves it, so a total that
+        // has dropped or transactions that have taken more of it pull the arena down even while the band is asking
+        // for a bigger one. It keeps backing its own demand: the resource broker is never told less than the node
+        // is really using.
+        ui64 planned = Min(ArenaTargetLocked(used), Max(used, cap));
+        if (planned > size) {
+            planned = Max(size, Min(planned, cap)); // growing stops at the cap, see ArenaSizeCapLocked
+        }
+        return planned;
+    }
+
+    void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
+        if (!resources.ExternalMemory && !resources.ExecutionUnits) {
+            return;
+        }
+        if (!allocate) {
+            const ui64 external = ArenaExternalMemory.fetch_sub(resources.ExternalMemory);
+            const ui64 units = ArenaExecutionUnits.fetch_sub(ArenaUnitsOf(resources));
+            // TTxState::Released has already verified the tx part of the demand
+            Y_DEBUG_ABORT_UNLESS(external >= resources.ExternalMemory);
+            Y_DEBUG_ABORT_UNLESS(units >= ArenaUnitsOf(resources));
+            return; // the surplus is left to the periodic pass
+        }
+        ArenaExternalMemory.fetch_add(resources.ExternalMemory);
+        ArenaExecutionUnits.fetch_add(ArenaUnitsOf(resources));
+        // a burst that overruns the arena by far is not left to the periodic pass; a resize in progress is not
+        // waited for, and a growth the resource broker or the node total withheld is not asked again
+        if (EnableMemoryArena.load() && !ArenaGrowWithheld.load(std::memory_order_relaxed)
+            && ArenaUsed() > Arena.Size.load() + MemoryArenaMaxFreeSize.load())
+        {
+            if (TTryGuard<TMutex> guard(ArenaLock); guard.WasAcquired()) {
+                ResizeArenaLocked(/* burst */ true);
+            }
+        }
+    }
+
+    // The periodic pass (TKqpResourceManagerActor::HandleAdjustArena).
+    void AdjustArena() {
+        with_lock (ArenaLock) {
+            ResizeArenaLocked(/* burst */ false);
+        }
+    }
+
+    // Under ArenaLock, held across the resource broker calls; Lock is taken only to plan and to commit. A burst
+    // (ApplyArenaDemand) only grows.
+    void ResizeArenaLocked(bool burst) {
+        if (Arena.Stopped) {
+            return;
+        }
+        TIntrusivePtr<IResourceBroker> broker;
+        ui64 used = 0;
+        ui64 target = 0;
+        with_lock (Lock) {
+            broker = ResourceBroker;
+            used = ArenaUsed();
+            target = ArenaPlanLocked(used);
+        }
+        ui64 size = Arena.Size.load();
+        ui64 taskId = Arena.TaskId;
+        if (target > size) {
+            if (burst) {
+                Counters->RmArenaBurstGrows->Inc();
+            }
+            const ui64 sizeBefore = size;
+            const ui64 delta = target - size;
+            const ui64 deficit = used > size ? used - size : 0;
+            const ui64 granted = GrowArena(*broker, taskId, size, delta, Min(deficit, delta));
+            NoteArenaGrowth(sizeBefore, delta, granted, deficit);
+        } else if (target < size && !burst) {
+            ShrinkArena(*broker, taskId, size, size - target);
+        }
+        bool publish = false;
+        with_lock (Lock) {
+            Arena.Size.store(size);
+            Arena.TaskId = taskId;
+            publish = ReconcileArenaLocked();
+            // the band still wants more than the resource broker or the node total gave: the allocation path
+            // leaves it to the next pass rather than ask on every request
+            const bool withheld = ArenaTargetLocked(used) > size;
+            ArenaGrowWithheld.store(withheld, std::memory_order_relaxed);
+            if (!withheld) {
+                Arena.GrowRefused = false; // stale: a later refusal is news, a later grant is not
+            }
+        }
+        if (publish) {
+            FireResourcesPublishing();
+        }
+    }
+
+    // Logged on a change of outcome only, not on every refused pass.
+    void NoteArenaGrowth(ui64 sizeBefore, ui64 delta, ui64 granted, ui64 deficit) {
+        const bool refused = granted < delta;
+        if (std::exchange(Arena.GrowRefused, refused) == refused || !ActorSystem) {
+            return;
+        }
+        if (refused && granted) {
+            YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth partly granted by the resource broker",
+                {"size", sizeBefore},
+                {"delta", delta},
+                {"granted", granted},
+                {"deficit", deficit});
+        } else if (refused) {
+            YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth refused by the resource broker",
+                {"size", sizeBefore},
+                {"delta", delta},
+                {"granted", granted},
+                {"deficit", deficit});
+        } else {
+            YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth granted again by the resource broker",
+                {"size", sizeBefore},
+                {"delta", delta});
+        }
+    }
+
+    // Grows by delta, or by the deficit alone when the full delta is refused. Returns what was granted.
+    ui64 GrowArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 delta, ui64 deficit) {
+        const ui64 asks[2] = {delta, deficit < delta ? deficit : 0}; // the second try only when it is a different ask
+        for (ui64 ask : asks) {
+            if (!ask) {
+                continue;
+            }
+            const ui64 id = LastResourceBrokerTaskId.fetch_add(1) + 1;
+            const TString name = TStringBuilder() << "kqp-arena-" << id;
+            if (!broker.SubmitTaskInstant(TEvResourceBroker::TEvSubmitTask(id, name, {0, ask}, NLocalDb::KqpResourceManagerTaskName, 0, {}), SelfId)) {
+                continue; // refused, and the resource broker has removed the task again
+            }
+            if (taskId == 0) {
+                taskId = id;
+            } else {
+                // the donor is finished by the merge; the arena task is dropped by the resource broker only after
+                // StopArena, which waits for this resize
+                const bool merged = broker.MergeTasksInstant(taskId, id, SelfId);
+                Y_ABORT_UNLESS(merged);
+            }
+            size += ask;
+            Counters->RmArenaGrows->Inc();
+            return ask;
+        }
+        Counters->RmArenaGrowFailures->Inc();
+        return 0;
+    }
+
+    void ShrinkArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 by) {
+        bool shrunk = false;
+        if (by >= size) {
+            // cancelled, not finished: the arena outlives the queries it backs, and the resource broker averages
+            // the lifetime of finished tasks into the execution time it shows for the type and orders a waiting
+            // queue by (TScheduler::FinishTask); the delta tasks a growth merges in are finished by the merge, as
+            // the per tx ones are, but they live for the length of the merge
+            shrunk = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
+            taskId = 0;
+            size = 0;
+        } else {
+            shrunk = broker.ReduceTaskResourcesInstant(taskId, {0, by}, SelfId);
+            size -= by;
+        }
+        Y_DEBUG_ABORT_UNLESS(shrunk);
+        Counters->RmArenaShrinks->Inc();
+    }
+
+    // The resource manager outlives its actor: after PassAway the resource broker, which drops the arena task with
+    // the per tx ones, is not called any more, and the demand is not charged any more.
+    void StopArena() {
+        with_lock (ArenaLock) {
+            ArenaGrowWithheld.store(true, std::memory_order_relaxed); // for good, there is no pass any more
+            with_lock (Lock) {
+                Arena.Stopped = true;
+                Arena.Size.store(0);
+                Arena.TaskId = 0;
+                ReconcileArenaLocked();
+            }
+        }
+    }
+
     TActorId SelfId;
 
     std::atomic<ui64> QueryMemoryLimit;
@@ -718,7 +994,6 @@ public:
     std::atomic<i32> ExecutionUnitsResource;
     std::atomic<i32> ExecutionUnitsLimit;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
-    std::atomic<ui64> ExternalDataQueryMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
     std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
     std::atomic<bool> PreferLocalDatacenterExecution = true;
@@ -726,6 +1001,35 @@ public:
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
+
+    // the demand, tracked without the lock; the execution units are a count, priced when it is read, so that a
+    // config change re-prices the ones in use
+    std::atomic<ui64> ArenaExternalMemory = 0;
+    std::atomic<ui64> ArenaExecutionUnits = 0;
+    // the allocation path leaves the growth to the periodic pass, see ResizeArenaLocked
+    std::atomic<bool> ArenaGrowWithheld = false;
+
+    // serializes the resizes of the arena; taken before Lock, never under it
+    TMutex ArenaLock;
+    struct TMemoryArena {
+        // the supply: the memory of the arena task, 0 <=> TaskId == 0; written under both locks, the allocation
+        // path reads it with none
+        std::atomic<ui64> Size = 0;
+        ui64 TaskId = 0; // written under both locks
+        bool Stopped = false; // written under both locks, TKqpResourceManagerActor::PassAway
+        bool GrowRefused = false; // ArenaLock: the last growth did not fully go through, see NoteArenaGrowth
+        // Lock
+        ui64 Charged = 0; // force-acquired from TotalMemoryResource, Max(Size, Used) after every reconcile
+        // the last values published to the gauges
+        ui64 ShownUsed = 0;
+        ui64 ShownSize = 0;
+        ui64 ShownDeficit = 0;
+    };
+    TMemoryArena Arena;
+    std::atomic<bool> EnableMemoryArena = true;
+    std::atomic<ui64> ExecutionUnitMemory = 0;
+    std::atomic<ui64> MemoryArenaMinFreeSize = 0;
+    std::atomic<ui64> MemoryArenaMaxFreeSize = 0;
 
     std::atomic_flag PublishAfterBootstrap;
     std::atomic_flag PublishScheduled;
@@ -825,6 +1129,8 @@ public:
 
         Become(&TKqpResourceManagerActor::WorkState);
 
+        Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());
+
         AskSelfNodeInfo();
         SendWhiteboardRequest();
     }
@@ -873,6 +1179,7 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
             hFunc(TEvKqpWarmupComplete, HandleWarmupComplete);
             cFunc(TEvPrivate::EvWarmupDeadline, HandleWarmupDeadline);
+            cFunc(TEvPrivate::EvAdjustArena, HandleAdjustArena);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -890,6 +1197,13 @@ private:
 
     void HandleWork(TEvPrivate::TEvSchedulePublishResources::TPtr&) {
         PublishResourceUsage("alloc");
+    }
+
+    // Shrinks the memory arena, retries a growth that was withheld, and picks up a new resource broker, queue limit
+    // or config, see TKqpResourceManager::ResizeArenaLocked.
+    void HandleAdjustArena() {
+        ResourceManager->AdjustArena();
+        Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());
     }
 
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
@@ -1034,8 +1348,21 @@ private:
             PRE() {
                 str << "State storage key: " << WbState.Tenant << Endl;
                 with_lock (ResourceManager->Lock) {
+                    const auto& arena = ResourceManager->Arena;
+                    const ui64 arenaExternal = ResourceManager->ArenaExternalMemory.load();
+                    const ui64 arenaUnits = ResourceManager->ArenaExecutionUnits.load();
+                    const ui64 unitMemory = ResourceManager->ExecutionUnitMemory.load();
+                    const ui64 arenaUsed = arenaExternal + arenaUnits * unitMemory;
                     str << "ScanQuery memory resource: " << ResourceManager->TotalMemoryResource->ToString() << Endl;
-                    str << "External DataQuery memory: " << ResourceManager->ExternalDataQueryMemory.load() << Endl;
+                    str << "Memory arena: size " << arena.Size.load()
+                        << ", used " << arenaUsed
+                        << " (external " << arenaExternal
+                        << ", execution units " << arenaUnits << " x " << unitMemory << ")"
+                        << ", charged " << arena.Charged
+                        << ", deficit " << ResourceManager->ArenaDeficitLocked(arenaUsed)
+                        << ", broker task " << arena.TaskId
+                        << (ResourceManager->EnableMemoryArena.load() ? "" : ", disabled")
+                        << Endl;
                     str << "ExecutionUnits resource: " << ResourceManager->ExecutionUnitsResource.load() << Endl;
                 }
                 str << "Last resource broker task id: " << ResourceManager->LastResourceBrokerTaskId.load() << Endl;
@@ -1108,6 +1435,7 @@ private:
 
 private:
     void PassAway() override {
+        ResourceManager->StopArena();
         ToBroker(new TEvResourceBroker::TEvNotifyActorDied);
         if (ResourceManager->ResourceInfoExchanger) {
             Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
@@ -1213,6 +1541,8 @@ private:
     }
 
 private:
+    static constexpr TDuration ArenaAdjustPeriod = TDuration::Seconds(1);
+
     const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 

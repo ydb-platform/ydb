@@ -1,15 +1,14 @@
 #pragma once
 
-#include "line_write.h"
+#include "metric_line.h"
+#include <memory>
 
 namespace NActors {
-    class TInMemoryMetricsBackend;
-
     template<class TFrontend>
     class TLine {
     public:
         TLine() noexcept = default;
-        TLine(TInMemoryMetricsBackend* backend, std::shared_ptr<TLineWriterState> state) noexcept;
+        explicit TLine(std::shared_ptr<IMetricLine> state) noexcept;
 
         TLine(TLine&& rhs) noexcept;
         TLine& operator=(TLine&& rhs) noexcept;
@@ -20,7 +19,7 @@ namespace NActors {
         ~TLine();
 
         explicit operator bool() const noexcept {
-            return Backend && State && State->Status.load(std::memory_order_acquire) != ELineWriterStatus::Rejected;
+            return State && State->IsValid();
         }
 
         // Pending handles are valid but Append returns false until registration
@@ -30,8 +29,7 @@ namespace NActors {
         ui32 GetLineId() const noexcept;
 
     private:
-        TInMemoryMetricsBackend* Backend = nullptr;
-        std::shared_ptr<TLineWriterState> State;
+        std::shared_ptr<IMetricLine> State;
     };
 
 } // namespace NActors

@@ -151,7 +151,7 @@ struct TSetup {
     }
 
     void Reset() {
-        Terminator.Destroy();
+        Terminator.reset();
         Pattern.Reset();
     }
 

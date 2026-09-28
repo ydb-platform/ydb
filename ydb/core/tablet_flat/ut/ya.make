@@ -31,6 +31,7 @@ SRCS(
     ut_btree_index_iter_charge.cpp
     ut_self.cpp
     ut_iterator.cpp
+    ut_key_blocks.cpp
     ut_memtable.cpp
     ut_sausage.cpp
     ut_stat.cpp

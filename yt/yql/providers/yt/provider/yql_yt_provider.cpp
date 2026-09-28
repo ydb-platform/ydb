@@ -71,6 +71,8 @@ void TYtTableDescription::ToYson(NYson::TYsonWriter& writer, const TString& clus
         writer.OnBooleanScalar(RowSpec && RowSpec->IsSorted());
         writer.OnKeyedItem("IsDynamic");
         writer.OnBooleanScalar(Meta->IsDynamic);
+        writer.OnKeyedItem("IsLink");
+        writer.OnBooleanScalar(Meta->IsLink);
         writer.OnKeyedItem("HasRLS");
         writer.OnBooleanScalar(Meta->HasRLS);
         writer.OnKeyedItem("UniqueKeys");
@@ -550,7 +552,9 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtFill::CallableName());
         Names.insert(TYtTouch::CallableName());
         Names.insert(TYtCreateTable::CallableName());
+        Names.insert(TYtCreateSymlink::CallableName());
         Names.insert(TYtDropTable::CallableName());
+        Names.insert(TYtDropSymlink::CallableName());
         Names.insert(TYtCreateView::CallableName());
         Names.insert(TYtDropView::CallableName());
         Names.insert(TCoCommit::CallableName());

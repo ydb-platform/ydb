@@ -1911,6 +1911,7 @@ message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
     optional bool IsRebuild = 3 [ default = false ];
+    optional string RebuildIndexName = 4;
 }
 
 message TIndexBuildControl {

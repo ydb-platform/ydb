@@ -1,10 +1,14 @@
 #include "compression.h"
 
 #include "compression_detail.h"
+#include "helpers.h"
+#include "http.h"
 
 #include <yt/yt/core/ytree/serialize.h>
 
 #include <yt/yt/core/compression/dictionary_codec.h>
+
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <library/cpp/streams/brotli/brotli.h>
@@ -14,10 +18,14 @@
 
 #include <util/stream/zlib.h>
 
+#include <util/string/split.h>
+#include <util/string/strip.h>
+
 namespace NYT::NHttp {
 
 using namespace NHttp::NDetail;
 using namespace NConcurrency;
+using namespace NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -356,41 +364,22 @@ const std::vector<TContentEncoding>& GetSupportedContentEncodings()
     return result;
 }
 
-// NB: Does not implement the spec, but a reasonable approximation.
+// NB: Does not implement the spec, but a reasonable approximation: quality values are ignored
+// and the first supported encoding listed by the client wins.
 TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAcceptEncodingHeader)
 {
-    auto bestPosition = std::string::npos;
-    std::optional<TContentEncoding> bestEncoding;
-
-    auto checkCandidate = [&] (const auto& candidate, size_t position) {
-        if (position != std::string::npos && (bestPosition == std::string::npos || position < bestPosition)) {
-            bestEncoding = candidate;
-            bestPosition = position;
-        }
-    };
-
-    for (const auto& candidate : GetInternallySupportedContentEncodings()) {
+    for (const auto& part : StringSplitter(clientAcceptEncodingHeader).Split(',')) {
+        TContentEncoding candidate(StripString(part.Token().Before(';')));
         if (candidate == "x-lzop") {
             continue;
         }
-
-        auto position = clientAcceptEncodingHeader.find(candidate);
-        checkCandidate(candidate, position);
+        if (IsContentEncodingSupported(candidate)) {
+            return candidate;
+        }
     }
 
-    for (const auto& blockcodec : NBlockCodecs::ListAllCodecs()) {
-        auto candidate = std::string("z-") + std::string(blockcodec);
-
-        auto position = clientAcceptEncodingHeader.find(candidate);
-        checkCandidate(candidate, position);
-    }
-
-    if (!bestEncoding) {
-        return TError("Could not determine feasible content encoding given accept encoding constraints")
-            .With("client_accept_encoding", clientAcceptEncodingHeader);
-    }
-
-    return *bestEncoding;
+    return TError("Could not determine feasible content encoding given accept encoding constraints")
+        .With("client_accept_encoding", clientAcceptEncodingHeader);
 }
 
 IFlushableAsyncOutputStreamPtr CreateCompressingAdapter(
@@ -413,6 +402,275 @@ IAsyncInputStreamPtr CreateDecompressingAdapter(
         std::move(underlying),
         std::move(contentEncoding),
         std::move(compressionInvoker));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+class TDecodingRequest
+    : public IRequest
+{
+public:
+    TDecodingRequest(
+        IRequestPtr underlying,
+        TContentEncoding contentEncoding,
+        IInvokerPtr compressionInvoker)
+        : Underlying_(std::move(underlying))
+        , Decoder_(CreateZeroCopyAdapter(CreateDecompressingAdapter(
+            Underlying_,
+            std::move(contentEncoding),
+            std::move(compressionInvoker))))
+    { }
+
+    TFuture<TSharedRef> Read() override
+    {
+        return Decoder_->Read();
+    }
+
+    std::pair<int, int> GetVersion() override
+    {
+        return Underlying_->GetVersion();
+    }
+
+    EMethod GetMethod() override
+    {
+        return Underlying_->GetMethod();
+    }
+
+    const TUrlRef& GetUrl() override
+    {
+        return Underlying_->GetUrl();
+    }
+
+    const THeadersPtr& GetHeaders() override
+    {
+        return Underlying_->GetHeaders();
+    }
+
+    const NNet::TNetworkAddress& GetRemoteAddress() const override
+    {
+        return Underlying_->GetRemoteAddress();
+    }
+
+    TConnectionId GetConnectionId() const override
+    {
+        return Underlying_->GetConnectionId();
+    }
+
+    TRequestId GetRequestId() const override
+    {
+        return Underlying_->GetRequestId();
+    }
+
+    i64 GetReadByteCount() const override
+    {
+        return Underlying_->GetReadByteCount();
+    }
+
+    TInstant GetStartTime() const override
+    {
+        return Underlying_->GetStartTime();
+    }
+
+    bool IsHttps() const override
+    {
+        return Underlying_->IsHttps();
+    }
+
+    int GetPort() const override
+    {
+        return Underlying_->GetPort();
+    }
+
+private:
+    const IRequestPtr Underlying_;
+    const IAsyncZeroCopyInputStreamPtr Decoder_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TEncodingResponseWriter
+    : public IResponseWriter
+{
+public:
+    TEncodingResponseWriter(
+        IResponseWriterPtr underlying,
+        TContentEncoding contentEncoding,
+        IInvokerPtr compressionInvoker)
+        : Underlying_(std::move(underlying))
+        , ContentEncoding_(std::move(contentEncoding))
+        , CompressionInvoker_(std::move(compressionInvoker))
+    { }
+
+    const THeadersPtr& GetHeaders() override
+    {
+        return Underlying_->GetHeaders();
+    }
+
+    const THeadersPtr& GetTrailers() override
+    {
+        return Underlying_->GetTrailers();
+    }
+
+    bool AreHeadersFlushed() const override
+    {
+        return Underlying_->AreHeadersFlushed();
+    }
+
+    std::optional<EStatusCode> GetStatus() const override
+    {
+        return Underlying_->GetStatus();
+    }
+
+    void SetStatus(EStatusCode status) override
+    {
+        Underlying_->SetStatus(status);
+    }
+
+    void AddConnectionCloseHeader() override
+    {
+        Underlying_->AddConnectionCloseHeader();
+    }
+
+    i64 GetWriteByteCount() const override
+    {
+        return Underlying_->GetWriteByteCount();
+    }
+
+    TFuture<void> Write(const TSharedRef& buffer) override
+    {
+        return GetBodyStream()->Write(buffer);
+    }
+
+    TFuture<void> Flush() override
+    {
+        return GetBodyStream()->Flush();
+    }
+
+    TFuture<void> Close() override
+    {
+        if (!Encoding_) {
+            return Underlying_->Close();
+        }
+        return BodyStream_->Close().Apply(BIND([underlying = Underlying_] {
+            return underlying->Close();
+        }));
+    }
+
+    TFuture<void> WriteBody(const TSharedRef& smallBody) override
+    {
+        return WriteBody(TRange(&smallBody, 1));
+    }
+
+    TFuture<void> WriteBody(TRange<TSharedRef> bodyParts) override
+    {
+        if (!BodyStream_ && !ShouldEncode()) {
+            return Underlying_->WriteBody(bodyParts);
+        }
+        std::vector<TSharedRef> parts(bodyParts.begin(), bodyParts.end());
+        return BIND([this, this_ = MakeStrong(this), parts = std::move(parts)] {
+            for (const auto& part : parts) {
+                WaitFor(Write(part))
+                    .ThrowOnError();
+            }
+            WaitFor(Close())
+                .ThrowOnError();
+        })
+            .AsyncVia(CompressionInvoker_)
+            .Run();
+    }
+
+private:
+    const IResponseWriterPtr Underlying_;
+    const TContentEncoding ContentEncoding_;
+    const IInvokerPtr CompressionInvoker_;
+
+    IFlushableAsyncOutputStreamPtr BodyStream_;
+    bool Encoding_ = false;
+
+    bool ShouldEncode() const
+    {
+        return
+            ContentEncoding_ != IdentityContentEncoding &&
+            !Underlying_->GetHeaders()->Find(ContentEncodingHeaderName);
+    }
+
+    const IFlushableAsyncOutputStreamPtr& GetBodyStream()
+    {
+        if (BodyStream_) {
+            return BodyStream_;
+        }
+        if (ShouldEncode()) {
+            const auto& headers = Underlying_->GetHeaders();
+            headers->Set(ContentEncodingHeaderName, ContentEncoding_);
+            headers->Add(VaryHeaderName, AcceptEncodingHeaderName);
+            BodyStream_ = CreateCompressingAdapter(Underlying_, ContentEncoding_, CompressionInvoker_);
+            Encoding_ = true;
+        } else {
+            BodyStream_ = Underlying_;
+        }
+        return BodyStream_;
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TContentEncodingHttpHandler
+    : public IHttpHandler
+{
+public:
+    TContentEncodingHttpHandler(IHttpHandlerPtr underlying, IInvokerPtr compressionInvoker)
+        : Underlying_(std::move(underlying))
+        , CompressionInvoker_(std::move(compressionInvoker))
+    { }
+
+    void HandleRequest(const IRequestPtr& req, const IResponseWriterPtr& rsp) override
+    {
+        auto decodingReq = req;
+        if (const auto* requestContentEncoding = req->GetHeaders()->Find(ContentEncodingHeaderName);
+            requestContentEncoding && *requestContentEncoding != IdentityContentEncoding)
+        {
+            if (!IsContentEncodingSupported(*requestContentEncoding)) {
+                FillYTErrorHeaders(rsp, TError("Unsupported content encoding %Qv", *requestContentEncoding));
+                rsp->SetStatus(EStatusCode::UnsupportedMediaType);
+                WaitFor(rsp->Close())
+                    .ThrowOnError();
+                return;
+            }
+            decodingReq = New<TDecodingRequest>(req, *requestContentEncoding, CompressionInvoker_);
+        }
+
+        auto responseContentEncoding = IdentityContentEncoding;
+        if (const auto* acceptEncoding = req->GetHeaders()->Find(AcceptEncodingHeaderName)) {
+            auto contentEncodingOrError = GetBestAcceptedContentEncoding(*acceptEncoding);
+            if (contentEncodingOrError.IsOK()) {
+                responseContentEncoding = contentEncodingOrError.Value();
+            }
+        }
+
+        if (responseContentEncoding == IdentityContentEncoding) {
+            Underlying_->HandleRequest(decodingReq, rsp);
+            return;
+        }
+
+        Underlying_->HandleRequest(
+            decodingReq,
+            New<TEncodingResponseWriter>(rsp, std::move(responseContentEncoding), CompressionInvoker_));
+    }
+
+private:
+    const IHttpHandlerPtr Underlying_;
+    const IInvokerPtr CompressionInvoker_;
+};
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+IHttpHandlerPtr CreateContentEncodingHttpHandler(IHttpHandlerPtr underlying, IInvokerPtr compressionInvoker)
+{
+    return New<TContentEncodingHttpHandler>(std::move(underlying), std::move(compressionInvoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -34,15 +34,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         std::optional<double> Weight;
 
         std::optional<ui64> CpuLimit;
-        std::optional<ui64> CpuGuarantee;
         std::optional<TDuration> ReadLimit; // per second
 
         auto GetCpuLimit() const {
             return CpuLimit.value_or(Infinity());
-        }
-
-        auto GetCpuGuarantee() const {
-            return CpuGuarantee.value_or(0);
         }
 
         auto GetWeight() const {
@@ -60,9 +55,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             if (other.CpuLimit) {
                 CpuLimit = other.CpuLimit;
             }
-            if (other.CpuGuarantee) {
-                CpuGuarantee = other.CpuGuarantee;
-            }
             if (other.ReadLimit) {
                 ReadLimit = other.ReadLimit;
             }
@@ -72,7 +64,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             return TStringBuilder()
                 << "Weight: " << GetWeight()
                 << ", CpuLimit: " << GetCpuLimit()
-                << ", CpuGuarantee: " << GetCpuGuarantee()
                 << ", ReadLimit: " << GetReadLimit();
         }
     };
@@ -186,8 +177,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
     struct TPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Limit;
-        NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
+        NMonitoring::TDynamicCounters::TCounterPtr ActualDemand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
         NMonitoring::TDynamicCounters::TCounterPtr Read;
@@ -196,7 +187,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
-        NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::THistogramPtr                 Delay;
     };

@@ -210,13 +210,13 @@ class TpccSuiteBase(LoadSuiteBase):
             # Read the baseline before the upload, so that the current run is not part of it.
             deviation = check_tpcc_deviation(stats['tpcc_json'], run_type, result.start_time)
             # Results are stored regardless of the deviation check outcome.
-            ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type, result.start_time)
         if deviation.summary:
             allure_table_strings['deviation_check'] = deviation.summary
         for signal, value in deviation.measurements.items():
             result.add_stat('test', signal, value)
         for error in deviation.errors:
             result.add_error(error)
+        ResultsProcessor.upload_tpcc_results(stats.get('tpcc_json', {}), result.get_error_stats(), run_type, result.start_time)
         self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
 
 

@@ -14,6 +14,6 @@ public:
     virtual TParsedInput Parse(TCompletionInput input Y_LIFETIME_BOUND) const Y_LIFETIME_BOUND = 0;
 };
 
-IParser::TPtr MakeParser(bool isAnsiLexer);
+IParser::TPtr MakeParser();
 
 } // namespace NSQLComplete

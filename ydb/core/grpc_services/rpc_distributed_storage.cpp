@@ -336,7 +336,7 @@ void ConvertPDisk(const NKikimrBlobStorage::TBaseConfig::TPDisk& from, Ydb::Dist
     to.set_is_static(from.GetBoxId() == 0);
 
     const auto& metrics = from.GetPDiskMetrics();
-    to.set_expected_slot_count(metrics.HasSlotCount() ? metrics.GetSlotCount() : from.GetExpectedSlotCount());
+    to.set_expected_slot_count(metrics.HasExpectedSlotCount() ? metrics.GetExpectedSlotCount() : from.GetExpectedSlotCount());
     to.set_slot_size_in_units(metrics.HasSlotSizeInUnits() ? metrics.GetSlotSizeInUnits() : from.GetPDiskConfig().GetSlotSizeInUnits());
     to.set_num_static_slots(from.GetNumStaticSlots());
     to.set_enforced_dynamic_slot_size(metrics.GetEnforcedDynamicSlotSize());
@@ -504,6 +504,7 @@ void ConvertClusterSettings(const NKikimrBlobStorage::TUpdateSettings& from, Ydb
 void ApplySafetyOptions(const Ydb::DistributedStorage::SafetyOptions& options, NKikimrBlobStorage::TConfigRequest& request) {
     request.SetIgnoreDegradedGroupsChecks(options.ignore_degraded_groups());
     request.SetIgnoreGroupFailModelChecks(options.ignore_group_failure_model());
+    request.SetIgnoreGroupLayoutChecks(options.ignore_group_layout_checks());
 }
 
 void SetUserSid(const NACLib::TUserToken* token, NKikimrBlobStorage::TConfigRequest& request) {
@@ -536,6 +537,7 @@ Ydb::StatusIds::StatusCode MapBscMutationError(NKikimrBlobStorage::TConfigRespon
         case TStatus::kMayGetDegraded:
         case TStatus::kReassignNotViable:
         case TStatus::kGroupGenerationMismatch:
+        case TStatus::kGroupLayoutIncorrect:
         case TStatus::kGeneric:
         default:
             return Ydb::StatusIds::PRECONDITION_FAILED;
@@ -1123,6 +1125,7 @@ private:
         }
         command->SetConvertToDonor(!options.suppress_donor_mode());
         command->SetIgnoreGroupFailModelChecks(options.safety().ignore_group_failure_model());
+        command->SetIgnoreGroupLayoutChecks(options.safety().ignore_group_layout_checks());
         command->SetIgnoreDegradedGroupsChecks(options.safety().ignore_degraded_groups());
         command->SetIgnoreVSlotQuotaCheck(options.ignore_target_space_check());
         command->SetAllowUnusableDisks(options.allow_existing_ineligible_pdisks());

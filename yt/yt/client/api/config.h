@@ -51,6 +51,7 @@ struct TConnectionConfig
     std::optional<std::string> ClusterName;
     TTableMountCacheConfigPtr TableMountCache;
     NChaosClient::TReplicationCardCacheConfigPtr ReplicationCardCache;
+    NChaosClient::TChaosLeaseCacheConfigPtr ChaosLeaseCache;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 
@@ -209,6 +210,11 @@ struct TDynamicJournalWriterConfig
     : public virtual NYTree::TYsonStruct
 {
     std::optional<bool> ValidateErasureCoding;
+    std::optional<int> MaxBatchRowCount;
+    std::optional<i64> MaxBatchDataSize;
+    std::optional<int> MaxFlushRowCount;
+    std::optional<i64> MaxFlushDataSize;
+    std::optional<bool> PreferLocalHost;
 
     REGISTER_YSON_STRUCT(TDynamicJournalWriterConfig);
 

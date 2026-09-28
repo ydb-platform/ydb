@@ -6,6 +6,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/base/memory_controller_iface.h_serialized.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mon_alloc/stats.h>
@@ -147,6 +148,175 @@ struct TConsumerCounters {
     TCounterPtr LimitMinBytes;
     TCounterPtr LimitMaxBytes;
 };
+
+using TLimitBytesGetter = ui64 (*)(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes);
+// A stats writer adds one consumer's report to its fields of TMemoryStats
+using TStatsWriter = void (*)(NKikimrMemory::TMemoryStats& stats, const TConsumerState& consumer, bool summed, bool withLimit, ui64 limitBytes);
+
+#define MEMORY_STATS_WRITER(name) \
+    void Write##name##Stats(NKikimrMemory::TMemoryStats& stats, const TConsumerState& consumer, bool summed, bool withLimit, ui64 limitBytes) { \
+        if (!summed) { \
+            Y_ASSERT(!stats.Has##name##Consumption()); \
+        } \
+        if (withLimit) { \
+            Y_ASSERT(!stats.Has##name##Limit()); \
+        } \
+        const ui64 base = summed ? stats.Get##name##Consumption() : 0; \
+        const ui64 baseDemand = summed ? stats.Get##name##Demand() : 0; \
+        const ui64 baseReclaimable = summed ? stats.Get##name##Reclaimable() : 0; \
+        stats.Set##name##Consumption(base + consumer.Consumption); \
+        stats.Set##name##Demand(baseDemand + consumer.Demand); \
+        stats.Set##name##Reclaimable(baseReclaimable + consumer.Reclaimable); \
+        if (withLimit) { \
+            stats.Set##name##Limit(limitBytes); \
+        } \
+    }
+
+MEMORY_STATS_WRITER(MemTable)
+MEMORY_STATS_WRITER(SharedCache)
+MEMORY_STATS_WRITER(Compaction)
+MEMORY_STATS_WRITER(QueryExecution)
+
+#undef MEMORY_STATS_WRITER
+
+enum class ELimitDelivery {
+    MemTableCompaction, // MC selects memtables and asks them to compact
+    LimitShares, // every registrant of the kind is told its own ceiling
+    PortionsCacheSetter,
+};
+
+struct TConsumerTraits {
+    EMemoryConsumerKind Kind;
+    bool ElasticLimit; // false: the limit is not flexible, only the consumption is accounted
+    bool CanZeroLimit;
+    TLimitBytesGetter GetMinBytes;
+    TLimitBytesGetter GetMaxBytes;
+    ELimitDelivery LimitDelivery;
+    TStatsWriter WriteStats;
+    bool StatsSummed; // several kinds add up into the same fields
+    bool StatsWithLimit; // the kind writes the limit field
+};
+
+// One row per EMemoryConsumerKind, in the enum order
+constexpr TConsumerTraits ConsumerTraits[] = {
+    {
+        .Kind = EMemoryConsumerKind::SharedCache,
+        .ElasticLimit = true,
+        .CanZeroLimit = true,
+        .GetMinBytes = &GetSharedCacheMinBytes,
+        .GetMaxBytes = &GetSharedCacheMaxBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteSharedCacheStats,
+        .StatsSummed = true,
+        .StatsWithLimit = true,
+    },
+    {
+        .Kind = EMemoryConsumerKind::MemTable,
+        .ElasticLimit = true,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetMemTableMinBytes,
+        .GetMaxBytes = &GetMemTableMaxBytes,
+        .LimitDelivery = ELimitDelivery::MemTableCompaction,
+        .WriteStats = &WriteMemTableStats,
+        .StatsSummed = false,
+        .StatsWithLimit = true,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesScanGroupedMemory,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetColumnTablesScanGroupedMemoryLimitBytes,
+        .GetMaxBytes = &GetColumnTablesScanGroupedMemoryLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteQueryExecutionStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesCompGroupedMemory,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetColumnTablesCompGroupedMemoryLimitBytes,
+        .GetMaxBytes = &GetColumnTablesCompGroupedMemoryLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteCompactionStats,
+        .StatsSummed = false,
+        .StatsWithLimit = true,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesBlobCache,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetColumnTablesBlobCacheLimitBytes,
+        .GetMaxBytes = &GetColumnTablesBlobCacheLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteSharedCacheStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesDataAccessorCache,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetColumnTablesDataAccessorCacheLimitBytes,
+        .GetMaxBytes = &GetColumnTablesDataAccessorCacheLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteSharedCacheStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesColumnDataCache,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetColumnTablesColumnDataCacheLimitBytes,
+        .GetMaxBytes = &GetColumnTablesColumnDataCacheLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteSharedCacheStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetColumnTablesDeduplicationGroupedMemoryLimitBytes,
+        .GetMaxBytes = &GetColumnTablesDeduplicationGroupedMemoryLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteQueryExecutionStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetPortionsMetaDataCacheLimitBytes,
+        .GetMaxBytes = &GetPortionsMetaDataCacheLimitBytes,
+        .LimitDelivery = ELimitDelivery::PortionsCacheSetter,
+        .WriteStats = &WriteSharedCacheStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
+};
+
+constexpr bool ConsumerTraitsFollowEnumOrder() {
+    for (size_t i = 0; i < std::size(ConsumerTraits); ++i) {
+        if (static_cast<size_t>(ConsumerTraits[i].Kind) != i) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(std::size(ConsumerTraits) == GetEnumItemsCount<EMemoryConsumerKind>(), "expected one traits row per EMemoryConsumerKind");
+static_assert(ConsumerTraitsFollowEnumOrder(), "expected ConsumerTraits[i].Kind == i");
+
+const TConsumerTraits& GetConsumerTraits(EMemoryConsumerKind kind) {
+    const size_t index = static_cast<size_t>(kind);
+    Y_ABORT_UNLESS(index < std::size(ConsumerTraits));
+    return ConsumerTraits[index];
+}
 
 class TMemoryController : public TActorBootstrapped<TMemoryController> {
 public:
@@ -474,56 +644,26 @@ private:
     }
 
     ui64 GetTargetConsumption(const TConsumerState& consumer, const double coefficient) const {
-        switch (consumer.Kind) {
-            case EMemoryConsumerKind::MemTable:
-            case EMemoryConsumerKind::SharedCache:
-                return consumer.GetLimit(coefficient);
-            // column tables memory limits are not flexible for now, use only their consumption:
-            case EMemoryConsumerKind::ColumnTablesBlobCache:
-            case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
-            case EMemoryConsumerKind::ColumnTablesColumnDataCache:
-            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
-            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
-                return consumer.Consumption;
-        }
+        return GetConsumerTraits(consumer.Kind).ElasticLimit
+            ? consumer.GetLimit(coefficient)
+            : consumer.Consumption;
     }
 
     ui64 GetResultingConsumption(const TConsumerState& consumer, const double coefficient) const {
-        switch (consumer.Kind) {
-            case EMemoryConsumerKind::MemTable:
-            case EMemoryConsumerKind::SharedCache:
-                return Max(consumer.Consumption, consumer.GetLimit(coefficient));
-            // column tables memory limits are not flexible for now, use only their consumption:
-            case EMemoryConsumerKind::ColumnTablesBlobCache:
-            case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
-            case EMemoryConsumerKind::ColumnTablesColumnDataCache:
-            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
-            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
-                return consumer.Consumption;
-        }
+        return GetConsumerTraits(consumer.Kind).ElasticLimit
+            ? Max(consumer.Consumption, consumer.GetLimit(coefficient))
+            : consumer.Consumption;
     }
 
     void ApplyLimit(const TConsumerState& consumer, ui64 limitBytes) const {
-        switch (consumer.Kind) {
-            // Release-request shape: MC selects memtables and asks them to compact
-            case EMemoryConsumerKind::MemTable:
+        switch (GetConsumerTraits(consumer.Kind).LimitDelivery) {
+            case ELimitDelivery::MemTableCompaction:
                 ApplyMemTableLimit(limitBytes);
                 break;
-            // Limit-share shape: every registrant of the kind is told its own ceiling
-            case EMemoryConsumerKind::SharedCache:
-            case EMemoryConsumerKind::ColumnTablesBlobCache:
-            case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
-            case EMemoryConsumerKind::ColumnTablesColumnDataCache:
-            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case ELimitDelivery::LimitShares:
                 SendLimitShares(consumer.Kind, limitBytes);
                 break;
-            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
+            case ELimitDelivery::PortionsCacheSetter:
                 NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetPortionsCacheLimit(limitBytes);
                 break;
         }
@@ -625,50 +765,8 @@ private:
     }
 
     void AddMemoryStats(const TConsumerState& consumer, NKikimrMemory::TMemoryStats& stats, ui64 limitBytes) const {
-        switch (consumer.Kind) {
-            case EMemoryConsumerKind::MemTable: {
-                Y_ASSERT(!stats.HasMemTableConsumption());
-                Y_ASSERT(!stats.HasMemTableLimit());
-                stats.SetMemTableConsumption(consumer.Consumption);
-                stats.SetMemTableDemand(consumer.Demand);
-                stats.SetMemTableReclaimable(consumer.Reclaimable);
-                stats.SetMemTableLimit(limitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::SharedCache: {
-                Y_ASSERT(!stats.HasSharedCacheLimit());
-                stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
-                stats.SetSharedCacheDemand(stats.GetSharedCacheDemand() + consumer.Demand);
-                stats.SetSharedCacheReclaimable(stats.GetSharedCacheReclaimable() + consumer.Reclaimable);
-                stats.SetSharedCacheLimit(limitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesCompGroupedMemory: {
-                Y_ASSERT(!stats.HasCompactionConsumption());
-                Y_ASSERT(!stats.HasCompactionLimit());
-                stats.SetCompactionConsumption(consumer.Consumption);
-                stats.SetCompactionDemand(consumer.Demand);
-                stats.SetCompactionReclaimable(consumer.Reclaimable);
-                stats.SetCompactionLimit(limitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
-            case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
-            case EMemoryConsumerKind::ColumnTablesColumnDataCache:
-            case EMemoryConsumerKind::ColumnTablesBlobCache: {
-                stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
-                stats.SetSharedCacheDemand(stats.GetSharedCacheDemand() + consumer.Demand);
-                stats.SetSharedCacheReclaimable(stats.GetSharedCacheReclaimable() + consumer.Reclaimable);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
-                stats.SetQueryExecutionConsumption(stats.GetQueryExecutionConsumption() + consumer.Consumption);
-                stats.SetQueryExecutionDemand(stats.GetQueryExecutionDemand() + consumer.Demand);
-                stats.SetQueryExecutionReclaimable(stats.GetQueryExecutionReclaimable() + consumer.Reclaimable);
-                break;
-            }
-        }
+        const auto& traits = GetConsumerTraits(consumer.Kind);
+        traits.WriteStats(stats, consumer, traits.StatsSummed, traits.StatsWithLimit, limitBytes);
     }
 
     TConsumerState BuildConsumerState(const TMemoryConsumer& consumer, ui64 hardLimitBytes) const {
@@ -684,47 +782,10 @@ private:
     }
 
     void SetLimitBounds(TConsumerState& result, ui64 hardLimitBytes) const {
-        switch (result.Kind) {
-            case EMemoryConsumerKind::MemTable: {
-                result.MinBytes = GetMemTableMinBytes(Config, hardLimitBytes);
-                result.MaxBytes = GetMemTableMaxBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::SharedCache: {
-                result.MinBytes = GetSharedCacheMinBytes(Config, hardLimitBytes);
-                result.MaxBytes = GetSharedCacheMaxBytes(Config, hardLimitBytes);
-                result.CanZeroLimit = true;
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory: {
-                result.MinBytes = result.MaxBytes = GetColumnTablesScanGroupedMemoryLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
-                result.MinBytes = result.MaxBytes = GetColumnTablesDeduplicationGroupedMemoryLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesCompGroupedMemory: {
-                result.MinBytes = result.MaxBytes = GetColumnTablesCompGroupedMemoryLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesBlobCache: {
-                result.MinBytes = result.MaxBytes = GetColumnTablesBlobCacheLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesDataAccessorCache: {
-                result.MinBytes = result.MaxBytes = GetColumnTablesDataAccessorCacheLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesColumnDataCache: {
-                result.MinBytes = result.MaxBytes = GetColumnTablesColumnDataCacheLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache: {
-                result.MinBytes = result.MaxBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
-                break;
-            }
-        }
+        const auto& traits = GetConsumerTraits(result.Kind);
+        result.MinBytes = traits.GetMinBytes(Config, hardLimitBytes);
+        result.MaxBytes = traits.GetMaxBytes(Config, hardLimitBytes);
+        result.CanZeroLimit = traits.CanZeroLimit;
 
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;

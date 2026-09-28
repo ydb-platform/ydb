@@ -168,6 +168,13 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
     }
+    if (KqpSessionSpan) {
+        auto description = DescribeQueryTrace(GetType(), Statements.size(),
+            PreparedQuery->GetPhysicalQuery(), CommandTagName);
+        if (description.Operation) {
+            TraceDescription = std::move(description);
+        }
+    }
     for (const auto& param : PreparedQuery->GetParameters()) {
         const auto& ast = CompileResult->GetAst();
         if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->Contains(param.GetName())) {
@@ -379,7 +386,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
-        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks);
+        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics());
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {

@@ -169,6 +169,22 @@ Y_UNIT_TEST(Write_Statistics_UseTx)
                             {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "percentile,ms", "percentile,ms", "percentile,ms"}});
 }
 
+Y_UNIT_TEST(Write_KeyedWrites_UseTx)
+{
+    ExecYdb({"init", "--partitions", "1"});
+
+    auto output = ExecYdb({"run", "write",
+                          "--threads", "1",
+                          "--message-rate", "5",
+                          "--use-tx",
+                          "--keyed-writes",
+                          "--tx-commit-interval", "200",
+                          "--warmup", "0",
+                          "--seconds", "2"});
+
+    UNIT_ASSERT_GT(GetCommitTimeValue(output), 0);
+}
+
 Y_UNIT_TEST(Full_Statistics_UseTx)
 {
     ExecYdb({"init"});

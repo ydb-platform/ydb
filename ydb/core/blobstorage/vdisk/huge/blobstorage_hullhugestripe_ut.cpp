@@ -212,6 +212,20 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(st.CanBeFreedChunks, 1u);
         }
 
+        Y_UNIT_TEST(SpaceStatSeparatesLockedFreeBytes) {
+            TStripeHeap h = MakeHeap();
+            THugeSlot first, second;
+            h.Allocate(Append, &first, 1);
+            h.Allocate(2 * Append, &second, 2);
+            UNIT_ASSERT(h.LockChunk(2));
+
+            const TStripeHeapSpaceStat stat = h.GetSpaceStat();
+            UNIT_ASSERT_VALUES_EQUAL(stat.ChunkCount, 2u);
+            UNIT_ASSERT_VALUES_EQUAL(stat.UsedBytes, 3 * Append);
+            UNIT_ASSERT_VALUES_EQUAL(stat.FreeBytes, ChunkSize - Append);
+            UNIT_ASSERT_VALUES_EQUAL(stat.LockedFreeBytes, ChunkSize - 2 * Append);
+        }
+
         Y_UNIT_TEST(GetOwnedChunks) {
             TStripeHeap h = MakeHeap();
             THugeSlot a;

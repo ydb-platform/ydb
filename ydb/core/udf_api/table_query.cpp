@@ -102,8 +102,7 @@ void ReadInstant(const Ydb::ResultSet& resultSet, const Ydb::Value& row, TString
 
 const TString& ModuleColumnList() {
     static const TString value =
-        "name, uid, md5, size, type, version, chunk_count,"
-        " compile_status, compile_error, manifest, created_at, compile_finished_at";
+        "name, uid, md5, size, type, version, chunk_count, manifest, created_at";
     return value;
 }
 
@@ -133,13 +132,8 @@ void ReadModuleRow(const Ydb::ResultSet& resultSet, const Ydb::Value& rawRow, TM
     TUdfModule::TypeFromString(type, row.Type);
     ReadUint64(resultSet, rawRow, TUdfModule::VersionColName, row.Version);
     ReadUint64(resultSet, rawRow, TUdfModule::ChunkCountColName, row.ChunkCount);
-    TString compileStatus;
-    ReadText(resultSet, rawRow, TUdfModule::CompileStatusColName, compileStatus);
-    TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
-    ReadText(resultSet, rawRow, TUdfModule::CompileErrorColName, row.CompileError);
     ReadText(resultSet, rawRow, TUdfModule::ManifestColName, row.Manifest);
     ReadInstant(resultSet, rawRow, TUdfModule::CreatedAtColName, row.CreatedAt);
-    ReadInstant(resultSet, rawRow, TUdfModule::CompileFinishedAtColName, row.CompileFinishedAt);
 }
 
 } // namespace
@@ -171,16 +165,10 @@ TString BuildListModulesQuery(const TString& modulesTablePath, const TListFilter
     if (filter.Type) {
         query << "DECLARE $type AS Utf8; ";
     }
-    if (filter.CompileStatus) {
-        query << "DECLARE $compile_status AS Utf8; ";
-    }
     query << "SELECT " << ModuleColumnList() << " FROM `" << EscapeTablePath(modulesTablePath) << "`";
     TVector<TString> predicates = {"type IN (\"WASM\", \"LIBRARY\")"};
     if (filter.Type) {
         predicates.push_back("type = $type");
-    }
-    if (filter.CompileStatus) {
-        predicates.push_back("compile_status = $compile_status");
     }
     for (size_t i = 0; i < predicates.size(); ++i) {
         query << (i == 0 ? " WHERE " : " AND ") << predicates[i];
@@ -201,10 +189,6 @@ void SetListModulesParams(
     (*request.mutable_parameters())["$limit"] = MakeUint64Param(limit);
     if (filter.Type) {
         (*request.mutable_parameters())["$type"] = MakeUtf8Param(TUdfModule::TypeToString(*filter.Type));
-    }
-    if (filter.CompileStatus) {
-        (*request.mutable_parameters())["$compile_status"] =
-            MakeUtf8Param(TUdfModule::CompileStatusToString(*filter.CompileStatus));
     }
 }
 
@@ -232,7 +216,6 @@ TString BuildFlipModuleQuery(const TString& modulesTablePath, bool withManifest)
           << "DECLARE $version AS Uint64; "
           << "DECLARE $version_given AS Bool; "
           << "DECLARE $chunk_count AS Uint64; "
-          << "DECLARE $compile_status AS Utf8; "
           << "DECLARE $expected_uid AS Utf8; "
           << "DECLARE $require_uid AS Bool; "
           << "DECLARE $require_absent AS Bool; "
@@ -263,13 +246,8 @@ TString BuildFlipModuleQuery(const TString& modulesTablePath, bool withManifest)
           // The module keeps the version it was uploaded with unless this
           // upload names one of its own.
           << " IF($version_given, $version, COALESCE($cur_version, CAST(1 AS Uint64))) AS version,"
-          << " $chunk_count AS chunk_count, $compile_status AS compile_status,"
-          << " CAST(\"\" AS Utf8) AS compile_error,"
-          // created_at belongs to the module, the compile timestamps to an
-          // artifact of the uid this row no longer points at.
-          << " COALESCE($cur_created_at, CurrentUtcTimestamp()) AS created_at,"
-          << " Nothing(Timestamp?) AS compile_started_at,"
-          << " Nothing(Timestamp?) AS compile_finished_at";
+          << " $chunk_count AS chunk_count,"
+          << " COALESCE($cur_created_at, CurrentUtcTimestamp()) AS created_at";
     if (withManifest) {
         query << ", $manifest AS manifest";
     }
@@ -293,7 +271,6 @@ void SetFlipModuleParams(
     params["$version"] = MakeUint64Param(row.Version);
     params["$version_given"] = MakeBoolParam(versionGiven);
     params["$chunk_count"] = MakeUint64Param(row.ChunkCount);
-    params["$compile_status"] = MakeUtf8Param(TUdfModule::CompileStatusToString(row.CompileStatus));
     params["$expected_uid"] = MakeUtf8Param(conditions.ExpectedUid);
     params["$require_uid"] = MakeBoolParam(!conditions.ExpectedUid.empty());
     params["$require_absent"] = MakeBoolParam(conditions.RequireAbsent);
@@ -398,16 +375,17 @@ void SetUpsertSourceChunkParams(
     params["$data"] = MakeStringParam(data);
 }
 
-TString BuildSelectArtifactReadyQuery(const TString& artifactTablePath) {
+TString BuildSelectArtifactStateQuery(const TString& artifactTablePath) {
     return TStringBuilder()
         << "DECLARE $id AS Utf8; "
         << "DECLARE $kind AS Utf8; "
         << "DECLARE $uid AS Utf8; "
-        << "SELECT object_code_chunk_count FROM `" << EscapeTablePath(artifactTablePath)
+        << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
+        << EscapeTablePath(artifactTablePath)
         << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
 }
 
-void SetSelectArtifactReadyParams(
+void SetSelectArtifactStateParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
     const TString& kind,
@@ -419,20 +397,36 @@ void SetSelectArtifactReadyParams(
     params["$uid"] = MakeUtf8Param(uid);
 }
 
-bool ParseArtifactReadyResponse(const Ydb::Table::ExecuteDataQueryResponse& response, bool& ready) {
+bool ParseArtifactStateResponse(
+    const Ydb::Table::ExecuteDataQueryResponse& response,
+    TMaybe<TArtifactCompileState>& state)
+{
     Ydb::ResultSet resultSet;
     if (!ExtractResultSet(response, resultSet)) {
         return false;
     }
-    ready = false;
     if (resultSet.rows().empty()) {
+        state.Clear();
         return true;
     }
-    ui64 chunkCount = 0;
-    ReadUint64(resultSet, resultSet.rows(0), "object_code_chunk_count", chunkCount);
-    // A row whose object code is not written yet belongs to a compile still in
-    // flight, which is the same thing as not being ready to the caller.
-    ready = chunkCount > 0;
+    TArtifactCompileState parsed;
+    TString status;
+    ReadText(resultSet, resultSet.rows(0), "compile_status", status);
+    if (!TUdfModule::CompileStatusFromString(status, parsed.Status)) {
+        return false;
+    }
+    ReadText(resultSet, resultSet.rows(0), "compile_error", parsed.Error);
+    TInstant instant;
+    ReadInstant(resultSet, resultSet.rows(0), "compile_started_at", instant);
+    if (instant) {
+        parsed.StartedAt = instant;
+    }
+    instant = {};
+    ReadInstant(resultSet, resultSet.rows(0), "compile_finished_at", instant);
+    if (instant) {
+        parsed.FinishedAt = instant;
+    }
+    state = std::move(parsed);
     return true;
 }
 

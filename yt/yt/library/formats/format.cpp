@@ -516,7 +516,6 @@ struct TParserAdapter
     : public TBase
     , public IParser
 {
-public:
     template <class... TArgs>
     explicit TParserAdapter(TArgs&&... args)
         : TBase(std::forward<TArgs>(args)...)

@@ -60,7 +60,7 @@ public:
 
     TCompletionList Completion(const TCompletionParams& params) const override {
         auto document = Service_.TextDocuments->Find(params.TextDocument);
-        return Service_.Completion->Completion(document->Text, params);
+        return Service_.Completion->Completion(document, params);
     }
 
     TDocumentDiagnosticReport Diagnostic(TDocumentDiagnosticParams params) const override {
@@ -70,7 +70,7 @@ public:
 
     TVector<TTextEdit> Formatting(const TDocumentFormattingParams& params) const override {
         auto document = Service_.TextDocuments->Find(params.TextDocument);
-        if (auto edit = Service_.Formatting->Formatting(document->Text)) {
+        if (auto edit = Service_.Formatting->Formatting(document->Text())) {
             return {std::move(*edit)};
         }
         return {};

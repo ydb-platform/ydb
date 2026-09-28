@@ -399,16 +399,19 @@ public:
 
 class TOpEmptySource: public IOperator {
 public:
-    TOpEmptySource(TPositionHandle pos)
-        : IOperator(EOperator::EmptySource, pos) {
+    TOpEmptySource(TPositionHandle pos, TExprNode::TPtr input = nullptr)
+        : IOperator(EOperator::EmptySource, pos)
+        , Input(std::move(input)) {
     }
 
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "EmptySource"; }
-
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
+    // Represents a custom input, basically it's an external param.
+    TExprNode::TPtr Input;
 protected:
     void ComputeOutputIUs() override;
 };
@@ -1093,7 +1096,7 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 
 public:
-    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options);
+    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options, const TVector<TInfoUnit>& usedColumns);
     virtual TString GetExplainName() const override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 

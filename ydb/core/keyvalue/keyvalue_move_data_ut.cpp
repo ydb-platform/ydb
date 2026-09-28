@@ -828,5 +828,22 @@ Y_UNIT_TEST(MoveDataCounters) {
     UNIT_ASSERT_EQUAL(dbGroup->GetCounter("KV/MoveDataRecordsScanned")->Val(), 1);
 }
 
+Y_UNIT_TEST(MoveDataCanceledByYellowStop) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare([](TTestActorRuntime &){});
+
+    CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    tc.PoisonTablet();
+    tc.StartReassignedTablet();
+
+    tc.DsProxies[2]->SetStorageStatusFlags(TStorageStatusFlags(
+        NKikimrBlobStorage::StatusDiskSpaceYellowStop | NKikimrBlobStorage::StatusIsValid));
+
+    tc.SendMoveData();
+    tc.WaitMoveDataError(NKikimrTabletBase::TEvMoveDataResponse::NotEnoughSpace);
+}
+
 } // TKeyValueMoveDataTest
 } // NKikimr

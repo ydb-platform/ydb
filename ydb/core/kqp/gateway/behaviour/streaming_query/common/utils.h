@@ -35,6 +35,7 @@ public:
         static inline constexpr char ResourcePool[] = "resource_pool";
         static inline constexpr char Force[] = "force";
         static inline constexpr char StreamingDisposition[] = "streaming_disposition";
+        static inline constexpr char ReadFrom[] = "read_from";
         static inline constexpr char StreamingDispositionFromTime[] = "from_time";
         static inline constexpr char StreamingDispositionTimeAgo[] = "time_ago";
         static inline constexpr char WatermarkLateEventsPolicy[] = "watermark_late_events_policy";

@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor_factory.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 
 namespace NKikimr::NKqp {
 
@@ -46,6 +47,9 @@ NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(NYql::NDq::IMemoryQu
 // initialMemoryLimit is the part of the external memory of the query quota manager the channels start with
 NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
     ui64 initialMemoryLimit, ui64 allocationStep = 1_MB);
+
+// Returns nullptr without a query - then the memory isn't tracked by the compute scheduler.
+std::shared_ptr<NRm::ITxMemoryTracker> CreateTxMemoryTracker(const NScheduler::NHdrf::NDynamic::TQueryPtr& query);
 
 
 } // namespace NKikimr::NKqp

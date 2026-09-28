@@ -40,6 +40,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CpuBurstThrottle = 0;
         std::atomic<ui64> ReadBurstUsage = 0;
 
+        std::atomic<ui64> MemoryUsage = 0;
+        std::atomic<ui64> MemoryDemand = 0;
+
         // TODO: implement Read resource - for now it's only per datashard.
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
@@ -114,10 +117,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     public:
         std::atomic<ui64> TotalLimit = Infinity();
+        ui64 MemoryTotalLimit = Infinity();
 
     private:
         struct {
             NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr MemoryTotalLimit;
         } Counters;
     };
 

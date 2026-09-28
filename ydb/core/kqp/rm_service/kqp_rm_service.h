@@ -69,6 +69,15 @@ struct TMemoryResourceCookies {
 
 class IKqpResourceManager;
 
+// Mirrors the memory accounted for the tx somewhere else, e.g. in the compute scheduler. Must be thread safe.
+class ITxMemoryTracker {
+public:
+    virtual ~ITxMemoryTracker() = default;
+
+    virtual void IncreaseUsage(ui64 bytes) = 0;
+    virtual void DecreaseUsage(ui64 bytes) = 0;
+};
+
 class TTxState : public TAtomicRefCount<TTxState> {
 
 public:
@@ -85,6 +94,7 @@ public:
     // thread without a lock, see IKqpResourceManager::GetMemoryResourceCookies
     const TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
     const TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
+    const std::shared_ptr<ITxMemoryTracker> MemoryTracker;
 
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
@@ -104,12 +114,12 @@ public:
 
 public:
     TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-        const TString& database, bool collectBacktrace);
+        const TString& database, bool collectBacktrace, std::shared_ptr<ITxMemoryTracker> memoryTracker = nullptr);
     ~TTxState();
 
 private:
     TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-        const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies);
+        const TString& database, bool collectBacktrace, std::shared_ptr<ITxMemoryTracker> memoryTracker, TMemoryResourceCookies cookies);
 
 public:
     // The key of a resource pool in the resource manager, the one rule for the tx and for the cookie hand-out
@@ -230,6 +240,10 @@ public:
         }
         Counters->RmComputeActors->Sub(resources.ExecutionUnits);
 
+        if (const auto memory = resources.Memory + resources.ExternalMemory; MemoryTracker && memory) {
+            MemoryTracker->DecreaseUsage(memory);
+        }
+
         return true;
     }
 
@@ -243,6 +257,10 @@ public:
 
         TxExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
         Counters->RmExternalMemory->Add(resources.ExternalMemory);
+
+        if (const auto memory = resources.Memory + resources.ExternalMemory; MemoryTracker && memory) {
+            MemoryTracker->IncreaseUsage(memory);
+        }
 
         if (resources.ExecutionUnits > 0) {
             Counters->RmOnStartAllocs->Inc();

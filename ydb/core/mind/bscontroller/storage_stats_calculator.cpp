@@ -108,7 +108,9 @@ public:
             const TBoxStoragePoolId key(group.GetBoxId(), group.GetStoragePoolId());
             if (const auto it = spToEntity.find(key); it != spToEntity.end()) {
                 auto& e = storageStats[it->second];
-                e.SetCurrentGroupsCreated(e.GetCurrentGroupsCreated() + 1);
+                const bool isVirtual = group.HasVirtualGroupState();
+                e.SetCurrentGroupsCreated(e.GetCurrentGroupsCreated() + !isVirtual);
+                e.SetCurrentVirtualGroupsCreated(e.GetCurrentVirtualGroupsCreated() + isVirtual);
                 e.SetCurrentAllocatedSize(e.GetCurrentAllocatedSize() + group.GetAllocatedSize());
                 e.SetCurrentAvailableSize(e.GetCurrentAvailableSize() + group.GetAvailableSize());
             }

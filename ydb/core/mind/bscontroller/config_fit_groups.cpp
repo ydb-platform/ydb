@@ -851,6 +851,7 @@ namespace NKikimr {
                         fitter.FitExistingGroup(groupId, state.Fit.GroupsToAllocate.contains(groupId));
                         if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
                             ++numActualGroups;
+                            numGroups -= group->VirtualGroupState.Defined();
                         }
                     }
                     if (createNewGroups) {

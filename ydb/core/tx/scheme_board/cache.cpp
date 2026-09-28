@@ -897,6 +897,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
                 nameToId[column.Name] = column.Id;
+                if (columnDesc.HasDefaultFromExpression()) {
+                    column.SetDefaultFromExpression();
+                    const auto& generated = columnDesc.GetDefaultFromExpression();
+                    column.DefaultExpression.ConstructInPlace();
+                    column.DefaultExpression->ExprText = generated.GetExprText();
+                    column.DefaultExpression->Stored = generated.GetStored();
+                    column.DefaultExpression->Dependencies.assign(
+                        generated.GetDependencyColumnNames().begin(),
+                        generated.GetDependencyColumnNames().end());
+                }
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
                 }

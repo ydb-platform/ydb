@@ -471,6 +471,7 @@ message TOlapColumnDescription {
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
     optional uint32 ColumnFamilyId = 14 [deprecated = true];
     optional string ColumnFamilyName = 15 [deprecated = true];
+    optional TDefaultExpressionColumnDescription DefaultFromExpression = 16;
 }
 
 message TIndexDataExtractor {

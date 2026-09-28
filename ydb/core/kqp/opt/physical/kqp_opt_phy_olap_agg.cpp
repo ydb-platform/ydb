@@ -223,6 +223,26 @@ TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool
         return node;
     }
 
+    TMaybe<THashSet<TStringBuf>> passthroughFields;
+    if (auto flatMap = aggCombine.Input().Maybe<TCoFlatMap>()) {
+        if (!IsPassthroughFlatMap(flatMap.Cast(), &passthroughFields)) {
+            return node;
+        }
+    }
+
+    for (const auto& key : aggCombine.Keys()) {
+        bool physical = false;
+        for (const auto& column : maybeRead.Columns()) {
+            if (key.Value() == column.Value()) {
+                physical = true;
+                break;
+            }
+        }
+        if (!physical || (passthroughFields && !passthroughFields->contains(key.Value()))) {
+            return node;
+        }
+    }
+
     if (NYql::HasSetting(maybeRead.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         return node;
     }

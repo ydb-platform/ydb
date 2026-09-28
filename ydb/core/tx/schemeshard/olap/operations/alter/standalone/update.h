@@ -50,7 +50,7 @@ private:
 
     void FillToShardTx(NKikimrTxColumnShard::TAlterTable& shardAlter) const {
         if (AlterSchema) {
-            *shardAlter.MutableSchema() = TargetStandalone->GetTableSchemaProto();
+            TargetStandalone->GetTableSchemaVerified().SerializeForColumnShard(*shardAlter.MutableSchema());
         }
         if (AlterTTL) {
             *shardAlter.MutableTtlSettings() = TargetStandalone->GetTableTTLProto();

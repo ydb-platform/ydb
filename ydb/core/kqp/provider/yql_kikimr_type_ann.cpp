@@ -1543,6 +1543,20 @@ private:
         }
         meta->TableType = tableTypeEnum;
 
+        if (meta->TableType == ETableType::Table || meta->TableType == ETableType::TableStore) {
+            for (auto&& setting : create.TableSettings()) {
+                if (setting.Name().Value() != "storeType") {
+                    continue;
+                }
+
+                const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
+                if (storeType && to_lower(storeType.GetRef()) == "column") {
+                    meta->StoreType = EStoreType::Column;
+                }
+                break;
+            }
+        }
+
         meta->Temporary = TString(create.Temporary()) == "true" ? true : false;
 
         for (auto atom : create.PrimaryKey()) {
@@ -1618,19 +1632,41 @@ private:
             return status;
         }
 
-        if (meta->TableType == ETableType::Table) {
-            for (auto&& setting : create.TableSettings()) {
-                if (setting.Name().Value() == "storeType") {
-                    const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
-                    if (storeType) {
-                        const auto& val = to_lower(storeType.GetRef());
-                        if (val == "column") {
-                            meta->StoreType = EStoreType::Column;
-                        }
-                    }
+        for (const auto& [name, column] : meta->Columns) {
+            if (!column.IsDefaultFromExpression()) {
+                continue;
+            }
 
-                    break;
-                }
+            if (meta->TableType == ETableType::TableStore) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Generated columns are not supported in TABLESTORE schema presets. Column: " << name));
+                return TStatus::Error;
+            }
+
+            if (meta->StoreType != EStoreType::Column) {
+                continue;
+            }
+
+            YQL_ENSURE(column.DefaultExpression);
+            if (column.DefaultExpression->Stored) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "STORED generated column '" << name << "' is not supported for column tables"));
+                return TStatus::Error;
+            }
+            if (column.Compression) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Compression cannot be applied to VIRTUAL generated column '" << name << "'"));
+                return TStatus::Error;
+            }
+            if (column.Encoding) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Encoding cannot be applied to VIRTUAL generated column '" << name << "'"));
+                return TStatus::Error;
+            }
+            if (!column.Families.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Column family cannot be applied to VIRTUAL generated column '" << name << "'"));
+                return TStatus::Error;
             }
         }
 
@@ -1740,6 +1776,27 @@ private:
                     return IGraphTransformer::TStatus::Error;
                 }
                 dataColumns.emplace_back(TString(dataCol.Value()));
+            }
+
+            if (meta->StoreType == EStoreType::Column) {
+                for (const auto& columnName : indexColumns) {
+                    const auto* column = meta->Columns.FindPtr(columnName);
+                    if (column && column->IsDefaultFromExpression()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                            << "Index '" << index.Name().Value()
+                            << "' cannot reference VIRTUAL generated column '" << columnName << "'"));
+                        return TStatus::Error;
+                    }
+                }
+                for (const auto& columnName : dataColumns) {
+                    const auto* column = meta->Columns.FindPtr(columnName);
+                    if (column && column->IsDefaultFromExpression()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                            << "Index '" << index.Name().Value()
+                            << "' cannot reference VIRTUAL generated column '" << columnName << "'"));
+                        return TStatus::Error;
+                    }
+                }
             }
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
@@ -1924,6 +1981,17 @@ private:
                     return TStatus::Error;
                 }
                 statisticsDesc.Columns.push_back(TString(column.Value()));
+            }
+            if (meta->StoreType == EStoreType::Column) {
+                for (const auto& columnName : statisticsDesc.Columns) {
+                    const auto* column = meta->Columns.FindPtr(columnName);
+                    if (column && column->IsDefaultFromExpression()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(statistics.Pos()), TStringBuilder()
+                            << "Statistics '" << statisticsDesc.Name
+                            << "' cannot reference VIRTUAL generated column '" << columnName << "'"));
+                        return TStatus::Error;
+                    }
+                }
             }
             for (const auto& type : statistics.Types()) {
                 const auto typeName = to_upper(TString(type.Value()));
@@ -2173,9 +2241,17 @@ private:
                     return TStatus::Error;
                 }
 
-                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName); ttlColumn && ttlColumn->IsDefaultFromExpression()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder()
-                        << "TTL column " << ttlSettings.ColumnName << " can not be a GENERATED column"));
+                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName);
+                    ttlColumn && ttlColumn->IsDefaultFromExpression())
+                {
+                    if (meta->StoreType == EStoreType::Column) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder()
+                            << "TTL column " << ttlSettings.ColumnName
+                            << " can not reference a VIRTUAL generated column"));
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder()
+                            << "TTL column " << ttlSettings.ColumnName << " can not be a GENERATED column"));
+                    }
                     return TStatus::Error;
                 }
 

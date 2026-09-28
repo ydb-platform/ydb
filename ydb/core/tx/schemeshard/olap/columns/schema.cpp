@@ -63,6 +63,12 @@ bool TOlapColumnsDescription::ApplyUpdate(
             auto itColumn = Columns.find(it->second);
             Y_ABORT_UNLESS(itColumn != Columns.end());
             TOlapColumnSchema& newColumn = itColumn->second;
+            if (newColumn.IsVirtualGenerated()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "Physical settings cannot be altered for VIRTUAL generated column '"
+                    << newColumn.GetName() << "'");
+                return false;
+            }
             if (!newColumn.ApplyDiff(columnDiff, errors)) {
                 return false;
             }
@@ -105,7 +111,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
         Columns.erase(columnInfo->GetId());
     }
 
-    return true;
+    return ValidateGeneratedColumns(errors);
 }
 
 void TOlapColumnsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
@@ -146,6 +152,60 @@ void TOlapColumnsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
         Y_ABORT_UNLESS(!!column);
         *tableSchema.AddKeyColumnNames() = column->GetName();
     }
+}
+
+bool TOlapColumnsDescription::ValidateGeneratedColumns(IErrorCollector& errors) const {
+    for (const auto& [_, column] : Columns) {
+        if (!column.GetDefaultFromExpression()) {
+            continue;
+        }
+
+        const auto& generated = *column.GetDefaultFromExpression();
+        if (generated.GetStored()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "STORED generated column '" << column.GetName()
+                << "' is not supported for column tables");
+            return false;
+        }
+        if (column.IsKeyColumn()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "VIRTUAL generated column '" << column.GetName()
+                << "' cannot be part of the primary key");
+            return false;
+        }
+
+        THashSet<TString> dependencies;
+        for (const auto& dependencyName : generated.GetDependencyColumnNames()) {
+            if (!dependencies.emplace(dependencyName).second) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "VIRTUAL generated column '" << column.GetName()
+                    << "' has duplicate dependency '" << dependencyName << "'");
+                return false;
+            }
+
+            const auto* dependency = GetByName(dependencyName);
+            if (!dependency) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "VIRTUAL generated column '" << column.GetName()
+                    << "' references missing dependency '" << dependencyName << "'");
+                return false;
+            }
+            if (dependency == &column) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "VIRTUAL generated column '" << column.GetName()
+                    << "' cannot reference itself");
+                return false;
+            }
+            if (dependency->GetDefaultFromExpression()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "VIRTUAL generated column '" << column.GetName()
+                    << "' cannot reference generated column '" << dependencyName << "'");
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {

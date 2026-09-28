@@ -426,6 +426,10 @@ public:
         return GetShowCreateTable(Session, tablePath);
     }
 
+    void SetGeneratedVirtualEnabled(bool enabled) {
+        Kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableGeneratedVirtual(enabled);
+    }
+
 private:
     TKikimrRunner Kikimr;
     NYdb::NQuery::TQueryClient Db;
@@ -3511,15 +3515,243 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                     PRIMARY KEY (k)
                 ) WITH (TTL = Interval("PT1H") ON expires);
             )", "TTL column expires can not be a GENERATED column");
-            rejects(R"(
-                CREATE TABLE VirtualOlap (
-                    k Int32 NOT NULL,
-                    a Int32,
-                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
-                    PRIMARY KEY (k)
-                ) WITH (STORE = COLUMN);
-            )", "Generated columns are not supported in column tables");
         }
     } // Y_UNIT_TEST_SUITE(GeneratedVirtual)
+
+Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
+    static constexpr const char* ColumnTableDdl = R"(
+        CREATE TABLE ColumnGenerated (
+            a Int32,
+            b Int32,
+            derived Int32 GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) VIRTUAL,
+            k Int32 NOT NULL,
+            PRIMARY KEY (k)
+        ) WITH (STORE = COLUMN);
+    )";
+
+    Y_UNIT_TEST(ReadWriteRestartAndPhysicalPlan) {
+        TTestFixture fixture(ColumnTableDdl);
+
+        fixture.Exec("INSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2);");
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b) VALUES (2, 3, NULL);");
+        fixture.Exec("REPLACE INTO ColumnGenerated (k, a, b) VALUES (3, 4, 5);");
+
+        fixture.Rejects(
+            "UPSERT INTO ColumnGenerated (k, a, derived) VALUES (4, 4, 40);",
+            "cannot be set explicitly");
+        fixture.Rejects(
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (4, 4, 6) RETURNING derived;",
+            "RETURNING is not supported for column-oriented tables");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[12]];[2;[30]];[3;[45]]]");
+        fixture.Check("SELECT * FROM ColumnGenerated ORDER BY k;",
+            "[[[1];[2];[12];1];[[3];#;[30];2];[[4];[5];[45];3]]");
+        fixture.Check("SELECT k FROM ColumnGenerated WHERE derived >= 30 ORDER BY derived;",
+            "[[2];[3]]");
+        fixture.Check("SELECT derived, COUNT(*) FROM ColumnGenerated GROUP BY derived ORDER BY derived;",
+            "[[[12];1u];[[30];1u];[[45];1u]]");
+        fixture.Check("SELECT SUM(derived) FROM ColumnGenerated;", "[[[87]]]");
+        fixture.Check(R"(
+            PRAGMA ydb.DisableBlockExecution;
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            SELECT k FROM ColumnGenerated WHERE derived >= 30 ORDER BY k;
+        )", "[[2];[3]]");
+        fixture.Check(R"(
+            PRAGMA ydb.DisableBlockExecution;
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+            PRAGMA Kikimr.OptEnableOlapProvideComputeSharding = "true";
+            SELECT derived, COUNT(*) FROM ColumnGenerated GROUP BY derived ORDER BY derived;
+        )", "[[[12];1u];[[30];1u];[[45];1u]]");
+
+        const char* physicalFilterQuery = R"(
+            PRAGMA ydb.DisableBlockExecution;
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            SELECT derived FROM ColumnGenerated WHERE a >= 3;
+        )";
+        fixture.CheckUnordered(physicalFilterQuery, "[[[30]];[[45]]]");
+        const auto physicalFilterAst = fixture.ExplainAst(physicalFilterQuery);
+        UNIT_ASSERT_C(physicalFilterAst.Contains("KqpOlapFilter"),
+            "filter on a physical column was not pushed down:\n" << physicalFilterAst);
+
+        const auto physicalGroupByAst = fixture.ExplainAst(R"(
+            PRAGMA ydb.DisableBlockExecution;
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+            PRAGMA Kikimr.OptEnableOlapProvideComputeSharding = "true";
+            SELECT a, SUM(derived) FROM ColumnGenerated GROUP BY a;
+        )");
+        UNIT_ASSERT_C(physicalGroupByAst.Contains("GroupByFieldNames"),
+            "physical group-by key was not passed to the read:\n" << physicalGroupByAst);
+
+        const auto aliasedGroupByAst = fixture.ExplainAst(R"(
+            PRAGMA ydb.DisableBlockExecution;
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+            PRAGMA Kikimr.OptEnableOlapProvideComputeSharding = "true";
+            SELECT a, COUNT(*) FROM (SELECT derived AS a FROM ColumnGenerated) GROUP BY a;
+        )");
+        UNIT_ASSERT_C(!aliasedGroupByAst.Contains("GroupByFieldNames"),
+            "computed alias was passed to the physical read as a group-by key:\n" << aliasedGroupByAst);
+
+        const auto virtualGroupByAst = fixture.ExplainAst(R"(
+            PRAGMA ydb.DisableBlockExecution;
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+            PRAGMA Kikimr.OptEnableOlapProvideComputeSharding = "true";
+            SELECT derived, COUNT(*) FROM ColumnGenerated GROUP BY derived;
+        )");
+        UNIT_ASSERT_C(!virtualGroupByAst.Contains("GroupByFieldNames"),
+            "virtual group-by key was passed to the physical read:\n" << virtualGroupByAst);
+
+        const auto plan = fixture.ExplainPlan("SELECT derived FROM ColumnGenerated WHERE k = 1;");
+        const auto readColumns = GetSinglePhysicalReadColumns(plan, "ColumnGenerated");
+        THashMap<TString, ui32> columnCounts;
+        for (const auto& column : readColumns) {
+            ++columnCounts[column];
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(columnCounts["a"], 1u, plan.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL_C(columnCounts["b"], 1u, plan.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL_C(columnCounts["derived"], 0u, plan.GetStringRobust());
+
+        fixture.RestartSchemeShard("/Root/ColumnGenerated");
+        fixture.SetGeneratedVirtualEnabled(false);
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[12]];[2;[30]];[3;[45]]]");
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b) VALUES (2, 7, 8);");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated WHERE k = 2;", "[[2;[78]]]");
+    }
+
+    Y_UNIT_TEST(ShowCreateRoundTripAndDependencyFreeRead) {
+        TTestFixture fixture(R"(
+            CREATE TABLE ColumnConstant (
+                c Int32 GENERATED ALWAYS AS (5) VIRTUAL,
+                k Int32 NOT NULL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )");
+
+        fixture.Exec("INSERT INTO ColumnConstant (k) VALUES (1), (2);");
+        fixture.CheckUnordered("SELECT c FROM ColumnConstant;", "[[[5]];[[5]]]");
+
+        const auto plan = fixture.ExplainPlan("SELECT c FROM ColumnConstant;");
+        const auto readColumns = GetSinglePhysicalReadColumns(plan, "ColumnConstant");
+        UNIT_ASSERT_C(std::ranges::any_of(readColumns, [](const auto& column) {
+            return column.StartsWith("k");
+        }), plan.GetStringRobust());
+        UNIT_ASSERT_C(std::ranges::none_of(readColumns, [](const auto& column) {
+            return column.StartsWith("c");
+        }), plan.GetStringRobust());
+
+        const auto ddl = fixture.ShowCreateTable("/Root/ColumnConstant");
+        UNIT_ASSERT_STRING_CONTAINS(ddl, "GENERATED ALWAYS AS (5) VIRTUAL");
+        UNIT_ASSERT_STRING_CONTAINS(ddl, "STORE = COLUMN");
+
+        fixture.Exec("DROP TABLE ColumnConstant;");
+        fixture.Exec(ddl);
+        fixture.Exec("INSERT INTO ColumnConstant (k) VALUES (3);");
+        fixture.Check("SELECT c FROM ColumnConstant WHERE k = 3;", "[[[5]]]");
+    }
+
+    Y_UNIT_TEST(ColumnStoreSpecificDefinitionsAreRejected) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        auto rejects = [&](const std::string& query, const TString& expectedError) {
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "expected query to be rejected: " << query);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, query);
+        };
+
+        rejects(R"(
+            CREATE TABLE StoredColumnTable (
+                k Int32 NOT NULL,
+                stored Int32 GENERATED ALWAYS AS (k + 1) STORED,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "STORED generated column 'stored'");
+
+        rejects(R"(
+            CREATE TABLE GeneratedPrimaryKeyColumnTable (
+                a Int32,
+                generated_key Int32 GENERATED ALWAYS AS (COALESCE(a, 0)) VIRTUAL,
+                PRIMARY KEY (generated_key)
+            ) WITH (STORE = COLUMN);
+        )", "Generated columns cannot be part of the primary key");
+
+        rejects(R"(
+            CREATE TABLE CompressedVirtual (
+                k Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL COMPRESSION(algorithm=off),
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "Compression cannot be applied to VIRTUAL generated column 'v'");
+
+        rejects(R"(
+            CREATE TABLE EncodedVirtual (
+                k Int32 NOT NULL,
+                s Utf8,
+                v Utf8 GENERATED ALWAYS AS (s) VIRTUAL ENCODING(OFF),
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "Encoding cannot be applied to VIRTUAL generated column 'v'");
+
+        rejects(R"(
+            CREATE TABLE TtlVirtual (
+                k Int32 NOT NULL,
+                ts Timestamp,
+                expires Timestamp GENERATED ALWAYS AS (ts) VIRTUAL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN, TTL = Interval("PT1H") ON expires);
+        )", "TTL column expires can not reference a VIRTUAL generated column");
+
+        rejects(R"(
+            CREATE TABLE IndexedVirtual (
+                k Int32 NOT NULL,
+                a Int32,
+                v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                PRIMARY KEY (k),
+                INDEX v_idx LOCAL USING bloom_filter ON (v)
+            ) WITH (STORE = COLUMN);
+        )", "Index 'v_idx' cannot reference VIRTUAL generated column 'v'");
+
+        rejects(R"(
+            CREATE TABLE StatisticsVirtual (
+                k Int32 NOT NULL,
+                a Int32,
+                v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
+                PRIMARY KEY (k),
+                STATISTICS v_stats ON (v) WITH (COUNT_MIN_SKETCH)
+            ) WITH (STORE = COLUMN);
+        )", "Statistics 'v_stats' cannot reference VIRTUAL generated column 'v'");
+
+        rejects(R"(
+            CREATE TABLESTORE GeneratedStore (
+                k Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+    }
+
+    Y_UNIT_TEST(FeatureFlagDisabled) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(false);
+        TTestFixture fixture(R"(
+            CREATE TABLE PhysicalColumnTable (
+                k Int32 NOT NULL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "", appConfig);
+
+        fixture.Rejects(
+            "INSERT INTO PhysicalColumnTable (k) VALUES (1) RETURNING k;",
+            "RETURNING is not supported for column-oriented tables");
+        fixture.Rejects(ColumnTableDdl, "VIRTUAL GENERATED columns are disabled. Column: derived");
+    }
+}
 
 }   // namespace NKikimr::NKqp

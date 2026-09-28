@@ -1620,6 +1620,13 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         Stream << " NOT NULL";
     }
 
+    if (olapColumnDesc.HasDefaultFromExpression()) {
+        const auto& generated = olapColumnDesc.GetDefaultFromExpression();
+        Stream << " GENERATED ALWAYS AS (" << generated.GetExprText() << ")";
+        Stream << (generated.GetStored() ? " STORED" : " VIRTUAL");
+        return;
+    }
+
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }

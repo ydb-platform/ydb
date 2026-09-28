@@ -106,7 +106,10 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 double Remainder = 0.0;
             };
 
-            std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed; // Aggregated consumed counters for parent resources.
+            // Aggregated consumed counters for parent resources. Shared with TResource of the
+            // parent in quoter service and with proxies of other descendants, so they are never
+            // removed by name
+            std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed;
             ::NMonitoring::TDynamicCounterPtr ResourceCounters;
             ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
             ::NMonitoring::TDynamicCounters::TCounterPtr QueueWeight;

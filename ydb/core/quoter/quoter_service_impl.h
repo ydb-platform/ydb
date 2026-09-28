@@ -215,7 +215,8 @@ struct TResource {
         if (!Counters.ResourceCounters) {
             return;
         }
-        Counters.ResourceCounters->RemoveCounter(CONSUMED_COUNTER_NAME);
+        // QuotaConsumed is not removed: it is shared with TKesusQuoterProxy, which
+        // holds the QuotaConsumed counters of all parents of its resources.
         Counters.ResourceCounters->RemoveCounter(REQUESTED_COUNTER_NAME);
         Counters.ResourceCounters->RemoveCounter(REQUESTS_COUNT_SENSOR_NAME);
         Counters.ResourceCounters->RemoveCounter(ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME);

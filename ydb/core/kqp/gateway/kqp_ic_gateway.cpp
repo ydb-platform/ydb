@@ -1680,6 +1680,11 @@ public:
         return TObjectDrop(*this).Execute(cluster, settings);
     }
 
+    TFuture<TGenericResult> KillSession(const TString&, const TString&, bool) override {
+        return MakeFuture(ResultFromError<TGenericResult>(
+            "KILL SESSION is supported only through Query Service"));
+    }
+
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const NYql::TCreateGroupSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 

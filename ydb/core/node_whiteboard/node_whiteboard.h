@@ -66,6 +66,8 @@ struct TEvWhiteboard {
         EvBridgeInfoUpdate,
         EvBridgeInfoRequest,
         EvBridgeInfoResponse,
+        EvDDiskStateUpdate,
+        EvDDiskStateDelete,
         EvEnd
     };
 
@@ -188,6 +190,25 @@ struct TEvWhiteboard {
     struct TEvPDiskStateRequest : public TEventPB<TEvPDiskStateRequest, NKikimrWhiteboard::TEvPDiskStateRequest, EvPDiskStateRequest> {};
 
     struct TEvPDiskStateResponse : public TEventPB<TEvPDiskStateResponse, NKikimrWhiteboard::TEvPDiskStateResponse, EvPDiskStateResponse> {};
+
+    // Local publications only; requests never fan out to DDisk/PB actors.
+    struct TEvDDiskStateUpdate : TEventLocal<TEvDDiskStateUpdate, EvDDiskStateUpdate> {
+        NKikimrWhiteboard::TDDiskStateInfo Record;
+        ui64 OwnerRound = 0;
+        TDuration Lifetime;
+    };
+
+    struct TEvDDiskStateDelete : TEventLocal<TEvDDiskStateDelete, EvDDiskStateDelete> {
+        ui32 PDiskId;
+        ui32 DDiskSlotId;
+        ui64 OwnerRound;
+
+        TEvDDiskStateDelete(ui32 pdiskId, ui32 slotId, ui64 ownerRound)
+            : PDiskId(pdiskId)
+            , DDiskSlotId(slotId)
+            , OwnerRound(ownerRound)
+        {}
+    };
 
     struct TEvVDiskStateUpdate : TEventPB<TEvVDiskStateUpdate, NKikimrWhiteboard::TVDiskStateInfo, EvVDiskStateUpdate> {
         const bool Initial = false;

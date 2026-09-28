@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/hp_timer_helpers.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/pb.h>
 
@@ -167,6 +168,22 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvCheckSpaceResult::TPtr ev) {
         if (ev->Get()->Status == NKikimrProto::EReplyStatus::OK) {
             NormalizedOccupancy = ev->Get()->NormalizedOccupancy;
+        }
+        // A failed check must not replace a still-fresh successful sample.
+        if (ev->Get()->Status == NKikimrProto::OK
+                && IsPersistentBufferActor && PersistentBufferReady && !Stopping && !IsBroken()) {
+            auto update = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>();
+            update->OwnerRound = BaseInfo.InitOwnerRound;
+            update->Lifetime = TDuration::MilliSeconds(ui64(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds) * 3);
+            update->Record.SetPDiskId(BaseInfo.PDiskId);
+            update->Record.SetDDiskSlotId(BaseInfo.VDiskSlotId);
+            if (ev->Get()->Status == NKikimrProto::OK && NormalizedOccupancy >= 0) {
+                update->Record.SetDDiskOccupancy(NormalizedOccupancy);
+            }
+            if (PersistentBufferFormat.MaxChunks && SectorInChunk) {
+                update->Record.SetPersistentBufferOccupancy(1.0 - GetPersistentBufferFreeSpace());
+            }
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), update.release());
         }
     }
 
@@ -798,6 +815,7 @@ namespace NKikimr::NDDisk {
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
             PersistentBufferReady = true;
+            UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;

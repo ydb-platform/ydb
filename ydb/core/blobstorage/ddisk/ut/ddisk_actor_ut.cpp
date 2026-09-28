@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -1186,6 +1187,37 @@ void AssertActorDies(TTestContext& ctx, const TActorId& actorId) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorTest) {
+    Y_UNIT_TEST(PublishesSpaceToWhiteboard) {
+        TTestContext ctx;
+        const auto disk = ctx.CreateDDisk(121, 1, NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 30000, 512 * 1024});
+        const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
+        auto* space = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+        space->NormalizedOccupancy = 0.4;
+        SendToDDisk(ctx, disk.PBServiceId, space);
+        for (;;) {
+            const auto update = ctx.Runtime.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>(board, false);
+            UNIT_ASSERT_VALUES_EQUAL(update->Get()->OwnerRound, 1);
+            UNIT_ASSERT_VALUES_EQUAL(update->Get()->Lifetime, TDuration::Seconds(90));
+            const auto& record = update->Get()->Record;
+            if (record.GetDDiskOccupancy() != 0.4) {
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPDiskId(), 121);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetDDiskSlotId(), 1);
+            UNIT_ASSERT(record.HasPersistentBufferOccupancy());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferOccupancy(), 0);
+            break;
+        }
+        SendToDDisk(ctx, disk.PBServiceId,
+            new NPDisk::TEvCheckSpaceResult(NKikimrProto::ERROR, 0, 0, 0, 0, 0, 0, 0, "failed", 0));
+        auto* recovered = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+        recovered->NormalizedOccupancy = 0.6;
+        SendToDDisk(ctx, disk.PBServiceId, recovered);
+        const auto update = ctx.Runtime.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>(board, false);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Record.GetDDiskOccupancy(), 0.6);
+    }
+
     Y_UNIT_TEST(ShutdownReleasesOnlyNeverCommittedReservations) {
         for (const bool checksums : {false, true}) {
             for (const bool acknowledgeCommit : {false, true}) {
@@ -6861,6 +6893,26 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
     }
 #endif
+
+    Y_UNIT_TEST(PublishesSpaceToWhiteboardAfterRestore) {
+        TTestContext ctx;
+        const auto board = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId), board);
+        const auto disk = CreateDDiskWithRestoredChunkData(ctx, 122, 1, {100, 101, 102, 103}, 1, {});
+        for (const double occupancy : {0.4, 0.6}) {
+            const auto request = ctx.WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+            auto* space = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+            space->NormalizedOccupancy = occupancy;
+            ctx.SendPDiskResponse(disk, *request, space);
+            const auto update = ctx.Runtime.WaitForEdgeActorEvent<NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateUpdate>(board, false);
+            const auto& record = update->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPDiskId(), 122);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetDDiskSlotId(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetDDiskOccupancy(), occupancy);
+            UNIT_ASSERT(record.HasPersistentBufferOccupancy());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferOccupancy(), 0);
+        }
+    }
 
     // Test: a new PersistentBuffer instance must NOT restore records written by a previous
     // instance (different PersistentBufferUniqueId) even when the same physical chunks are reused.

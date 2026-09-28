@@ -1,6 +1,5 @@
 #include "ydb/core/tablet_flat/flat_table_key_blocks.h"
 #include "ydb/core/tablet_flat/flat_page_data.h"
-#include "ydb/core/tablet_flat/flat_iterator.h"
 #include "ydb/core/tablet_flat/flat_part_index_iter_iface.h"
 
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
@@ -14,8 +13,6 @@
 #include <util/generic/hash_set.h>
 #include <util/stream/str.h>
 
-#include <algorithm>
-#include <initializer_list>
 #include <set>
 #include <tuple>
 
@@ -49,47 +46,34 @@ bool SameBounds(const TBounds& left, const TBounds& right) {
         && left.LastKey.GetBuffer() == right.LastKey.GetBuffer();
 }
 
-NPage::TConf Conf(ui32 pageRows, bool btree = true, bool groups = false) {
+NPage::TConf Conf(ui32 pageRows, bool btree = true) {
     NPage::TConf conf(true, 4096);
     conf.CutIndexKeys = true;
     conf.WriteBTreeIndex = btree;
     conf.WriteFlatIndex = !btree;
     conf.Group(0).PageRows = pageRows;
-    if (groups) {
-        conf.Group(1).PageRows = pageRows;
-        conf.Group(1).PageSize = 2048;
-    }
     return conf;
 }
 
-NPage::TConf SmallBTreeConf(ui32 pageRows, bool groups = false) {
-    auto conf = Conf(pageRows, true, groups);
-    for (ui32 group = 0; group <= ui32(groups); ++group) {
-        conf.Group(group).BTreeIndexNodeTargetSize = 128;
-        conf.Group(group).BTreeIndexNodeKeysMin = 2;
-    }
+NPage::TConf SmallBTreeConf(ui32 pageRows) {
+    auto conf = Conf(pageRows);
+    conf.Group(0).BTreeIndexNodeTargetSize = 128;
+    conf.Group(0).BTreeIndexNodeKeysMin = 2;
     return conf;
 }
 
-TIntrusiveConstPtr<TRowScheme> Scheme64(bool extraGroup = false) {
+TIntrusiveConstPtr<TRowScheme> Scheme64() {
     TLayoutCook lay;
     lay.Col(0, 0, NScheme::NTypeIds::Uint64);
     lay.Col(0, 1, NScheme::NTypeIds::Uint32);
-    if (extraGroup) {
-        lay.Col(1, 2, NScheme::NTypeIds::String);
-    }
     lay.Key({0});
     return lay.RowScheme();
 }
 
-TPartView CookRows(const TIntrusiveConstPtr<TRowScheme>& scheme, const NPage::TConf& conf, TLogoBlobID label, TEpoch epoch, ui64 rows, bool extraGroup = false) {
+TPartView CookRows(const TIntrusiveConstPtr<TRowScheme>& scheme, const NPage::TConf& conf, TLogoBlobID label, TEpoch epoch, ui64 rows) {
     TPartCook cook(scheme, conf, label, epoch);
     for (ui64 row = 0; row < rows; ++row) {
-        if (extraGroup) {
-            cook.Add(*TSchemedCookRow(*scheme).Col(row, ui32(row), TString("v")));
-        } else {
-            cook.Add(*TSchemedCookRow(*scheme).Col(row, ui32(row)));
-        }
+        cook.Add(*TSchemedCookRow(*scheme).Col(row, ui32(row)));
     }
     // Eggs keep the part alive only through the returned view.
     return cook.Finish().ToPartView();
@@ -147,40 +131,6 @@ struct TLoadOnRetryEnv : TTrackingIndexEnv {
     }
 };
 
-struct TTrackingDataEnv : TTestEnv {
-    std::set<TTrackingIndexEnv::TPage> Pages;
-    ui64 Bytes = 0;
-
-    const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-        if (part->GetPageType(pageId, groupId) == NPage::EPage::DataPage && groupId.Index == 0
-            && Pages.emplace(part, groupId.Raw(), pageId).second)
-        {
-            Bytes += part->GetPageSize(pageId, groupId);
-        }
-        return TTestEnv::TryGetPage(part, pageId, groupId);
-    }
-};
-
-// Normal row iteration supplies an independent page-footprint oracle.
-ui32 ReadRangeRows(const TRowScheme& scheme, std::initializer_list<const TRun*> runs,
-        const TSerializedCellVec& from, const TSerializedCellVec& end, IPages& env)
-{
-    TTableIter read(&scheme, scheme.Tags());
-    for (const auto* run : runs) {
-        auto part = MakeHolder<TRunIter>(*run, read.Remap.Tags, scheme.Keys, &env);
-        UNIT_ASSERT_VALUES_EQUAL(int(part->Seek(from.GetCells(), ESeek::Lower)), int(EReady::Data));
-        read.Push(std::move(part));
-    }
-    read.StopBefore(end.GetCells());
-    ui32 rows = 0;
-    EReady ready;
-    while ((ready = read.Next(ENext::Data)) == EReady::Data) {
-        ++rows;
-    }
-    UNIT_ASSERT_VALUES_EQUAL(int(ready), int(EReady::Gone));
-    return rows;
-}
-
 TKeyBlockIterator::TConf Cfg(ui32 stride = 64) {
     TKeyBlockIterator::TConf conf;
     conf.MemtableStride = stride;
@@ -208,50 +158,6 @@ TVector<TKeyBlock> Collect(TKeyBlockIterator& iter) {
     }
     UNIT_ASSERT_VALUES_EQUAL(int(ready), int(EReady::Data));
     return CollectPositioned(iter);
-}
-
-void AssertSameSplits(const TSplitResult& expected, const TSplitResult& actual) {
-    UNIT_ASSERT_VALUES_EQUAL(actual.Truncated, expected.Truncated);
-    UNIT_ASSERT_VALUES_EQUAL(actual.Keys.size(), expected.Keys.size());
-    for (size_t i = 0; i < expected.Keys.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(actual.Keys[i].Key.GetBuffer(), expected.Keys[i].Key.GetBuffer());
-        UNIT_ASSERT_VALUES_EQUAL(int(actual.Keys[i].Side), int(expected.Keys[i].Side));
-    }
-}
-
-TSplitResult SplitOnce(const TSubset& subset, const TSplitRequest& request,
-        const TKeyBoundary& from = {{}, EBoundarySide::Before}) {
-    TIndexOnlyEnv env;
-    const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), subset.Scheme->Keys);
-    TKeyBlockIterator iter(subset, &env, subset.Scheme->Keys, Cfg(), layout);
-    UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(from.Key.GetCells(),
-        from.Side == EBoundarySide::Before)), int(EReady::Data));
-    TSplitResult result;
-    UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-    return result;
-}
-
-TSplitResult SplitInChunks(const TSubset& subset, TSplitRequest request) {
-    TSplitResult result;
-    TSplitResult previous;
-    request.Continuation.reset();
-    for (ui32 step = 0; step < 100; ++step) {
-        // Rebuild the iterator as a new Execute would.
-        const TKeyBoundary resumeAt = previous.Paused ? previous.ResumeAt
-            : TKeyBoundary{{}, EBoundarySide::Before};
-        auto chunk = SplitOnce(subset, request, resumeAt);
-        UNIT_ASSERT(!chunk.Stale);
-        result.Keys.insert(result.Keys.end(), chunk.Keys.begin(), chunk.Keys.end());
-        if (!chunk.Paused) {
-            UNIT_ASSERT_C(step > 0, "walk finished in one chunk");
-            result.Truncated = chunk.Truncated;
-            return result;
-        }
-        request.Continuation = chunk.Continuation;
-        previous = std::move(chunk);
-    }
-    UNIT_FAIL("chunked walk did not finish");
-    return {};
 }
 
 void AssertAbut(const TVector<TKeyBlock>& units, const TKeyCellDefaults& keys) {
@@ -570,25 +476,26 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         TSubset subset(TEpoch::FromIndex(1), scheme);
         subset.Flatten.push_back(small);
         subset.Flatten.push_back(big);
-        TIndexOnlyEnv env;
+        TTrackingIndexEnv env;
         const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
         TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
-        TSplitRequest request;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult split;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, split)), int(EReady::Data));
-        UNIT_ASSERT(!split.Truncated);
-        UNIT_ASSERT(split.Keys.empty());
-        const auto units = CollectPositioned(iter);
+        const auto units = Collect(iter);
         UNIT_ASSERT(!units.empty());
-        const auto& tele = iter.Telemetry();
+        const auto tele = iter.Telemetry();
         UNIT_ASSERT_VALUES_EQUAL(tele.Parts, 2u);
         UNIT_ASSERT_VALUES_EQUAL(tele.OwnerMainGroupBytes, IndexTools::CountDataSize(*big.Part, {}));
-        UNIT_ASSERT_VALUES_EQUAL(tele.OtherMainGroupBytes, IndexTools::CountDataSize(*small.Part, {}));
         UNIT_ASSERT(tele.OwnerRowsPerUnitMax > 0);
         UNIT_ASSERT(tele.IndexPagesTouched > 0);
+        UNIT_ASSERT_VALUES_EQUAL(tele.IndexPagesTouched, env.Pages.size());
+        for (const auto& page : env.Pages) {
+            UNIT_ASSERT_VALUES_EQUAL(std::get<0>(page), big.Part.Get());
+        }
+
+        // Seeking again resets unit counts, but must not charge the same pages twice.
+        UNIT_ASSERT_VALUES_EQUAL(Collect(iter).size(), units.size());
+        UNIT_ASSERT_VALUES_EQUAL(iter.Telemetry().UnitsTotal, units.size());
+        UNIT_ASSERT_VALUES_EQUAL(iter.Telemetry().OwnerMainGroupBytes, tele.OwnerMainGroupBytes);
+        UNIT_ASSERT_VALUES_EQUAL(iter.Telemetry().IndexPagesTouched, tele.IndexPagesTouched);
 
         TRowId maxRows = 0;
         {
@@ -657,14 +564,8 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
             UNIT_ASSERT(SameBounds(emptyLayout.Regions[i].Bounds, layout.Regions[i].Bounds));
         }
         TKeyBlockIterator withoutEmptyRows(withEmpty, &env, scheme->Keys, Cfg(), emptyLayout);
-        UNIT_ASSERT_VALUES_EQUAL(int(withoutEmptyRows.Seek({}, true)), int(EReady::Data));
-        TSplitRequest request;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult split;
-        UNIT_ASSERT_VALUES_EQUAL(int(withoutEmptyRows.SplitPoints(request, split)), int(EReady::Data));
-        const auto& telemetry = withoutEmptyRows.Telemetry();
-        UNIT_ASSERT_VALUES_EQUAL(telemetry.OwnerMainGroupBytes + telemetry.OtherMainGroupBytes,
+        UNIT_ASSERT_VALUES_EQUAL(Collect(withoutEmptyRows).size(), units.size());
+        UNIT_ASSERT_VALUES_EQUAL(withoutEmptyRows.Telemetry().OwnerMainGroupBytes,
             IndexTools::CountDataSize(*view.Part, {}));
     }
 
@@ -765,19 +666,8 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         UNIT_ASSERT_VALUES_EQUAL(int(exc.Seek({&midCell, 1}, false)), int(EReady::Data));
         UNIT_ASSERT_VALUES_EQUAL(inc.Get().SelectionKey, wide->SelectionKey);
         UNIT_ASSERT_VALUES_EQUAL(exc.Get().SelectionKey, wide->SelectionKey);
-
-        for (bool inclusive : {false, true}) {
-            auto& iter = inclusive ? inc : exc;
-            TSplitRequest request;
-            request.EndKey = Key64(mid);
-            request.EndInclusive = !inclusive;
-            TSplitResult result;
-            result.Truncated = true;
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-            UNIT_ASSERT(result.Keys.empty() && !result.Truncated);
-            request.EndKey = wide->Bounds.FirstKey;
-            UNIT_ASSERT_EXCEPTION_CONTAINS(iter.SplitPoints(request, result), yexception, "end is before the current position");
-        }
+        UNIT_ASSERT(SameBounds(inc.Get().Bounds, wide->Bounds));
+        UNIT_ASSERT(SameBounds(exc.Get().Bounds, wide->Bounds));
 
         const TKeyBlock* closed = nullptr;
         for (auto it = units.rbegin(); it != units.rend(); ++it) {
@@ -823,27 +713,16 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         auto scheme = Scheme64();
         const auto conf = SmallBTreeConf(1);
         auto owner = CookRows(scheme, conf, TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 80);
-        auto other = CookRows(scheme, conf, TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(2), 60);
         owner.Slices = TSlices::All();
-        other.Slices = TSlices::All();
         UNIT_ASSERT(owner->IndexPages.GetBTree({}).LevelCount > 1);
         TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten = {owner, other};
+        subset.Flatten.push_back(owner);
         const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
         const auto target = Key64(10);
         TIndexOnlyEnv warmEnv;
         TKeyBlockIterator warm(subset, &warmEnv, scheme->Keys, Cfg(), layout);
         UNIT_ASSERT_VALUES_EQUAL(int(warm.Seek(target.GetCells(), true)), int(EReady::Data));
         const TString selection = warm.Get().SelectionKey;
-        const TBounds certain(target, Key64(40), true, false);
-        TSplitRequest request;
-        request.Certain = &certain;
-        request.MaxExpectedBytes = 500;
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult expected;
-        UNIT_ASSERT_VALUES_EQUAL(int(warm.SplitPoints(request, expected)), int(EReady::Data));
-        UNIT_ASSERT(!expected.Truncated);
-        UNIT_ASSERT(!expected.Keys.empty());
 
         TLoadOnRetryEnv faultEnv;
         TKeyBlocksLayout retryLayout;
@@ -881,39 +760,11 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
                 UNIT_ASSERT_VALUES_EQUAL(int(ready), int(EReady::Data));
             }
             UNIT_ASSERT_VALUES_EQUAL(faulted->Get().SelectionKey, warm.Get().SelectionKey);
-            if (nextFault) {
-                break;
-            }
+            UNIT_ASSERT(SameBounds(faulted->Get().Bounds, warm.Get().Bounds));
+            UNIT_ASSERT_VALUES_EQUAL(faulted->Get().OwnerRows, warm.Get().OwnerRows);
         }
         UNIT_ASSERT_C(nextFault, "Next did not exercise a cold index page");
-        const ui32 beforeSplit = faultEnv.Faults;
-        TSplitResult sentinel;
-        sentinel.Truncated = true;
-        sentinel.Keys.push_back({Key64(99999), EBoundarySide::After});
-        TSplitResult actual = sentinel;
-        bool finished = false;
-        for (ui32 attempt = 0; attempt < 512; ++attempt) {
-            restartAt(target, true);
-            const EReady ready = faulted->SplitPoints(request, actual);
-            UNIT_ASSERT_VALUES_EQUAL(faulted->Get().SelectionKey, selection);
-            if (ready != EReady::Page) {
-                UNIT_ASSERT_VALUES_EQUAL(int(ready), int(EReady::Data));
-                finished = true;
-                break;
-            }
-            AssertSameSplits(sentinel, actual);
-            TSplitRequest prefix = request;
-            prefix.EndKey = faulted->Get().Bounds.LastKey;
-            prefix.EndInclusive = faulted->Get().Bounds.LastInclusive;
-            prefix.MaxIndexPages = 0;
-            TSplitResult prefixResult;
-            UNIT_ASSERT_VALUES_EQUAL(int(faulted->SplitPoints(prefix, prefixResult)), int(EReady::Data));
-            UNIT_ASSERT(prefixResult.Keys.empty() && !prefixResult.Truncated);
-        }
-        UNIT_ASSERT_C(finished, "split page retries made no progress");
-        UNIT_ASSERT(faultEnv.Faults > beforeSplit);
-        AssertSameSplits(expected, actual);
-        CollectPositioned(*faulted);
+        UNIT_ASSERT_VALUES_EQUAL(int(faulted->Next()), int(EReady::Gone));
         UNIT_ASSERT(!faulted->IsValid());
         UNIT_ASSERT_VALUES_EQUAL(int(faulted->Next()), int(EReady::Gone));
     }
@@ -1136,534 +987,6 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
         }
     }
 
-    Y_UNIT_TEST(SplitPointsPrefixUpperBound) {
-        TLayoutCook lay;
-        lay.Col(0, 0, NScheme::NTypeIds::Uint64)
-            .Col(0, 1, NScheme::NTypeIds::Uint64).Key({0, 1});
-        auto scheme = lay.RowScheme();
-        TPartCook cook(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1));
-        for (ui64 suffix = 1; suffix <= 8; ++suffix) {
-            cook.Add(*TSchemedCookRow(*scheme).Col(ui64(10), suffix));
-        }
-        auto view = cook.Finish().ToPartView();
-        view.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-        TIndexOnlyEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        const TSerializedCellVec start(TVector<TCell>{TCell::Make(ui64(10)), TCell::Make(ui64(1))});
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(start.GetCells(), true)), int(EReady::Data));
-        TSplitRequest request;
-        request.EndKey = Key64(10);
-        request.EndInclusive = true;
-        request.MaxExpectedBytes = 1;
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult prefix;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, prefix)), int(EReady::Data));
-        request.EndKey = TSerializedCellVec(TVector<TCell>{TCell::Make(ui64(10)), TCell::Make(ui64(8))});
-        TSplitResult full;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, full)), int(EReady::Data));
-        UNIT_ASSERT_C(!full.Keys.empty(), "full bound should split");
-        AssertSameSplits(full, prefix);
-    }
-
-    Y_UNIT_TEST(SplitPointsSparseSuccessorFootprint) {
-        auto scheme = Scheme64();
-        auto owner = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(2), 10);
-        auto sparse = CookKeys(scheme, Conf(2), TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(1),
-            TVector<ui64>{0, 1, 20, 21});
-        owner.Slices = TSlices::All();
-        sparse.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(2), scheme);
-        subset.Flatten = {owner, sparse};
-
-        TTrackingDataEnv data;
-        TPageId successor = Max<TPageId>();
-        {
-            TTestEnv raw;
-            auto index = CreateIndexIter(sparse.Part.Get(), &raw, {});
-            UNIT_ASSERT_VALUES_EQUAL(int(index->Seek(TRowId(0))), int(EReady::Data));
-            UNIT_ASSERT_VALUES_EQUAL(int(index->Next()), int(EReady::Data));
-            successor = index->GetPageId();
-            TSmallVec<TCell> cells;
-            index->GetKeyCells(cells);
-            UNIT_ASSERT_VALUES_EQUAL(cells[0].AsValue<ui64>(), 20u);
-        }
-
-        const auto from = Key64(1);
-        const auto end = Key64(3);
-        TRun ownerRun(*scheme->Keys);
-        TRun sparseRun(*scheme->Keys);
-        ownerRun.Insert(owner.Part, owner.Slices->front());
-        sparseRun.Insert(sparse.Part, sparse.Slices->front());
-        UNIT_ASSERT_VALUES_EQUAL(ReadRangeRows(*scheme, {&ownerRun, &sparseRun}, from, end, data), 2u);
-        UNIT_ASSERT_C(data.Pages.contains({sparse.Part.Get(), 0, successor}),
-            "real IterateRange path did not read sparse page at 20");
-
-        TIndexOnlyEnv indexEnv;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator estimate(subset, &indexEnv, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(estimate.Seek(from.GetCells(), true)), int(EReady::Data));
-        TSplitRequest request;
-        request.EndKey = end;
-        request.Rate = 1;
-        request.MaxExpectedBytes = data.Bytes - 1;
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(estimate.SplitPoints(request, result)), int(EReady::Data));
-        const auto& telemetry = estimate.Telemetry();
-        UNIT_ASSERT_C(!result.Keys.empty(), "preflight accepted actual " << data.Bytes
-            << " bytes with budget " << request.MaxExpectedBytes << "; metadata counted "
-            << telemetry.OwnerMainGroupBytes + telemetry.OtherMainGroupBytes);
-    }
-
-    Y_UNIT_TEST(SplitPointsProbeNextRunSliceAcrossGap) {
-        const auto scheme = Scheme64();
-        auto owner = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(3), 10);
-        auto first = CookKeys(scheme, Conf(2), TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(2), {0, 1});
-        auto future = CookKeys(scheme, Conf(2), TLogoBlobID(3, 2, 3, 1, 0, 3), TEpoch::FromIndex(1), {20, 21});
-        owner.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(3), scheme);
-        subset.Flatten = {owner, first, future};
-        const auto from = Key64(1);
-        const auto end = Key64(3);
-        TRun ownerRun(*scheme->Keys);
-        TRun disjointRun(*scheme->Keys);
-        ownerRun.Insert(owner.Part, owner.Slices->front());
-        disjointRun.Insert(first.Part, first.Slices->front());
-        disjointRun.Insert(future.Part, future.Slices->front());
-        TTrackingDataEnv data;
-        UNIT_ASSERT_VALUES_EQUAL(ReadRangeRows(*scheme, {&ownerRun, &disjointRun}, from, end, data), 2u);
-        bool probedFuture = false;
-        for (const auto& page : data.Pages) {
-            probedFuture |= std::get<0>(page) == future.Part.Get();
-        }
-        UNIT_ASSERT_C(probedFuture, "range iteration did not probe the next slice beyond its end");
-
-        TTrackingIndexEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(from.GetCells(), true)), int(EReady::Data));
-        TSplitRequest request;
-        request.EndKey = end;
-        request.MaxExpectedBytes = data.Bytes - 1;
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(!result.Keys.empty());
-        UNIT_ASSERT(iter.Telemetry().OwnerMainGroupBytes + iter.Telemetry().OtherMainGroupBytes >= data.Bytes);
-    }
-
-    Y_UNIT_TEST(SplitPointsProbeRespectsExclusiveSliceStart) {
-        const auto scheme = Scheme64();
-        auto owner = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(2), 50);
-        auto sparse = CookKeys(scheme, Conf(1), TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(1), {19, 20, 21, 22});
-        owner.Slices = TSlices::All();
-        ReplaceSlices(sparse, {TSlice(Key64(19), Key64(22), 0, 3, false, true)});
-        TSubset subset(TEpoch::FromIndex(2), scheme);
-        subset.Flatten = {owner, sparse};
-        const auto from = Key64(18);
-        const auto end = Key64(20);
-        TRun ownerRun(*scheme->Keys);
-        TRun sparseRun(*scheme->Keys);
-        ownerRun.Insert(owner.Part, owner.Slices->front());
-        sparseRun.Insert(sparse.Part, sparse.Slices->front());
-        TTrackingDataEnv data;
-        UNIT_ASSERT_VALUES_EQUAL(ReadRangeRows(*scheme, {&ownerRun, &sparseRun}, from, end, data), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(data.Pages.size(), 4u);
-        TTestEnv raw;
-        auto index = CreateIndexIter(sparse.Part.Get(), &raw, {});
-        UNIT_ASSERT_VALUES_EQUAL(int(index->Seek(TRowId(1))), int(EReady::Data));
-        UNIT_ASSERT(data.Pages.contains({sparse.Part.Get(), 0, index->GetPageId()}));
-        ui32 sparsePages = 0;
-        for (const auto& page : data.Pages) {
-            sparsePages += std::get<0>(page) == sparse.Part.Get();
-        }
-        UNIT_ASSERT_VALUES_EQUAL(sparsePages, 1u);
-
-        TIndexOnlyEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(from.GetCells(), true)), int(EReady::Data));
-        TSplitRequest request;
-        request.EndKey = end;
-        request.MaxExpectedBytes = data.Bytes;
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(result.Keys.empty());
-        UNIT_ASSERT_VALUES_EQUAL(iter.Telemetry().OwnerMainGroupBytes + iter.Telemetry().OtherMainGroupBytes, data.Bytes);
-    }
-
-    Y_UNIT_TEST(SplitPointsSingleUnitExempt) {
-        const auto scheme = Scheme64();
-        // Cover a whole one-page table and a unit inside a multilevel index.
-        for (ui64 rows : {ui64(1), ui64(1024)}) {
-            auto view = CookRows(scheme, SmallBTreeConf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), rows);
-            view.Slices = TSlices::All();
-            TSubset subset(TEpoch::FromIndex(1), scheme);
-            subset.Flatten.push_back(view);
-            TTrackingIndexEnv env;
-            const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-            TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-            const auto from = rows == 1 ? TSerializedCellVec() : Key64(700);
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(from.GetCells(), true)), int(EReady::Data));
-            if (rows == 1) {
-                UNIT_ASSERT(!iter.Get().Bounds.FirstKey);
-                UNIT_ASSERT(!iter.Get().Bounds.LastKey);
-            }
-            TSplitRequest request;
-            request.EndKey = iter.Get().Bounds.LastKey;
-            request.EndInclusive = iter.Get().Bounds.LastInclusive;
-            request.MaxExpectedBytes = 0;
-            env.Pages.clear();
-            for (ui64 limit : {ui64(0), ui64(1), Max<ui64>()}) {
-                request.MaxIndexPages = limit;
-                TSplitResult result;
-                UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-                UNIT_ASSERT_C(!result.Truncated, "single-unit range has no valid split boundary");
-                UNIT_ASSERT(result.Keys.empty());
-                UNIT_ASSERT(env.Pages.empty());
-            }
-        }
-    }
-
-    Y_UNIT_TEST(SplitPointsIgnoreSecondaryGroupIndexes) {
-        const auto scheme = Scheme64(true);
-        auto conf = SmallBTreeConf(4, true);
-        conf.Group(1).PageRows = 1;
-        auto view = CookRows(scheme, conf, TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 80, true);
-        view.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-
-        TTrackingIndexEnv mainEnv;
-        auto index = CreateIndexIter(view.Part.Get(), &mainEnv, {});
-        EReady ready = index->Seek(TRowId(0));
-        while (ready == EReady::Data) {
-            ready = index->Next();
-        }
-        UNIT_ASSERT_VALUES_EQUAL(int(ready), int(EReady::Gone));
-        UNIT_ASSERT(!mainEnv.Pages.empty());
-
-        TTrackingIndexEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
-        env.Pages.clear();
-        TSplitRequest request;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = mainEnv.Pages.size();
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(result.Keys.empty());
-        UNIT_ASSERT(env.Pages.size() <= request.MaxIndexPages);
-        for (const auto& page : env.Pages) {
-            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(page), 0u);
-        }
-    }
-
-    Y_UNIT_TEST(SplitPointsDisjointParts) {
-        const auto scheme = Scheme64();
-        TSubset all(TEpoch::FromIndex(1), scheme);
-        TSubset relevant(TEpoch::FromIndex(1), scheme);
-        std::set<const TPart*> expectedParts;
-        std::set<const TPart*> allowedParts;
-        for (ui32 part = 0; part < 24; ++part) {
-            const ui64 first = 10 * part;
-            auto view = CookKeys(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, part + 1), TEpoch::FromIndex(part + 1),
-                {first, first + 1, first + 2, first + 3});
-            all.Flatten.push_back(view);
-            if (8 <= part && part <= 13) {
-                relevant.Flatten.push_back(view);
-                allowedParts.insert(view.Part.Get());
-                if (part <= 12) {
-                    expectedParts.insert(view.Part.Get());
-                }
-            }
-        }
-        std::reverse(all.Flatten.begin(), all.Flatten.end());
-        const auto start = Key64(82);
-        TSplitRequest request;
-        request.EndKey = Key64(123);
-        request.MaxExpectedBytes = 1;
-        request.MaxIndexPages = Max<ui64>();
-        auto split = [&](const TSubset& subset) {
-            TTrackingIndexEnv env;
-            const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-            TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(start.GetCells(), true)), int(EReady::Data));
-            TSplitResult result;
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-            UNIT_ASSERT(!result.Truncated);
-            UNIT_ASSERT(!result.Keys.empty());
-            std::set<const TPart*> touched;
-            for (const auto& page : env.Pages) {
-                touched.insert(std::get<0>(page));
-                UNIT_ASSERT(allowedParts.contains(std::get<0>(page)));
-            }
-            for (const auto* part : expectedParts) {
-                UNIT_ASSERT(touched.contains(part));
-            }
-            return result;
-        };
-        AssertSameSplits(split(relevant), split(all));
-    }
-
-    Y_UNIT_TEST(SplitPointsFit) {
-        auto scheme = Scheme64();
-        auto view = CookRows(scheme, Conf(2), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 8);
-        view.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-        TIndexOnlyEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
-        TSplitRequest request;
-        request.Rate = 1.0;
-        request.MaxExpectedBytes = ui64(1) << 40;
-        request.MaxIndexPages = ui64(1) << 20;
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(result.Keys.empty());
-        UNIT_ASSERT(iter.IsValid());
-        const TString stayed = iter.Get().SelectionKey;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Next()), int(EReady::Data));
-        UNIT_ASSERT(iter.Get().SelectionKey != stayed);
-    }
-
-    Y_UNIT_TEST(SplitPointsByteCuts) {
-        auto scheme = Scheme64();
-        auto view = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 6);
-        view.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-        TIndexOnlyEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator scan(subset, &env, scheme->Keys, Cfg(), layout);
-        const auto units = Collect(scan);
-        UNIT_ASSERT(units.size() >= 3);
-
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
-        TSplitRequest request;
-        request.Rate = 1.0;
-        request.MaxExpectedBytes = 1;
-        request.MaxIndexPages = ui64(1) << 20;
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT_VALUES_EQUAL(result.Keys.size(), units.size() - 1);
-        for (size_t i = 0; i < result.Keys.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(result.Keys[i].Key.GetBuffer(), units[i + 1].Bounds.FirstKey.GetBuffer());
-            UNIT_ASSERT_VALUES_EQUAL(int(result.Keys[i].Side), int(EBoundarySide::Before));
-            if (i > 0) {
-                UNIT_ASSERT(ComparePartKeys(result.Keys[i - 1].Key.GetCells(), result.Keys[i].Key.GetCells(), *scheme->Keys) < 0);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(SplitPointsIndexBudgetTail) {
-        auto scheme = Scheme64();
-        auto view = CookRows(scheme, SmallBTreeConf(4), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 80);
-        view.Slices = TSlices::All();
-        UNIT_ASSERT(view->IndexPages.GetBTree({}).LevelCount > 1);
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        const auto target = Key64(5);
-
-        for (ui64 budget : {ui64(0), ui64(1), ui64(2), ui64(4), ui64(8), ui64(16), ui64(32)}) {
-            TIndexOnlyEnv env;
-            TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(target.GetCells(), true)), int(EReady::Data));
-            const auto unit = iter.Get();
-            UNIT_ASSERT(ComparePartKeys(unit.Bounds.FirstKey.GetCells(), target.GetCells(), *scheme->Keys) < 0);
-            UNIT_ASSERT(ComparePartKeys(target.GetCells(), unit.Bounds.LastKey.GetCells(), *scheme->Keys) < 0);
-            TSplitRequest request;
-            request.MaxExpectedBytes = Max<ui64>();
-            request.MaxIndexPages = budget;
-            TSplitResult result;
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-            UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, unit.SelectionKey);
-            UNIT_ASSERT(SameBounds(iter.Get().Bounds, unit.Bounds));
-            if (budget <= 1) {
-                // The first unit cannot fit the index budget, but cannot be divided.
-                UNIT_ASSERT(result.Truncated);
-                UNIT_ASSERT_VALUES_EQUAL(result.Keys.size(), 1u);
-                UNIT_ASSERT_VALUES_EQUAL(result.Keys.front().Key.GetBuffer(), unit.Bounds.LastKey.GetBuffer());
-                UNIT_ASSERT_VALUES_EQUAL(int(result.Keys.front().Side), int(EBoundarySide::Before));
-                auto prefix = request;
-                prefix.EndKey = unit.Bounds.LastKey;
-                prefix.EndInclusive = unit.Bounds.LastInclusive;
-                TSplitResult exempt;
-                UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(prefix, exempt)), int(EReady::Data));
-                UNIT_ASSERT(!exempt.Truncated);
-                UNIT_ASSERT(exempt.Keys.empty());
-                UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, unit.SelectionKey);
-            }
-            if (!result.Truncated) {
-                continue;
-            }
-            UNIT_ASSERT(!result.Keys.empty());
-            const auto& firstCut = result.Keys.back();
-            const bool inclusive = firstCut.Side == EBoundarySide::Before;
-            TIndexOnlyEnv env2;
-            TKeyBlockIterator again(subset, &env2, scheme->Keys, Cfg(), layout);
-            UNIT_ASSERT_VALUES_EQUAL(int(again.Seek(firstCut.Key.GetCells(), inclusive)), int(EReady::Data));
-            TSplitResult tail;
-            UNIT_ASSERT_VALUES_EQUAL(int(again.SplitPoints(request, tail)), int(EReady::Data));
-            if (!tail.Keys.empty()) {
-                UNIT_ASSERT(ComparePartKeys(firstCut.Key.GetCells(), tail.Keys.front().Key.GetCells(), *scheme->Keys) < 0);
-            } else {
-                UNIT_ASSERT(!tail.Truncated);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(SplitPointsBudgetLimitsActualPageFetches) {
-        auto scheme = Scheme64();
-        const auto conf = SmallBTreeConf(1);
-        auto view = CookRows(scheme, conf, TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 1024);
-        view.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TTrackingIndexEnv env;
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        const auto target = Key64(700);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(target.GetCells(), true)), int(EReady::Data));
-        const TString selection = iter.Get().SelectionKey;
-        env.Pages.clear();
-        TSplitRequest request;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = 4 * (view->IndexPages.GetBTree({}).LevelCount + 1);
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT_C(env.Pages.size() <= request.MaxIndexPages,
-            "split budget " << request.MaxIndexPages << " allowed " << env.Pages.size() << " index page fetches");
-        UNIT_ASSERT(result.Truncated);
-        UNIT_ASSERT(!result.Keys.empty());
-        UNIT_ASSERT(ComparePartKeys(target.GetCells(), result.Keys.back().Key.GetCells(), *scheme->Keys) < 0);
-        UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, selection);
-    }
-
-    Y_UNIT_TEST(SplitPointsIgnoreRemovedRowsAfterEarlierRange) {
-        auto scheme = Scheme64();
-        auto owner = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 30);
-        auto removed = CookRows(scheme, Conf(1), TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(2), 20);
-        owner.Slices = TSlices::All();
-        ReplaceSlice(removed, 0, true, 1, true);
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten = {owner, removed};
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TIndexOnlyEnv env;
-        TKeyBlockIterator earlier(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(earlier.Seek({}, true)), int(EReady::Data));
-        TSplitRequest warmRequest;
-        warmRequest.EndKey = Key64(2);
-        warmRequest.MaxExpectedBytes = Max<ui64>();
-        warmRequest.MaxIndexPages = Max<ui64>();
-        TSplitResult ignored;
-        UNIT_ASSERT_VALUES_EQUAL(int(earlier.SplitPoints(warmRequest, ignored)), int(EReady::Data));
-
-        TSplitRequest request;
-        request.MaxExpectedBytes = IndexTools::CountDataSize(*owner.Part, {});
-        request.MaxIndexPages = Max<ui64>();
-        const auto target = Key64(5);
-        TKeyBlockIterator fresh(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(fresh.Seek(target.GetCells(), true)), int(EReady::Data));
-        UNIT_ASSERT_VALUES_EQUAL(int(earlier.Seek(target.GetCells(), true)), int(EReady::Data));
-        TSplitResult freshResult;
-        TSplitResult earlierResult;
-        UNIT_ASSERT_VALUES_EQUAL(int(fresh.SplitPoints(request, freshResult)), int(EReady::Data));
-        UNIT_ASSERT_VALUES_EQUAL(int(earlier.SplitPoints(request, earlierResult)), int(EReady::Data));
-        UNIT_ASSERT(!freshResult.Truncated);
-        UNIT_ASSERT(freshResult.Keys.empty());
-        AssertSameSplits(freshResult, earlierResult);
-    }
-
-    Y_UNIT_TEST(SplitPointsCertain) {
-        const auto scheme = Scheme64();
-        auto view = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 4);
-        view.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten.push_back(view);
-        TIndexOnlyEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
-        const TBounds certain = iter.Get().Bounds;
-        const TString selection = iter.Get().SelectionKey;
-        TTestEnv raw;
-        auto index = CreateIndexIter(view.Part.Get(), &raw, {});
-        UNIT_ASSERT_VALUES_EQUAL(int(index->Seek(0)), int(EReady::Data));
-        const ui64 firstBytes = view->GetPageSize(index->GetPageId(), {});
-        UNIT_ASSERT_VALUES_EQUAL(int(index->Next()), int(EReady::Data));
-        const ui64 nextBytes = view->GetPageSize(index->GetPageId(), {});
-        // The second budget only overflows when the successor is certain too.
-        for (ui64 budget : {firstBytes / 2, firstBytes + nextBytes / 2}) {
-            TSplitRequest request;
-            request.Rate = 0.001;
-            request.MaxExpectedBytes = budget;
-            request.MaxIndexPages = Max<ui64>();
-            TSplitResult result;
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-            UNIT_ASSERT(!result.Truncated);
-            UNIT_ASSERT(result.Keys.empty());
-            request.Certain = &certain;
-            UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-            UNIT_ASSERT(!result.Truncated);
-            UNIT_ASSERT(!result.Keys.empty());
-            UNIT_ASSERT_VALUES_EQUAL(result.Keys.front().Key.GetBuffer(), certain.LastKey.GetBuffer());
-            UNIT_ASSERT_VALUES_EQUAL(int(result.Keys.front().Side), int(EBoundarySide::Before));
-            UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, selection);
-        }
-    }
-
-    Y_UNIT_TEST(SplitPointsBudgetAcrossOwnerChanges) {
-        auto scheme = Scheme64();
-        const auto conf = SmallBTreeConf(1);
-        auto continuous = CookRows(scheme, conf, TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 512);
-        auto singletons = CookRows(scheme, conf, TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(2), 513);
-        continuous.Slices = TSlices::All();
-        TVector<TSlice> slices;
-        for (ui64 key = 32; key <= 480; key += 2) {
-            slices.emplace_back(Key64(key), Key64(key), TRowId(key), TRowId(key), true, true);
-        }
-        ReplaceSlices(singletons, std::move(slices));
-        TSubset subset(TEpoch::FromIndex(1), scheme);
-        subset.Flatten = {continuous, singletons};
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(), scheme->Keys);
-        UNIT_ASSERT(layout.Regions.size() > 400);
-        TTrackingIndexEnv env;
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(), layout);
-        const auto target = Key64(32);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek(target.GetCells(), false)), int(EReady::Data));
-        const TString selection = iter.Get().SelectionKey;
-        env.Pages.clear();
-        TSplitRequest request;
-        request.EndKey = Key64(481);
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = 4 * (Max(continuous->IndexPages.GetBTree({}).LevelCount,
-            singletons->IndexPages.GetBTree({}).LevelCount) + 1);
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT_C(env.Pages.size() <= request.MaxIndexPages,
-            "owner changes fetched " << env.Pages.size() << " pages for budget " << request.MaxIndexPages);
-        UNIT_ASSERT_C(result.Truncated, "owner changes must advance through new index pages");
-        UNIT_ASSERT(!result.Keys.empty());
-        UNIT_ASSERT(ComparePartKeys(target.GetCells(), result.Keys.back().Key.GetCells(), *scheme->Keys) < 0);
-        UNIT_ASSERT(ComparePartKeys(result.Keys.back().Key.GetCells(), request.EndKey.GetCells(), *scheme->Keys) < 0);
-        UNIT_ASSERT_VALUES_EQUAL(iter.Get().SelectionKey, selection);
-    }
-
     Y_UNIT_TEST(MemtableAnchorsAcrossManyGaps) {
         auto scheme = Scheme64();
         auto part = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 40);
@@ -1727,258 +1050,6 @@ Y_UNIT_TEST_SUITE(KeyBlocks) {
             "visited " << iter.Telemetry().MemtableKeysVisited);
     }
 
-    // The persisted part forces a walk. The uncharged tail must preserve split keys
-    // without visiting every memtable anchor.
-    Y_UNIT_TEST(SplitPointsSkipsUnchargedMemtableTail) {
-        auto scheme = Scheme64();
-        auto part = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 8);
-        TCooker cooker(scheme, TEpoch::FromIndex(2));
-        constexpr ui64 Tail = 400;
-        for (ui64 key = 8; key < Tail; ++key) {
-            cooker.Add(*TSchemedCookRow(*scheme).Col(key, ui32(key)));
-        }
-        TSubset partOnly(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        TSubset mixed(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        mixed.Frozen.emplace_back(*cooker, (*cooker)->Snapshot());
-        TIndexOnlyEnv partEnv;
-        TIndexOnlyEnv mixedEnv;
-        const auto partLayout = TKeyBlockIterator::BuildLayout(partOnly, Cfg(1), scheme->Keys);
-        const auto mixedLayout = TKeyBlockIterator::BuildLayout(mixed, Cfg(1), scheme->Keys);
-        TKeyBlockIterator partIter(partOnly, &partEnv, scheme->Keys, Cfg(1), partLayout);
-        TKeyBlockIterator mixedIter(mixed, &mixedEnv, scheme->Keys, Cfg(1), mixedLayout);
-        UNIT_ASSERT_VALUES_EQUAL(int(partIter.Seek({}, true)), int(EReady::Data));
-        UNIT_ASSERT_VALUES_EQUAL(int(mixedIter.Seek({}, true)), int(EReady::Data));
-        TSplitRequest request;
-        request.MaxExpectedBytes = 1;
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult partSplit;
-        TSplitResult mixedSplit;
-        UNIT_ASSERT_VALUES_EQUAL(int(partIter.SplitPoints(request, partSplit)), int(EReady::Data));
-        UNIT_ASSERT_VALUES_EQUAL(int(mixedIter.SplitPoints(request, mixedSplit)), int(EReady::Data));
-        UNIT_ASSERT(!partSplit.Keys.empty());
-        AssertSameSplits(partSplit, mixedSplit);
-        UNIT_ASSERT_C(mixedIter.Telemetry().MemtableKeysVisited < 32,
-            "visited " << mixedIter.Telemetry().MemtableKeysVisited);
-    }
-
-    // All prefix units probe the same persisted page. Skipping them is safe only
-    // when the byte budget can charge that page with probability 1.
-    Y_UNIT_TEST(SplitPointsSkipsRepeatedProbePrefix) {
-        auto scheme = Scheme64();
-        constexpr ui64 Prefix = 400;
-        auto part = CookKeys(scheme, Conf(100), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), {Prefix, Prefix + 1});
-        TCooker cooker(scheme, TEpoch::FromIndex(2));
-        for (ui64 key = 0; key < Prefix; ++key) {
-            cooker.Add(*TSchemedCookRow(*scheme).Col(key, ui32(key)));
-        }
-        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        subset.Frozen.emplace_back(*cooker, (*cooker)->Snapshot());
-        TIndexOnlyEnv env;
-        const auto layout = TKeyBlockIterator::BuildLayout(subset, Cfg(1), scheme->Keys);
-        TKeyBlockIterator iter(subset, &env, scheme->Keys, Cfg(1), layout);
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.Seek({}, true)), int(EReady::Data));
-        TSplitRequest request;
-        request.Rate = 0.05;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = Max<ui64>();
-        TSplitResult result;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(result.Keys.empty());
-        UNIT_ASSERT_C(iter.Telemetry().MemtableKeysVisited < 32,
-            "visited " << iter.Telemetry().MemtableKeysVisited);
-
-        request.EndKey = Key64(Prefix);
-        request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 2;
-        UNIT_ASSERT_VALUES_EQUAL(int(iter.SplitPoints(request, result)), int(EReady::Data));
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(!result.Keys.empty());
-        UNIT_ASSERT(ComparePartKeys(result.Keys.front().Key.GetCells(),
-            request.EndKey.GetCells(), *scheme->Keys) < 0);
-    }
-
-    // Chunks must preserve repeated page charges and produce the same split keys
-    // as an uninterrupted walk.
-    Y_UNIT_TEST(SplitPointsMaxUnitsPerCallPreservesPiece) {
-        auto scheme = Scheme64();
-        auto part = CookRows(scheme, Conf(1, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 24);
-        part.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        TSplitRequest base;
-        base.Rate = 0.5;
-        // Four units cost 3.25 pages; five cost 4. Repeated end probes must
-        // retain their probabilities across chunks.
-        const ui64 pageBytes = IndexTools::CountDataSize(*part.Part, {}) / 24;
-        base.MaxExpectedBytes = pageBytes * 7 / 2;
-        base.MaxIndexPages = Max<ui64>();
-        const auto expected = SplitOnce(subset, base);
-        UNIT_ASSERT(!expected.Keys.empty());
-        UNIT_ASSERT(!expected.Paused);
-        UNIT_ASSERT_VALUES_EQUAL(expected.Keys.front().Key.GetBuffer(), Key64(4).GetBuffer());
-        for (ui64 maxUnitsPerCall : {ui64(1), ui64(3)}) {
-            base.MaxUnitsPerCall = maxUnitsPerCall;
-            AssertSameSplits(expected, SplitInChunks(subset, base));
-        }
-    }
-
-    // Each flat index page must be charged only once across all chunks.
-    Y_UNIT_TEST(SplitPointsChunksShareIndexPages) {
-        auto scheme = Scheme64();
-        auto left = CookRows(scheme, Conf(8, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
-        auto right = CookRows(scheme, Conf(1, false), TLogoBlobID(2, 2, 3, 1, 0, 2), TEpoch::FromIndex(2), 8);
-        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{left, right});
-        TSplitRequest request;
-        request.Rate = 0.05;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = 2;
-        request.MaxUnitsPerCall = 1;
-        const auto result = SplitInChunks(subset, request);
-        UNIT_ASSERT(!result.Truncated);
-        UNIT_ASSERT(result.Keys.empty());
-    }
-
-    // Later chunks must spend the original range's remaining index-page budget.
-    Y_UNIT_TEST(SplitPointsChunksShareIndexBudget) {
-        auto scheme = Scheme64();
-        auto part = CookRows(scheme, SmallBTreeConf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 256);
-        part.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        TSplitRequest request;
-        request.MaxExpectedBytes = Max<ui64>();
-        request.MaxIndexPages = 4 * (part->IndexPages.GetBTree({}).LevelCount + 1);
-        const auto expected = SplitOnce(subset, request);
-        UNIT_ASSERT(expected.Truncated);
-        UNIT_ASSERT_VALUES_EQUAL(expected.Keys.size(), 1u);
-        request.MaxUnitsPerCall = 1;
-        AssertSameSplits(expected, SplitInChunks(subset, request));
-    }
-
-    Y_UNIT_TEST(SplitPointsRejectsChangedRequest) {
-        auto scheme = Scheme64();
-        auto part = CookRows(scheme, Conf(1, false), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
-        part.Slices = TSlices::All();
-        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        const TBounds certain{Key64(0), Key64(1), true, false};
-        TSplitRequest request;
-        request.EndKey = Key64(12);
-        request.Rate = 0.5;
-        request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 4;
-        request.MaxIndexPages = Max<ui64>();
-        request.MaxUnitsPerCall = 2;
-        request.Certain = &certain;
-        auto chunk = SplitOnce(subset, request);
-        UNIT_ASSERT(chunk.Paused);
-        UNIT_ASSERT(chunk.Keys.empty());
-        request.MaxUnitsPerCall = 0;
-        request.Continuation = chunk.Continuation;
-
-        const auto checkChanged = [&](auto change) {
-            auto changed = request;
-            change(changed);
-            const auto result = SplitOnce(subset, changed, chunk.ResumeAt);
-            UNIT_ASSERT(result.Stale);
-            UNIT_ASSERT(result.Keys.empty());
-            UNIT_ASSERT(!result.Paused);
-            UNIT_ASSERT(!result.Truncated);
-        };
-        checkChanged([](auto& changed) { changed.Rate = 0.25; });
-        checkChanged([](auto& changed) { changed.Rate = 1.0; });
-        checkChanged([](auto& changed) { --changed.MaxExpectedBytes; });
-        checkChanged([](auto& changed) { changed.MaxIndexPages = 1; });
-        checkChanged([](auto& changed) { changed.EndKey = Key64(10); });
-        checkChanged([](auto& changed) { changed.EndInclusive = true; });
-        checkChanged([](auto& changed) { changed.Certain = nullptr; });
-        const TBounds changedBounds[] = {
-            {Key64(1), Key64(1), true, false},
-            {Key64(0), Key64(2), true, false},
-            {Key64(0), Key64(1), false, false},
-            {Key64(0), Key64(1), true, true},
-        };
-        for (const auto& bounds : changedBounds) {
-            checkChanged([&](auto& changed) { changed.Certain = &bounds; });
-        }
-
-        const ui64 resumeKey = chunk.ResumeAt.Key.GetCells()[0].AsValue<ui64>();
-        const TKeyBoundary wrongPositions[] = {
-            {Key64(resumeKey - 1), EBoundarySide::Before},
-            {Key64(resumeKey + 1), EBoundarySide::Before},
-            {chunk.ResumeAt.Key, chunk.ResumeAt.Side == EBoundarySide::Before
-                ? EBoundarySide::After : EBoundarySide::Before},
-        };
-        for (const auto& position : wrongPositions) {
-            const auto result = SplitOnce(subset, request, position);
-            UNIT_ASSERT(result.Stale);
-            UNIT_ASSERT(result.Keys.empty());
-            UNIT_ASSERT(!result.Paused);
-            UNIT_ASSERT(!result.Truncated);
-        }
-
-        // Rejection leaves the continuation reusable.
-        const auto expected = SplitOnce(subset, request, chunk.ResumeAt);
-        UNIT_ASSERT(!expected.Stale);
-        UNIT_ASSERT(!expected.Keys.empty());
-        const TBounds equivalent{Key64(0), Key64(1), true, false};
-        request.Certain = &equivalent;
-        const TKeyBoundary equivalentResumeAt{TSerializedCellVec(chunk.ResumeAt.Key.GetCells()), chunk.ResumeAt.Side};
-        // The request remains valid after the source result is discarded.
-        chunk = {};
-        const auto resumed = SplitOnce(subset, request, equivalentResumeAt);
-        UNIT_ASSERT(!resumed.Stale);
-        AssertSameSplits(expected, resumed);
-
-        request.Continuation.reset();
-        request.MaxUnitsPerCall = 2;
-        request.MaxIndexPages = 1;
-        request.Certain = nullptr;
-        chunk = SplitOnce(subset, request);
-        UNIT_ASSERT(chunk.Paused);
-        UNIT_ASSERT(!chunk.Truncated);
-        request.Continuation = chunk.Continuation;
-        request.MaxUnitsPerCall = 0;
-        checkChanged([](auto& changed) { changed.MaxIndexPages = Max<ui64>(); });
-        checkChanged([&](auto& changed) { changed.Certain = &certain; });
-    }
-
-    // Continuations survive equivalent part objects, but reject changed layouts.
-    Y_UNIT_TEST(SplitPointsRejectsStaleContinuation) {
-        auto scheme = Scheme64();
-        auto part = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, 1), TEpoch::FromIndex(1), 16);
-        TSubset subset(TEpoch::FromIndex(1), scheme, TVector<TPartView>{part});
-        TSplitRequest request;
-        request.MaxExpectedBytes = IndexTools::CountDataSize(*part.Part, {}) / 4;
-        request.MaxIndexPages = Max<ui64>();
-        request.MaxUnitsPerCall = 2;
-        const auto chunk = SplitOnce(subset, request);
-        UNIT_ASSERT(chunk.Paused);
-        UNIT_ASSERT(!chunk.Stale);
-        UNIT_ASSERT(chunk.Keys.empty());
-
-        request.MaxUnitsPerCall = 0;
-        request.Continuation = chunk.Continuation;
-        const auto expected = SplitOnce(subset, request, chunk.ResumeAt);
-        UNIT_ASSERT(!expected.Keys.empty());
-        const std::tuple<ui32, TSplitContinuation, bool> cases[] = {
-            {1, chunk.Continuation, true}, {1, {}, false}, {2, chunk.Continuation, false},
-        };
-        for (const auto& [cookie, continuation, valid] : cases) {
-            auto replacement = CookRows(scheme, Conf(1), TLogoBlobID(1, 2, 3, 1, 0, cookie), TEpoch::FromIndex(1), 16);
-            TSubset changed(TEpoch::FromIndex(1), scheme, TVector<TPartView>{replacement});
-            request.Continuation = continuation;
-            const auto resumed = SplitOnce(changed, request, chunk.ResumeAt);
-            UNIT_ASSERT_VALUES_EQUAL(resumed.Stale, !valid);
-            UNIT_ASSERT(!resumed.Paused);
-            UNIT_ASSERT(!resumed.Truncated);
-            if (valid) {
-                AssertSameSplits(expected, resumed);
-            } else {
-                UNIT_ASSERT(resumed.Keys.empty());
-                request.Continuation.reset();
-                const auto restarted = SplitOnce(changed, request);
-                UNIT_ASSERT(!restarted.Stale);
-                UNIT_ASSERT(!restarted.Keys.empty());
-            }
-        }
-    }
 }
 
 }

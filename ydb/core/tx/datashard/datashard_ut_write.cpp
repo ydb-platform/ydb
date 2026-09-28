@@ -5808,6 +5808,19 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             evWrite->AddUnsafeTruncateOperation(tableId);
             return evWrite;
         }
+
+        ui64 GetUnsafeTruncateCounter(TTestActorRuntime& runtime, ui64 shard) {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+                if (counter.GetName() == "DataShard/UnsafeTruncate") {
+                    return counter.GetValue();
+                }
+            }
+            UNIT_ASSERT_C(false, "DataShard/UnsafeTruncate counter not found");
+            return 0;
+        }
     }
 
     Y_UNIT_TEST(UnsafeTruncateImmediate) {
@@ -5818,12 +5831,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
 
         Write(runtime, sender, shards[0],
             MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId),
             NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 1u);
     }
 
     Y_UNIT_TEST(UnsafeTruncatePrepared) {
@@ -5860,6 +5875,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 1u);
 
         // The whole point of the data-plane unsafe truncate: the schema version must not move.
         // A write still carrying the original version would fail with SCHEME_CHANGED otherwise.
@@ -5900,6 +5916,85 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
 
         UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+    }
+
+    // TruncateTable also asserts !Truncated, so truncating the same table twice in one write
+    // transaction would abort the tablet as well. It must be a bad request instead.
+    Y_UNIT_TEST(UnsafeTruncateDuplicateTableRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        auto request = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+        request->AddUnsafeTruncateOperation(tableId);
+
+        Write(runtime, sender, shards[0], std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+    }
+
+    // Unsafe truncate only frees space, so it must keep working once the shard has run out of it.
+    // Only the distributed path depends on the exemption: an immediate truncate has no keys, and
+    // the out-of-space check lets immediate transactions without writes through anyway.
+    Y_UNIT_TEST(UnsafeTruncateOnOutOfSpace) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // The shard learns it is out of space from the status flags of its blob writes. The periodic
+        // blobstorage status check would clear them again, so it is kept from arriving.
+        auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPutResult>([&](TEvBlobStorage::TEvPutResult::TPtr& ev) {
+            auto* msg = ev->Get();
+            if (msg->Id.TabletID() == shard) {
+                const_cast<TStorageStatusFlags&>(msg->StatusFlags).Raw |= NKikimrBlobStorage::StatusDiskSpaceYellowStop;
+            }
+        });
+        TBlockEvents<TEvTablet::TEvCheckBlobstorageStatusResult> blockedStatusChecks(runtime);
+
+        // The flags come back with the commit of any write.
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // Control: an ordinary distributed write is refused, so the shard really is out of space.
+        Write(runtime, sender, shard,
+            MakeWriteRequest(99, NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, 1),
+            NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE);
+
+        const ui64 txId = 100;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Write(runtime, sender, shard,
+                MakeUnsafeTruncateRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, tableId),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+            });
+
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shard), 1u);
     }
 
     // Whether a lock survived is read off its identity: writing again under the same lock id
@@ -5965,6 +6060,53 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "the issuing transaction's lock must survive its own unsafe truncate");
         UNIT_ASSERT_VALUES_EQUAL_C(competingAfter, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN,
             "a competing lock must be broken by the unsafe truncate");
+    }
+
+    // The issuing transaction keeps reading at the snapshot it took before the truncate. That read
+    // must succeed and see an empty table, which is why the truncate must not advance the snapshot
+    // low watermark the way the schema truncate does: the snapshot would be lost.
+    Y_UNIT_TEST(UnsafeTruncateThenReadInSameTransaction) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // The truncate must spare the lock the transaction reads under, as KQP does.
+        ui64 userLockTxId = 0;
+        auto readObserver = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTableId().GetTableId() == tableId.PathId.LocalPathId && record.GetLockTxId()) {
+                userLockTxId = record.GetLockTxId();
+            }
+        });
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table-1` ORDER BY key;
+            )"),
+            "{ items { uint32_value: 0 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 3 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 5 } }");
+        UNIT_ASSERT(userLockTxId);
+
+        {
+            auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+            req->Record.AddPreserveLockTxIds(userLockTxId);
+            Write(runtime, sender, shards[0], std::move(req),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table-1` ORDER BY key;
+            )"),
+            "");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
     }
 
     Y_UNIT_TEST(UnsafeTruncateVolatileRejected) {

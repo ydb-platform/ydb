@@ -30,13 +30,11 @@ struct TColumnMeta {
 // Splits the converter's flat cell row into keys (in key order) and values (in
 // scheme order) and forwards them to the engine's addRow.
 //
-// IRowWriter::AddRow says an implementation must copy the cells: they point
-// into the converter's scratch pool and the Arrow arrays and are gone once
-// TArrowToYdbConverter::Process moves on. This writer deliberately does not
-// copy. IDataParser::TAddRowFn carries the same borrowed-cells contract and
-// both sinks (TUploadRowsRequestBuilder serializes, TDirectPartWriter encodes
-// into pages) consume the row synchronously inside the call, so a copy here
-// would only duplicate theirs. addRow must never defer the cells.
+// The cells are borrowed from the converter (see IRowWriter::AddRow) and are
+// not copied here: IDataParser::TAddRowFn carries the same borrowed-cells
+// contract as for CSV, and both sinks (TUploadRowsRequestBuilder serializes,
+// TDirectPartWriter encodes into pages) consume the row synchronously inside
+// the call. addRow must never defer the cells.
 class TImportParquetRowWriter final : public NArrow::IRowWriter {
 public:
     TImportParquetRowWriter(

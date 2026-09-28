@@ -120,10 +120,6 @@ public:
     // durable checkpoint. A transport retry must preserve the matching
     // in-memory checksum state even when no source bytes are currently held.
     virtual bool HasLiveState() const = 0;
-
-    // Whether rows may be fed to the direct-part writer (which requires
-    // strictly ascending keys, as every backup produced by the exporter has).
-    virtual bool SupportsDirectPartImport() const = 0;
 };
 
 struct TImportS3EngineSettings {

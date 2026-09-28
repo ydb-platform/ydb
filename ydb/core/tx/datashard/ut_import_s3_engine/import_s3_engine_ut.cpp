@@ -323,8 +323,6 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             /*readBatchSize=*/5,
             /*validateChecksum=*/true);
 
-        UNIT_ASSERT(engine->SupportsDirectPartImport());
-
         TMemoryPool pool(256);
         TVector<TDecodedRow> rows;
         TString checksumInput;
@@ -532,7 +530,6 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             source,
             /*readBatchSize=*/8_KB);
 
-        UNIT_ASSERT(engine->SupportsDirectPartImport());
         UNIT_ASSERT_GT(source.size(), 64_KB);
         UNIT_ASSERT_LT(source.size(), 1_MB);
 
@@ -1367,6 +1364,100 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(checksumInput, source);
         AssertReadExactlyOnce(successfulRanges, source.size());
+    }
+}
+
+// HasBytes() and ReadBytes() are served by a single segment, so a positive
+// answer for a range that was loaded in several puts proves those puts were
+// merged.
+Y_UNIT_TEST_SUITE(TParquetSparseFileTest) {
+    Y_UNIT_TEST(MergesTouchingRangesPutInAnyOrder) {
+        TParquetSparseFile file(300);
+        AssertSuccess(file.PutRange(200, TString(100, 'c')));
+        AssertSuccess(file.PutRange(0, TString(100, 'a')));
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 200);
+        UNIT_ASSERT(file.HasBytes(0, 100));
+        UNIT_ASSERT(file.HasBytes(200, 100));
+        UNIT_ASSERT(!file.HasBytes(100, 100));
+        UNIT_ASSERT(!file.HasBytes(0, 300));
+        UNIT_ASSERT(!file.ReadBytes(50, 100)); // crosses the gap
+        UNIT_ASSERT(!file.IsFullyBuffered());
+
+        // Filling the gap bridges both neighbours into one segment.
+        AssertSuccess(file.PutRange(100, TString(100, 'b')));
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 300);
+        UNIT_ASSERT(file.HasBytes(0, 300));
+        UNIT_ASSERT(file.IsFullyBuffered());
+        UNIT_ASSERT_VALUES_EQUAL(*file.ReadBytes(0, 300),
+            TString(100, 'a') + TString(100, 'b') + TString(100, 'c'));
+        UNIT_ASSERT_VALUES_EQUAL(*file.ReadBytes(90, 20), TString(10, 'a') + TString(10, 'b'));
+    }
+
+    Y_UNIT_TEST(SkipsAlreadyLoadedPrefixAndKeepsLoadedBytes) {
+        TParquetSparseFile file(200);
+        AssertSuccess(file.PutRange(0, TString(100, 'a')));
+
+        // A retried or re-routed chunk repeats loaded bytes: they are skipped,
+        // not overwritten, and only the new tail is stored.
+        AssertSuccess(file.PutRange(50, TString(100, 'b')));
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 150);
+        UNIT_ASSERT(file.HasBytes(0, 150));
+        UNIT_ASSERT_VALUES_EQUAL(*file.ReadBytes(0, 150), TString(100, 'a') + TString(50, 'b'));
+
+        // A chunk that is entirely loaded is a no-op.
+        AssertSuccess(file.PutRange(20, TString(30, 'z')));
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 150);
+        UNIT_ASSERT_VALUES_EQUAL(*file.ReadBytes(20, 30), TString(30, 'a'));
+    }
+
+    Y_UNIT_TEST(RejectsOverlapWithFollowingSegmentAndPastEof) {
+        TParquetSparseFile file(300);
+        AssertSuccess(file.PutRange(200, TString(100, 'c')));
+
+        // [150, 250) starts in a gap and runs into the loaded [200, 300).
+        auto result = file.PutRange(150, TString(100, 'x'));
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_STRING_CONTAINS(result.error(), "overlaps loaded range");
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 100);
+        UNIT_ASSERT(!file.HasBytes(150, 50));
+
+        result = file.PutRange(250, TString(100, 'x'));
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_STRING_CONTAINS(result.error(), "past the end");
+        result = file.PutRange(300, TString(1, 'x'));
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 100);
+        UNIT_ASSERT(!file.HasBytes(299, 2));
+        UNIT_ASSERT(!file.ReadBytes(299, 2));
+    }
+
+    Y_UNIT_TEST(ClearBeforeKeepsTailAndAccounting) {
+        TParquetSparseFile file(400);
+        AssertSuccess(file.PutRange(0, TString(100, 'a')));
+        AssertSuccess(file.PutRange(100, TString(100, 'b')));
+        AssertSuccess(file.PutRange(300, TString(100, 'd')));
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 300);
+
+        file.ClearBefore(150); // cuts the merged [0, 200) segment in the middle
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 150);
+        UNIT_ASSERT(!file.HasBytes(100, 50));
+        UNIT_ASSERT(file.HasBytes(150, 50));
+        UNIT_ASSERT_VALUES_EQUAL(*file.ReadBytes(150, 50), TString(50, 'b'));
+        UNIT_ASSERT(file.HasBytes(300, 100));
+
+        file.ClearBefore(250); // boundary inside a gap
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 100);
+        UNIT_ASSERT(!file.HasBytes(150, 50));
+        UNIT_ASSERT(file.HasBytes(300, 100));
+
+        // Evicted bytes can be loaded again and merge with the kept tail.
+        AssertSuccess(file.PutRange(200, TString(100, 'c')));
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 200);
+        UNIT_ASSERT(file.HasBytes(200, 200));
+
+        file.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(file.BufferedBytes(), 0);
+        UNIT_ASSERT(!file.HasBytes(300, 1));
     }
 }
 

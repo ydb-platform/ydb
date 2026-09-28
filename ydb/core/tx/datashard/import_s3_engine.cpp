@@ -619,10 +619,6 @@ public:
             Reader->PendingBytes() != 0 || ProcessedBytes != 0;
     }
 
-    bool SupportsDirectPartImport() const override {
-        return true;
-    }
-
 private:
     std::expected<void, TString> ValidateOutstandingRange(
         const TImportRange& range,
@@ -1050,12 +1046,6 @@ public:
     bool HasLiveState() const override {
         return OutstandingRange || WaitingBatch || ChecksumOffset != 0 || !ChecksumChunk.empty()
             || (SparseFile && SparseFile->BufferedBytes() != 0) || Phase != EPhase::FooterTail;
-    }
-
-    bool SupportsDirectPartImport() const override {
-        // The exporter writes rows in key order across row groups, which is
-        // all the direct-part writer requires.
-        return true;
     }
 
 private:

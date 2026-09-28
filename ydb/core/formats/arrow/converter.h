@@ -13,7 +13,9 @@ class IRowWriter {
 public:
     virtual ~IRowWriter() = default;
 
-    // NOTE: This method must copy cells data to its own strorage
+    // The cells are valid only for the duration of this call: they point into
+    // the Arrow batch and the converter's scratch pool. An implementation that
+    // keeps a row beyond the call must copy the cells (e.g. TSerializedCellVec).
     virtual void AddRow(const TConstArrayRef<TCell>& cells) = 0;
 };
 

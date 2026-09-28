@@ -713,6 +713,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             }
 
             if (DirectPartImportEnabled) {
+                // Direct mode persists nothing until the final attach:
+                // TTxS3DirectWriteFinish stores the download record together
+                // with the part. Commit() here only releases the engine's
+                // batch and advances the parser, so a restart before the
+                // attach replays the whole file and no acknowledged data is
+                // lost.
                 if (auto commitResult = Engine->Commit(std::exchange(PendingBatchId, 0)); !commitResult) {
                     return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                         << ": cannot commit import-engine batch: " << commitResult.error());
@@ -1264,7 +1270,8 @@ private:
         }
         Engine = std::move(*engineResult);
 
-        DirectPartImportEnabled = DirectPartImportEnabled && Engine->SupportsDirectPartImport();
+        // Every engine feeds rows in the exporter's key order (CSV lines and
+        // Parquet row groups alike), which is all the direct-part writer needs.
         if (DirectPartImportEnabled && !DirectImport) {
             DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
         }

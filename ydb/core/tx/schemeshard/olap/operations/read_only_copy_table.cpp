@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_backup_scheme_snapshot.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
@@ -411,7 +412,7 @@ public:
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
-            
+
         if (!AppData()->FeatureFlags.GetEnableColumnTablesBackup()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Read-Only Copy Column Table is supported only for backups. Backups are disabled for the database.");
             return result;
@@ -552,6 +553,8 @@ public:
             return result;
         }
 
+        auto backupSchemeSnapshot = MakeBackupTableSchemeSnapshot(context.SS, context.Ctx, srcPath.Base()->PathId);
+
         auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
@@ -600,8 +603,10 @@ public:
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
             tableInfo->Stats = {};
+            tableInfo->BackupSettings.Swap(&backupSchemeSnapshot);
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
+        context.DbChanges.PersistBackupSchemeSnapshot(dstPath.Base()->PathId);
         context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "copy table info");
 
         const auto tabletType = ETabletType::ColumnShard;

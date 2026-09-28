@@ -2,6 +2,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
+#include "schemeshard_backup_scheme_snapshot.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
@@ -692,6 +693,11 @@ public:
             }
         }
 
+        NKikimrSchemeOp::TBackupTask backupSchemeSnapshot;
+        if (isBackup) {
+            backupSchemeSnapshot = MakeBackupTableSchemeSnapshot(context.SS, context.Ctx, srcPath.Base()->PathId);
+        }
+
         const bool omitFollowers = schema.GetOmitFollowers();
 
         if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
@@ -771,6 +777,10 @@ public:
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
+
+        if (isBackup) {
+            tableInfo->BackupSettings.Swap(&backupSchemeSnapshot);
+        }
 
         // Preserve table partitions storage format from source table.
         tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
@@ -874,6 +884,9 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         context.SS->Tables.Set(newTable->PathId, tableInfo);
+        if (isBackup) {
+            context.DbChanges.PersistBackupSchemeSnapshot(newTable->PathId);
+        }
 
         if (parent.Base()->HasActiveChanges()) {
             TTxId parentTxId = parent.Base()->PlannedToCreate() ? parent.Base()->CreateTxId : parent.Base()->LastTxId;

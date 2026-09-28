@@ -1,4 +1,5 @@
 #include "schemeshard_path_describer.h"
+#include "schemeshard_backup_scheme_snapshot.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
@@ -1512,6 +1513,50 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     NKikimrSchemeOp::TDescribeOptions options;
     options.SetShowPrivateTable(true);
     return DescribePath(self, ctx, path, options);
+}
+
+NKikimrSchemeOp::TBackupTask MakeBackupTableSchemeSnapshot(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TPathId& sourcePathId
+) {
+    NKikimrSchemeOp::TDescribeOptions options;
+    options.SetReturnPartitioningInfo(false);
+    options.SetReturnPartitionConfig(true);
+    options.SetReturnBoundaries(true);
+    options.SetReturnIndexTableBoundaries(true);
+    options.SetShowPrivateTable(true);
+
+    const TPath sourcePath = TPath::Init(sourcePathId, self);
+    Y_ABORT_UNLESS(sourcePath.IsResolved());
+
+    auto sourceResult = DescribePath(self, ctx, sourcePathId, options);
+    Y_ABORT_UNLESS(sourceResult->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess);
+    auto sourceDescription = sourceResult->GetRecord().GetPathDescription();
+
+    NKikimrSchemeOp::TBackupTask snapshot;
+    snapshot.SetTableName(sourcePath.LeafName());
+
+    if (sourceDescription.HasTable()) {
+        for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
+            auto cdcResult = DescribePath(self, ctx, TPathId::FromProto(cdcStream.GetPathId()), options);
+            Y_ABORT_UNLESS(cdcResult->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess);
+
+            for (const auto& child : cdcResult->GetRecord().GetPathDescription().GetChildren()) {
+                if (child.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                    continue;
+                }
+
+                auto topicResult = DescribePath(self, ctx,TPathId(child.GetSchemeshardId(), child.GetPathId()), options);
+                Y_ABORT_UNLESS(topicResult->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess);
+
+                snapshot.AddChangefeedUnderlyingTopics()->CopyFrom(topicResult->GetRecord().GetPathDescription());
+            }
+        }
+    }
+
+    snapshot.MutableTable()->Swap(&sourceDescription);
+    return snapshot;
 }
 
 void TSchemeShard::DescribeTable(

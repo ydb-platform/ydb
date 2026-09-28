@@ -917,6 +917,34 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
+    using TBackupSchemeSnapshotRec = std::tuple<TPathId, TString, TString, TString>;
+    using TBackupSchemeSnapshotRows = TDeque<TBackupSchemeSnapshotRec>;
+
+    bool LoadBackupSchemeSnapshots(NIceDb::TNiceDb& db, TBackupSchemeSnapshotRows& snapshots) const {
+        auto rowSet = db.Table<Schema::BackupSchemeSnapshots>().Range().Select();
+        if (!rowSet.IsReady()) {
+            return false;
+        }
+
+        while (!rowSet.EndOfSet()) {
+            const TPathId pathId(
+                rowSet.GetValue<Schema::BackupSchemeSnapshots::OwnerPathId>(),
+                rowSet.GetValue<Schema::BackupSchemeSnapshots::LocalPathId>());
+
+            snapshots.emplace_back(
+                pathId,
+                rowSet.GetValue<Schema::BackupSchemeSnapshots::TableName>(),
+                rowSet.GetValue<Schema::BackupSchemeSnapshots::TableDescription>(),
+                rowSet.GetValueOrDefault<Schema::BackupSchemeSnapshots::ChangefeedUnderlyingTopics>(""));
+
+            if (!rowSet.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     typedef std::tuple<TPathId, TTxId, ui64, ui32, ui32, ui64, ui64, ui8> TCompletedBackupRestoreRec;
     typedef TDeque<TCompletedBackupRestoreRec> TCompletedBackupRestoreRows;
 
@@ -4598,6 +4626,64 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
                                 << ", pathId: " << pathId
                                 << ", tablename: " << tableName.data());
+            }
+        }
+
+        // Read structural scheme snapshots captured together with backup copies
+        {
+            TBackupSchemeSnapshotRows snapshots;
+            if (!LoadBackupSchemeSnapshots(db, snapshots)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for BackupSchemeSnapshots"
+                             << ", read records: " << snapshots.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            for (auto& [pathId, tableName, tableDesc, changefeedUnderlyingTopics] : snapshots) {
+                bool restored = false;
+                auto fillSchemeSnapshot = [&](auto& tableInfo) {
+                    if (tableInfo->BackupSettings.HasTable()) {
+                        return;
+                    }
+
+                    tableInfo->BackupSettings.SetTableName(tableName);
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*tableInfo->BackupSettings.MutableTable(), tableDesc));
+
+                    tableInfo->BackupSettings.ClearChangefeedUnderlyingTopics();
+                    if (changefeedUnderlyingTopics) {
+                        NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                        for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                            *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                        }
+                    }
+                    restored = true;
+                };
+
+                bool found = false;
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    found = true;
+                    fillSchemeSnapshot(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    found = true;
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillSchemeSnapshot(tableInfo);
+                }
+
+                if (!found) {
+                    // Old binaries ignore this additive table and may remove the private copy
+                    // while leaving its snapshot behind
+                    Self->PersistRemoveBackupSchemeSnapshot(db, pathId);
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Removed obsolete backup scheme snapshot"
+                                   << ", pathId: " << pathId);
+                    continue;
+                }
+
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            (restored ? "Loaded backup scheme snapshot" : "Retained backup scheme snapshot")
+                                << ", pathId: " << pathId
+                                << ", tablename: " << tableName);
             }
         }
 

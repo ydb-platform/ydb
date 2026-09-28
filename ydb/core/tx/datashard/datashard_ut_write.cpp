@@ -5960,8 +5960,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const auto preservedAfter = writeUnderLock(preservedLockTxId, 101);
         const auto competingAfter = writeUnderLock(competingLockTxId, 201);
-        Cerr << "LOCKS preserved=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(preservedAfter)
-             << " competing=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(competingAfter) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL_C(preservedAfter, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
             "the issuing transaction's lock must survive its own unsafe truncate");
@@ -6169,7 +6167,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         runtime.SendToPipe(shard, sender, req.release(), 0, GetPipeConfigWithRetries());
         auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
-        Cerr << "LOCKCOMMIT result: " << ev->Get()->Record.ShortDebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(),
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
             "committing a lock together with an unsafe truncate must not reach the local database");

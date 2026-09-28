@@ -1294,7 +1294,7 @@ void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const
     }
     Y_ABORT_UNLESS(!item.Descriptor->Leading.load());
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelData);
 #if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
@@ -1389,7 +1389,7 @@ void TNodeState::FailOutputs(const TString& reason) {
 }
 
 void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelControl);
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, cookie));
 }
@@ -1645,7 +1645,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
     evAck->Record.SetStatus(record.GetSeqNo() <= confirmedSeqNo ? NYql::NDqProto::TEvChannelAckV2::OK : NYql::NDqProto::TEvChannelAckV2::RESEND);
     evAck->Record.SetSeqNo(confirmedSeqNo);
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelControl);
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
 
@@ -1699,7 +1699,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::RESEND);
             evAck->Record.SetSeqNo(confirmedSeqNo + 1);
 
-            ui32 flags = SendFlags();
+            ui32 flags = SendFlags(DqIcChannelControl);
 
             ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
         }
@@ -2101,7 +2101,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelControl);
 
     LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
         << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -2429,7 +2429,7 @@ void TNodeState::SendDiscovery() {
     evDiscovery->Record.SetGenMinor(GenMinor);
     evDiscovery->Record.SetSeqNo(SeqNo);
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelData);
 
     // the cookie 0 is what the reply echoes, and how HandleAck tells it from a gap RESEND
     ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags, 0));

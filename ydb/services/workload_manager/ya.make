@@ -22,6 +22,8 @@ PEERDIR(
 
     ydb/library/aclib
 
+    library/cpp/threading/atomic_shared_ptr
+
     ydb/library/yql/providers/pq/common
 
 )
@@ -33,7 +35,6 @@ END()
 RECURSE(
     actors
     common
-    gateway
     metadata_subscription
     tables
     service

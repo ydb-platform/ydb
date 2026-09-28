@@ -1,8 +1,10 @@
 #include "resource_pools_cache_actor.h"
 
+#include <ydb/services/workload_manager/gateway_internal.h>
+#include <ydb/services/workload_manager/service/service.h>
+
 #include <ydb/services/workload_manager/common/helpers.h>
 #include <ydb/services/workload_manager/events.h>
-#include <ydb/services/workload_manager/gateway/internal.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 
 #include <ydb/core/base/appdata.h>
@@ -26,10 +28,52 @@
 
 namespace NKikimr::NWorkloadManager {
 
+std::shared_ptr<IQueryClassifier> NPrivate::TWorkloadManagerGateway::TryCreateQueryClassifier(
+    const TString& databaseId, TClassifyContext context)
+{
+    TSnapshotPtr snapshot = Snapshot_;
+
+    if (!snapshot || !snapshot->IsResourcePoolsEnabled(databaseId)) {
+        return nullptr;
+    }
+
+    const TString effectivePoolId = context.PoolId
+        ? context.PoolId
+        : NResourcePool::DEFAULT_POOL_ID;
+
+    if (!snapshot->Pools || !snapshot->Pools->contains(GetPoolKey(databaseId, effectivePoolId))) {
+        const ui32 nodeId = CacheActorId_.NodeId();
+        NActors::TActivationContext::Send(new NActors::IEventHandle(
+            NKqp::MakeKqpSchedulerServiceId(nodeId),
+            CacheActorId_,
+            new NKqp::NScheduler::TEvAddPool(databaseId, effectivePoolId)));
+        NActors::TActivationContext::Send(new NActors::IEventHandle(
+            MakeServiceId(nodeId),
+            CacheActorId_,
+            new TEvSubscribeOnPoolChanges(databaseId, effectivePoolId)));
+    }
+
+    return CreateQueryClassifier(
+        snapshot->Pools,
+        TClassifierConfigsView(snapshot->Classifiers, databaseId),
+        databaseId,
+        std::move(context),
+        *AppData());
+}
+
 namespace {
 
 using namespace NActors;
 
+///
+/// Actor which receives updates for workload manager state:
+/// - pools,
+/// - classifiers,
+/// - configs.
+///
+/// Creates an immutable snapshot and publishes it via the passed-in
+/// `TWorkloadManagerGateway` (owned by AppData).
+///
 class TResourcePoolsCacheActor : public TActorBootstrapped<TResourcePoolsCacheActor> {
     struct TPoolInfo {
         NResourcePool::TPoolSettings Config;
@@ -38,15 +82,13 @@ class TResourcePoolsCacheActor : public TActorBootstrapped<TResourcePoolsCacheAc
     };
 
 public:
-    explicit TResourcePoolsCacheActor(TActorId workloadManagerServiceId)
-        : WorkloadManagerServiceId_(workloadManagerServiceId)
-        , Gateway_(std::make_shared<NPrivate::TWorkloadManagerGateway>())
+    explicit TResourcePoolsCacheActor(std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
+        : Gateway_(std::move(gateway))
     {}
 
     void Registered(TActorSystem* sys, const TActorId& owner) override {
         TActorBootstrapped::Registered(sys, owner);
-        Gateway_->OnRegistered(SelfId(), WorkloadManagerServiceId_, SelfId().NodeId());
-        NPrivate::RegisterGateway(Gateway_, SelfId().NodeId());
+        Gateway_->OnRegistered(SelfId());
     }
 
     void Bootstrap() {
@@ -133,7 +175,7 @@ private:
                 PoolsCache_.erase(it);
             } else {
                 it->second.Expired = true;
-                Send(WorkloadManagerServiceId_, new TEvSubscribeOnPoolChanges(databaseId, poolId));
+                Send(MakeServiceId(SelfId().NodeId()), new TEvSubscribeOnPoolChanges(databaseId, poolId));
             }
             return;
         }
@@ -159,7 +201,7 @@ private:
                 }
                 Send(NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()),
                      new NKqp::NScheduler::TEvAddPool(databaseId, *poolId));
-                Send(WorkloadManagerServiceId_,
+                Send(MakeServiceId(SelfId().NodeId()),
                      new TEvSubscribeOnPoolChanges(databaseId, *poolId));
             }
         }
@@ -206,17 +248,15 @@ private:
     }
 
     void Rebuild() {
-        auto snapshot = std::make_shared<NPrivate::TSnapshot>();
+        auto* snapshot = new NPrivate::TSnapshot();
         snapshot->Pools = BuildResourcePoolMapSnapshot();
         snapshot->Classifiers = LastClassifierSnapshot_;
-        snapshot->FeatureFlags = FeatureFlags_;
-        snapshot->WorkloadManagerConfig = WorkloadManagerConfig_;
         for (const auto& [databaseId, info] : DatabasesCache_) {
             snapshot->Databases[databaseId] = NPrivate::TDatabaseInfo{.Serverless = info.Serverless};
         }
         snapshot->EnableResourcePools = EnableResourcePools_;
         snapshot->EnableResourcePoolsOnServerless = EnableResourcePoolsOnServerless_;
-        Gateway_->PublishSnapshot(std::move(snapshot));
+        Gateway_->PublishSnapshot(NPrivate::TSnapshotPtr(snapshot));
     }
 
     TString LogPrefix() const {
@@ -233,14 +273,15 @@ private:
     bool EnableResourcePoolsOnServerless_ = false;
     bool SubscribedOnResourcePoolClassifiers_ = false;
 
-    TActorId WorkloadManagerServiceId_;
     std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway_;
 };
 
 }
 
-NActors::IActor* CreateResourcePoolsCacheActor(NActors::TActorId workloadManagerServiceId) {
-    return new TResourcePoolsCacheActor(workloadManagerServiceId);
+NActors::IActor* CreateResourcePoolsCacheActor(
+    std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
+{
+    return new TResourcePoolsCacheActor(std::move(gateway));
 }
 
 }

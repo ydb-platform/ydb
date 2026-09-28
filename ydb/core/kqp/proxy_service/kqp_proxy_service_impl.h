@@ -96,10 +96,9 @@ public:
         State.store(state, std::memory_order_release);
     }
 
-    void SetPoolContext(TString poolId, TString classifiedBy) override {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        PoolId = std::move(poolId);
-        ClassifiedBy = std::move(classifiedBy);
+    void SetPoolContext(TPoolContext context) override {
+        TGuard<TAdaptiveLock> guard(ContextLock_);
+        Context_ = std::move(context);
     }
 
     EState GetState() const {
@@ -114,23 +113,17 @@ public:
         return TInstant::MicroSeconds(ExitTimeUs.load(std::memory_order_acquire));
     }
 
-    TString GetPoolId() const {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        return PoolId;
-    }
-
-    TString GetClassifiedBy() const {
-        TGuard<TAdaptiveLock> guard(PoolIdLock);
-        return ClassifiedBy;
+    TPoolContext GetPoolContext() const {
+        TGuard<TAdaptiveLock> guard(ContextLock_);
+        return Context_;
     }
 
     void Clean() {
         EnterTimeUs.store(0, std::memory_order_release);
         ExitTimeUs.store(0, std::memory_order_release);
         {
-            TGuard<TAdaptiveLock> guard(PoolIdLock);
-            PoolId.clear();
-            ClassifiedBy.clear();
+            TGuard<TAdaptiveLock> guard(ContextLock_);
+            Context_ = {};
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -140,9 +133,8 @@ private:
     std::atomic<ui64> EnterTimeUs{0};
     std::atomic<ui64> ExitTimeUs{0};
 
-    mutable TAdaptiveLock PoolIdLock;
-    TString PoolId;
-    TString ClassifiedBy;
+    mutable TAdaptiveLock ContextLock_;
+    TPoolContext Context_;
 };
 
 template<typename TValue>

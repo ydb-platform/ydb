@@ -1752,17 +1752,16 @@ private:
             return;
         }
 
-        auto gateway = NWorkloadManager::TryGetGateway();
-        if (!gateway) {
-            return;
-        }
-
         auto context = NWorkloadManager::TClassifyContext{
             .PoolId = ev->Get()->GetPoolId(),
             .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
             .UserToken = ev->Get()->GetUserToken(),
         };
 
+        auto& gateway = AppData()->WorkloadManagerGateway;
+        if (!gateway) {
+            return;
+        }
         auto classifier = gateway->TryCreateQueryClassifier(ev->Get()->GetDatabaseId(), std::move(context));
         if (!classifier) {
             return;

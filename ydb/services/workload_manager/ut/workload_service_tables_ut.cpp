@@ -120,7 +120,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         // Restart workload service
         ydb->StopWorkloadService();
         auto runtime = ydb->GetRuntime();
-        runtime->Register(CreateService(NWorkloadManager::GetWorkloadManagerCounters(runtime->GetAppData().Counters)));
+        auto gateway = std::static_pointer_cast<NWorkloadManager::NPrivate::TWorkloadManagerGateway>(
+            runtime->GetAppData().WorkloadManagerGateway);
+        runtime->Register(CreateService(NWorkloadManager::GetWorkloadManagerCounters(runtime->GetAppData().Counters), gateway));
 
         // Check that tables will be cleanuped
         ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 0});

@@ -66,7 +66,7 @@ def lines_to_bokeh(
     lines = convert_lines(lines, line_type, LineType.ChunkCombinedNan)
     lines = dechunk_lines(lines, LineType.ChunkCombinedNan)
     if TYPE_CHECKING:
-        lines = cast(LineReturn_ChunkCombinedNan, lines)
+        lines = cast("LineReturn_ChunkCombinedNan", lines)
     points = lines[0][0]
     if points is None:
         return None, None

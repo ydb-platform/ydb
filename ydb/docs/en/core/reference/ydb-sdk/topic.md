@@ -3759,6 +3759,19 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
 ### Auto-scaling support for topics {#autoscaling}
 
+{% note warning %}
+
+`min_active_partitions` and `max_active_partitions` do not enable topic
+autoscaling by themselves. If `auto_partitioning_settings` is omitted, the
+strategy remains `DISABLED` and the topic has a fixed number of active
+partitions. In YDB 26.2, `describe_topic()` then reports the effective
+`max_active_partitions` as equal to `min_active_partitions`.
+
+To configure different minimum and maximum limits, also set the strategy to
+`TopicAutoPartitioningStrategy.SCALE_UP`, as shown below.
+
+{% endnote %}
+
 {% list tabs group=lang %}
 
 - C++

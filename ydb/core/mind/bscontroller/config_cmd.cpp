@@ -244,7 +244,7 @@ namespace NKikimr::NBsController {
                             }
                         }
                         const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
-                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status);
+                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status, !SelfHeal && !GroupLayoutSanitizer);
 
                         const TDuration passed = TDuration::Seconds(timer.Passed());
                         switch (step.GetCommandCase()) {

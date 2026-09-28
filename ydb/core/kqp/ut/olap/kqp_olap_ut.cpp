@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -1758,6 +1759,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "[[1];[3]]",
         };
 
+        const TString stringContainsIgnoreCaseKernel = "String._yql_AsciiContainsIgnoreCase";
+        const TString fastContainsIgnoreCaseKernel = "OlapKernels._yql_AsciiContainsIgnoreCase";
+
         UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
 
         auto run = [&](const TString& extraPragma, bool expectFastKernel) {
@@ -1780,22 +1784,99 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
                     TStringBuilder() << "ILIKE contains not pushed down. Query: " << query);
                 if (expectFastKernel) {
-                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") != std::string::npos,
+                    UNIT_ASSERT_C(ast->find(fastContainsIgnoreCaseKernel) != std::string::npos,
                         TStringBuilder() << "OlapKernels UDF not used. Query: " << query << " AST: " << *ast);
-                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                    UNIT_ASSERT_C(ast->find(stringContainsIgnoreCaseKernel) == std::string::npos,
                         TStringBuilder() << "String UDF path still used with pragma on. Query: " << query);
                 } else {
-                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                    UNIT_ASSERT_C(ast->find(fastContainsIgnoreCaseKernel) == std::string::npos,
                         TStringBuilder() << "OlapKernels UDF used with pragma off. Query: " << query);
-                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") != std::string::npos,
-                        TStringBuilder() << "UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
+                    UNIT_ASSERT_C(ast->find(stringContainsIgnoreCaseKernel) != std::string::npos,
+                        TStringBuilder() << "String UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
                 }
+                const auto& expectedKernel = expectFastKernel ? fastContainsIgnoreCaseKernel : stringContainsIgnoreCaseKernel;
+                const auto plan = res.GetStats()->GetPlan();
+                UNIT_ASSERT_C(plan->find(Sprintf("Udf(%s)(", expectedKernel.c_str())) != std::string::npos,
+                    TStringBuilder() << "UDF filter is not formatted. Query: " << query << " Plan: " << *plan);
                 CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
             }
         };
 
         run(R"(PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";)", true);
         run("", false);
+    }
+
+    Y_UNIT_TEST(PredicatePushdown_IgnoreCaseUdfHandleBothStringAndUtf8) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto schemeSession = tableClient.CreateSession().GetValueSync().GetSession();
+        UNIT_ASSERT(schemeSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                str String,
+                u_str Utf8,
+                PRIMARY KEY(id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync().IsSuccess());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto insertResult = session.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (id, str, u_str) VALUES
+                (1, "foobar", "foobar"),
+                (2, "barfoo", "barfoo"),
+                (3, "foo", "foo"),
+                (4, NULL, NULL)
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues());
+
+        const THashMap<TString, std::pair<TString, TString>> patterns = {
+            {"EqualsIgnoreCase", {"foo", "[[3]]"}},
+            {"StartsWithIgnoreCase", {"foo%", "[[1];[3]]"}},
+            {"EndsWithIgnoreCase", {"%foo", "[[2];[3]]"}},
+            {"StringContainsIgnoreCase", {"%foo%", "[[1];[2];[3]]"}},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(patterns.size(), NOpt::IgnoreCaseSubstringMatchFunctions.size());
+
+        const std::vector<TString> inputColumns = {"str", "u_str"};
+        const TString directUdfNode = "KqpOlapUdf";
+
+        auto run = [&](const TString& expectedKernel, const TString& pattern, const TString& expectedResult,
+                       const TString& extraPragma) {
+            for (const auto& column : inputColumns) {
+                const auto query = Sprintf(R"(
+                    PRAGMA OptimizeSimpleILike;
+                    PRAGMA AnsiLike;
+                    %s
+                    SELECT id FROM `/Root/foo` WHERE %s ILIKE "%s" ORDER BY id;
+                )", extraPragma.c_str(), column.c_str(), pattern.c_str());
+                const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+                CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResult);
+
+                const auto ast = res.GetStats()->GetAst();
+                UNIT_ASSERT_C(ast->find(directUdfNode) != std::string::npos,
+                    TStringBuilder() << "Expected direct UDF node. Query: " << query << " AST: " << *ast);
+                UNIT_ASSERT_C(ast->find(expectedKernel) != std::string::npos,
+                    TStringBuilder() << "Expected UDF kernel. Query: " << query << " AST: " << *ast);
+            }
+        };
+
+        for (const auto& [functionName, kernelName] : NOpt::IgnoreCaseSubstringMatchFunctions) {
+            const auto* test = patterns.FindPtr(functionName);
+            UNIT_ASSERT_C(test, TStringBuilder() << "Missing ILIKE pattern for " << functionName);
+            run(kernelName, test->first, test->second, "");
+        }
+
+        const auto* containsTest = patterns.FindPtr("StringContainsIgnoreCase");
+        UNIT_ASSERT(containsTest);
+        run("OlapKernels._yql_AsciiContainsIgnoreCase", containsTest->first, containsTest->second,
+            "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = \"true\";");
     }
 
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {

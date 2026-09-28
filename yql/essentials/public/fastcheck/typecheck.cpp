@@ -7,7 +7,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_partial.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -44,7 +44,7 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(request.Mode, astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
+        res.Success = DoTypeCheck(request, astResult->Root, res.Issues);
 
         return res;
     }
@@ -58,7 +58,7 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(request.Mode, astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
+        res.Success = DoTypeCheck(request, astResult->Root, res.Issues);
 
         return res;
     }
@@ -72,23 +72,28 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(request.Mode, astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
+        res.Success = DoTypeCheck(request, astResult->Root, res.Issues);
 
         return res;
     }
 
-    bool DoTypeCheck(EMode mode, TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues) {
+    bool DoTypeCheck(const TChecksRequest& request, TAstNode* astRoot, TIssues& issues) {
+        const IUdfMeta* udfMeta = request.UdfMeta;
         if (!udfMeta) {
             udfMeta = GetDefaultUdfMeta();
         }
 
-        // clang-format off
-        return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues,
-            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true); },
-            [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); },
-            [](const TTypeAnnotationNode* type) { return NCommon::WriteTypeToYson(type); }
-        );
-        // clang-format on
+        const TPartialAnnotationConfig config = {
+            .IsLibrary = request.Mode == EMode::Library,
+            .LangVer = request.LangVer,
+            .UdfMeta = udfMeta,
+            .ConfigProviderFactory = [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true); },
+            .TypeParser = [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); },
+            .TypeWriter = [](const TTypeAnnotationNode* type) { return NCommon::WriteTypeToYson(type); },
+            .LimitStrictnessFactor = request.LimitStrictnessFactor,
+        };
+
+        return PartiallyAnnotateTypes(astRoot, issues, config);
     }
 };
 

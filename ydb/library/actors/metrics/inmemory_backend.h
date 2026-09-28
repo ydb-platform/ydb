@@ -89,3 +89,10 @@ namespace NActors {
 } // namespace NActors
 
 #include "line.h"
+
+namespace NActors {
+    template<class TFrontend>
+    TLine<TFrontend> TInMemoryMetricsBackend::CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config) {
+        return TLine<TFrontend>(CreateLineWithMeta(name, labels, TFrontend::MakeMeta(config)));
+    }
+}

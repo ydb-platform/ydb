@@ -1,6 +1,7 @@
 #pragma once
 
 #include "radix.h"
+#include "text_document.h"
 
 #include <yql/essentials/tools/yql_language_server/lsp/message/completion.h>
 
@@ -14,7 +15,7 @@ public:
 
     explicit TCompletionService(NSQLComplete::ISqlCompletionEngine::TPtr engine);
 
-    TCompletionList Completion(TStringBuf text, const TCompletionParams& params) const;
+    TCompletionList Completion(TTextDocument::TPtr document, const TCompletionParams& params) const;
 
 private:
     TString SortText(size_t index, size_t length) const;

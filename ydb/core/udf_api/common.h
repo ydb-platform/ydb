@@ -5,6 +5,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/ydb_udf.pb.h>
+#include <google/protobuf/timestamp.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -70,7 +71,7 @@ bool FromProtoType(Ydb::Udf::ModuleType type, NUdfStore::EUdfType& result);
 Ydb::StatusIds::StatusCode ValidateKind(Ydb::Udf::ModuleKind kind, TString& error);
 Ydb::StatusIds::StatusCode ValidateUpload(const Ydb::Udf::UploadModuleParams& params, TString& error);
 Ydb::Udf::CompileStatus ToProtoCompileStatus(NUdfStore::ECompileStatus status);
-bool FromProtoCompileStatus(Ydb::Udf::CompileStatus status, NUdfStore::ECompileStatus& result);
+void FillTimestamp(TInstant value, google::protobuf::Timestamp& proto);
 
 void FillModuleInfo(const NQuery::TModuleRow& row, Ydb::Udf::ModuleInfo& info);
 

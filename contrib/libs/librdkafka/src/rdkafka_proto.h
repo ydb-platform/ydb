@@ -578,6 +578,11 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 #define RD_KAFKAP_MSGSET_V2_OF_RecordCount                                     \
         (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8 + 8 + 2 + 4)
 
+/* Byte offsets for legacy MsgVersion v0..v1 MessageSet fields */
+#define RD_KAFKAP_MSGSET_V0_OF_MessageSize (8)
+#define RD_KAFKAP_MSGSET_V0_OF_MagicByte   (8 + 4 + 4)
+#define RD_KAFKAP_MSGSET_V0_OF_Attributes  (8 + 4 + 4 + 1)
+
 
 /**
  * @struct Struct representing UUID protocol primitive type.
@@ -619,8 +624,9 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
         return 0;
 }
 
-static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
-        rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(const void *a,
+                                                     const void *b) {
+        const rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
         return rd_kafka_Uuid_cmp(*a_uuid, *b_uuid);
 }
 

@@ -159,7 +159,8 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
             .With("WrittenSize", writer->GetWrittenSize())
             .With("ReadUncompressedDataSize", dataStatistics.uncompressed_data_size())
             .With("ReadCompressedDataSize", dataStatistics.compressed_data_size())
-            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns());
+            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns())
+            .With("TimingStatistics", reader->GetTimingStatistics());
     });
 
     PipeReaderToWriterByBatches(

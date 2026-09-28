@@ -5,6 +5,7 @@
 #include "events.h"
 #include "event_local.h"
 #include "hfunc.h"
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/sanitizers.h>
@@ -279,6 +280,74 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
 
     Y_UNIT_TEST(PoisonPill) {
         Check(MakeHolder<TEvents::TEvPoisonPill>());
+    }
+
+    class TNotBootstrappedCoroActor: public TActorCoroImpl {
+        bool& RunCalled;
+
+    public:
+        explicit TNotBootstrappedCoroActor(bool& runCalled)
+            : TActorCoroImpl(64 * 1024)
+            , RunCalled(runCalled)
+        {}
+
+        void Run() override {
+            RunCalled = true;
+        }
+    };
+
+    Y_UNIT_TEST(DestroyBeforeBootstrap) {
+        // The actor system Stop destroys the actors left in mailboxes, and an actor registered just before it may still
+        // have its bootstrap queued: this runtime never dispatches it
+        bool runCalled = false;
+        {
+            TTestActorRuntimeBase runtime;
+            runtime.Initialize();
+            runtime.Register(new TActorCoro(MakeHolder<TNotBootstrappedCoroActor>(runCalled)));
+        }
+        UNIT_ASSERT(!runCalled);
+    }
+
+    class TWaitingCoroActor: public TActorCoroImpl {
+        bool& Waiting;
+        bool& Unwound;
+
+    public:
+        TWaitingCoroActor(bool& waiting, bool& unwound)
+            : TActorCoroImpl(64 * 1024, /* allowUnhandledDtor */ true)
+            , Waiting(waiting)
+            , Unwound(unwound)
+        {}
+
+        void Run() override {
+            Waiting = true;
+            try {
+                WaitForEvent();
+            } catch (const TDtorException&) {
+                Unwound = true;
+                throw;
+            }
+        }
+    };
+
+    Y_UNIT_TEST(DestroyWhileWaiting) {
+        // a bootstrapped coroutine is still resumed by its destruction, to unwind its stack
+        bool waiting = false;
+        bool unwound = false;
+        {
+            TTestActorRuntimeBase runtime;
+            runtime.Initialize();
+            runtime.Register(new TActorCoro(MakeHolder<TWaitingCoroActor>(waiting, unwound)));
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return waiting;
+            };
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime.DispatchEvents(options);
+        }
+        UNIT_ASSERT(waiting);
+        UNIT_ASSERT(unwound);
     }
 
     template <EChainCoroStackKind StackKind>

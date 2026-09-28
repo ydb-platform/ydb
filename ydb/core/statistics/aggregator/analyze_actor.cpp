@@ -157,7 +157,7 @@ void TAnalyzeActor::Bootstrap() {
     entry.TableId = PathId;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
     entry.Operation = TNavigate::OpTable;
-    entry.SyncVersion = SamplingRequested();
+    entry.SyncVersion = true;
 
     auto request = std::make_unique<TNavigate>();
     request->DatabaseName = DatabaseName;

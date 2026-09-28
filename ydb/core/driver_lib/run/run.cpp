@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
@@ -1529,6 +1530,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
 
+    AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(runConfig.AppConfig.GetResourcePathPrefixMapping());
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {

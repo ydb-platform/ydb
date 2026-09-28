@@ -16,6 +16,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
     const TMonotonic startGlobal = TMonotonic::Now();
     for (auto&& t : workerTasks) {
         const TMonotonic start = TMonotonic::Now();
+        t.GetTask()->OnAssignedToWorker(WorkerIdx);
         t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
         results.emplace_back(t.GetResult(start, TMonotonic::Now()));
     }

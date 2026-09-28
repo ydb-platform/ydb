@@ -20,8 +20,6 @@ namespace NKikimr::NUdfApi {
 using NUdfStore::ECompileStatus;
 using NUdfStore::EUdfType;
 
-namespace {
-
 void FillTimestamp(TInstant value, google::protobuf::Timestamp& proto) {
     if (!value) {
         return;
@@ -29,8 +27,6 @@ void FillTimestamp(TInstant value, google::protobuf::Timestamp& proto) {
     proto.set_seconds(static_cast<i64>(value.Seconds()));
     proto.set_nanos(static_cast<i32>(value.MicroSecondsOfSecond() * 1000));
 }
-
-} // namespace
 
 bool IsWasmUdfEnabled() {
     const auto& config = AppData()->UdfStoreConfig;
@@ -187,25 +183,6 @@ Ydb::Udf::CompileStatus ToProtoCompileStatus(ECompileStatus status) {
     return Ydb::Udf::COMPILE_STATUS_UNSPECIFIED;
 }
 
-bool FromProtoCompileStatus(Ydb::Udf::CompileStatus status, ECompileStatus& result) {
-    switch (status) {
-        case Ydb::Udf::PENDING:
-            result = ECompileStatus::Pending;
-            return true;
-        case Ydb::Udf::COMPILING:
-            result = ECompileStatus::Compiling;
-            return true;
-        case Ydb::Udf::READY:
-            result = ECompileStatus::Ready;
-            return true;
-        case Ydb::Udf::FAILED:
-            result = ECompileStatus::Failed;
-            return true;
-        default:
-            return false;
-    }
-}
-
 Ydb::StatusIds::StatusCode ValidateKind(Ydb::Udf::ModuleKind kind, TString& error) {
     if (kind == Ydb::Udf::NATIVE) {
         error = NativeUnsupported;
@@ -247,10 +224,7 @@ void FillModuleInfo(const NQuery::TModuleRow& row, Ydb::Udf::ModuleInfo& info) {
     info.set_md5(row.Md5);
     info.set_size(row.Size);
     info.set_version(row.Version);
-    info.set_compile_status(ToProtoCompileStatus(row.CompileStatus));
-    info.set_compile_error(row.CompileError);
     FillTimestamp(row.CreatedAt, *info.mutable_created_at());
-    FillTimestamp(row.CompileFinishedAt, *info.mutable_compile_finished_at());
 }
 
 } // namespace NKikimr::NUdfApi

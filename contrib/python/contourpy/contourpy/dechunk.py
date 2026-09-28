@@ -46,12 +46,12 @@ def dechunk_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> cpy.Fil
         return filled
 
     if TYPE_CHECKING:
-        filled = cast(cpy.FillReturn_Chunk, filled)
+        filled = cast("cpy.FillReturn_Chunk", filled)
     points = concat_points_or_none(filled[0])
 
     if fill_type == FillType.ChunkCombinedCode:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedCode, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedCode", filled)
         if points is None:
             ret1: cpy.FillReturn_ChunkCombinedCode = ([None], [None])
         else:
@@ -59,7 +59,7 @@ def dechunk_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> cpy.Fil
         return ret1
     elif fill_type == FillType.ChunkCombinedOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedOffset", filled)
         if points is None:
             ret2: cpy.FillReturn_ChunkCombinedOffset = ([None], [None])
         else:
@@ -67,7 +67,7 @@ def dechunk_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> cpy.Fil
         return ret2
     elif fill_type == FillType.ChunkCombinedCodeOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedCodeOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedCodeOffset", filled)
         if points is None:
             ret3: cpy.FillReturn_ChunkCombinedCodeOffset = ([None], [None], [None])
         else:
@@ -76,7 +76,7 @@ def dechunk_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> cpy.Fil
         return ret3
     elif fill_type == FillType.ChunkCombinedOffsetOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedOffsetOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedOffsetOffset", filled)
         if points is None:
             ret4: cpy.FillReturn_ChunkCombinedOffsetOffset = ([None], [None], [None])
         else:
@@ -117,11 +117,11 @@ def dechunk_lines(lines: cpy.LineReturn, line_type: LineType | str) -> cpy.LineR
         return lines
 
     if TYPE_CHECKING:
-        lines = cast(cpy.LineReturn_Chunk, lines)
+        lines = cast("cpy.LineReturn_Chunk", lines)
 
     if line_type == LineType.ChunkCombinedCode:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedCode, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedCode", lines)
         points = concat_points_or_none(lines[0])
         if points is None:
             ret1: cpy.LineReturn_ChunkCombinedCode = ([None], [None])
@@ -130,7 +130,7 @@ def dechunk_lines(lines: cpy.LineReturn, line_type: LineType | str) -> cpy.LineR
         return ret1
     elif line_type == LineType.ChunkCombinedOffset:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedOffset, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedOffset", lines)
         points = concat_points_or_none(lines[0])
         if points is None:
             ret2: cpy.LineReturn_ChunkCombinedOffset = ([None], [None])
@@ -139,7 +139,7 @@ def dechunk_lines(lines: cpy.LineReturn, line_type: LineType | str) -> cpy.LineR
         return ret2
     elif line_type == LineType.ChunkCombinedNan:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedNan, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedNan", lines)
         points = concat_points_or_none_with_nan(lines[0])
         ret3: cpy.LineReturn_ChunkCombinedNan = ([points],)
         return ret3

@@ -420,4 +420,6 @@ message TFeatureFlags {
     // that frees the most chunks, which then reserves exactly the chunks it will write before writing any.
     optional bool EnableVDiskPlannedCompaction = 343 [default = false, (RequireRestart) = true];
     optional bool EnableStreamingAggregationAdvanced = 344 [default = false];
+    // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
+    optional bool EnableSavepoints = 345 [default = false];
 }

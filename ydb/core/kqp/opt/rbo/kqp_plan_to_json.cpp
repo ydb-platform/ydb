@@ -520,7 +520,7 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 
     queryPlan["meta"] = meta;
 
-    OperatorId is needed while correlating ANALYZE stats, but has no meaning in a published plan.
+    //OperatorId is needed while correlating ANALYZE stats, but has no meaning in a published plan.
     RemoveOperatorIds(txPlan["SimplifiedPlan"]);
     for (auto& plan : txPlan["Plans"].GetArraySafe()) {
         RemoveOperatorIds(plan);

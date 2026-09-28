@@ -155,7 +155,10 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     auto& record = Proto(ev->Get());
     ui64 step = record.GetStep();
     ui64 txId = record.GetTxId();
-    LOG_S_DEBUG("CheckTransaction planStep " << step << " txId " << txId << " at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "CheckTransaction planStep txId at tablet",
+        {"step", step},
+        {"txId", txId},
+        {"tabletID", TabletID()});
 
     auto frontTx = ProgressTxController->GetFrontTx();
     bool finished = step < frontTx.Step || (step == frontTx.Step && txId < frontTx.TxId);

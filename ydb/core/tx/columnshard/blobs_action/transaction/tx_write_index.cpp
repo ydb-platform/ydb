@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
-#include <ydb/library/actors/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD

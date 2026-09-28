@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
@@ -508,6 +510,36 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 2, MakeTieredPortion(2, "tier1", schema.GetIndexInfo()) } };
             actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "tiered portion with every entity in tier storage must be skipped");
+        }
+    }
+
+    // The move locks with Actualization while compaction planners query with Compaction.
+    // TListPortionsLock::DoIsLocked ignores the category outright, so the separation rests
+    // entirely on LockCategoriesInteraction; assert it through the manager, both directions.
+    Y_UNIT_TEST(ActualizationLockAndCompactionExcludeEachOther) {
+        using namespace NOlap::NDataLocks;
+        const auto portion = MakeDefaultTierPortion(1);
+        const std::vector<NOlap::TPortionInfo::TConstPtr> portions{ portion };
+
+        {
+            TManager manager;
+            auto guard = manager.RegisterLock<TListPortionsLock>("movedata::rewrite", portions, ELockCategory::Actualization);
+            UNIT_ASSERT_C(manager.IsLocked(*portion, ELockCategory::Compaction),
+                "a compaction planner must see the move's Actualization lock, or it can pick a portion being rewritten");
+            UNIT_ASSERT_C(manager.IsLocked(*portion, ELockCategory::Actualization), "the move must see its own lock");
+            UNIT_ASSERT_C(!manager.IsLocked(*portion, ELockCategory::Scan), "a reader must not be blocked by the move");
+        }
+        {
+            TManager manager;
+            auto guard = manager.RegisterLock<TListPortionsLock>("compaction::merge", portions, ELockCategory::Compaction);
+            UNIT_ASSERT_C(manager.IsLocked(*portion, ELockCategory::Actualization),
+                "the move must see a compaction lock, or DoExtractTasks hands out a portion compaction owns");
+        }
+        {
+            TManager manager;
+            const std::vector<NOlap::TPortionInfo::TConstPtr> other{ MakeDefaultTierPortion(2) };
+            auto guard = manager.RegisterLock<TListPortionsLock>("movedata::other", other, ELockCategory::Actualization);
+            UNIT_ASSERT_C(!manager.IsLocked(*portion, ELockCategory::Compaction), "a lock on another portion must not block this one");
         }
     }
 

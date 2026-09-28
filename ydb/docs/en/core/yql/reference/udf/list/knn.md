@@ -233,7 +233,7 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 
 This example differs from the [exact search example](#exact-vector-search-examples) by using bit quantization.
 
-This allows to first do a approximate preliminary search by the `embedding_bit` column, and then refine the results by the original vector column `embedding`.
+This enables an approximate preliminary search on the `embedding_bit` column, followed by refinement using the original vector column `embedding`.
 
 {% if backend_name == "YDB" %}
 

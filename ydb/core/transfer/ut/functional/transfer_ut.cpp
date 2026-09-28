@@ -269,6 +269,57 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTable();
     }
 
+    // LOGBROKER-10676: transfer stuck in Running state without any visible error
+    // when the transfer user has no read permission on the source topic.
+    // The transfer must go to Error state with a descriptive access-denied message.
+    Y_UNIT_TEST(ReadFromTopic_WithoutReadPermission)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateUser(username);
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        // The transfer user can write to the target table...
+        testCase.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
+
+        testCase.CreateTopic(1);
+        // ...and can create the consumer and discover the topic,
+        // but has no read permission on the topic: reading silently fails
+        // (LOGBROKER-10676).
+        testCase.Grant(testCase.TopicName, username, {"ydb.granular.alter_schema", "ydb.granular.describe_schema"});
+        testCase.Write({"Message-1"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithUsername(username));
+
+        // The transfer must fail with a visible access-denied error
+        // instead of silently staying in the Running state.
+        testCase.CheckTransferStateError("Cannot read from topic");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
     Y_UNIT_TEST(LocalTopic_WithPermission)
     {
         auto id = RandomNumber<ui16>();

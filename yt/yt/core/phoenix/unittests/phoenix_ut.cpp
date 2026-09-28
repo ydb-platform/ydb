@@ -1041,6 +1041,149 @@ TEST(TPhoenixTest, SaveHonorsBeforeVersionAndInVersions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NExternalType {
+
+// Mimics a class from a library that knows nothing of Phoenix.
+class S
+{
+public:
+    S() = default;
+
+    S(int a, std::string b)
+        : A_(a)
+        , B_(std::move(b))
+    { }
+
+    bool operator==(const S&) const = default;
+
+protected:
+    int A_ = 0;
+    std::string B_;
+};
+
+} // namespace NExternalType
+
+} // namespace
+} // namespace NYT::NPhoenix
+
+PHOENIX_DECLARE_EXTERNAL_TYPE(
+    NYT::NPhoenix::NExternalType::S,
+    0x1a7c3e95,
+    NYT::NPhoenix::TSaveContext,
+    NYT::NPhoenix::TLoadContext);
+
+PHOENIX_DEFINE_EXTERNAL_TYPE(NYT::NPhoenix::NExternalType::S)
+{
+    PHOENIX_REGISTER_FIELD(1, A_);
+    PHOENIX_REGISTER_FIELD(2, B_);
+}
+
+namespace NYT::NPhoenix {
+namespace {
+
+TEST(TPhoenixTest, ExternalType)
+{
+    using namespace NExternalType;
+
+    S s1(123, "hello");
+
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NExternalBaseType {
+
+// Mimics a class from a library that knows nothing of Phoenix.
+class TBase
+{
+public:
+    TBase() = default;
+
+    explicit TBase(int a)
+        : A_(a)
+    { }
+
+    bool operator==(const TBase&) const = default;
+
+protected:
+    int A_ = 0;
+};
+
+struct S
+    : public TBase
+{
+    std::string B;
+
+    S() = default;
+
+    S(int a, std::string b)
+        : TBase(a)
+        , B(std::move(b))
+    { }
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x3c9e50b7);
+    PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN(S);
+};
+
+} // namespace NExternalBaseType
+
+} // namespace
+} // namespace NYT::NPhoenix
+
+PHOENIX_DECLARE_EXTERNAL_TYPE(
+    NYT::NPhoenix::NExternalBaseType::TBase,
+    0x2b8d4fa6,
+    NYT::NPhoenix::TSaveContext,
+    NYT::NPhoenix::TLoadContext);
+
+PHOENIX_DEFINE_EXTERNAL_TYPE(NYT::NPhoenix::NExternalBaseType::TBase)
+{
+    PHOENIX_REGISTER_FIELD(1, A_);
+}
+
+namespace NYT::NPhoenix {
+namespace {
+
+namespace NExternalBaseType {
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+    PHOENIX_REGISTER_FIELD(1, B);
+}
+
+PHOENIX_DEFINE_TYPE(S);
+PHOENIX_DEFINE_YSON_DUMPABLE_TYPE_MIXIN(S);
+
+} // namespace NExternalBaseType
+
+TEST(TPhoenixTest, ExternalBaseType)
+{
+    using namespace NExternalBaseType;
+
+    S s1(123, "hello");
+
+    auto s2 = Deserialize<S>(Serialize(s1));
+    EXPECT_EQ(s1, s2);
+}
+
+TEST(TPhoenixTest, YsonDumpableExternalBaseType)
+{
+    using namespace NExternalBaseType;
+
+    S s(123, "hello");
+
+    auto ysonStr = ConvertToYsonString(s);
+    auto canonicalYsonStr = TYsonString(std::string("{A_=123;B=hello}"));
+    EXPECT_TRUE(AreNodesEqual(ConvertToNode(ysonStr), ConvertToNode(canonicalYsonStr)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TPhoenixTest, Pair)
 {
     TPair<std::string, double> p1{.First = "hello", .Second = 3.14};

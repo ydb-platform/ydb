@@ -1284,7 +1284,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProtobufWriter
-    : public TProtobufTranscoderBase
+    : public IProtobufWriter
+    , public TProtobufTranscoderBase
     , public TForwardingYsonConsumer
 {
 public:
@@ -1306,6 +1307,46 @@ public:
         , ForwardingUnknownYsonFieldValueWriter_(UnknownYsonFieldValueStringWriter_, Options_.UnknownYsonFieldModeResolver)
         , TreeBuilder_(CreateBuilderFromFactory(GetEphemeralNodeFactory()))
     { }
+
+    bool TryOnProtobufMessage(TRange<TStringBuf> parts) override
+    {
+        if (!State_.ForwardingConsumers.empty()) {
+            return false;
+        }
+        if (TypeStack_.empty()) {
+            CodedOutputStream output(OutputStream_);
+            for (auto part : parts) {
+                output.WriteRaw(part.data(), part.size());
+            }
+            return true;
+        }
+
+        const auto* field = FieldStack_.back().Field;
+        if (!field || field->GetType() != FieldDescriptor::TYPE_MESSAGE) {
+            return false;
+        }
+
+        if (field->IsRepeated() && !FieldStack_.back().ParsingList) {
+            for (auto part : parts) {
+                WriteTag();
+                BodyCodedStream_.WriteVarint64(part.size());
+                BodyCodedStream_.WriteRaw(part.data(), part.size());
+            }
+        } else {
+            ui64 size = 0;
+            for (auto part : parts) {
+                size += part.size();
+            }
+            WriteTag();
+            BodyCodedStream_.WriteVarint64(size);
+            for (auto part : parts) {
+                BodyCodedStream_.WriteRaw(part.data(), part.size());
+            }
+        }
+        FieldStack_.pop_back();
+        YPathStack_.Pop();
+        return true;
+    }
 
 private:
     ZeroCopyOutputStream* const OutputStream_;
@@ -2176,7 +2217,7 @@ private:
     }
 };
 
-std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
+std::unique_ptr<IProtobufWriter> CreateProtobufWriter(
     ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
     TProtobufWriterOptions options)

@@ -81,11 +81,36 @@ void TSysViewProcessor::PersistIntervalEnd(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_IntervalEnd, ToString(intervalEndUs));
 }
 
-void TSysViewProcessor::PersistLastMergedQueryMetricsIntervalEnd(
+void TSysViewProcessor::PersistLastFinalizedQueryMetricsIntervalEnd(
     NIceDb::TNiceDb& db, TInstant intervalEnd)
 {
     PersistSysParam(db, Schema::SysParam_LastMergedQueryMetricsIntervalEnd,
         ToString(intervalEnd.MicroSeconds()));
+}
+
+void TSysViewProcessor::CompleteIntervalMetricsRequest(
+    NIceDb::TNiceDb& db, ui64 requestId, EIntervalMetricsResult result)
+{
+    auto request = RequestsInFlight.find(requestId);
+    if (request == RequestsInFlight.end()) {
+        return;
+    }
+
+    const bool requestedQueryMetrics = !request->second.Hashes.empty();
+    db.Table<Schema::NodesToRequest>().Key(request->second.NodeId).Delete();
+    RequestsInFlight.erase(request);
+
+    if (requestedQueryMetrics) {
+        if (result == EIntervalMetricsResult::Responded) {
+            ++QueryMetricsCoverage.RespondedNodes;
+        } else if (result == EIntervalMetricsResult::Failed) {
+            ++QueryMetricsCoverage.FailedNodes;
+        }
+    }
+
+    if (RequestsInFlight.empty() && NodesToRequest.empty()) {
+        PersistQueryResults(db);
+    }
 }
 
 template <typename TSchema>
@@ -130,7 +155,9 @@ TSysViewProcessor::TRankedQueryMetrics TSysViewProcessor::RankMinuteQueryMetrics
             result.emplace_back(metrics.Metrics.GetCpuTimeUs().GetSum(), queryHash);
         }
     }
-    std::sort(result.begin(), result.end(), QueryMetricsRankCompare);
+    const auto topCount = std::min(result.size(), NQueryMetricsLimits::OneMinuteResultCount);
+    std::partial_sort(result.begin(), result.begin() + topCount, result.end(), QueryMetricsRankCompare);
+    result.resize(topCount);
     return result;
 }
 
@@ -140,7 +167,9 @@ TSysViewProcessor::TRankedQueryMetrics TSysViewProcessor::RankCurrentHourQueryMe
     for (const auto& [queryHash, metrics] : CurrentHourMetrics) {
         result.emplace_back(metrics.GetCpuTimeUs().GetSum(), queryHash);
     }
-    std::sort(result.begin(), result.end(), QueryMetricsRankCompare);
+    const auto topCount = std::min(result.size(), NQueryMetricsLimits::OneHourResultCount);
+    std::partial_sort(result.begin(), result.begin() + topCount, result.end(), QueryMetricsRankCompare);
+    result.resize(topCount);
     return result;
 }
 
@@ -284,7 +313,7 @@ void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
 }
 
 void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
-    if (IntervalEnd <= LastMergedQueryMetricsIntervalEnd) {
+    if (IntervalEnd <= LastFinalizedQueryMetricsIntervalEnd) {
         return;
     }
 
@@ -292,7 +321,7 @@ void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
     PersistMinuteQueryMetrics(db, minuteMetrics);
 
     if (AppData()->FeatureFlags.GetCollectHourMetric()) {
-        const auto hourEnd = EndOfHourInterval(IntervalEnd);
+        const auto hourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
         MergeCurrentHourQueryMetrics(db, hourEnd);
 
         const auto hourMetrics = RankCurrentHourQueryMetrics();
@@ -302,9 +331,9 @@ void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
         UpdateAndLogQueryMetricsCoverage(hourEnd, persistedHourMetrics);
     }
 
-    LastMergedQueryMetricsIntervalEnd = IntervalEnd;
-    PersistLastMergedQueryMetricsIntervalEnd(
-        db, LastMergedQueryMetricsIntervalEnd);
+    LastFinalizedQueryMetricsIntervalEnd = IntervalEnd;
+    PersistLastFinalizedQueryMetricsIntervalEnd(
+        db, LastFinalizedQueryMetricsIntervalEnd);
 }
 
 void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
@@ -319,7 +348,7 @@ void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
     PersistQueryTopResults<Schema::TopByRequestUnitsOneMinute>(
         db, ByRequestUnitsMinute, TopByRequestUnitsOneMinute, IntervalEnd);
 
-    auto hourEnd = EndOfHourInterval(IntervalEnd);
+    auto hourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
 
     PersistQueryTopResults<Schema::TopByDurationOneHour>(
         db, ByDurationHour, TopByDurationOneHour, hourEnd);
@@ -364,7 +393,7 @@ void TSysViewProcessor::PersistPartitionResults(NIceDb::TNiceDb& db) {
     PersistPartitionTopResults<Schema::TopPartitionsByTliOneMinute>(
         db, PartitionTopByTliMinute, TopPartitionsByTliOneMinute, intervalEnd);
 
-    auto hourEnd = EndOfHourInterval(intervalEnd);
+    auto hourEnd = EndOfQueryMetricsHourInterval(intervalEnd);
 
     PersistPartitionTopResults<Schema::TopPartitionsOneHour>(
         db, PartitionTopByCpuHour, TopPartitionsByCpuOneHour, hourEnd);
@@ -415,10 +444,6 @@ void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration
         db.Table<TSchema>().Key(it->first).Delete();
     }
     results.erase(results.begin(), bound);
-}
-
-TInstant TSysViewProcessor::EndOfHourInterval(TInstant intervalEnd) {
-    return EndOfQueryMetricsHourInterval(intervalEnd);
 }
 
 void TSysViewProcessor::ClearIntervalSummaries(NIceDb::TNiceDb& db) {
@@ -480,8 +505,8 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     CurrentStage = COLLECT;
     PersistStage(db);
 
-    auto oldHourEnd = EndOfHourInterval(IntervalEnd);
-    auto partitionOldHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
+    auto oldHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
+    auto partitionOldHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd + TotalInterval);
 
     auto now = ctx.Now();
     auto intervalSize = TotalInterval.MicroSeconds();
@@ -489,8 +514,8 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     IntervalEnd = TInstant::MicroSeconds(rounded);
     PersistIntervalEnd(db);
 
-    auto newHourEnd = EndOfHourInterval(IntervalEnd);
-    auto partitionNewHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
+    auto newHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
+    auto partitionNewHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd + TotalInterval);
 
     if (oldHourEnd != newHourEnd) {
         for (const auto& [queryHash, _] : CurrentHourMetrics) {
@@ -967,7 +992,7 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 str << "CurrentHourMetrics" << Endl
                     << "  HourEnd: " << CurrentHourEnd << Endl
                     << "  Count: " << CurrentHourMetrics.size() << Endl
-                    << "  LastMergedIntervalEnd: " << LastMergedQueryMetricsIntervalEnd << Endl << Endl;
+                    << "  LastFinalizedIntervalEnd: " << LastFinalizedQueryMetricsIntervalEnd << Endl << Endl;
                 str << "TopByDurationOneMinute" << Endl
                     << "  Count: " << TopByDurationOneMinute.size() << Endl << Endl;
                 str << "TopByDurationOneHour" << Endl

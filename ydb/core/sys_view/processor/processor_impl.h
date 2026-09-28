@@ -159,8 +159,16 @@ private:
     void PersistDatabase(NIceDb::TNiceDb& db);
     void PersistStage(NIceDb::TNiceDb& db);
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
-    void PersistLastMergedQueryMetricsIntervalEnd(
+    void PersistLastFinalizedQueryMetricsIntervalEnd(
         NIceDb::TNiceDb& db, TInstant intervalEnd);
+
+    enum class EIntervalMetricsResult {
+        Responded,
+        Failed,
+        Stale,
+    };
+    void CompleteIntervalMetricsRequest(
+        NIceDb::TNiceDb& db, ui64 requestId, EIntervalMetricsResult result);
 
     template <typename TSchema>
     void PersistQueryTopResults(NIceDb::TNiceDb& db,
@@ -191,7 +199,6 @@ private:
     template <typename TSchema, typename TMap>
     void CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize);
 
-    static TInstant EndOfHourInterval(TInstant intervalEnd);
 
     void ClearIntervalSummaries(NIceDb::TNiceDb& db);
 
@@ -331,7 +338,7 @@ private:
     // IntervalMetricsOneHour
     std::unordered_map<TQueryHash, NKikimrSysView::TQueryMetrics> CurrentHourMetrics;
     TInstant CurrentHourEnd;
-    TInstant LastMergedQueryMetricsIntervalEnd;
+    TInstant LastFinalizedQueryMetricsIntervalEnd;
 
     // NodesToRequest
     using THashVector = std::vector<TQueryHash>;

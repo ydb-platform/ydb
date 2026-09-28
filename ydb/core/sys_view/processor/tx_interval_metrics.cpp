@@ -34,13 +34,11 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
                 {"requestId", RequestId});
             return true;
         }
-        const bool requestedQueryMetrics = !node->second.Hashes.empty();
-
         NIceDb::TNiceDb db(txc.DB);
 
-        if (Record.GetIntervalEndUs() <= Self->LastMergedQueryMetricsIntervalEnd.MicroSeconds()) {
-            db.Table<Schema::NodesToRequest>().Key(node->second.NodeId).Delete();
-            Self->RequestsInFlight.erase(node);
+        if (Record.GetIntervalEndUs() <= Self->LastFinalizedQueryMetricsIntervalEnd.MicroSeconds()) {
+            Self->CompleteIntervalMetricsRequest(
+                db, RequestId, TSelf::EIntervalMetricsResult::Stale);
             return true;
         }
 
@@ -116,15 +114,8 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE, NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR,
             *Record.MutableTopByRequestUnits());
 
-        db.Table<Schema::NodesToRequest>().Key(node->second.NodeId).Delete();
-        Self->RequestsInFlight.erase(node);
-        if (requestedQueryMetrics) {
-            ++Self->QueryMetricsCoverage.RespondedNodes;
-        }
-
-        if (Self->RequestsInFlight.empty() && Self->NodesToRequest.empty()) {
-            Self->PersistQueryResults(db);
-        }
+        Self->CompleteIntervalMetricsRequest(
+            db, RequestId, TSelf::EIntervalMetricsResult::Responded);
         return true;
     }
 
@@ -155,16 +146,8 @@ struct TSysViewProcessor::TTxIntervalMetricsFailure : public TTxBase {
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        const bool requestedQueryMetrics = !node->second.Hashes.empty();
-        db.Table<Schema::NodesToRequest>().Key(node->second.NodeId).Delete();
-        Self->RequestsInFlight.erase(node);
-        if (requestedQueryMetrics) {
-            ++Self->QueryMetricsCoverage.FailedNodes;
-        }
-
-        if (Self->RequestsInFlight.empty() && Self->NodesToRequest.empty()) {
-            Self->PersistQueryResults(db);
-        }
+        Self->CompleteIntervalMetricsRequest(
+            db, RequestId, TSelf::EIntervalMetricsResult::Failed);
 
         return true;
     }

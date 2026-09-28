@@ -221,11 +221,11 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                             {"intervalEnd", Self->IntervalEnd});
                         break;
                     case Schema::SysParam_LastMergedQueryMetricsIntervalEnd:
-                        Self->LastMergedQueryMetricsIntervalEnd =
+                        Self->LastFinalizedQueryMetricsIntervalEnd =
                             TInstant::MicroSeconds(FromString<ui64>(value));
                         YDB_LOG_DEBUG("Loading last merged query metrics interval end",
                             {"tabletId", Self->TabletID()},
-                            {"lastMergedIntervalEnd", Self->LastMergedQueryMetricsIntervalEnd});
+                            {"lastFinalizedIntervalEnd", Self->LastFinalizedQueryMetricsIntervalEnd});
                         break;
                     default:
                         YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
@@ -310,18 +310,23 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         // IntervalMetricsOneHour
         {
             Self->CurrentHourMetrics.clear();
-            Self->CurrentHourEnd = Self->EndOfHourInterval(Self->IntervalEnd);
+            Self->CurrentHourEnd = EndOfQueryMetricsHourInterval(Self->IntervalEnd);
 
-            auto rowset = db.Table<Schema::IntervalMetricsOneHour>()
-                .Prefix(Self->CurrentHourEnd.MicroSeconds())
-                .Select();
+            auto rowset = db.Table<Schema::IntervalMetricsOneHour>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                TQueryHash queryHash =
-                    rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
+                const ui64 hourEndUs = rowset.GetValue<Schema::IntervalMetricsOneHour::HourEnd>();
+                TQueryHash queryHash = rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
+                if (hourEndUs != Self->CurrentHourEnd.MicroSeconds()) {
+                    db.Table<Schema::IntervalMetricsOneHour>().Key(hourEndUs, queryHash).Delete();
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
                 TString data = rowset.GetValue<Schema::IntervalMetricsOneHour::Data>();
 
                 if (data) {
@@ -435,8 +440,14 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             size_t staleRequestsCount = 0;
             while (!rowset.EndOfSet()) {
                 TNodeId nodeId = rowset.GetValue<Schema::NodesToRequest::NodeId>();
-                const ui64 requestIntervalEndUs =
-                    rowset.GetValueOrDefault<Schema::NodesToRequest::IntervalEnd>(0);
+                const bool hasIntervalEnd = rowset.HaveValue<Schema::NodesToRequest::IntervalEnd>();
+                const ui64 requestIntervalEndUs = hasIntervalEnd
+                    ? rowset.GetValue<Schema::NodesToRequest::IntervalEnd>()
+                    : Self->IntervalEnd.MicroSeconds();
+                if (!hasIntervalEnd) {
+                    db.Table<Schema::NodesToRequest>().Key(nodeId).Update(
+                        NIceDb::TUpdate<Schema::NodesToRequest::IntervalEnd>(requestIntervalEndUs));
+                }
                 if (requestIntervalEndUs != Self->IntervalEnd.MicroSeconds()) {
                     db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
                     ++staleRequestsCount;

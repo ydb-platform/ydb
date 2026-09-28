@@ -22,11 +22,14 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         }
         std::sort(candidates.begin(), candidates.end(), Self->QueryMetricsRankCompare);
 
+        const auto candidateLimit = AppData()->FeatureFlags.GetCollectHourMetric()
+            ? NQueryMetricsLimits::MetricsFetchCount
+            : NQueryMetricsLimits::OneMinuteResultCount;
         THashVector selectedHashes;
         selectedHashes.reserve(std::min(
-            candidates.size(), NQueryMetricsLimits::MetricsFetchCount));
+            candidates.size(), candidateLimit));
         for (const auto& [_, queryHash] : candidates) {
-            if (selectedHashes.size() == NQueryMetricsLimits::MetricsFetchCount) {
+            if (selectedHashes.size() == candidateLimit) {
                 break;
             }
             selectedHashes.emplace_back(queryHash);

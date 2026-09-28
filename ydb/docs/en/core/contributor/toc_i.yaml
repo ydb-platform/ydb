@@ -42,6 +42,8 @@ items:
       href: distributed-storage/ddisk.md
     - name: PersistentBuffer
       href: distributed-storage/persistent-buffer.md
+    - name: VDisk space usage report
+      href: vdisk-space-report.md
   - name: Metadata Distribution Subsystems
     href: metadata-distribution.md
   - name: LocalDB

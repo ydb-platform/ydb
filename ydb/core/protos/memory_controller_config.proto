@@ -28,4 +28,15 @@ message TMemoryControllerConfig {
 
     optional float CompactionLimitPercent = 130 [default = 10];
     optional uint64 CompactionLimitBytes = 131;
+
+    // Budget against AnonRss (minus slack for allocator caches) when it exceeds AllocatedMemory,
+    // so caches do not grow into memory the allocator still holds.
+    optional bool RssAwareBudget = 140 [default = false];
+    optional uint64 RssBudgetSlackBytes = 141 [default = 536870912];
+    // Release allocator caches to the OS in the same tick when AnonRss exceeds the soft limit.
+    optional bool ReleaseAllocatorCachesOnPressure = 142 [default = false];
+    // Smallest release request: a smaller one is served by the allocator's huge page cache alone.
+    optional uint64 MinAllocatorCachesReleaseBytes = 143 [default = 67108864];
+    // Largest release request of a single tick: the allocator releases synchronously.
+    optional uint64 MaxAllocatorCachesReleaseBytes = 144 [default = 268435456];
 }

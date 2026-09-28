@@ -285,7 +285,7 @@ public:
             }
         }
 
-        TPath dstPath = mainTablePath.Child(dstName);
+        TPath dstPath = TPath::ResolveWithInactive(OperationId, mainTablePath.PathString() + "/" + dstName, context.SS);
         {
             TPath::TChecker checks = dstPath.Check();
             if (dstPath.IsResolved()) {

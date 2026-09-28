@@ -117,37 +117,13 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
-
-        TPathId pathId = txState->TargetPathId;
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY_S(context.SS->PathsById.contains(path->ParentPathId),
-                   "no parent with id: " <<  path->ParentPathId << " for node with id: " << path->PathId);
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_ABORT_UNLESS(!path->Dropped());
-        path->SetDropped(step, OperationId.GetTxId());
-        context.SS->PersistDropStep(db, pathId, step, OperationId);
-
-        auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside(context.SS);
-        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
-
-        context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
-        context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
-
-        ++parentDir->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentDir);
-        context.SS->ClearDescribePathCaches(parentDir);
-        context.SS->ClearDescribePathCaches(path);
-
-        if (!context.SS->DisablePublicationsOfDropping) {
-            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-            context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-        }
+        txState->PlanStep = step;
+        context.SS->PersistTxPlanStep(db, OperationId, step);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
@@ -315,6 +291,38 @@ private:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         NIceDb::TNiceDb db(context.GetDB());
+
+        TPath path = TPath::Init(txState->TargetPathId, context.SS);
+        Y_ABORT_UNLESS(path.IsResolved());
+
+        if (!path->Dropped()) {
+            // Old code dropped the path early at TPropose. After rolling update
+            // new code may reach Finish with the path already dropped.
+            Y_ABORT_UNLESS(txState->PlanStep);
+            Y_VERIFY_S(context.SS->PathsById.contains(path->ParentPathId),
+                       "no parent with id: " << path->ParentPathId << " for node with id: " << path->PathId);
+            auto parentDir = path.Parent();
+
+            path->SetDropped(txState->PlanStep, OperationId.GetTxId());
+            context.SS->PersistDropStep(db, path->PathId, txState->PlanStep, OperationId);
+
+            auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
+            domainInfo->DecPathsInside(context.SS);
+            DecAliveChildrenDirect(OperationId, parentDir.Base(), context); // for correct discard of ChildrenExist prop
+
+            context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
+            context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
+
+            ++parentDir->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
+            context.SS->ClearDescribePathCaches(parentDir.Base());
+            context.SS->ClearDescribePathCaches(path.Base());
+
+            if (!context.SS->DisablePublicationsOfDropping) {
+                context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+                context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+            }
+        }
 
         bool isStandalone = false;
         {

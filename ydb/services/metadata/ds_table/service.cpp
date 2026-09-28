@@ -4,12 +4,12 @@
 #include "behaviour_registrator_actor.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
 #include <ydb/services/metadata/manager/abstract.h>
+#include <ydb/services/metadata/service.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
@@ -180,6 +180,19 @@ void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
     }
 }
 
+void TService::Handle(TEvTxUserProxy::TEvProposeTransaction::TPtr& ev) {
+    const auto operation = ev->Get()->Record.GetTransaction().GetModifyScheme().GetOperationType();
+    const THolder<ISchemeTransactionFactory> factory(ISchemeTransactionFactory::TFactory::Construct(operation));
+    if (factory) {
+        Register(factory->CreateActor(std::move(ev)));
+    } else {
+        auto response = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(TEvTxUserProxy::TResultStatus::NotImplemented);
+        response->Record.SetSchemeShardStatus(NKikimrScheme::StatusInvalidParameter);
+        response->Record.SetSchemeShardReason("Unsupported metadata scheme transaction");
+        Send(ev->Sender, std::move(response), 0, ev->Cookie);
+    }
+}
+
 void TService::Handle(TEvTrackOperationCompletion::TPtr& ev) {
     const auto id = TTrackOperationId{
         .DatabaseId = ev->Get()->GetDatabaseId(),
@@ -206,7 +219,6 @@ void TService::StartTracking(const TEvTrackOperationCompletion& request) {
     Y_VALIDATE(cBehaviour, "Unsupported object type: \"" << request.GetTypeId() << "\"");
 
     NModifications::IOperationsManager::TExternalModificationContext externalData;
-    externalData.SetUserToken(request.GetUserToken());
     externalData.SetDatabase(request.GetDatabase());
     externalData.SetDatabaseId(request.GetDatabaseId());
     externalData.SetActorSystem(TActivationContext::ActorSystem());
@@ -216,6 +228,8 @@ void TService::StartTracking(const TEvTrackOperationCompletion& request) {
     context.SetRequestGeneration(request.GetRequestGeneration());
     context.SetObjectGeneration(request.GetObjectGeneration());
     context.SetOperationOwner(request.GetOperationOwner());
+    context.SetProperties(request.GetProperties());
+    context.SetSchemeTxId(request.GetSchemeTxId());
 
     auto controller = std::make_shared<TObjectTrackCommand::TController>(request.GetTypeId(), request.GetObjectId(), context);
     auto command = std::make_shared<TObjectTrackCommand>(request.GetObjectId(), cBehaviour, std::move(controller), std::move(context));

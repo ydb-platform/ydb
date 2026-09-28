@@ -1,5 +1,6 @@
 #include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
@@ -324,8 +325,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
     Y_UNIT_TEST(MixedVersionSchemeShardWithoutOperationOwner) {
         TContinuationTest f;
         ui64 registrations = 0;
-        auto legacySchemeShard = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
-            auto* tx = ev->Get()->Record.MutableTransaction()->MutableModifyScheme();
+        auto legacySchemeShard = f.Runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            auto* tx = ev->Get()->Record.MutableTransaction(0);
             if (!tx->HasCreateStreamingQuery()) {
                 return;
             }
@@ -394,8 +395,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         f.WaitFinished(1);
         const auto initialState = f.CheckRow().SerializeAsString();
         bool registered = false;
-        auto legacySchemeShard = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
-            auto* tx = ev->Get()->Record.MutableTransaction()->MutableModifyScheme();
+        auto legacySchemeShard = f.Runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            auto* tx = ev->Get()->Record.MutableTransaction(0);
             if (tx->HasCreateStreamingQuery() && tx->GetCreateStreamingQuery().GetName() == TContinuationTest::QueryName
                 && tx->GetCreateStreamingQuery().HasOperationOwnerActorId()) {
                 tx->MutableCreateStreamingQuery()->ClearOperationOwnerActorId();
@@ -634,6 +635,48 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         f.CheckDropped();
     }
 
+    Y_UNIT_TEST(MetadataDisconnectFailsOwnerAndContinuesAcceptedOperation) {
+        TContinuationTest f(true, 2);
+        const auto node = f.RemoteOwnerNode();
+        TActorId forwarder;
+        ui32 metadataNode = 0;
+        bool disconnected = false;
+        auto requests = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
+            const auto& query = ev->Get()->Record.GetTransaction().GetModifyScheme().GetCreateStreamingQuery();
+            if (query.GetName() == TContinuationTest::QueryName && query.HasOperationOwnerActorId()
+                && ev->Sender.NodeId() != ev->Recipient.NodeId()) {
+                UNIT_ASSERT(ev->Flags & IEventHandle::FlagTrackDelivery);
+                forwarder = ev->Sender;
+                metadataNode = ev->Recipient.NodeId();
+            }
+        });
+        auto disconnects = f.Runtime.AddObserver<TEvInterconnect::TEvNodeDisconnected>([&](auto& ev) {
+            if (ev->Recipient == forwarder) {
+                disconnected = true;
+            }
+        });
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> planning(f.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTabletID() == Tests::SchemeRoot;
+        });
+        // Exercise the session subscription independently of the pipe's notification.
+        TBlockEvents<TEvTabletPipe::TEvClientDestroyed> pipeDisconnects(f.Runtime, [&](const auto& ev) {
+            return ev->Recipient == forwarder;
+        });
+        const auto edge = f.StartOnNode(TContinuationTest::CreateQuery(), node);
+        f.WaitFor("remote metadata accepted the operation before plan", [&] { return forwarder && !planning.empty(); });
+        UNIT_ASSERT(f.Tracking.empty());
+        f.Runtime.DisconnectNodes(node, metadataNode - f.Runtime.GetFirstNodeId());
+        const auto response = f.Runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(edge, TDuration::Seconds(60));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT(disconnected);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE,
+            response->Get()->Record.DebugString());
+        pipeDisconnects.Stop().clear();
+        planning.Unblock().Stop();
+        f.WaitFinished(1);
+        f.CheckSettled();
+    }
+
     Y_UNIT_TEST_TWIN(UserTransactionLostReplyIsCompletedByTracker, Begin) {
         TContinuationTest f;
         TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
@@ -650,7 +693,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             }
         });
         auto responses = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransactionStatus>([&](auto& ev) {
-            if (!injected && ev->Recipient == transactionActor && ev->Get()->Status() == NTxProxy::TResultStatus::ExecInProgress) {
+            const auto expectedStatus = Begin ? NTxProxy::TResultStatus::ExecComplete : NTxProxy::TResultStatus::ExecInProgress;
+            if (!injected && ev->Recipient == transactionActor && ev->Get()->Status() == expectedStatus) {
                 injected = true;
                 ev->Get()->Record.SetStatus(NTxProxy::TResultStatus::ProxyShardNotAvailable);
                 ev->Get()->Record.SetSchemeShardStatus(NKikimrScheme::StatusNotAvailable);

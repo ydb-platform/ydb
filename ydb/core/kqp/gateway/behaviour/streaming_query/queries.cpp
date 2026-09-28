@@ -5,7 +5,10 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/retry/retry_policy.h>
 
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -25,6 +28,7 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/services/metadata/scheme_transaction/interface.h>
 
 #include <yql/essentials/core/sql_types/hopping.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -47,6 +51,8 @@ using TStatus = NKikimr::TYQLConclusionSpecialStatus<Ydb::StatusIds::StatusCode,
 
 template <typename TValue>
 using TValueStatus = TConclusionImpl<TStatus, TValue>;
+
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 
 //// Events
 
@@ -437,6 +443,15 @@ protected:
 
 //// Scheme actions
 
+void AddPathToSchemeNavigation(NSchemeCache::TSchemeCacheNavigate& request, const TVector<TString>& path, bool redirect = true) {
+    auto& entry = request.ResultSet.emplace_back();
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+    entry.ShowPrivatePath = true;
+    entry.SyncVersion = true;
+    entry.RedirectRequired = redirect;
+    entry.Path = path;
+}
+
 template <typename TDerived>
 class TSchemeActorBase : public TActionActorBase<TDerived> {
     using TBase = TActionActorBase<TDerived>;
@@ -608,12 +623,7 @@ protected:
             request->UserToken = MakeIntrusiveConst<NACLib::TUserToken>(*UserToken);
         }
 
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-        entry.ShowPrivatePath = true;
-        entry.Path = SplitPath(QueryPath);
-        entry.SyncVersion = true;
+        AddPathToSchemeNavigation(*request, SplitPath(QueryPath));
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), IEventHandle::FlagTrackDelivery);
     }
@@ -624,6 +634,458 @@ protected:
 
 private:
     std::optional<TSchemeInfo> Info;
+};
+
+// 1. Resolve the path and check permissions.
+// 2. Connect to SchemeShard; forward to metadata on its node if it is remote (at most three redirects).
+// 3. Allocate a transaction id and submit through the same connected pipe.
+// 4. Wait for acceptance and completion/publication.
+// 5. Check the published path and owner; start a local tracker if the operation is still current, then reply.
+// Reconnect only before submission; fail on disconnect after submission or forwarding.
+class TStartStreamingQuerySchemeActor final : public TActorBootstrapped<TStartStreamingQuerySchemeActor>, public IActorExceptionHandler {
+    static constexpr ui64 MAX_REDIRECTS = 3;
+
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    using EStatus = TNavigate::EStatus;
+    using TStatus = TEvTxUserProxy::TResultStatus;
+
+    enum class ENavigation {
+        WorkingDir,
+        Access,
+        Query,
+        Database,
+    };
+
+public:
+    explicit TStartStreamingQuerySchemeActor(TEvTxUserProxy::TEvProposeTransaction::TPtr request)
+        : Request(std::move(request))
+        , SchemeTx(Request->Get()->Record.GetTransaction().GetModifyScheme())
+        , QueryPath(JoinPath({SchemeTx.GetWorkingDir(), SchemeTx.GetCreateStreamingQuery().GetName()}))
+    {}
+
+    bool OnUnhandledException(const std::exception& e) final {
+        Reply(TStatus::ExecError, NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unhandled exception: " << e.what());
+        return true;
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+
+        if ((SchemeTx.GetOperationType() != NKikimrSchemeOp::ESchemeOpCreateStreamingQuery && SchemeTx.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterStreamingQuery)
+            || !ActorIdFromProto(SchemeTx.GetCreateStreamingQuery().GetOperationOwnerActorId())
+            || Request->Get()->HasTransactionalModification()) {
+            Reply(TStatus::ExecError, NKikimrScheme::StatusInvalidParameter, "Expected a streaming query operation-start transaction");
+            return;
+        }
+
+        if (const auto& token = Request->Get()->Record.GetUserToken(); !token.empty()) {
+            UserToken.emplace(token);
+        }
+
+        Navigation = IsCreate() ? ENavigation::WorkingDir : ENavigation::Access;
+        Navigate();
+    }
+
+private:
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+        hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
+        hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+        hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+        IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+        IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
+        sFunc(TEvents::TEvWakeup, Navigate);
+    )
+
+    bool IsCreate() const {
+        return SchemeTx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateStreamingQuery;
+    }
+
+    void Connect() {
+        Connected = false;
+        Pipe = Register(NTabletPipe::CreateClient(SelfId(), SchemeShardId, NTabletPipe::TClientRetryPolicy{
+            .RetryLimitCount = 10,
+            .MaxRetryTime = TDuration::Seconds(5),
+        }));
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        if (msg.ClientId != Pipe) {
+            return;
+        }
+
+        if (msg.Status != NKikimrProto::OK || !msg.Leader) {
+            Unavailable("Cannot connect to SchemeShard");
+            return;
+        }
+
+        Generation = msg.Generation;
+        if (msg.ServerId.NodeId() != SelfId().NodeId()) {
+            // The initial metadata request has cookie zero; each forwarding hop increments it.
+            if (Request->Cookie >= MAX_REDIRECTS) {
+                Unavailable("Too many SchemeShard redirects");
+                return;
+            }
+
+            ForwardedNode = msg.ServerId.NodeId();
+            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            request->Record = std::move(Request->Get()->Record);
+            Send(NMetadata::NProvider::MakeServiceId(ForwardedNode), std::move(request), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, Request->Cookie + 1);
+            return;
+        }
+
+        Connected = true;
+
+        if (!AllocationRequested) {
+            AllocationRequested = true;
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, IEventHandle::FlagTrackDelivery);
+        }
+
+        Submit();
+    }
+
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        TxId = ev->Get()->TxId;
+        Submit();
+    }
+
+    void Submit() {
+        if (!Connected || !TxId || Submitted) {
+            return;
+        }
+        Submitted = true;
+
+        auto proposal = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        proposal->Record.SetOwner(ChooseAppropriateOwner(proposal->Record, AppData(), UserToken));
+        proposal->Record.SetPeerName(Request->Get()->Record.GetPeerName());
+        if (UserToken) {
+            proposal->Record.SetUserToken(UserToken->SerializeAsString());
+        }
+        *proposal->Record.AddTransaction() = SchemeTx;
+        NTabletPipe::SendData(SelfId(), Pipe, proposal.Release());
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        if (ev->Get()->ClientId != Pipe) {
+            return;
+        }
+
+        Pipe = {};
+        Connected = false;
+
+        if (Submitted || ForwardedNode) {
+            Unavailable("SchemeShard disconnected during transaction execution");
+        } else {
+            Connect();
+        }
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        Unavailable("Scheme transaction service is unavailable");
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        if (ev->Get()->NodeId == ForwardedNode) {
+            Unavailable("Metadata service node disconnected");
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
+        Send(Request->Sender, ev->Release().Release(), 0, Request->Cookie);
+        PassAway();
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        Response = std::move(ev);
+
+        if (IsIn({NKikimrScheme::StatusAccepted, NKikimrScheme::StatusSuccess}, Response->Get()->Record.GetStatus())) {
+            NTabletPipe::SendData(SelfId(), Pipe, new TEvSchemeShard::TEvNotifyTxCompletion(TxId));
+        } else {
+            Finish();
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+        if (ev->Get()->Record.GetTxId() == TxId && !Completed) {
+            Completed = true;
+            Navigation = ENavigation::Query;
+            Navigate();
+        }
+    }
+
+    void Navigate() {
+        if (NavigationInFlight) {
+            return;
+        }
+        NavigationInFlight = true;
+
+        auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = Request->Get()->Record.GetDatabaseName();
+
+        switch (Navigation) {
+            case ENavigation::WorkingDir: {
+                auto parts = SplitPath(QueryPath);
+                for (size_t size = 1; size < parts.size(); ++size) {
+                    AddPathToSchemeNavigation(*request, TVector<TString>(parts.begin(), parts.begin() + size), /* redirect */ false);
+                }
+                break;
+            }
+            case ENavigation::Access: {
+                AddPathToSchemeNavigation(*request, SplitPath(IsCreate() ? SchemeTx.GetWorkingDir() : QueryPath));
+                if (IsCreate() && SchemeTx.GetReplaceIfExists()) {
+                    AddPathToSchemeNavigation(*request, SplitPath(QueryPath));
+                }
+                break;
+            }
+            case ENavigation::Query: {
+                AddPathToSchemeNavigation(*request, SplitPath(QueryPath));
+                break;
+            }
+            case ENavigation::Database: {
+                Y_VALIDATE(DomainInfo, "Missing domain info");
+                auto& entry = request->ResultSet.emplace_back();
+                entry.Operation = TNavigate::OpPath;
+                entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+                entry.TableId = TTableId(DomainInfo->DomainKey.OwnerId, DomainInfo->DomainKey.LocalPathId);
+                entry.RedirectRequired = false;
+                entry.SyncVersion = true;
+                break;
+            }
+        }
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), IEventHandle::FlagTrackDelivery);
+    }
+
+    bool ResolveError(const TNavigate::TEntry& entry) {
+        switch (entry.Status) {
+            case EStatus::Ok:
+                return false;
+            case EStatus::AccessDenied:
+                Reply(TStatus::AccessDenied, NKikimrScheme::StatusAccessDenied, "Access denied to " + CanonizePath(entry.Path));
+                break;
+            case EStatus::LookupError:
+            case EStatus::RedirectLookupError:
+            case EStatus::TableCreationNotComplete:
+                Unavailable("Cannot resolve " + CanonizePath(entry.Path));
+                break;
+            default:
+                Reply(TStatus::ResolveError, NKikimrScheme::StatusPathDoesNotExist, "Cannot resolve " + CanonizePath(entry.Path));
+                break;
+        }
+        return true;
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        NavigationInFlight = false;
+
+        const auto& entries = ev->Get()->Request->ResultSet;
+
+        if (Navigation == ENavigation::WorkingDir) {
+            for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+                if (it->Status == EStatus::Ok) {
+                    const auto parts = SplitPath(QueryPath);
+                    SchemeTx.SetWorkingDir(CanonizePath(it->Path));
+                    SchemeTx.MutableCreateStreamingQuery()->SetName(CombinePath(parts.begin() + it->Path.size(), parts.end(), false));
+                    Navigation = ENavigation::Access;
+                    Navigate();
+                    return;
+                }
+            }
+
+            for (const auto& entry : entries) {
+                if (entry.Status == EStatus::LookupError || entry.Status == EStatus::RedirectLookupError) {
+                    Unavailable("Cannot resolve working directory");
+                    return;
+                }
+            }
+
+            Reply(TStatus::ResolveError, NKikimrScheme::StatusPathDoesNotExist, "Cannot resolve working directory");
+            return;
+        }
+
+        if (entries.empty()) {
+            Unavailable("Empty scheme cache response");
+            return;
+        }
+
+        if (Navigation == ENavigation::Access) {
+            if (entries.size() != (IsCreate() && SchemeTx.GetReplaceIfExists() ? 2 : 1)) {
+                Unavailable("Incomplete scheme cache response");
+                return;
+            }
+
+            for (size_t i = 0; i < entries.size(); ++i) {
+                const auto& entry = entries[i];
+                if (i == 1 && entry.Status == EStatus::PathErrorUnknown) {
+                    // A missing replacement target is a plain CREATE.
+                    continue;
+                }
+
+                if (ResolveError(entry)) {
+                    return;
+                }
+
+                ui32 access = IsCreate() && i == 0 ? NACLib::CreateTable : NACLib::AlterSchema;
+                if (i == 0 && SchemeTx.HasAlterUserAttributes()) {
+                    access |= NACLib::WriteUserAttributes;
+                }
+
+                if (UserToken && entry.SecurityObject && !entry.SecurityObject->CheckAccess(access, *UserToken)) {
+                    Reply(TStatus::AccessDenied, NKikimrScheme::StatusAccessDenied, "Access denied to " + CanonizePath(entry.Path));
+                    return;
+                }
+            }
+
+            const auto& entry = entries.front();
+            if (!entry.DomainInfo) {
+                Unavailable("Missing SchemeShard domain information");
+                return;
+            }
+
+            SchemeShardId = entry.DomainInfo->Params.HasSchemeShard() && entry.RedirectRequired
+                ? entry.DomainInfo->Params.GetSchemeShard() : entry.DomainInfo->DomainKey.OwnerId;
+            Connect();
+            return;
+        }
+
+        Y_VALIDATE(entries.size() == 1, "Unexpected scheme cache response after transaction completion");
+        const auto& entry = entries.front();
+        if (entry.Status == EStatus::LookupError || entry.Status == EStatus::RedirectLookupError || entry.Status == EStatus::TableCreationNotComplete) {
+            Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+            return;
+        }
+
+        if (entry.Status == EStatus::PathErrorUnknown || entry.Status == EStatus::RootUnknown) {
+            // The transaction committed, but the object or database was subsequently dropped.
+            Finish();
+            return;
+        }
+
+        if (ResolveError(entry)) {
+            return;
+        }
+
+        if (Navigation == ENavigation::Database) {
+            Y_VALIDATE(Tracking, "Missing tracking request");
+
+            const auto database = CanonizePath(entry.Path);
+            Tracking->SetDatabase(database);
+            Tracking->SetDatabaseId(CreateDatabaseId(database, DomainInfo->IsServerless(), DomainInfo->DomainKey));
+
+            std::pair<TString, TString> splitPath;
+            TString error;
+            Y_VALIDATE(TrySplitPathByDb(QueryPath, database, splitPath, error), "Invalid database for streaming query: " << error);
+            Tracking->SetObjectId(std::move(splitPath.second));
+            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), std::move(Tracking));
+
+            Finish();
+            return;
+        }
+
+        Y_VALIDATE(entry.Self, "Missing path information in successful streaming query description");
+        const auto& path = entry.Self->Info;
+        const auto& result = Response->Get()->Record;
+        if (result.HasPathId() && (path.GetSchemeshardId() != SchemeShardId || path.GetPathId() != result.GetPathId())) {
+            // The original object was dropped and this path now identifies another object.
+            Finish();
+            return;
+        }
+        Y_VALIDATE(entry.StreamingQueryInfo, "Missing streaming query information in successful description");
+        Y_VALIDATE(entry.DomainInfo, "Missing domain information in successful streaming query description");
+
+        const auto owner = ActorIdFromProto(SchemeTx.GetCreateStreamingQuery().GetOperationOwnerActorId());
+        if (ActorIdFromProto(entry.StreamingQueryInfo->Description.GetOperationOwnerActorId()) != owner) {
+            // The operation was completed/superseded, or an older SchemeShard ignored the owner field.
+            Finish();
+            return;
+        }
+
+        DomainInfo = entry.DomainInfo;
+        Tracking = MakeHolder<NMetadata::NProvider::TEvTrackOperationCompletion>();
+        Tracking->SetTypeId("STREAMING_QUERY");
+        Tracking->SetPathId(TPathId(path.GetSchemeshardId(), path.GetPathId()));
+        Tracking->SetObjectGeneration(path.GetVersion().GetStreamingQueryVersion());
+        Tracking->SetRequestGeneration(Generation);
+        Tracking->SetOperationOwner(owner);
+        for (const auto& [key, value] : entry.StreamingQueryInfo->Description.GetProperties().GetProperties()) {
+            Tracking->MutableProperties().emplace(key, value);
+        }
+
+        Navigation = ENavigation::Database;
+        Navigate();
+    }
+
+    void Finish() {
+        auto& record = Response->Get()->Record;
+        auto response = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(Completed || record.GetStatus() == NKikimrScheme::StatusAlreadyExists ? TStatus::ExecComplete : TStatus::ExecError);
+        response->Record.SetTxId(record.GetTxId());
+        response->Record.SetSchemeShardTabletId(record.GetSchemeshardId());
+        response->Record.SetSchemeShardStatus(Completed ? NKikimrScheme::StatusSuccess : record.GetStatus());
+        response->Record.SetSchemeShardReason(record.GetReason());
+        if (record.HasPathId()) {
+            response->Record.SetPathId(record.GetPathId());
+        }
+        *response->Record.MutableIssues() = std::move(*record.MutableIssues());
+        Send(Request->Sender, std::move(response), 0, Request->Cookie);
+        PassAway();
+    }
+
+    void Unavailable(const TString& reason) {
+        Reply(TStatus::ProxyShardNotAvailable, NKikimrScheme::StatusNotAvailable, reason);
+    }
+
+    void Reply(TStatus::EStatus status, NKikimrScheme::EStatus schemeStatus, const TString& reason) {
+        auto response = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
+        response->Record.SetTxId(TxId);
+        response->Record.SetSchemeShardTabletId(SchemeShardId);
+        response->Record.SetSchemeShardStatus(schemeStatus);
+        response->Record.SetSchemeShardReason(reason);
+        response->Record.AddIssues()->set_message(reason);
+        Send(Request->Sender, std::move(response), 0, Request->Cookie);
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (Pipe) {
+            NTabletPipe::CloseClient(SelfId(), Pipe);
+        }
+        if (ForwardedNode) {
+            Send(TActivationContext::InterconnectProxy(ForwardedNode), new TEvents::TEvUnsubscribe);
+        }
+        TActorBootstrapped::PassAway();
+    }
+
+    TEvTxUserProxy::TEvProposeTransaction::TPtr Request;
+    NKikimrSchemeOp::TModifyScheme SchemeTx;
+    const TString QueryPath;
+    std::optional<NACLib::TUserToken> UserToken;
+    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr Response;
+    THolder<NMetadata::NProvider::TEvTrackOperationCompletion> Tracking;
+    TIntrusivePtr<NSchemeCache::TDomainInfo> DomainInfo;
+    TActorId Pipe;
+    ui64 SchemeShardId = 0;
+    ui64 TxId = 0;
+    ui64 Generation = 0;
+    ui32 ForwardedNode = 0;
+    ENavigation Navigation = ENavigation::Access;
+    bool Connected = false;
+    bool AllocationRequested = false;
+    bool Submitted = false;
+    bool Completed = false;
+    bool NavigationInFlight = false;
+};
+
+class TStreamingQuerySchemeTransactionFactory final : public NMetadata::ISchemeTransactionFactory {
+public:
+    IActor* CreateActor(TEvTxUserProxy::TEvProposeTransaction::TPtr request) const override {
+        return new TStartStreamingQuerySchemeActor(std::move(request));
+    }
 };
 
 class TExecuteTransactionSchemeActor final : public TSchemeActorBase<TExecuteTransactionSchemeActor> {
@@ -857,7 +1319,9 @@ protected:
             event->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
-        Send(MakeTxProxyID(), std::move(event));
+        const auto recipient = SchemeTx.GetCreateStreamingQuery().HasOperationOwnerActorId()
+            ? NMetadata::NProvider::MakeServiceId(SelfId().NodeId()) : MakeTxProxyID();
+        Send(recipient, std::move(event), IEventHandle::FlagTrackDelivery);
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status) final {
@@ -2806,6 +3270,8 @@ protected:
 class TCreateStreamingQueryActor final : public TUserRequestHandlerBase<TCreateStreamingQueryActor> {
     using TBase = TUserRequestHandlerBase<TCreateStreamingQueryActor>;
 
+    inline static const NMetadata::ISchemeTransactionFactory::TFactory::TRegistrator<TStreamingQuerySchemeTransactionFactory> SchemeTransactionRegistrator{NKikimrSchemeOp::ESchemeOpCreateStreamingQuery};
+
 public:
     TCreateStreamingQueryActor(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)
         : TBase(__func__, schemeTx, schemeTx.GetCreateStreamingQuery().GetName(), context, std::move(controller), NACLib::DescribeSchema | NACLib::CreateTable)
@@ -2853,6 +3319,8 @@ private:
 
 class TAlterStreamingQueryActor final : public TUserRequestHandlerBase<TAlterStreamingQueryActor> {
     using TBase = TUserRequestHandlerBase<TAlterStreamingQueryActor>;
+
+    inline static const NMetadata::ISchemeTransactionFactory::TFactory::TRegistrator<TStreamingQuerySchemeTransactionFactory> SchemeTransactionRegistrator{NKikimrSchemeOp::ESchemeOpAlterStreamingQuery};
 
 public:
     TAlterStreamingQueryActor(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)

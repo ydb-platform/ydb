@@ -9,7 +9,6 @@ SRCS(
     config.cpp
     registration.cpp
     scheme_describe.cpp
-    scheme_transaction.cpp
     service.cpp
     table_exists.cpp
 )
@@ -24,6 +23,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/services/metadata/common
     ydb/services/metadata/initializer
+    ydb/services/metadata/scheme_transaction
     ydb/services/metadata/secret
 )
 

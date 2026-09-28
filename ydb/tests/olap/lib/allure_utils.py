@@ -4,7 +4,7 @@ import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
-from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get_test_tools_version
+from ydb.tests.olap.lib.utils import external_param_is_true, get_allure_report_url, get_ci_version, get_test_tools_version
 import os
 from urllib.parse import urlencode
 from datetime import datetime
@@ -869,6 +869,9 @@ def get_environment_info() -> dict[str, Any]:
     ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
     if ci_launch_url:
         result['ci_launch_url'] = ci_launch_url
+    report_url = get_allure_report_url()
+    if report_url is not None:
+        result['report_url'] = report_url
     result['table_path'] = YdbCluster.get_tables_path()
     db = result['database']
     result['db_admin'] = (
@@ -929,6 +932,10 @@ def allure_test_description(
     if 'ci_launch_url' in test_info:
         test_info['ci_launch_url'] = (
             f"<a target='_blank' href='{test_info['ci_launch_url']}'>arcadia run</a>"
+        )
+    if 'report_url' in test_info:
+        test_info['report_url'] = (
+            f"<a target='_blank' href='{test_info['report_url']}'>allure report</a>"
         )
     service_url = YdbCluster._get_service_url()
     test_info['db_admin'] = f"<a target='_blank' href='{test_info['db_admin']}'>{service_url}</a>"

@@ -1,5 +1,7 @@
 * Added an optional S3 object key prefix to TTL eviction settings for column tables.
 
+* Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.
+
 * Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
 
 * Added `Float16` and `BFloat16` vector index types.

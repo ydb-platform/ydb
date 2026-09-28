@@ -30,7 +30,7 @@ struct TYdbState : public TThrRefBase
     std::unordered_map<std::pair<TString, TString>, TTableMeta, THash<std::pair<TString, TString>>> Tables;
 
     TTypeAnnotationContext* Types = nullptr;
-    TYdbConfiguration::TPtr Configuration = MakeIntrusive<TYdbConfiguration>();
+    TYdbConfiguration::TPtr Configuration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;

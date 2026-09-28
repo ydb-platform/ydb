@@ -621,7 +621,7 @@ namespace NKikimr {
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()
-                            && CompactionTask->GetHugeBlobsAllocatedStripe().Empty()) {
+                            && CompactionTask->GetHugeBlobsAllocatedStripe().Empty() && !HasDeletedSstStripes()) {
                         AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
@@ -820,6 +820,18 @@ namespace NKikimr {
             }
         }
 
+        bool HasDeletedSstStripes() const {
+            if (CompactionTask->CollectDeletedSsts()) {
+                TLeveledSstsIterator it(&CompactionTask->GetSstsToDelete());
+                for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                    if (!it.Get().SstPtr->HeapStripe.Empty()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         void ApplyCompactionResult(const TActorContext &ctx, TVector<ui32> chunksAdded, TVector<ui32> reservedChunksLeft,
                 ui64 wId) {
             // Reservations the compaction never wrote into. They went into no SST, so no
@@ -927,8 +939,10 @@ namespace NKikimr {
             }
             THullChange *msg = ev->Get();
 
-            if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty() ||
-                    !msg->AllocatedStripeBlobs.Empty()) && !wId && !msg->Aborted) {
+            // Input SST stripes are added to the removal list in ApplyCompactionResult, not by the worker.
+            // They need a write ID even when the output uses ordinary chunks or the compaction writes nothing.
+            if (!wId && !msg->Aborted && (!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty() ||
+                    !msg->AllocatedStripeBlobs.Empty() || (!msg->FreshCompaction && HasDeletedSstStripes()))) {
                 const ui64 cookie = NextPreCompactCookie++;
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Requesting PreCompact for THullChange",
                     {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});

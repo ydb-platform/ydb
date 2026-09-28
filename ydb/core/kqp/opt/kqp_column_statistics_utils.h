@@ -28,4 +28,9 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
                     const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics);
 
+void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
+                    const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
+                    const THashMap<TString, THashMap<TString, TVector<TString>>>& columnTuplesByTableName,
+                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics);
+
 } // namespace NKikimr::NKqp

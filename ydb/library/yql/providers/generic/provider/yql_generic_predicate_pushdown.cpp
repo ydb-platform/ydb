@@ -157,6 +157,7 @@ namespace NYql {
             MATCH_TYPE(Json, JSON);
             MATCH_TYPE(Timestamp, TIMESTAMP);
             MATCH_TYPE(Interval, INTERVAL);
+            MATCH_TYPE(Date, DATE);
 
             ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
             return false;

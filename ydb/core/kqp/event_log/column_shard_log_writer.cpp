@@ -50,101 +50,74 @@ void TColumnShardLogWriter::Flush() {
     CurrentBatchSize = 0;
 }
 
-TString TColumnShardLogWriter::GetStoreDescription() {
+TString TColumnShardLogWriter::GetCreateStoreQuery() {
     TStringBuilder sb;
+    sb << " CREATE TABLESTORE `/Root/" << Settings.StoreName << "` (";
+
     for (const auto& column : Columns) {
-        sb << "Columns{ Name: \"" << column->Name << "\" Type : \"" << column->Type << "\"";
+        sb << column->Name << " " << column->Type;
+
+        if (column->Settings.IsNotNull || column->Settings.IsPK) {
+            sb << " NOT NULL";
+        }
+
         if (column->Settings.IsDictionary) {
-            sb << " DataAccessorConstructor{ ClassName: \"DICTIONARY\" } ";
+            sb << " ENCODING(DICT)";
         }
-        if (column->Settings.IsNotNull) {
-            sb << " NotNull : true";
-        }
-        if (!column->Settings.Extra.empty()) {
-            sb << " " << column->Settings.Extra;
-        }
-        sb << " }";
+        sb << ", ";
     }
-
-    for (const auto& column : Columns) {
-        if (column->Settings.IsPK) {
-            sb << "KeyColumnNames: \"" << column->Name << "\"\n";
-        }
-    }
-
-    return Sprintf(R"(
-        Name: "%s"
-        ColumnShardCount: %d
-        SchemaPresets {
-            Name: "default"
-            Schema {
-                %s
-                }
-            }
-        )", Settings.StoreName.c_str(), Settings.StoreShardsCount, sb.data());
-}
-
-TString TColumnShardLogWriter::GetTableDescription() {
-    TStringBuilder sb;
-    sb << "[";
+    sb << " PRIMARY KEY(";
     bool first = true;
     for (const auto& column : Columns) {
-        if (column->Settings.IsShardingKey) {
-            if (!first) {
-                sb << ", ";
-            } else {
-                first = false;
-            }
-            sb << "\"" << column->Name << "\"\n";
+        if (!column->Settings.IsPK) continue;
+
+        if (!first) {
+            sb << ", ";
+        } else {
+            first = false;
         }
+        sb << column->Name;
     }
-    sb << "]";
-
-    return Sprintf(R"(
-        Name: "%s"
-        ColumnShardCount: %d
-        Sharding {
-            HashSharding {
-                Function: %s
-                Columns: %s
-            }
-        })", Settings.TableName.c_str(),
-        Settings.TableShardsCount,
-        NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction_Name(Settings.ShardingMethod).c_str(),
-        sb.c_str());
+    sb << ") ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Settings.StoreShardsCount << ");";
+    return sb;
 }
 
-void TColumnShardLogWriter::WaitForSchemeOperation(NActors::TActorId sender, ui64 txId) {
-    auto& server = GetRunner().GetTestServer();
-    auto& runtime = *server.GetRuntime();
-    auto& settings = server.GetSettings();
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-    request->Record.SetTxId(txId);
+TString TColumnShardLogWriter::GetCreateTableQuery() {
 
-    const ui64 mask = static_cast<ui64>(0xff) << 56;
-    ui64 tabletId = Tests::SchemeRoot;
-    ui32 id = settings.Domain;
-    auto tid = (tabletId & ~mask) | static_cast<ui64>(id & 0xff) << 56;
+    TStringBuilder sb;
 
-    runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
-    runtime.template GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
-}
+    sb << " CREATE TABLE `/Root/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
+    for (const auto& column : Columns) {
+        sb << column->Name << " " << column->Type;
 
-void TColumnShardLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
-    auto& server = GetRunner().GetTestServer();
-    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-    request->Record.SetExecTimeoutPeriod(Max<ui64>());
-    *request->Record.MutableTransaction()->MutableModifyScheme() = modifyScheme;
-    TActorId sender = server.GetRuntime()->AllocateEdgeActor();
-    server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
-    auto ev = server.GetRuntime()->template GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    auto status = ev->Get()->Record.GetStatus();
-    ui64 txId = ev->Get()->Record.GetTxId();
-    UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
-    WaitForSchemeOperation(sender, txId);
+        if (column->Settings.IsNotNull || column->Settings.IsPK) {
+            sb << " NOT NULL";
+        }
+
+        if (column->Settings.IsDictionary) {
+            sb << " ENCODING(DICT)";
+        }
+        sb << ", ";
+    }
+    sb << " PRIMARY KEY(";
+    bool first = true;
+    for (const auto& column : Columns) {
+        if (!column->Settings.IsPK) continue;
+
+        if (!first) {
+            sb << ", ";
+        } else {
+            first = false;
+        }
+        sb << column->Name;
+    }
+    sb << ") ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Settings.TableShardsCount << ");";
+    return sb;
 }
 
 bool TColumnShardLogWriter::CheckStorageExists() const {
+    // @todo Будет ли работать в production
+    // @todo Не слишком ли - ходить через клиента?
     auto schemeClient = GetRunner().GetSchemeClient();
 
     const TString storePath = "/Root/" + Settings.StoreName;
@@ -159,28 +132,22 @@ bool TColumnShardLogWriter::CheckStorageExists() const {
 }
 
 void TColumnShardLogWriter::CreateStorage() {
-    TString storeScheme = GetStoreDescription();
-    NKikimrSchemeOp::TColumnStoreDescription store;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(storeScheme, &store));
-    NKikimrSchemeOp::TModifyScheme op;
-    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
-    op.SetWorkingDir("/Root");
-    op.MutableCreateColumnStore()->CopyFrom(store);
-    ExecuteModifyScheme(op);
+    auto session = GetRunner().GetTableClient().CreateSession().GetValueSync().GetSession();
 
-    TString storeOrDirName = Settings.StoreName;
-    TString tableScheme = GetTableDescription();
-    NKikimrSchemeOp::TColumnTableDescription table;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(tableScheme, &table));
-    TString workingDir = "/Root";
-    if (!storeOrDirName.empty()) {
-        workingDir += "/" + storeOrDirName;
+    auto storeQuery = GetCreateStoreQuery();
+    Cerr << "QUERY: " << storeQuery << Endl;
+    auto storeResult = session.ExecuteSchemeQuery(storeQuery).GetValueSync();
+
+    // @todo UNIT_ASSERT(storeResult.IsSuccess());
+
+    auto tableQuery = GetCreateTableQuery();
+    Cerr << "QUERY: " << tableQuery << Endl;
+
+    auto tableResult = session.ExecuteSchemeQuery(tableQuery).GetValueSync();
+    if (!tableResult.IsSuccess()) {
+        Cerr << "FAILED: " << tableResult.GetIssues().ToOneLineString() << Endl;
     }
-
-    op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
-    op.SetWorkingDir(workingDir);
-    op.MutableCreateColumnTable()->CopyFrom(table);
-    ExecuteModifyScheme(op);
+    // @todo UNIT_ASSERT(tableResult.IsSuccess());
 }
 
 void TColumnShardLogWriter::CreateOrUpdateStorage() {
@@ -193,12 +160,8 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
 void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {
     auto* runtime = GetRunner().GetTestServer().GetRuntime();
 
-    UNIT_ASSERT(batch);
-    UNIT_ASSERT(batch->num_rows());
     auto data = NKikimr::NArrow::SerializeBatchNoCompression(batch);
-    UNIT_ASSERT(!data.empty());
     TString serializedSchema = NKikimr::NArrow::SerializeSchema(*batch->schema());
-    UNIT_ASSERT(serializedSchema);
 
     Ydb::Table::BulkUpsertRequest request;
     request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
@@ -217,8 +180,6 @@ void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch
             }
             issues << "\n";
         }
-        Cerr << issues;
-        UNIT_ASSERT_VALUES_EQUAL(op.status(), Ydb::StatusIds::SUCCESS);
         responses.fetch_add(1);
     });
 

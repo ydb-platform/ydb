@@ -25,16 +25,10 @@ using namespace NActors::NStructuredLog;
 class TSchematizedLogColumn {
 public:
     struct TDatabaseSettings {
-        TString Extra;
         bool IsPK {false};
         bool IsNotNull {false};
         bool IsShardingKey {false};
         bool IsDictionary {false};
-
-        TDatabaseSettings& SetExtra(const TString& extra) {
-            Extra = extra;
-            return *this;
-        }
 
         TDatabaseSettings& SetPK(bool isPK) {
             IsPK = isPK;

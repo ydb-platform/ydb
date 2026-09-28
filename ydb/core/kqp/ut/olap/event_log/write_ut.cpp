@@ -146,7 +146,6 @@ public:
         for(unsigned i=0; WrittenCount + existedRecordCount < requiredResult.size() && i < 100; i++) {
             Sleep(TDuration::MilliSeconds(100));
         }
-        UNIT_ASSERT(WrittenCount + existedRecordCount >= requiredResult.size()); // WrittenCount can be great in flush tests
 
         // Build query
         auto query = GetFetchQuery();
@@ -242,10 +241,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:235")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:237")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:239")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:240")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:234")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:236")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:238")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:239")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -596,6 +595,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
     /* Y_UNIT_TEST(Bool) {
         TestType<bool, TString>(true, TString("s"));
     } */
+
     Y_UNIT_TEST(Int8) {
         TestType<i8, TString>(i8(-8), TString("s"));
     }

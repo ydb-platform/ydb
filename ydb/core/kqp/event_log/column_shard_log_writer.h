@@ -44,11 +44,8 @@ public:
     void Flush() override;
 
 protected:
-    TString GetStoreDescription();
-    TString GetTableDescription();
-
-    void WaitForSchemeOperation(NActors::TActorId sender, ui64 txId);
-    void ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme);
+    TString GetCreateStoreQuery();
+    TString GetCreateTableQuery();
 
     void CreateStorage();
     bool CheckStorageExists() const;

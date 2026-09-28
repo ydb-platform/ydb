@@ -49,14 +49,19 @@ namespace NKikimr::NPathAliasing {
             return TString(path);
         }
 
+        TStringBuf normalizedPath = path;
+        while (normalizedPath.StartsWith("//")) {
+            normalizedPath = normalizedPath.SubStr(1);
+        }
+
         for (const auto& rule : Impl->Rules) {
-            if (path.StartsWith(rule.Src)
-                && (rule.Src.EndsWith("/") || path.size() == rule.Src.size() || path[rule.Src.size()] == '/')) {
+            if (normalizedPath.StartsWith(rule.Src)
+                && (rule.Src.EndsWith("/") || normalizedPath.size() == rule.Src.size() || normalizedPath[rule.Src.size()] == '/')) {
                 TString result(rule.Dst);
-                if (path.size() > rule.Src.size() && result.back() != '/' && path[rule.Src.size()] != '/') {
+                if (normalizedPath.size() > rule.Src.size() && result.back() != '/' && normalizedPath[rule.Src.size()] != '/') {
                     result.push_back('/');
                 }
-                result.append(path.data() + rule.Src.size(), path.size() - rule.Src.size());
+                result.append(normalizedPath.data() + rule.Src.size(), normalizedPath.size() - rule.Src.size());
                 size_t write = 0;
                 for (size_t read = 0; read < result.size(); ++read) {
                     const char c = result[read];

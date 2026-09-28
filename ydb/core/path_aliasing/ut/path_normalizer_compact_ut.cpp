@@ -38,6 +38,7 @@ namespace NKikimr::NPathAliasing {
                      TString("/Root/./Table"),
                      TString("/Root/../Table"),
                      TString("/Other///"),
+                     TString("//Other///"),
                      TString("/Root/Table"),
                  }) {
                 UNIT_ASSERT_VALUES_EQUAL(disabled.NormalizePath(path), path);
@@ -57,7 +58,8 @@ namespace NKikimr::NPathAliasing {
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/backup/ru/mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/"), "/backup/ru/mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//mydb///"), "/backup/ru/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("//ru/mydb"), "//ru/mydb");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("//ru/mydb"), "/backup/ru/mydb");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("///ru/mydb"), "/backup/ru/mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/russian///"), "/russian///");
         }
 

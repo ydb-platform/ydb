@@ -1,7 +1,9 @@
 #include "rpc_scheme_base.h"
 #include "service_table.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -75,6 +77,22 @@ private:
                     issues.AddIssue(error);
                     Reply(status, issues, ctx);
                     return;
+                }
+
+                const auto header = Request_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
+                const auto database = Request_->GetDatabaseName();
+                if (header && database) {
+                    const TString rawDatabase = CGIUnescapeRet(*header);
+                    const TString logicalDatabase = NKikimr::CanonizePath(rawDatabase);
+                    const TString physicalPrefix = *database == "/" ? "/" : *database + "/";
+                    const TString logicalPrefix = logicalDatabase == "/" ? "/" : logicalDatabase + "/";
+                    const TStringBuf dataSourcePath(describeResult.data_source_path());
+                    if (rawDatabase.StartsWith("/") && logicalDatabase != *database
+                        && Request_->NormalizePath(logicalDatabase) == *database
+                        && dataSourcePath.StartsWith(physicalPrefix)) {
+                        describeResult.set_data_source_path(TStringBuilder()
+                            << logicalPrefix << dataSourcePath.SubStr(physicalPrefix.size()));
+                    }
                 }
 
                 return ReplyWithResult(

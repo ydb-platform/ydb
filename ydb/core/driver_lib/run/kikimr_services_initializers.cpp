@@ -2536,12 +2536,17 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
     );
 }
 
-TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(
+    const TKikimrRunConfig& runConfig,
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway)
     : IKikimrServicesInitializer(runConfig)
+    , Gateway_(std::move(gateway))
 {}
 
 void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
+    auto workloadManager = NWorkloadManager::CreateService(
+        NWorkloadManager::GetWorkloadManagerCounters(appData->Counters),
+        Gateway_);
     setup->LocalServices.push_back(std::make_pair(
         NWorkloadManager::MakeServiceId(NodeId),
         TActorSetupCmd(workloadManager, TMailboxType::HTSwap, appData->UserPoolId)));

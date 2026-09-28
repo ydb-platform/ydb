@@ -76,6 +76,8 @@
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
@@ -2198,8 +2200,11 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    auto workloadManagerGateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+    AppData->WorkloadManagerGateway = workloadManagerGateway;
+
     if (serviceMask.EnableWorkloadManagerService) {
-        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig, workloadManagerGateway));
     }
 
     if (serviceMask.EnableKqp) {

@@ -3,14 +3,11 @@
 #include <ydb/services/workload_manager/gateway.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
 
-#include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/protos/workload_manager_config.pb.h>
-
 #include <ydb/library/actors/core/actorid.h>
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
-#include <util/system/spinlock.h>
 
 #include <memory>
 
@@ -21,11 +18,12 @@ struct TDatabaseInfo {
     bool Serverless = false;
 };
 
+///
+/// Snapshot of the workload manager state. Immutable once published.
+///
 struct TSnapshot {
     TResourcePoolMapPtr Pools;
     std::shared_ptr<const TResourcePoolClassifierSnapshot> Classifiers;
-    NKikimrConfig::TFeatureFlags FeatureFlags;
-    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     THashMap<TString, TDatabaseInfo> Databases;
     bool EnableResourcePools = false;
     bool EnableResourcePoolsOnServerless = false;
@@ -42,39 +40,29 @@ struct TSnapshot {
     }
 };
 
-using TSnapshotPtr = std::shared_ptr<const TSnapshot>;
+using TSnapshotPtr = TTrueAtomicSharedPtr<TSnapshot>;
 
-
+///
+/// Server-side implementation of IGateway. Created in the initializer and
+/// stored in `AppData()->WorkloadManagerGateway`. Cache actor writes
+/// snapshots via `PublishSnapshot`; consumers call `TryCreateQueryClassifier`.
+///
 class TWorkloadManagerGateway : public IGateway {
 public:
-    void OnRegistered(NActors::TActorId cacheActorId, NActors::TActorId workloadManagerServiceId, ui32 nodeId) {
+    void OnRegistered(NActors::TActorId cacheActorId) {
         CacheActorId_ = cacheActorId;
-        WorkloadManagerServiceId_ = workloadManagerServiceId;
-        NodeId_ = nodeId;
     }
 
     void PublishSnapshot(TSnapshotPtr snapshot) {
-        with_lock (Lock_) {
-            Snapshot_ = std::move(snapshot);
-        }
-    }
-
-    ui32 GetNodeId() const {
-        return NodeId_;
+        Snapshot_.atomic_store(std::move(snapshot));
     }
 
     std::shared_ptr<IQueryClassifier> TryCreateQueryClassifier(
         const TString& databaseId, TClassifyContext context) override;
 
 private:
-    mutable TAdaptiveLock Lock_;
     TSnapshotPtr Snapshot_;
     NActors::TActorId CacheActorId_;
-    NActors::TActorId WorkloadManagerServiceId_;
-    ui32 NodeId_ = 0;
 };
-
-
-void RegisterGateway(std::shared_ptr<TWorkloadManagerGateway> gateway, ui32 nodeId);
 
 }

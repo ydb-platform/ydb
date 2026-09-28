@@ -344,7 +344,7 @@ void TTxInitSchema::Complete(const TActorContext& ctx) {
         {"process", "TTxInitSchema::Complete"});
     Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TxInitSchema.Complete at tablet",
-        {"#_Self->TabletID();", Self->TabletID();});
+        {"#_Self->TabletID();", Self->TabletID()});
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }
 

@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 
 #include <library/cpp/json/writer/json.h>
 
@@ -192,11 +193,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::TierName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
+            const TString tierName = NColumnShard::NTiers::TExternalStorageId::GetDisplayName(Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo()));
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
+            const TString tierName = NColumnShard::NTiers::TExternalStorageId::GetDisplayName(Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo()));
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));

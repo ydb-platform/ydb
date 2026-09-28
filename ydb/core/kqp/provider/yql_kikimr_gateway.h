@@ -508,6 +508,7 @@ struct TTtlSettings {
     struct TTier {
         TDuration ApplyAfter;
         std::optional<TString> StorageName;
+        std::optional<TString> ObjectKeyPrefix;
     };
 
     TString ColumnName;

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    action.cpp
     actor.cpp
     auth_factory.cpp
     auth_mocks.cpp

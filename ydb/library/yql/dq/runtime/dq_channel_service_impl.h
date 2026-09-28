@@ -1086,7 +1086,11 @@ public:
 
     bool IsFinished() const override {
         bool finishCheckResult = Serializer->Buffer->IsFinished();
-        PopStats.FinishCheckTime = TInstant::Now();
+        // checked for every output on every run of the compute actor: the time is taken when the result changes,
+        // so that FinishCheckTime tells since when it holds, without a clock read per check
+        if (finishCheckResult != PopStats.FinishCheckResult || !PopStats.FinishCheckTime) {
+            PopStats.FinishCheckTime = TInstant::Now();
+        }
         PopStats.FinishCheckResult = finishCheckResult;
         return finishCheckResult;
     }

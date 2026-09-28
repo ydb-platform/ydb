@@ -31,13 +31,12 @@ namespace NKikimr::NGRpcService {
     void IRequestProxyCtx::InitializePathNormalization(
         std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer)
     {
-        if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
+        if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled() || !normalizer || !normalizer->HasRules()) {
             return;
         }
 
         const TString method = GetRpcMethodName();
-        if (method.StartsWith("Ydb.PersQueue.V1.") ||
-            method.StartsWith("Ydb.Cms.V1.CmsService/")) {
+        if (method.StartsWith("Ydb.Cms.V1.CmsService/")) {
             DisablePathNormalization();
             return;
         }

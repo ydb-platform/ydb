@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <yql/essentials/ast/yql_expr.h>
 
+#include <functional>
+
 namespace NYql {
 
 TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph);
@@ -13,7 +15,9 @@ TExprNode::TPtr RewriteReadFromView(
     TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
     IModuleResolver::TPtr moduleResolver,
-    const TViewPersistedData& viewData
+    const TViewPersistedData& viewData,
+    TStringBuf localCluster,
+    const std::function<TString(TStringBuf)>& normalizePath
 );
 
 }

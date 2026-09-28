@@ -44,6 +44,10 @@ namespace NKikimr::NPathAliasing {
         Impl = std::move(impl);
     }
 
+    bool TPathNormalizer::HasRules() const noexcept {
+        return bool(Impl);
+    }
+
     TString TPathNormalizer::NormalizePath(TStringBuf path) const {
         if (!Impl || !path.StartsWith("/")) {
             return TString(path);

@@ -80,6 +80,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
 ydb/core/kqp/ut/rbo KqpRboYql.Limit+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Limit-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
+ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.WindowFunctions-ColumnStore
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs

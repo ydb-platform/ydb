@@ -10,14 +10,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 
 import os
 import unittest
+from unittest.mock import patch
 
 from datetime import datetime, timedelta, timezone
 
 from github_actions import ci_metrics
+from github_actions import export_github_job_metrics
 from github_actions.export_github_job_metrics import (
     already_exported,
     attach_pull_requests,
     completed_since,
+    last_export_at,
     open_runs_to_save,
     pull_refs_from_commit_pulls,
     pull_requests_have_target,
@@ -87,6 +90,22 @@ class CompletedSinceTest(unittest.TestCase):
         last = datetime.now(timezone.utc) - timedelta(minutes=10)
         since = completed_since(2, last)
         self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
+
+    def test_unreadable_credentials_stay_a_cold_start(self):
+        class Wrapper:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def check_credentials(self):
+                return False
+
+        with patch.object(export_github_job_metrics, "has_send_credentials", return_value=True), patch.object(
+            export_github_job_metrics, "_open_ydb_wrapper", return_value=Wrapper()
+        ):
+            self.assertEqual(last_export_at(), (None, True))
 
     def test_failed_watermark_uses_twelve_hours(self):
         since = completed_since(2, None, watermark_ok=False)

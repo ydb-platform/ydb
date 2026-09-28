@@ -197,7 +197,7 @@ def last_export_at(table_path: Optional[str] = None) -> tuple[Optional[datetime]
     try:
         with _open_ydb_wrapper() as wrapper:
             if not wrapper.check_credentials():
-                return None
+                return None, True
             path = table_path or resolve_table_path(wrapper)
             rows = wrapper.execute_scan_query(
                 f"""

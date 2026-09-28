@@ -779,6 +779,17 @@ namespace NYql {
                     [[fallthrough]];
                 }
             }
+            case Ydb::Type::TIMESTAMP: {
+                const auto& value = typedValue.value();
+                switch (value.value_case()) {
+                case Ydb::Value::kInt64Value: {
+                    const auto instant = TInstant::MicroSeconds(value.int64_value());
+                    return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
+                }
+                default:
+                    [[fallthrough]];
+                }
+            }
             case Ydb::Type::DATE: {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {

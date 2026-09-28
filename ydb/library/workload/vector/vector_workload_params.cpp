@@ -39,7 +39,7 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .StoreTrue(&Recall);
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
-        opts.AddLongOption("hnsw-full-range", "Search all posting partitions for unprefixed, non-overlapping distributed_hnsw indexes")
+        opts.AddLongOption("hnsw-full-range", "Search all posting partitions for unprefixed, non-overlapping distributed_hnsw indexes (requires --stale-ro)")
             .StoreTrue(&HnswFullRange);
         opts.AddLongOption("stale-ro", "Read with StaleRO mode")
             .StoreTrue(&StaleRO);
@@ -244,6 +244,8 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                 case EWorkloadRunType::Upsert:
                     break;
                 case EWorkloadRunType::Select:
+                    Y_ENSURE(!HnswFullRange || StaleRO,
+                        "--hnsw-full-range reads index implementation tables; specify --stale-ro");
                     break;
             }
             break;

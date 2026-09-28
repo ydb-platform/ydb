@@ -45,7 +45,7 @@ controller cache allocation; cold or rebuilding caches can affect performance.
 The HNSW creation options apply only to `distributed_hnsw`. Recreate the index
 with different options to compare HNSW configurations.
 
-With `--hnsw-full-range`, unprefixed, non-overlapping `distributed_hnsw` selects search all posting-table partitions and
+With `--hnsw-full-range --stale-ro`, unprefixed, non-overlapping `distributed_hnsw` selects search all posting-table partitions and
 merge their HNSW candidates. This bypasses k-means cluster-range filtering and
 uses the stored HNSW settings; `--kmeans-tree-clusters` applies to k-means and
 prefixed index views, not this full-partition search. `--non-indexed` still
@@ -55,3 +55,6 @@ predicate. Overlapping indexes retain the index view to deduplicate postings.
 The default search continues to use the named index view and
 `--kmeans-tree-clusters`. Full-range mode searches more data and can have
 different recall and throughput; report the mode when comparing results.
+
+Full-range mode requires explicit stale reads because it reads implementation
+tables directly. Use the default index view for snapshot-consistent reads.

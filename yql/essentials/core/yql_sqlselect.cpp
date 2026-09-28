@@ -41,7 +41,7 @@ TExprNode::TPtr ExpandYqlTraitsFactory(
     // clang-format on
 
     ctxExpr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr);
+    auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr, ctxTypes);
     YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
     return traits;
@@ -306,7 +306,7 @@ TExprNode::TPtr ExpandSqlWindowCall(
         }
 
         ctxExpr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-        auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr);
+        auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr, ctxTypes);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
         return traits;

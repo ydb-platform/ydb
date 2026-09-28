@@ -617,7 +617,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                     });
 
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx, *optCtx.Types);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
 
                     switch (factoryIndex) {

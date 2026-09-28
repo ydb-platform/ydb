@@ -16,7 +16,7 @@ TIntegrityManager::TIntegrityManager(ui64 dataChunkSizeBytes, ui64 ddiskId, ui64
     , ExtentsPerChunkCount((dataChunkSizeBytes - IntegrityChunkHeaderRegionSize) / ExtentOnDiskSizeBytes)
     , DDiskId(ddiskId)
     , PDiskGuid(pdiskGuid)
-    , MaxBlockStates(Max<size_t>(1, checksumCacheBytes / BlockStateApproxBytes))
+    , MaxBlockStates(checksumCacheBytes ? Max<size_t>(1, checksumCacheBytes / BlockStateApproxBytes) : 0)
 {
     Y_ABORT_UNLESS(dataChunkSizeBytes % IntegrityUnitSize == 0);
     Y_ABORT_UNLESS(dataChunkSizeBytes > IntegrityChunkHeaderRegionSize);

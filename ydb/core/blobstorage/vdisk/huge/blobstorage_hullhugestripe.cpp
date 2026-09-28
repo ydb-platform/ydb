@@ -275,6 +275,21 @@ namespace NKikimr {
             return THeapStat(usedChunks, canBeFreed, std::move(locked));
         }
 
+        TStripeHeapSpaceStat TStripeHeap::GetSpaceStat() const {
+            TStripeHeapSpaceStat stat;
+            stat.ChunkCount = Chunks.size();
+            for (const auto& [_, chunk] : Chunks) {
+                stat.UsedBytes += chunk.UsedBytes;
+                const ui64 freeBytes = ChunkSize - chunk.UsedBytes;
+                if (chunk.Locked) {
+                    stat.LockedFreeBytes += freeBytes;
+                } else {
+                    stat.FreeBytes += freeBytes;
+                }
+            }
+            return stat;
+        }
+
         void TStripeHeap::ShredNotify(const std::vector<ui32>& chunksToShred) {
             ForbiddenChunks.insert(chunksToShred.begin(), chunksToShred.end());
             for (ui32 chunkId : chunksToShred) {

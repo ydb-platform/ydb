@@ -25,11 +25,9 @@ using namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic;
 
 namespace {
 
-constexpr double Epsilon = 1e-8;
-
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
-    explicit TComputeSchedulerService(const TDuration& updateFairSharePeriod) : UpdateFairSharePeriod(updateFairSharePeriod) {}
+    explicit TComputeSchedulerService(TDuration updateFairSharePeriod) : UpdateFairSharePeriod(updateFairSharePeriod) {}
 
     void Bootstrap() {
         Scheduler = AppData()->KqpComputeScheduler;
@@ -110,7 +108,6 @@ public:
     void Handle(TEvAddPool::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
-        const auto resourceWeight = std::max(ev->Get()->Params.ResourceWeight, 0.0); // TODO: resource weight shouldn't be negative!
         NHdrf::TStaticAttributes attrs = {
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
@@ -132,13 +129,9 @@ public:
             {"poolId", poolId},
             {"attrs", attrs});
 
-        if (PoolSubscribtions.insert({NHdrf::TFullPoolId{databaseId, poolId}, {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
-            PoolExternalWeightSum += resourceWeight;
+        if (PoolSubscribtions.insert({NHdrf::TFullPoolId{databaseId, poolId}, {.IsFirstRemoval=false}}).second) {
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
             Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
-            if (resourceWeight > Epsilon) {
-                UpdatePoolsGuarantee();
-            }
         }
     }
 
@@ -156,12 +149,6 @@ public:
             poolIt->second.IsFirstRemoval = false;
 
             NHdrf::TStaticAttributes attrs;
-
-            // Update external weight
-            PoolExternalWeightSum -= poolIt->second.ExternalWeight;
-            poolIt->second.ExternalWeight = ev->Get()->Config->ResourceWeight;
-            PoolExternalWeightSum += poolIt->second.ExternalWeight;
-            UpdatePoolsGuarantee();
 
             // Update limit
             if (const auto& cpuLimitPercent = ev->Get()->Config->TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
@@ -244,29 +231,14 @@ private:
         return Max<ui64>(poolStats.MaxThreadCount, 1);
     }
 
-    void UpdatePoolsGuarantee() {
-        if (PoolExternalWeightSum <= Epsilon) {
-            for (const auto& [fullPoolId, _] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, {.CpuGuarantee = 0});
-            }
-        } else {
-            for (const auto& [fullPoolId, params] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId,
-                    {.CpuGuarantee = params.ExternalWeight / PoolExternalWeightSum * Scheduler->GetTotalCpuLimit()});
-            }
-        }
-    }
-
 private:
     TComputeSchedulerPtr Scheduler;
     const TDuration UpdateFairSharePeriod;
 
     struct TPoolParams {
         bool IsFirstRemoval = false;
-        double ExternalWeight = 0.0;
     };
     THashMap<NHdrf::TFullPoolId, TPoolParams> PoolSubscribtions;
-    double PoolExternalWeightSum = 0.0;
 };
 
 } // namespace
@@ -279,7 +251,6 @@ TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters
     : Enabled(options.Enabled)
     , Root(std::make_shared<TRoot>(counters))
     , DelayParams(options.DelayParams)
-    , FairShareMode(options.FairShareMode)
     , KqpCounters(counters)
 {
     auto group = counters->GetKqpCounters();
@@ -321,8 +292,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
         pool = std::make_shared<TPool>(poolId, KqpCounters, attrs);
         database->AddPool(pool);
 
-        bool allowMinFairShare = (!pool->CpuLimit || *pool->CpuLimit > 0)
-            && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+        bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
 
         // Since they are not visible by query id - use the same id for each pool
         auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, allowMinFairShare, NHdrf::TStaticAttributes());
@@ -349,8 +319,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     if (query) {
         query->Update(attrs);
     } else {
-        bool allowMinFairShare = (!pool->CpuLimit || *pool->CpuLimit > 0)
-            && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+        bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
         query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
@@ -425,14 +394,11 @@ void TComputeScheduler::UpdateFairShare() {
         snapshot = NHdrf::NSnapshot::TRootPtr(Root->TakeSnapshot());
     }
 
-    snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown(FairShareMode);
+    snapshot->Update(Root->GetSnapshot());
 
     {
         TWriteGuard lock(Mutex);
-        if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
-            snapshot->AccountPreviousSnapshot(oldSnapshot);
-        }
+        Root->SetSnapshot(snapshot);
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());
@@ -460,7 +426,7 @@ NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(const NMonitoring::TD
     return std::make_shared<NScheduler::TComputeScheduler>(MakeIntrusive<NKqp::TKqpCounters>(counters), options);
 }
 
-IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod) {
+IActor* CreateKqpComputeSchedulerService(TDuration updateFairSharePeriod) {
     Y_ENSURE(updateFairSharePeriod > TDuration::Zero());
     return new TComputeSchedulerService(updateFairSharePeriod);
 }

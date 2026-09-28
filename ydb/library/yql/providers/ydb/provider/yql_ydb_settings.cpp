@@ -1,11 +1,14 @@
 #include "yql_ydb_settings.h"
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 namespace NYql {
 
 using namespace NCommon;
 
-TYdbConfiguration::TYdbConfiguration()
+TYdbConfiguration::TYdbConfiguration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(YdbProviderName, TQContext(), strictConfigValidation)
 {
 }
 

@@ -26,8 +26,8 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     gc_ut.cpp
     storage_service_ydb_ut.cpp
-    ydb_state_storage_ut.cpp
     ydb_checkpoint_storage_ut.cpp
+    ydb_state_storage_ut.cpp
 )
 
 END()

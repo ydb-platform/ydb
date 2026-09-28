@@ -1092,6 +1092,7 @@ config:
             request.SetIgnoreDegradedGroupsChecks(true);
             request.SetIgnoreDisintegratedGroupsChecks(true);
             request.SetIgnoreGroupSanityChecks(true);
+            request.SetIgnoreGroupLayoutChecks(true);
         }
         auto *cmd = request.AddCommand();
         auto *ds = cmd->MutableUpdateDriveStatus();

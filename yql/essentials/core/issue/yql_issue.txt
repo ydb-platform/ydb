@@ -137,6 +137,10 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: CORE_REPEAT_TRANSFORM_LIMIT_EXCEEDED
+  severity: S_ERROR
+}
+ids {
   code: KIKIMR_LOCKS_INVALIDATED
   severity: S_ERROR
   format: "Transaction locks invalidated."

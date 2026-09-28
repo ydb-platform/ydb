@@ -41,7 +41,7 @@ struct TKqpOptimizeContext;
 class TKqpRewriteSelectTransformer : public NYql::TSyncTransformerBase {
 public:
     TKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typeCtx)
-        : TypeCtx(typeCtx), KqpCtx(*kqpCtx), UniqueSourceIdCounter(0) {}
+        : TypeCtx(typeCtx), KqpCtx(*kqpCtx), UniqueSourceIdCounter(0), UniqueColumnIdCounter(0) {}
 
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
@@ -51,6 +51,7 @@ private:
     NYql::TTypeAnnotationContext& TypeCtx;
     NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
+    ui64 UniqueColumnIdCounter = 0;
     bool RboTraceRewriteSelectStarted = false;
 };
 
@@ -127,7 +128,8 @@ private:
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot = false);
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
+                              bool generateRoot = false);
 
 TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 

@@ -195,7 +195,7 @@ public:
     using TWrite = TEvPipeCache::TEvForward::TPtr;
 
     explicit TSinkFixture(ETableKind kind = ETableKind::Column, i64 memoryLimit = 64_MB,
-            TPartitions partitions = {{ShardId, Nothing()}})
+            TPartitions partitions = {{ShardId, Nothing()}}, ui64 maxRetryResolvesPerShard = 5)
         : PreviousSettings(GetWriteActorSettings())
         , Kind(kind)
         , RowPartitions(std::move(partitions))
@@ -203,6 +203,7 @@ public:
         auto settings = MakeIntrusive<TWriteActorSettings>(PreviousSettings);
         settings->InFlightMemoryLimitPerActorBytes = memoryLimit;
         settings->MaxWriteAttempts = 1;
+        settings->MaxRetryResolvesPerShard = maxRetryResolvesPerShard;
         SetWriteActorSettings(settings);
 
         Runtime.Initialize(TAppPrepare().Unwrap());
@@ -276,6 +277,28 @@ public:
         Execute();
     }
 
+    void SendWriteError(const TWrite& write, const NKikimrDataEvents::TEvWriteResult::EStatus& status) {
+        Runtime.Send(new IEventHandle(write->Sender, PipeCache,
+            NEvents::TDataEvents::TEvWriteResult::BuildError(
+                write->Get()->TabletId, /*txId*/ 0, status, "Shard is overloaded").release(),
+            0, write->Cookie));
+    }
+
+    void FailWrite(const TWrite& write, const NKikimrDataEvents::TEvWriteResult::EStatus& status) {
+        SendWriteError(write, status);
+        Execute();
+    }
+
+    void FailWriteTerminally(const TWrite& write, const NKikimrDataEvents::TEvWriteResult::EStatus& status) {
+        SendWriteError(write, status);
+        Runtime.Send(Owner, Edge, new TSinkOwner::TEvExecute([](auto&, auto&) {}));
+        UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvents::TEvWakeup>(Edge, TDuration::Seconds(1)));
+        UNIT_ASSERT_C(!Callbacks.Errors.Empty(),
+            "Expected the query to fail once the retry budget is exhausted");
+        UNIT_ASSERT_C(Runtime.CaptureMailboxEvents(PipeCache.Hint(), PipeCache.NodeId()).empty(),
+            "Unexpected write: the failed writer must not resend anything");
+    }
+
     void Retry(const TWrite& write, TPartitions partitions = {}) {
         if (!partitions.empty()) {
             UNIT_ASSERT(Kind == ETableKind::Row);
@@ -284,6 +307,15 @@ public:
         // Exhaust the write budget through the normal retry path, without timers.
         Runtime.Send(write->Sender, PipeCache, new TEvPipeCache::TEvDeliveryProblem(write->Get()->TabletId, false));
         Resolve();
+    }
+
+    void Resolve() {
+        if (Kind == ETableKind::Column) {
+            ResolveColumnTable();
+        } else {
+            ResolveRowTable();
+        }
+        Execute();
     }
 
     TCallbacks Callbacks;
@@ -324,15 +356,6 @@ private:
                 UNIT_ASSERT_VALUES_EQUAL(cells.GetCell(i, 1).AsBuf(), "value");
             }
         }
-    }
-
-    void Resolve() {
-        if (Kind == ETableKind::Column) {
-            ResolveColumnTable();
-        } else {
-            ResolveRowTable();
-        }
-        Execute();
     }
 
     void ResolveColumnTable() {
@@ -569,6 +592,38 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         UNIT_ASSERT(fixture.GetFreeSpace() > 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.Resumes, resumes + 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
+    }
+
+    const NKikimrDataEvents::TEvWriteResult::EStatus OverloadStatuses[] = {
+        NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED,
+        NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
+    };
+
+    Y_UNIT_TEST(OverloadWithoutSubscriptionRetriesAndRecovers) {
+        for (const auto status : OverloadStatuses) {
+            TSinkFixture fixture;
+            fixture.Write(1, MakeCheckpoint(1));
+            const auto original = fixture.GrabWrite();
+
+            fixture.FailWrite(original, status);
+            fixture.Resolve();
+            const auto retried = fixture.GrabWrite();
+            fixture.Acknowledge(retried);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
+        }
+    }
+
+    Y_UNIT_TEST(OverloadWithoutSubscriptionFailsAfterRetryBudget) {
+        for (const auto status : OverloadStatuses) {
+            TSinkFixture fixture(ETableKind::Column, 64_MB, {{ShardId, Nothing()}}, 1);
+            fixture.Write(1, MakeCheckpoint(1));
+            const auto original = fixture.GrabWrite();
+
+            fixture.FailWrite(original, status);
+            fixture.Resolve();
+            const auto retried = fixture.GrabWrite();
+            fixture.FailWriteTerminally(retried, status);
+        }
     }
 
 }

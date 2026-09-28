@@ -714,12 +714,6 @@ private:
     bool AttributesFound_ = false;
 };
 
-void ValidateAnyValue(TStringBuf yson)
-{
-    TYsonAnyValidator validator;
-    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
-}
-
 bool CheckSortedAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
@@ -855,6 +849,14 @@ void ValidateClientRow(
 }
 
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateAnyValue(TStringBuf yson)
+{
+    TYsonAnyValidator validator;
+    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

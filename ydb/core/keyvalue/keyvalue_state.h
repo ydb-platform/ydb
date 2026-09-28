@@ -432,8 +432,9 @@ public:
         ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryCheckTrash();
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> CheckTrash();
-    void FinishMoveData(const TActorContext& ctx);
-    void CancelMoveData();
+    void ResetMoveData();
+    void FinishMoveDataSuccess(const TActorContext& ctx);
+    void FinishMoveDataNotEnoughSpace(const TActorContext& ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,

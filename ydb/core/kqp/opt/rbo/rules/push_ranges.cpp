@@ -59,19 +59,20 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
 
     auto& ctx = rboCtx.ExprCtx;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    if (!IsLambdaOptionalType(node, structType, rboCtx)) {
-        return node;
-    }
 
     auto lambda = TCoLambda(node);
-    // clang-format off
-    auto newBody = Build<TCoCoalesce>(ctx, node->Pos())
-        .Predicate(lambda.Body())
-        .Value<TCoBool>()
-            .Literal().Build("false")
-        .Build()
-    .Done();
-    // clang-format on
+    // The range extractor expects a non optional predicate.
+    TExprBase newBody = lambda.Body();
+    if (IsLambdaOptionalType(node, structType, rboCtx)) {
+        // clang-format off
+        newBody = Build<TCoCoalesce>(ctx, node->Pos())
+            .Predicate(lambda.Body())
+            .Value<TCoBool>()
+                .Literal().Build("false")
+            .Build()
+        .Done();
+        // clang-format on
+    }
 
     // clang-format off
     auto newLambda = Build<TCoLambda>(ctx, node->Pos())

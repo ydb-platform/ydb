@@ -185,6 +185,36 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Filter(/*isDictionary=*/true))).Execute();
     }
 
+    Y_UNIT_TEST(ILikeKernel) {
+        const TString script = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 Utf8,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, "Alpha"), (2u, "beta"), (3u, "ALPINE")
+        ------
+        READ: PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+              SELECT Col1 FROM `/Root/ColumnTable` WHERE Col2 ILIKE "%alp%" ORDER BY Col1;
+        EXPECTED: [[1u];[3u]]
+        ------
+        )" + AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
     Y_UNIT_TEST(Simple) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Simple(/*isDictionary=*/true))).Execute();
     }

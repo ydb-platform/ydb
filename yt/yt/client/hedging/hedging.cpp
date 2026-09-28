@@ -83,8 +83,8 @@ public:
     RETRYABLE_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
     RETRYABLE_METHOD(TFuture<TVersionedLookupRowsResult>, VersionedLookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
     RETRYABLE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (const std::string&, const TSelectRowsOptions&));
-    RETRYABLE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueue, (const TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
-    RETRYABLE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (const TRichYPath&, const TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
+    RETRYABLE_METHOD(TFuture<TPullQueueResult>, PullQueue, (const TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
+    RETRYABLE_METHOD(TFuture<TPullQueueResult>, PullQueueConsumer, (const TRichYPath&, const TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
     RETRYABLE_METHOD(TFuture<void>, RegisterQueueConsumer, (const TRichYPath&, const TRichYPath&, bool, const TRegisterQueueConsumerOptions&));
     RETRYABLE_METHOD(TFuture<void>, UnregisterQueueConsumer, (const TRichYPath&, const TRichYPath&, const TUnregisterQueueConsumerOptions&));
     RETRYABLE_METHOD(TFuture<std::vector<TListQueueConsumerRegistrationsResult>>, ListQueueConsumerRegistrations, (const std::optional<TRichYPath>&, const std::optional<TRichYPath>&, const TListQueueConsumerRegistrationsOptions&));

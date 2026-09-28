@@ -178,7 +178,7 @@ struct IInternalClient
     //! Same as NApi::IClient::PullQueue, but without authentication.
     //! This is used inside methods like NApi::IClient::PullQueueConsumer, which perform their own authentication
     //! and allow reading from a queue without having read permissions for the underlying dynamic table.
-    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueueUnauthenticated(
+    virtual TFuture<TPullQueueResult> PullQueueUnauthenticated(
         const NYPath::TRichYPath& queuePath,
         i64 offset,
         int partitionIndex,

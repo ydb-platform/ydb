@@ -18,7 +18,7 @@ from time import time
 from typing import Optional, Union, Any
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy, ErrorArea, WorkloadError, ErrorPriority
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
+from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors, get_environment_info, get_test_info
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -575,7 +575,15 @@ class LoadSuiteBase:
                         data = yaml.safe_load(f)
                         if not isinstance(data, dict):
                             data = {}
-                data[query_name] = [e.serialize() for e in errors]
+                errors_by_tests = data.get('errors_by_tests')
+                if not isinstance(errors_by_tests, dict):
+                    errors_by_tests = {}
+                errors_by_tests[query_name] = {
+                    **get_test_info(cls.suite(), query_name, result.start_time, end_time),
+                    'errors': [e.serialize() for e in errors],
+                }
+                data['environment'] = get_environment_info()
+                data['errors_by_tests'] = errors_by_tests
                 with open(tmp_fn, 'w') as f:
                     yaml.safe_dump(data, f, allow_unicode=True)
                 os.replace(tmp_fn, fn)

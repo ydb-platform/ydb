@@ -25,35 +25,47 @@ class NodeErrors:
         self.message: str = message
 
 
-def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+def _monitoring_urls(start_time: float, end_time: float, database: str) -> dict[str, str]:
     monitoring_start = int((start_time) * 1000)
     monitoring_end = int((end_time) * 1000)
-    database = '/' + test_info.get('database', '*')
+    database = '/' + database
     # monitoring does not show intervals less 1 minute.
     monitoring_addition = 60000 - (monitoring_end - monitoring_start)
     if monitoring_addition > 0:
         monitoring_start -= monitoring_addition
         monitoring_end += monitoring_addition
 
-    if len(YdbCluster.get_monitoring_urls()) > 0:
+    return {
+        monitoring.caption: monitoring.url.format(
+            database=database,
+            start_time=monitoring_start,
+            end_time=monitoring_end
+        )
+        for monitoring in YdbCluster.get_monitoring_urls()
+    }
+
+
+def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+    urls = _monitoring_urls(start_time, end_time, test_info.get('database', '*'))
+    if len(urls) > 0:
         test_info['monitoring'] = ', '.join([
-            f"<a target='_blank' href='{monitoring.url.format(
-                database=database,
-                start_time=monitoring_start,
-                end_time=monitoring_end
-            )}'> {monitoring.caption} </a>"
-            for monitoring in YdbCluster.get_monitoring_urls()
+            f"<a target='_blank' href='{url}'> {caption} </a>"
+            for caption, url in urls.items()
         ])
 
 
-def _set_coredumps(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+def _coredumps_url(start_time: float, end_time: float, cluster_name: str) -> str:
     tz = timezone('Europe/Moscow')
     params = urlencode([
-        ('filter', f'program_type=kikimr; @cluster_name={test_info["name"]}'),
+        ('filter', f'program_type=kikimr; @cluster_name={cluster_name}'),
         ('since_ts', datetime.fromtimestamp(start_time, tz).isoformat()),
         ('till_ts', datetime.fromtimestamp(end_time, tz).isoformat()),
     ])
-    test_info['coredumps'] = f"<a target='_blank' href='https://coredumps.yandex-team.ru/v3/cores?{params}'>link</a>"
+    return f'https://coredumps.yandex-team.ru/v3/cores?{params}'
+
+
+def _set_coredumps(test_info: dict[str, str], start_time: float, end_time: float) -> None:
+    test_info['coredumps'] = f"<a target='_blank' href='{_coredumps_url(start_time, end_time, test_info['name'])}'>link</a>"
 
 
 def _set_node_errors(node_errors: list[NodeErrors]) -> str:
@@ -145,9 +157,9 @@ def _attach_sanitizer_outputs(node_errors: list[NodeErrors]):
             reported_hosts.add(host)
 
 
-def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refference_set: str) -> None:
+def _results_plot_url(suite: str, test: str, refference_set: str) -> Optional[str]:
     if not ResultsProcessor.send_results:
-        return
+        return None
     params = urlencode({
         'tab': 'o8',
         'suite_b2rp': suite,
@@ -155,7 +167,13 @@ def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refferen
         'db_fmdl': ResultsProcessor.get_cluster_id(),
         'cluster_dufr': refference_set
     })
-    test_info['results_plot'] = f"<a target='_blank' href='https://datalens.yandex-team.ru/iqnd4b1miaz27-testy-ydb?{params}'>link</a>"
+    return f'https://datalens.yandex-team.ru/iqnd4b1miaz27-testy-ydb?{params}'
+
+
+def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refference_set: str) -> None:
+    url = _results_plot_url(suite, test, refference_set)
+    if url is not None:
+        test_info['results_plot'] = f"<a target='_blank' href='{url}'>link</a>"
 
 
 def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: float):
@@ -839,6 +857,45 @@ def time_interval_str(start, end):
     )
 
 
+def get_environment_info() -> dict[str, Any]:
+    """Информация о кластере и CI, не зависящая от конкретного теста.
+
+    Значения - без HTML-разметки, пригодны и для отчёта, и для сериализации.
+    """
+    result = deepcopy(YdbCluster.get_cluster_info())
+    result['ci_version'] = get_ci_version()
+    # Prefer resolved CI tools revision (test_version → main/pr/sha) over local VCS fallback.
+    result['test_tools_version'] = get_test_tools_version()
+    ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
+    if ci_launch_url:
+        result['ci_launch_url'] = ci_launch_url
+    result['table_path'] = YdbCluster.get_tables_path()
+    db = result['database']
+    result['db_admin'] = (
+        f'{YdbCluster._get_service_url()}/monitoring/tenant?'
+        f'schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query'
+        f'&diagnosticsTab=nodes&name=/{db}'
+    )
+    return result
+
+
+def get_test_info(suite: str, test: str, start_time: float, end_time: float, refference_set: str = '') -> dict[str, Any]:
+    """Информация о конкретном прогоне теста: всё, что зависит от его времени.
+
+    Значения - без HTML-разметки, пригодны и для отчёта, и для сериализации.
+    """
+    cluster_info = YdbCluster.get_cluster_info()
+    result: dict[str, Any] = {'time': time_interval_str(start_time, end_time)}
+    monitoring = _monitoring_urls(start_time, end_time, cluster_info['database'])
+    if monitoring:
+        result['monitoring'] = monitoring
+    result['coredumps'] = _coredumps_url(start_time, end_time, cluster_info['name'])
+    results_plot = _results_plot_url(suite, test, refference_set)
+    if results_plot is not None:
+        result['results_plot'] = results_plot
+    return result
+
+
 def allure_test_description(
     suite: str,
     test: str,
@@ -868,35 +925,21 @@ def allure_test_description(
     for body, name, type in attachments:
         allure.attach(body, name, type)
 
-    test_info = deepcopy(YdbCluster.get_cluster_info())
-    test_info['ci_version'] = get_ci_version()
-    test_info.update(addition_table_strings)
-    # Prefer resolved CI tools revision (test_version → main/pr/sha) over local VCS fallback.
-    test_info['test_tools_version'] = get_test_tools_version()
-    ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
-    if ci_launch_url:
+    test_info = get_environment_info()
+    if 'ci_launch_url' in test_info:
         test_info['ci_launch_url'] = (
-            f"<a target='_blank' href='{ci_launch_url}'>arcadia run</a>"
+            f"<a target='_blank' href='{test_info['ci_launch_url']}'>arcadia run</a>"
         )
+    service_url = YdbCluster._get_service_url()
+    test_info['db_admin'] = f"<a target='_blank' href='{test_info['db_admin']}'>{service_url}</a>"
+    test_info.update(addition_table_strings)
 
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)
     _set_results_plot(test_info, suite, test, refference_set)
     _set_logs_command(test_info, start_time, end_time)
 
-    service_url = YdbCluster._get_service_url()
-    db = test_info['database']
-    test_info.update(
-        {
-            'table_path': YdbCluster.get_tables_path(),
-            'db_admin': (
-                f"<a target='_blank' href='{service_url}/monitoring/tenant?"
-                f"schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query"
-                f"&diagnosticsTab=nodes&name=/{db}'>{service_url}</a>"
-            ),
-            'time': time_interval_str(start_time, end_time),
-        }
-    )
+    test_info['time'] = time_interval_str(start_time, end_time)
     table_strings = '\n'.join([f'<tr><td>{_pretty_str(k)}</td><td>{v}</td></tr>' for k, v in test_info.items()])
     html = f'''<table border='1' cellpadding='4px'><tbody>
         {table_strings}

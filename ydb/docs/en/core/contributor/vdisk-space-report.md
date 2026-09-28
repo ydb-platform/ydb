@@ -6,7 +6,7 @@ The report is available through the VDisk monitoring page, an internal actor API
 
 {% note warning %}
 
-The report is a weakly consistent monitoring view. Do not use it for correctness decisions, data placement, or operation execution. Statistics sources and indexes are sampled at different times, so a nonzero `ReconciliationDeltaBytes` and unclassified bytes are valid results.
+The report is not a consistent snapshot. Its statistics sources and indexes are read at different times and can describe different VDisk states. Treat every value as a monitoring estimate: do not expect totals from different sections or repeated requests to match. A nonzero `ReconciliationDeltaBytes` and unclassified bytes are valid results. Do not use the report for correctness decisions, data placement, or operation execution.
 
 {% endnote %}
 
@@ -74,7 +74,7 @@ The caller must set its own deadline because the actor request has no cancellati
 | `PDiskAllocatedChunks` | Number of chunks allocated to the VDisk owner according to PDisk. |
 | `PDiskAllocatedBytes` | Product of `PDiskAllocatedChunks` and `ChunkSizeBytes`. |
 | `AccountedBytes` | Sum of all fields in `Total`. |
-| `ReconciliationDeltaBytes` | Signed difference between `PDiskAllocatedBytes` and `AccountedBytes`. Zero is the ideal result. A positive value is unaccounted space; a negative value is space counted in excess. In the current implementation, a complete internally consistent report is expected to produce zero or a negative value. |
+| `ReconciliationDeltaBytes` | Signed difference between `PDiskAllocatedBytes` and `AccountedBytes`. A positive value is unaccounted space; a negative value is space counted in excess. Because the inputs are sampled separately, a nonzero value is expected and zero does not make the report a consistent snapshot. |
 | `Total` | Combined byte classification of all report components. |
 | `CollectionStartedAtUnixMs` | Collection start time as Unix time in milliseconds. |
 | `CollectionCompletedAtUnixMs` | Collection completion time as Unix time in milliseconds. Use it to determine cache age. |
@@ -133,7 +133,7 @@ Every `ChunkKeeper` entry identifies its owner in `SubsystemId` and stores the c
 
 Hull can place SST extents and Huge data in the same physical stripe chunk. Such a chunk appears once in `StripeHeap.ChunkCount`; it is not included in the `ChunkCount` of `LogoBlobs`, `Blocks`, `Barriers`, or `Huge`.
 
-The report attributes used extents to the owning component through `StripedBytes`. Free stripe space is assigned to `Huge.Breakdown.FreeStripeBytes`, locked free space to `Huge.Breakdown.LockedOrQuarantinedBytes`, and any remainder that cannot be classified to `Huge.Breakdown.UnclassifiedBytes`. For a complete report, the sum of `StripedBytes` for `LogoBlobs`, `Blocks`, `Barriers`, and `Huge.Total` equals `StripeHeap.AllocatedBytes`.
+The report attributes used extents to the owning component through `StripedBytes`. Free stripe space is assigned to `Huge.Breakdown.FreeStripeBytes`, locked free space to `Huge.Breakdown.LockedOrQuarantinedBytes`, and any remainder that cannot be classified to `Huge.Breakdown.UnclassifiedBytes`. When stripe statistics are available, the builder assigns the entire stripe capacity, so the sum of `StripedBytes` for `LogoBlobs`, `Blocks`, `Barriers`, and `Huge.Total` equals `StripeHeap.AllocatedBytes` within that report.
 
 `StripeHeap.UsedBytes`, `FreeBytes`, and `LockedFreeBytes` are an allocator summary. Do not add them to `AccountedBytes`: the stripe-heap capacity is already represented in the component breakdowns.
 
@@ -154,7 +154,7 @@ The report attributes used extents to the owning component through `StripedBytes
 
 `Huge.FreeReserveChunks` is the current number of free Huge allocator chunks. These chunks are also included in `Huge.Total` through `FreeChunkReserveBytes`.
 
-With complete, consistent counters, the sum of `LiveSlotCount`, `GcDeadSlotCount`, `MergeRedundantSlotCount`, and `UnclassifiedSlotCount` equals the number of non-free slots. Free and locked-free slots appear only as bytes in `Breakdown`. Slots that the allocator does not describe are added to `UnclassifiedSlotCount`. If allocator counters contradict semantic classification, the entire size class is assigned to `UnclassifiedBytes` to preserve physical capacity without publishing an unreliable split.
+If the allocator counters and the index scan happened to describe the same VDisk state, the sum of `LiveSlotCount`, `GcDeadSlotCount`, `MergeRedundantSlotCount`, and `UnclassifiedSlotCount` would equal the number of non-free slots. The sources are sampled separately, so do not expect this relationship in every report. Free and locked-free slots appear only as bytes in `Breakdown`. Slots that the allocator does not describe are added to `UnclassifiedSlotCount`. If allocator counters contradict semantic classification, the entire size class is assigned to `UnclassifiedBytes` to preserve physical capacity without publishing an unreliable split.
 
 ## Dynamic counters {#dynamic-counters}
 
@@ -180,9 +180,9 @@ The collection worker runs in the VDisk batch pool and releases Hull snapshots b
 3. It scans the `LogoBlobs`, `Blocks`, and `Barriers` metabases sequentially. A new Hull snapshot is acquired before every quantum.
 4. For each key, it visits every physical record, merges the logical value, and applies garbage collection barriers. The selected physical representation is useful, removable records are classified as `GcDead*`, and remaining versions are `MergeRedundant*`.
 5. At the end of a quantum, it saves the traversal position, destroys the snapshot, and continues after a delay when necessary.
-6. It reconciles Hull estimates with dedicated Huge slots, shared stripe chunks, SyncLog, ChunkKeeper, and the PDisk allocation.
+6. It combines Hull estimates with dedicated Huge slots, shared stripe chunks, SyncLog, ChunkKeeper, and the PDisk allocation.
 7. On success, the manager caches the report and publishes dynamic counters.
 
 The target scan quantum is 5 milliseconds, followed by a scheduled 10 millisecond delay. Time is checked after processing a complete key, so one large key can extend a quantum. The manager aborts an attempt that exceeds the 30-minute watchdog.
 
-The scanner traverses metabases in descending key order and resumes below the last processed key between quanta. Keys inserted above the saved boundary do not extend the current scan, but they are omitted from the report. Keys inserted below the boundary may still be observed. This behavior, together with separately sampled subsystem statistics, is why the report is only weakly consistent.
+The scanner traverses metabases in descending key order and resumes below the last processed key between quanta. Keys inserted above the saved boundary do not extend the current scan, but they are omitted from the report. Keys inserted below the boundary may still be observed. The report is therefore not consistent: values and totals from different sections can describe different VDisk states and are not required to match.

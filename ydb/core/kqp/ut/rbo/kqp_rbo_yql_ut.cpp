@@ -1548,8 +1548,7 @@ FROM (
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
         auto plan = ExecuteExplainAnalyze(session, R"(
-            --SELECT 1 as x; SELECT 2 as y;
-            SELECT a+1 from `/Root/t1`; SELECT a+2 from `/Root/t1`;
+            SELECT * from `/Root/t1`; SELECT * from `/Root/t1`;
         )");
     }
 

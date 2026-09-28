@@ -494,7 +494,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
 
         materializeSize += Materialize[i].size();
 
-        for (ui32 j = 0; j < materializeSize; ++j) {
+        for (ui32 j = 0; j < Materialize[i].size(); ++j) {
             auto param = TExprBase(Materialize[i][j].first).Cast<TCoParameter>();
             auto materializeResult = TExprBase(Materialize[i][j].second).Cast<TDqCnValue>();
 

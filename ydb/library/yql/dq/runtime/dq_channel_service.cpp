@@ -2701,7 +2701,7 @@ IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSetti
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
     auto buffer = GetUnboundBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
-    return new TFastDqInputChannel(Self, settings, buffer, Limits.EnableInputReadiness);
+    return new TFastDqInputChannel(Self, settings, buffer);
 }
 
 void TDqChannelService::NotifyCleanup() {

@@ -44,7 +44,8 @@ public:
         TInstant& startTs,
         ui64& inputsConsumed,
         NKikimr::NMiniKQL::TWatermark* watermark,
-        TDqComputeActorWatermarks* watermarksTracker
+        TDqComputeActorWatermarks* watermarksTracker,
+        bool useReadySet
     )
         : TBase(memInfo)
         , Inputs(std::move(inputs))
@@ -67,7 +68,9 @@ public:
                 Y_ENSURE(false, "Unknown IDqInput type");
             }
         }
-        BindReadySet();
+        if (useReadySet) {
+            BindReadySet();
+        }
     }
 
 private:
@@ -160,53 +163,36 @@ private:
     }
 
 private:
-    // The inputs which opt in to TDqInputReadySet are taken out of Inputs, to be visited when marked
+    // The inputs are visited when marked, see TDqInputReadySet, a slot each: their index in Inputs, which then stays
+    // as is. An input which does not support it leaves the union polled, as before: the marks of the inputs bound
+    // already go to a set nobody reads
     void BindReadySet() {
         if (Inputs.empty()) {
             return;
         }
         auto readySet = std::make_shared<TDqInputReadySet>(Inputs.size());
-        TVector<IDqInput::TPtr> polled;
-        TVector<TPartitionKey> polledKeys;
-        for (size_t i = 0; i < Inputs.size(); ++i) {
-            if (Inputs[i]->BindReadySet(readySet, NotifiedInputs.size())) {
-                NotifiedInputs.push_back(Inputs[i]);
-                NotifiedKeys.push_back(InputKeys[i]);
-            } else {
-                polled.push_back(Inputs[i]);
-                polledKeys.push_back(InputKeys[i]);
+        for (ui32 slot = 0; slot < Inputs.size(); ++slot) {
+            if (!Inputs[slot]->BindReadySet(readySet, slot)) {
+                return;
             }
         }
-        if (NotifiedInputs.empty()) {
-            return;
-        }
         ReadySet = std::move(readySet);
-        SlotStates.assign(NotifiedInputs.size(), ESlotState::Idle);
-        NotifiedAlive = NotifiedInputs.size();
-        Inputs = std::move(polled);
-        InputKeys = std::move(polledKeys);
-        Alive = Inputs.size();
+        SlotStates.assign(Inputs.size(), ESlotState::Idle);
     }
 
     NUdf::EFetchStatus FindBuffer() {
         Batch.clear();
 
-        // the two kinds of inputs take turns to go first, so that busy notified inputs do not starve polled ones
-        PolledFirst = !PolledFirst;
-        if (PolledFirst ? (FindPolled() || FindNotified()) : (FindNotified() || FindPolled())) {
+        if (ReadySet ? FindNotified() : FindPolled()) {
             return NUdf::EFetchStatus::Ok;
         }
 
-        return Alive + NotifiedAlive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+        return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
     }
 
     // Visits the marked inputs, and those which had data the last time, as they may have more. An input leaves
     // the Ready queue only once it has been found empty, which asks it to wake the consumer up on its next push.
     bool FindNotified() {
-        if (!ReadySet) {
-            return false;
-        }
-
         Taken.clear();
         ReadySet->Take(Taken);
         for (auto slot : Taken) {
@@ -221,18 +207,18 @@ private:
             Ready.pop_front();
             // cleared before the input is looked at, see TDqInputReadySet
             ReadySet->Clear(slot);
-            auto& input = NotifiedInputs[slot];
+            auto& input = Inputs[slot];
             if (input->Pop(Batch, Watermark)) {
                 Ready.push_back(slot);
-                InputKey = NotifiedKeys[slot];
+                InputKey = InputKeys[slot];
                 return true;
             }
             if (input->IsFinished()) {
                 if (WatermarksEnabled()) {
-                    WatermarksTracker->UnregisterInput(NotifiedKeys[slot].InputId, NotifiedKeys[slot].IsChannel, /*silent=*/true);
+                    WatermarksTracker->UnregisterInput(InputKeys[slot].InputId, InputKeys[slot].IsChannel, /*silent=*/true);
                 }
                 SlotStates[slot] = ESlotState::Finished;
-                --NotifiedAlive;
+                --Alive;
             } else {
                 SlotStates[slot] = ESlotState::Idle;
             }
@@ -241,6 +227,7 @@ private:
         return false;
     }
 
+    // Polls every live input, round robin: a finished one is moved past Alive
     bool FindPolled() {
         auto startIndex = Index++;
         size_t i = 0;
@@ -289,7 +276,6 @@ private:
     }
 
 private:
-    // polled round robin: the inputs which do not support TDqInputReadySet
     TVector<IDqInput::TPtr> Inputs;
     TVector<TPartitionKey> InputKeys;
 
@@ -306,20 +292,16 @@ private:
     NKikimr::NMiniKQL::TWatermark* WatermarkStorage;
     TDqComputeActorWatermarks* WatermarksTracker;
 
-    // visited when marked: the inputs bound to ReadySet, a slot each
+    // set when the inputs are visited when marked rather than polled, see BindReadySet
     enum class ESlotState : ui8 {
         Idle,       // found empty, waits for a mark
         Ready,      // in Ready
         Finished,
     };
     std::shared_ptr<TDqInputReadySet> ReadySet;
-    TVector<IDqInput::TPtr> NotifiedInputs;
-    TVector<TPartitionKey> NotifiedKeys;
     std::vector<ESlotState> SlotStates;
     std::deque<ui32> Ready;
     std::vector<ui32> Taken;
-    size_t NotifiedAlive = 0;
-    bool PolledFirst = false;
 };
 
 template<bool IsWide>
@@ -987,13 +969,14 @@ NUdf::TUnboxedValue CreateInputUnionValue(
     TInstant& startTs,
     ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
-    TDqComputeActorWatermarks* watermarksTracker
+    TDqComputeActorWatermarks* watermarksTracker,
+    bool useReadySet
 ) {
     ValidateInputTypes(type, inputs);
     if (type->IsMulti()) {
-        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker);
+        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
     }
-    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker);
+    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
@@ -1013,7 +996,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr, false);
             }
             return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputsConsumed, pgBuilder);
         }

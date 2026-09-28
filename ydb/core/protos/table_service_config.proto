@@ -568,9 +568,9 @@ message TTableServiceConfig {
         optional uint64 IdlePingPeriodMs = 6 [default = 60000];
         optional uint64 IdleDestroyPeriodMs = 7 [default = 120000];
         optional uint64 LocalChannelColdInflightBytes = 9 [default = 524288];
-        // A union of inputs visits the channels which have something for it rather than polling all of them.
-        // Kill switch: off, the channels are polled as before
-        optional bool EnableInputReadiness = 10 [default = true];
+        // Channels tell their consumers and producers what changed, rather than being polled: a union of inputs
+        // visits the channels which have something for it. Kill switch: off, the channels are polled as before
+        optional bool EnableChannelNotifications = 10 [default = true];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];

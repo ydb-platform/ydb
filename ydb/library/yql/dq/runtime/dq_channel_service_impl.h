@@ -996,6 +996,9 @@ public:
     // unbound channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
+    bool IsChannelNotificationsEnabled() const final {
+        return Limits.EnableChannelNotifications;
+    }
     // extras
     void NotifyCleanup();
 
@@ -1160,9 +1163,8 @@ class TFastDqInputChannel : public IDqInputChannel {
 
 public:
 
-    TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer,
-        bool enableReadySet)
-        : Service(service), Buffer(buffer), ChannelQuotaManager(settings.ChannelQuotaManager), EnableReadySet(enableReadySet) {
+    TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer)
+        : Service(service), Buffer(buffer), ChannelQuotaManager(settings.ChannelQuotaManager) {
         PushStats.ChannelId = settings.ChannelId;
         PushStats.SrcStageId = settings.SrcStageId;
         PushStats.Level = settings.Level;
@@ -1258,9 +1260,6 @@ public:
 
     // the hook goes to the buffer, and again to the bound buffer which replaces the stub, see Bind
     bool BindReadySet(const std::shared_ptr<TDqInputReadySet>& set, ui32 slot) override {
-        if (!EnableReadySet) {
-            return false;
-        }
         ReadyHook = TDqInputReadyHook{set, slot};
         Buffer->SetReadyHook(ReadyHook);
         ReadyHook.Mark();
@@ -1274,7 +1273,6 @@ public:
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
     IDqInputChannelCallbacks* Callback = nullptr;
     bool PausedByCheckpoint = false;
-    const bool EnableReadySet;
     TDqInputReadyHook ReadyHook;
 };
 

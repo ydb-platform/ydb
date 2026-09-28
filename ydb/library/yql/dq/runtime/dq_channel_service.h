@@ -131,6 +131,8 @@ public:
     virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) = 0;
     virtual void SetServiceActorId(NActors::TActorId serviceActorId) = 0;
+    // TDqChannelLimits::EnableChannelNotifications
+    virtual bool IsChannelNotificationsEnabled() const = 0;
 };
 
 inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
@@ -152,9 +154,9 @@ struct TDqChannelLimits {
     TDuration CleanupPeriod = TDuration::MilliSeconds(30000);
     TDuration IdlePingPeriod = TDuration::MilliSeconds(30000);
     TDuration IdleDestroyPeriod = TDuration::MilliSeconds(30000);
-    // a union of inputs visits the channels which have something for it, rather than polling all of them,
-    // see TDqInputReadySet; off, the channels do not opt in and are polled as before
-    bool EnableInputReadiness = true;
+    // channels tell their consumers and producers what changed, rather than being polled: a union of inputs visits
+    // the channels which have something for it, see TDqInputReadySet; off, the channels are polled as before
+    bool EnableChannelNotifications = true;
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

@@ -117,8 +117,8 @@ struct TUnionTest {
     TVector<TIntrusivePtr<TFakeInput>> Inputs;
     NUdf::TUnboxedValue Union;
 
-    // `readiness` per input: true opts in, false is polled
-    explicit TUnionTest(const std::vector<bool>& readiness)
+    // `readiness` per input: true supports TDqInputReadySet; `useReadySet` is what the task runner asks for
+    explicit TUnionTest(const std::vector<bool>& readiness, bool useReadySet = true)
         : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("Mem")
@@ -130,7 +130,7 @@ struct TUnionTest {
             Inputs.push_back(MakeIntrusive<TFakeInput>(RowType, i + 1, readiness[i]));
             inputs.push_back(Inputs.back());
         }
-        Union = CreateInputUnionValue(RowType, std::move(inputs), HolderFactory, {}, StartTs, InputsConsumed, nullptr, nullptr);
+        Union = CreateInputUnionValue(RowType, std::move(inputs), HolderFactory, {}, StartTs, InputsConsumed, nullptr, nullptr, useReadySet);
     }
 
     ~TUnionTest() {
@@ -281,13 +281,12 @@ Y_UNIT_TEST_SUITE(DqInputUnionReadiness) {
         UNIT_ASSERT_VALUES_EQUAL_C(test.PopCalls(2), idlePops, "an idle notified input was polled");
     }
 
-    Y_UNIT_TEST(MixedInputsDeliverAllAndFinish) {
-        TUnionTest test({true, false, true, false});
+    Y_UNIT_TEST(DeliverAllAndFinish) {
+        TUnionTest test({true, true, true, true});
 
         std::multiset<i32> expected;
         for (i32 i = 0; i < 50; ++i) {
-            auto input = i % 4;
-            test.Inputs[input]->PushRow(i);
+            test.Inputs[i % 4]->PushRow(i);
             expected.insert(i);
         }
         auto [rows, finished] = test.Drain();
@@ -308,9 +307,9 @@ Y_UNIT_TEST_SUITE(DqInputUnionReadiness) {
         UNIT_ASSERT(finished);
     }
 
-    // busy notified inputs share the fetches, and do not starve the polled ones
+    // busy inputs share the fetches
     Y_UNIT_TEST(Fairness) {
-        TUnionTest test({true, true, false});
+        TUnionTest test({true, true, true});
         for (i32 i = 0; i < 30; ++i) {
             test.Inputs[0]->PushRow(i);
             test.Inputs[1]->PushRow(100 + i);
@@ -323,8 +322,24 @@ Y_UNIT_TEST_SUITE(DqInputUnionReadiness) {
             counts[row.Get<i32>() / 100]++;
         }
         for (auto count : counts) {
-            UNIT_ASSERT_C(count >= 5, "counts " << counts[0] << ", " << counts[1] << ", " << counts[2]);
+            UNIT_ASSERT_C(count >= 9, "counts " << counts[0] << ", " << counts[1] << ", " << counts[2]);
         }
+    }
+
+    // an input which does not support the ready set leaves the whole union polled: every input is looked at
+    Y_UNIT_TEST(FallbackToPolling) {
+        TUnionTest test({true, false, true});
+        test.Drain();
+        auto idlePops = test.PopCalls(2);
+        test.Inputs[1]->PushRow(1);
+        auto [rows, finished] = test.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_C(test.PopCalls(2) > idlePops, "an idle input was not polled in a polled union");
+        for (auto& input : test.Inputs) {
+            input->FinishInput();
+        }
+        std::tie(rows, finished) = test.Drain();
+        UNIT_ASSERT(finished);
     }
 
     // Pop returned false while the input held more: the input marks itself and the union comes back for the rest
@@ -358,13 +373,15 @@ Y_UNIT_TEST_SUITE(DqInputUnionReadiness) {
         UNIT_ASSERT(rows.contains(1));
     }
 
-    // an input which does not opt in is polled as before
+    // the task runner does not ask for the ready set: the inputs are polled as before, though they support it
     Y_UNIT_TEST(PolledOnly) {
-        TUnionTest test({false, false});
+        TUnionTest test({true, true}, false);
+        test.Drain();
+        auto idlePops = test.PopCalls(1);
         test.Inputs[0]->PushRow(1);
-        test.Inputs[1]->PushRow(2);
         auto [rows, finished] = test.Drain();
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_C(test.PopCalls(1) > idlePops, "an idle input was not polled in a polled union");
         test.Inputs[0]->FinishInput();
         test.Inputs[1]->FinishInput();
         std::tie(rows, finished) = test.Drain();

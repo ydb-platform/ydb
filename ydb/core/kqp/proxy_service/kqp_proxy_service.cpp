@@ -339,7 +339,7 @@ public:
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
-            limits.EnableInputReadiness = config.GetEnableInputReadiness();
+            limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();
             limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();

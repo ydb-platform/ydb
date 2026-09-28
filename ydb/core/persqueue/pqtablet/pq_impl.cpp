@@ -4171,6 +4171,10 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessProposeTransactionQueue(ctx, request->Record);
     ProcessWriteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
+    // Снимок _txinfo уже в запросе. Сбрасываем флаг здесь, а не в EndWriteTxs: пока запрос
+    // в полёте, PlanStep/ExecStep могут измениться и снова поднять флаг, и следующий цикл
+    // запишет их. Сброс в EndWriteTxs затёр бы это изменение вместе со старым снимком.
+    PlanStepChanged = false;
 
     MovePendingDeferredReadSetAcks();
 
@@ -4215,7 +4219,6 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     }
 
     TxWritesChanged = false;
-    PlanStepChanged = false;
     CompletedWriteTxsCycle = WriteTxsCycle;
 
     SendReplies(ctx);

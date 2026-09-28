@@ -152,6 +152,7 @@ struct TStageGraph {
         NYql::TExprNode::TPtr SinkSettings;
     };
 
+    int StageCounter = 0;
     TList<ui32> StageIds;
     THashMap<ui32, TSourceStageTraits> SourceStages;
     THashMap<ui32, TSinkStageTraits> SinkStages;

@@ -449,10 +449,10 @@ public:
 
 private:
     void Finish(bool success, const TString& error) {
-        LOG_I("Finish uploading CREATE TABLE"
-            << ", self: " << this->SelfId()
-            << ", success: " << success
-            << ", error: " << error
+        YDB_LOG_INFO("Finish uploading CREATE TABLE",
+            {"self", this->SelfId()},
+            {"success", success},
+            {"error", error},
         );
 
         this->Send(SchemeShard,

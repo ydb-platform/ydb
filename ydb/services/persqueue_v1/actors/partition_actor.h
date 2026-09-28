@@ -173,7 +173,7 @@ private:
     void SendPartitionReady(const TActorContext& ctx);
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial, ui64 cookie) const;
-    NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
+    NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, std::optional<ui64> lastOffset, ui64 maxCount,
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 

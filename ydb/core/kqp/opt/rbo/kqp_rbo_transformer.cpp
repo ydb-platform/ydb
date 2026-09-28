@@ -6,6 +6,7 @@
 
 #include <ydb/core/kqp/host/kqp_transform.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/string.h>
 #include <util/system/env.h>
 
@@ -81,6 +82,26 @@ void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLeve
 bool IsRboTraceLogEnabled() {
     TMaybe<TString> htmlTracePath = TryGetEnv("NEW_RBO_LOG");
     return htmlTracePath.Defined() && !htmlTracePath->empty();
+}
+
+void CollectMemberEqualityPairs(const TExprNode::TPtr& node, TVector<std::pair<TString, TString>>& result) {
+    if (!node) {
+        return;
+    }
+
+    if (TCoCmpEqual::Match(node.Get())) {
+        const auto equal = TCoCmpEqual(node);
+        const auto left = equal.Left().Maybe<TCoMember>();
+        const auto right = equal.Right().Maybe<TCoMember>();
+        if (left && right) {
+            result.emplace_back(left.Cast().Name().StringValue(), right.Cast().Name().StringValue());
+            return;
+        }
+    }
+
+    for (const auto& child : node->ChildrenList()) {
+        CollectMemberEqualityPairs(child, result);
+    }
 }
 
 } // anonymous namespace
@@ -258,6 +279,45 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
                 break;
         }
     }
+
+    auto requestHistogram = [&](const TInfoUnit& column) {
+        const auto it = mapping.find(TInfoUnit(column.GetFullName()));
+        if (it == mapping.end() || it->second.TableName == "") {
+            return;
+        }
+        HistColumnsByTableName[it->second.TableName].insert(it->second.ColumnName);
+    };
+
+    TVector<std::pair<TString, TString>> memberEqualities;
+    CollectMemberEqualityPairs(lambda.Body().Ptr(), memberEqualities);
+
+    THashMap<TString, std::pair<TVector<TInfoUnit>, TVector<TInfoUnit>>> keysByTablePair;
+    for (const auto& [lhs, rhs] : memberEqualities) {
+        const TInfoUnit lhsUnit(lhs);
+        const TInfoUnit rhsUnit(rhs);
+        requestHistogram(lhsUnit);
+        requestHistogram(rhsUnit);
+
+        const auto lhsIt = mapping.find(TInfoUnit(lhsUnit.GetFullName()));
+        const auto rhsIt = mapping.find(TInfoUnit(rhsUnit.GetFullName()));
+        if (lhsIt == mapping.end() || rhsIt == mapping.end()) {
+            continue;
+        }
+        const auto& lhsTable = lhsIt->second.TableName;
+        const auto& rhsTable = rhsIt->second.TableName;
+        if (lhsTable.empty() || rhsTable.empty() || lhsTable == rhsTable) {
+            continue;
+        }
+
+        auto& keys = keysByTablePair[TStringBuilder() << lhsTable << '\0' << rhsTable];
+        keys.first.push_back(lhsUnit);
+        keys.second.push_back(rhsUnit);
+    }
+
+    for (const auto& [_, keys] : keysByTablePair) {
+        CollectJoinKeysTuple(keys.first, props);
+        CollectJoinKeysTuple(keys.second, props);
+    }
 }
 
 void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props) {
@@ -274,12 +334,77 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>&
         HistColumnsByTableName[tableName].insert(colName);
     };
 
-    for (const auto& joinKey : join->JoinKeys) {
-        const auto& lhsKey = joinKey.Left;
-        const auto& rhsKey = joinKey.Right;
+    TVector<TInfoUnit> lhsKeys;
+    TVector<TInfoUnit> rhsKeys;
+    for (const auto& [lhsKey, rhsKey] : join->JoinKeys) {
         requestHistogram(lhsKey);
         requestHistogram(rhsKey);
+        lhsKeys.push_back(lhsKey);
+        rhsKeys.push_back(rhsKey);
     }
+
+    CollectJoinKeysTuple(lhsKeys, props);
+    CollectJoinKeysTuple(rhsKeys, props);
+}
+
+void TKqpNewRBOTransformer::CollectJoinKeysTuple(const TVector<TInfoUnit>& joinKeys, const TPhysicalOpProps& props) {
+    if (joinKeys.size() < 2) {
+        return;
+    }
+
+    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
+
+    TString tableName;
+    THashSet<TString> columns;
+    for (const auto& key : joinKeys) {
+        const auto it = mapping.find(TInfoUnit(key.GetFullName()));
+        if (it == mapping.end() || it->second.TableName == "") {
+            return;
+        }
+        if (!tableName.empty() && tableName != it->second.TableName) {
+            return;
+        }
+        tableName = it->second.TableName;
+        columns.insert(it->second.ColumnName);
+    }
+
+    if (columns.size() != joinKeys.size()) {
+        return;
+    }
+
+    if (auto tuple = FindEqHeightHistogramTuple(tableName, columns)) {
+        EqHeightHistTuplesByTableName[tableName].emplace(NYql::MakeMultiColumnKey(*tuple), *tuple);
+    }
+}
+
+std::optional<TVector<TString>> TKqpNewRBOTransformer::FindEqHeightHistogramTuple(
+    const TString& tableName,
+    const THashSet<TString>& columns) const
+{
+    const auto& tableMeta = Tables.GetTable(Cluster, tableName).Metadata;
+    if (!tableMeta) {
+        return std::nullopt;
+    }
+
+    auto sameColumns = [&columns](const TVector<TString>& candidate) {
+        return candidate.size() == columns.size()
+            && AllOf(candidate, [&columns](const TString& column) { return columns.contains(column); });
+    };
+
+    for (const auto& description : tableMeta->MultiColumnStatistics) {
+        if (Find(description.Types, "EQ_HEIGHT_HISTOGRAM") == description.Types.end()) {
+            continue;
+        }
+        if (sameColumns(description.Columns)) {
+            return description.Columns;
+        }
+    }
+
+    if (sameColumns(tableMeta->KeyColumnNames)) {
+        return tableMeta->KeyColumnNames;
+    }
+
+    return std::nullopt;
 }
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
@@ -302,6 +427,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                    [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
                    [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
+                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
 
     if (futures.empty()) {
         return TStatus::Ok;
@@ -343,6 +470,17 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                             }
                             if (newStat.HyperLogLog) {
                                 oldStat.HyperLogLog = newStat.HyperLogLog;
+                            }
+                        }
+                        for (const auto& [tuple, newStat] : column2Stat.MultiData) {
+                            auto& oldStat = oldColumn2Stat.MultiData[tuple];
+                            oldStat.Columns = newStat.Columns;
+                            oldStat.Types = newStat.Types;
+                            if (newStat.EqHeightHistogram) {
+                                oldStat.EqHeightHistogram = newStat.EqHeightHistogram;
+                            }
+                            if (newStat.CountMinSketch) {
+                                oldStat.CountMinSketch = newStat.CountMinSketch;
                             }
                         }
                     }

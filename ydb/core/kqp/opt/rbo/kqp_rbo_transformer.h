@@ -79,6 +79,8 @@ private:
     void CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op);
     void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
     void CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props);
+    void CollectJoinKeysTuple(const TVector<TInfoUnit>& joinKeys, const TPhysicalOpProps& props);
+    std::optional<TVector<TString>> FindEqHeightHistogramTuple(const TString& tableName, const THashSet<TString>& columns) const;
     bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
     void ApplyColumnStatistics();
     void InitializeRBOOptimizationStages();
@@ -101,6 +103,7 @@ private:
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
+    THashMap<TString, THashMap<TString, TVector<TString>>> EqHeightHistTuplesByTableName;
 
     TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;

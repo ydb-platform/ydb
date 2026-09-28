@@ -1636,3 +1636,182 @@ class TestTopicBlobSerializationTxRestart(RestartToAnotherVersionFixture):
 
         workload.restart_pq_tablets()
         workload.read_and_verify(workload.CONSUMER_AFTER, timeout_sec=600)
+
+
+class SourceIdMappingByIdWorkload:
+    """Workload for the SourceId mapping by topic Id feature.
+
+    The topic is created with 100 partitions so that the source-id -> partition
+    mapping (resolved by topic Id on new builds with the
+    ``EnableTopicSourceIdMappingById`` flag and by name on old builds) is
+    actually exercised. The first message is written to an explicit partition
+    (77) before any restart; subsequent writes after the version change do not
+    specify a partition and rely on the source-id -> partition mapping to route
+    the message to the same partition. Re-writing the same (producer_id, seqno)
+    pair must be deduplicated regardless of which cluster version handles the
+    write.
+    """
+
+    CONSUMER = "source-id-mapping-by-id-consumer"
+    PARTITION_COUNT = 100
+    INITIAL_PARTITION = 77
+    SOURCE_ID = "test-source"
+    SEQNO = 1
+
+    def __init__(self, fixture):
+        self.fixture = fixture
+        self.topic_name = f"source_id_mapping_by_id_topic_{uuid.uuid4().hex}"
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    def create_topic(self):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"CREATE TOPIC `{self.topic_name}` "
+                f"(CONSUMER `{self.CONSUMER}`) "
+                f"WITH (MIN_ACTIVE_PARTITIONS = {self.PARTITION_COUNT});"
+            )
+
+    def write_dedup_message(self, partition_id=None):
+        """Write a single message with the fixed SourceId and SEQNO.
+
+        When ``partition_id`` is given the message is written to that explicit
+        partition (used for the initial write before any restart). When it is
+        ``None`` the partition is chosen by the source-id -> partition mapping,
+        which is the path that differs between old (by name) and new (by topic
+        Id) builds.
+
+        Re-writing the same (producer_id, seqno) pair must be deduplicated by
+        the topic, regardless of the cluster version handling the write.
+        """
+        writer_kwargs = {
+            "producer_id": self.SOURCE_ID,
+            "auto_seqno": False,
+        }
+        if partition_id is not None:
+            writer_kwargs["partition_id"] = partition_id
+
+        with self.driver.topic_client.writer(self.topic_name, **writer_kwargs) as writer:
+            writer.write(
+                ydb.TopicWriterMessage(
+                    f"dedup-message-{self.SOURCE_ID}-{self.SEQNO}".encode("utf-8"),
+                    seqno=self.SEQNO,
+                )
+            )
+            writer.flush()
+
+    def wait_message_count(self, expected_count, timeout_sec=120):
+        deadline = time.time() + timeout_sec
+        last_end = 0
+        while time.time() < deadline:
+            try:
+                describe = self.driver.topic_client.describe_topic(
+                    self.topic_name, include_stats=True
+                )
+                last_end = sum(p.partition_stats.partition_end for p in describe.partitions)
+                if last_end >= expected_count:
+                    return last_end
+            except Exception as exc:
+                logger.info("describe_topic while waiting write: %s", exc)
+            time.sleep(1)
+        raise AssertionError(
+            f"message count was not reached in time: want {expected_count}, "
+            f"last observed end offset sum = {last_end}"
+        )
+
+    def read_and_count(self, timeout_sec=60):
+        received = 0
+        deadline = time.time() + timeout_sec
+        with self.driver.topic_client.reader(self.topic_name, consumer=self.CONSUMER) as reader:
+            while time.time() < deadline:
+                try:
+                    message = reader.receive_message(timeout=5)
+                except TimeoutError:
+                    break
+                received += 1
+                reader.commit(message)
+        return received
+
+    def restart_pq_tablets(self):
+        response = self.fixture.cluster.client.tablet_state(TabletTypes.PERSQUEUE)
+        tablet_ids = [info.TabletId for info in response.TabletStateInfo]
+        assert tablet_ids, "no PERSQUEUE tablets found"
+        for tablet_id in tablet_ids:
+            logger.info("Restarting PERSQUEUE tablet %s", tablet_id)
+            self.fixture.cluster.client.tablet_kill(tablet_id)
+
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                self.driver.topic_client.describe_topic(self.topic_name, include_stats=True)
+                return
+            except Exception as exc:
+                logger.info("topic not ready after tablet restart: %s", exc)
+                time.sleep(1)
+        raise AssertionError("topic did not become ready after PQ tablet restart")
+
+
+class TestSourceIdMappingByIdUpgradeDowngrade(RestartToAnotherVersionFixture):
+    """SourceId deduplication must survive an upgrade/downgrade of the cluster.
+
+    The ``EnableTopicSourceIdMappingById`` feature flag changes how the
+    source-id -> partition mapping is resolved (by topic Id on new builds vs by
+    name on old builds). This test ensures that a message written with a fixed
+    SourceId (producer_id + seqno) is deduplicated correctly when the cluster is
+    first upgraded to the new version and then downgraded back to the old one.
+
+    The topic has 100 partitions. The initial message is written to an explicit
+    partition (77) before any restart; after the version change the partition is
+    no longer specified, so the write relies on the source-id -> partition
+    mapping to route the message to the same partition and deduplicate it.
+    """
+
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(use_in_memory_pdisks=False)
+
+    def test_source_id_mapping_by_id_upgrade_downgrade(self):
+        workload = SourceIdMappingByIdWorkload(self)
+        expected_total = 1
+
+        # 1. Start cluster with the OLD version (feature flag off/absent).
+        workload.create_topic()
+
+        # 2. Write one message with SourceId="test-source" to an explicit
+        #    partition (77) before any restart.
+        workload.write_dedup_message(partition_id=workload.INITIAL_PARTITION)
+        workload.wait_message_count(expected_count=expected_total)
+        assert workload.read_and_count() == expected_total, (
+            "expected exactly 1 message after initial write"
+        )
+
+        # 3. Upgrade cluster to the NEW version (feature flag enabled).
+        self.change_cluster_version()
+        workload.restart_pq_tablets()
+
+        # 4. Write another message with the same SourceId (seqno=1), this time
+        #    without an explicit partition -> the source-id -> partition mapping
+        #    routes it to the same partition and the message is deduplicated.
+        workload.write_dedup_message(partition_id=None)
+        workload.wait_message_count(expected_count=expected_total)
+
+        # 5. Verify that still only 1 message is in the topic.
+        assert workload.read_and_count() == expected_total, (
+            "expected deduplication to keep the message count unchanged after upgrade"
+        )
+
+        # 6. Downgrade cluster back to the OLD version.
+        self.change_cluster_version()
+        workload.restart_pq_tablets()
+
+        # 7. Write another message with the same SourceId (seqno=1), again
+        #    without an explicit partition -> still deduplicated.
+        workload.write_dedup_message(partition_id=None)
+        workload.wait_message_count(expected_count=expected_total)
+
+        # 8. Verify that still only 1 message is in the topic.
+        assert workload.read_and_count() == expected_total, (
+            "expected deduplication to keep the message count unchanged after downgrade"
+        )

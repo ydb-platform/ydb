@@ -384,6 +384,32 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         fixture.ExpectHit(third, MakeData(40, '3'));
         fixture.ExpectMiss(second);
     }
+
+    Y_UNIT_TEST(StickyWriteFillDuringOutstandingRead) {
+        TBlobCacheFixture fixture(1 << 20);
+        auto range = MakeRange(1, 40);
+        const auto data = MakeData(40, 's');
+
+        fixture.ExpectMiss(range);
+
+        fixture.CacheRange(range, data, true);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("StickyBlobs"), 0);
+
+        // ReadCookie starts at 1 and the first DS get uses the pre-incremented value.
+        auto* getResult = new TEvBlobStorage::TEvGetResult(NKikimrProto::OK, 1, 0u);
+        getResult->Responses[0].Status = NKikimrProto::OK;
+        getResult->Responses[0].Buffer = TRope(data);
+        fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, getResult, 0, 2), 0, true);
+        auto readResult = fixture.Runtime.GrabEdgeEvent<TEvBlobCache::TEvReadBlobRangeResult>(fixture.Sender, TDuration::Seconds(5));
+        UNIT_ASSERT(readResult);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Data, data);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("StickyBlobs"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("StickyBytes"), 40);
+
+        fixture.ExpectHit(range, data);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("StickyHits", true), 1);
+    }
 }
 
 }   // namespace NKikimr::NBlobCache

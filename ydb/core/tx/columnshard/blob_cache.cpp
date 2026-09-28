@@ -32,6 +32,8 @@ private:
         TList<TActorId> Waiting;
         /// Put in cache after read.
         bool Cache{ false };
+        /// Write-fill asked for sticky while this read was already in flight.
+        bool Sticky{ false };
     };
 
     struct TReadItem: public TReadBlobRangeOptions {
@@ -167,7 +169,7 @@ public:
         , Evictable(SIZE_MAX)
         , MaxCacheDataSize(settings.MaxCacheDataSize, 0, 1ull << 40)
         , UseMaxCacheDataSizeFromConfig(settings.MaxCacheDataSizeFromConfig)
-        , MaxInFlightDataSize(settings.MaxInFlightBytes, 0, 10ull << 30)
+        , MaxInFlightDataSize(Min<ui64>(settings.MaxCacheDataSize, settings.MaxInFlightBytes), 0, 10ull << 30)
         , WriteProtectDurationMs(settings.WriteProtectDurationMs)
         , MaxRequestBytes(settings.MaxRequestBytes)
         , ReadDeadlineDuration(TDuration::MilliSeconds(settings.ReadDeadlineMs))
@@ -322,7 +324,12 @@ private:
     void SendCachedHit(const TActorId& sender, const TBlobRange& requested, const TCacheEntry& entry, const TBlobRange& covering,
         const bool promote, const TActorContext& ctx) {
         Y_ABORT_UNLESS(entry.Data.size() == covering.Size, "Cached %s, size %" PRISZT, covering.ToString().c_str(), entry.Data.size());
-        const TString data = entry.Data.substr(requested.Offset - covering.Offset, requested.Size);
+        TString partial;
+        const TString* data = &entry.Data;
+        if (covering.Offset != requested.Offset || covering.Size != requested.Size) {
+            partial = entry.Data.substr(requested.Offset - covering.Offset, requested.Size);
+            data = &partial;
+        }
         Hits->Inc();
         HitsBytes->Add(requested.Size);
         if (entry.StickyUntil) {
@@ -331,7 +338,7 @@ private:
         } else if (promote) {
             Evictable.Find(covering);
         }
-        SendResult(sender, requested, NKikimrProto::OK, data, {}, ctx, true);
+        SendResult(sender, requested, NKikimrProto::OK, *data, {}, ctx, true);
     }
 
     std::optional<TBlobRange> FindCoveringRange(const TBlobRange& blobRange) const {
@@ -370,8 +377,13 @@ private:
 
         Adds->Inc();
 
-        if (OutstandingReads.contains(blobRange)) {
-            // Don't bother if there is already a read request for this range
+        if (auto readIt = OutstandingReads.find(blobRange); readIt != OutstandingReads.end()) {
+            // A non-sticky add can wait for the in-flight read. A sticky write-fill must not:
+            // otherwise the DS reply inserts the fresh blob as an ordinary LRU entry.
+            if (ev->Get()->Sticky) {
+                readIt->second.Sticky = true;
+                readIt->second.Cache = true;
+            }
             return;
         }
 
@@ -599,7 +611,7 @@ private:
             ReadBytes->Add(blobRange.Size);
 
             if (readIt->second.Cache) {
-                InsertIntoCache(blobRange, data, false);
+                InsertIntoCache(blobRange, data, readIt->second.Sticky);
             }
         } else {
             LOG_S_WARN("Read failed for range: " << blobRange << " status: " << NKikimrProto::EReplyStatus_Name(status));

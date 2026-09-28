@@ -53,7 +53,88 @@ namespace NKikimr::NBlobDepot {
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else {
+<<<<<<< HEAD
                 Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, std::move(Response));
+=======
+                TActivationContext::Send(Response.release());
+            }
+        }
+    };
+
+    class TBlobDepot::TBlocksManager::TTxQueryBlocks : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        TEvBlobDepot::TEvQueryBlocks::TPtr Request;
+        std::unique_ptr<IEventHandle> Response;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_QUERY_BLOCKS; }
+
+        TTxQueryBlocks(TBlobDepot *self, TEvBlobDepot::TEvQueryBlocks::TPtr request)
+            : TTransactionBase(self, std::move(request->TraceId))
+            , Request(std::move(request))
+        {}
+
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            const TAgent *agent = Self->FindAgent(Request->Recipient);
+            if (!agent) {
+                return true;
+            }
+
+            const ui32 agentId = agent->Connection->NodeId;
+            const TMonotonic expirationTimestamp = TActivationContext::Monotonic() + BlockLeaseTime;
+            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*Request);
+            responseRecord->SetTimeToLiveMs(BlockLeaseTime.MilliSeconds());
+
+            for (const ui64 tabletId : Request->Get()->Record.GetTabletIds()) {
+                auto& block = Self->BlocksManager->Blocks[tabletId];
+                responseRecord->AddBlockedGenerations(block.BlockedGeneration);
+                block.PerAgentInfo[agentId].ExpirationTimestamp = expirationTimestamp;
+            }
+
+            Response = std::move(response);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            if (Response) {
+                TActivationContext::Send(Response.release());
+            }
+        }
+    };
+
+    // Drops the data of a tablet that has been deleted for good (Max<ui32>() block). This is what the
+    // hard barrier issued by Hive right after the block would have done, but that barrier may never
+    // arrive -- in particular, a VDisk that has seen the block is allowed to drop the barrier records
+    // for this tablet, so decommission may bring us the block without any barriers.
+    class TBlobDepot::TBlocksManager::TTxDeleteTabletData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const ui64 TabletId;
+        bool Finished = false;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DELETE_TABLET_DATA; }
+
+        TTxDeleteTabletData(TBlobDepot *self, ui64 tabletId)
+            : TTransactionBase(self)
+            , TabletId(tabletId)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            ui32 maxItems = 10'000;
+            Finished = Self->Data->OnTabletDeleted(TabletId, maxItems, txc, this);
+            if (Finished) {
+                // the data is gone, so the barriers that used to guard it are not needed either
+                Self->BarrierServer->OnTabletDeleted(TabletId, txc);
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Self->Data->CommitTrash(this);
+            if (Finished) {
+                Self->BlocksManager->DeleteTabletDataInFlight = false;
+                Self->BlocksManager->ProcessTabletsToDelete();
+            } else {
+                Self->Execute(std::make_unique<TTxDeleteTabletData>(Self, TabletId));
+>>>>>>> f492bd1aef5 (Fix blob depot block race (#54167))
             }
         }
     };
@@ -329,22 +410,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
-        TAgent& agent = Self->GetAgent(ev->Recipient);
-        const ui32 agentId = agent.Connection->NodeId;
-
-        const TMonotonic now = TActivationContext::Monotonic();
-
-        const auto& record = ev->Get()->Record;
-        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev);
-        responseRecord->SetTimeToLiveMs(BlockLeaseTime.MilliSeconds());
-
-        for (const ui64 tabletId : record.GetTabletIds()) {
-            auto& block = Blocks[tabletId];
-            responseRecord->AddBlockedGenerations(block.BlockedGeneration);
-            block.PerAgentInfo[agentId].ExpirationTimestamp = now + BlockLeaseTime;
-        }
-
-        TActivationContext::Send(response.release());
+        Self->Execute(std::make_unique<TTxQueryBlocks>(Self, std::move(ev)));
     }
 
     bool TBlobDepot::TBlocksManager::CheckBlock(ui64 tabletId, ui32 generation) const {

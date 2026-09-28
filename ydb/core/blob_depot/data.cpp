@@ -401,10 +401,10 @@ namespace NKikimr::NBlobDepot {
             return EMoveDataReplaceResult::KeyChanged;
         }
 
+        Y_ABORT_UNLESS(RefCountBlobs.contains(Self->MoveData.BlobId));
+        bool multipleRefs = RefCountBlobs[Self->MoveData.BlobId] > 1;
+
         Self->MoveData.ApplyingIndexUpdate = true;
-        Y_DEFER {
-            Self->MoveData.ApplyingIndexUpdate = false;
-        };
 
         const bool changed = UpdateKey(key, txc, cookie, "ReplaceLocatorForMoveData",
             [&](TValue& mutableValue, bool inserted) {
@@ -419,6 +419,14 @@ namespace NKikimr::NBlobDepot {
                 return EUpdateOutcome::CHANGE;
             });
         Y_ABORT_UNLESS(changed);
+
+        Self->MoveData.ApplyingIndexUpdate = false;
+
+        if (multipleRefs) {
+            const bool inserted = Self->MoveData.BlobIdToNewLocator.emplace(Self->MoveData.BlobId, newLocator).second;
+            Y_ABORT_UNLESS(inserted);
+        }
+
         return EMoveDataReplaceResult::Replaced;
     }
 

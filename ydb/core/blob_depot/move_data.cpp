@@ -90,8 +90,7 @@ namespace NKikimr::NBlobDepot {
                             if (it != state.BlobIdToNewLocator.end()) {
                                 const TBlobSeqId newBlobSeqId = TBlobSeqId::FromProto(it->second.GetBlobSeqId());
                                 const TLogoBlobID newBlobId = MakeFirstBlobId(Self->TabletID(), it->second);
-                                if (state.ProtectedBlobSeqIds.contains(newBlobSeqId) ||
-                                        Self->Data->IsBlobReferenced(newBlobId)) {
+                                if (Self->Data->IsBlobReferenced(newBlobId)) {
                                     state.NewBlobLocator.CopyFrom(it->second);
                                     state.NewBlobSeqId = newBlobSeqId;
                                     state.Phase = TMoveDataState::EPhase::UpdatingIndex;
@@ -173,8 +172,12 @@ namespace NKikimr::NBlobDepot {
             auto& state = Self->MoveData;
             Self->Data->CommitTrash(this);
 
+            const auto blobSeqId = TBlobSeqId::FromProto(state.NewBlobLocator.GetBlobSeqId());
+            if (state.ProtectedBlobSeqIds.erase(blobSeqId)) {
+                Self->ReleaseMoveDataBlobSeqId(blobSeqId);
+            }
+
             if (Result == TData::EMoveDataReplaceResult::Replaced) {
-                Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromProto(state.NewBlobLocator.GetBlobSeqId()));
                 ++state.ValueChainIndex;
             } else {
                 state.ValueChainIndex = 0;
@@ -534,10 +537,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 for (const TBlobSeqId& blobSeqId : MoveData.ProtectedBlobSeqIds) {
-                    TChannelInfo& channel = Channels[blobSeqId.Channel];
-                    const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blobSeqId.ToSequentialNumber());
-                    Y_ABORT_UNLESS(numErased == 1);
-                    Data->OnLeastExpectedBlobIdChange(channel.Index);
+                    ReleaseMoveDataBlobSeqId(blobSeqId);
                 }
                 MoveData.ProtectedBlobSeqIds.clear();
 
@@ -602,11 +602,11 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvMoveDataBlobCopied::TPtr ev) {
         Y_ABORT_UNLESS(MoveData.Phase == TMoveDataState::EPhase::CopyingBlob);
 
-        auto& locator = ev->Get()->NewLocator;
-        const TBlobSeqId blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
+        auto& newLocator = ev->Get()->NewLocator;
+        const TBlobSeqId blobSeqId = TBlobSeqId::FromProto(newLocator.GetBlobSeqId());
         Y_ABORT_UNLESS(blobSeqId == MoveData.NewBlobSeqId);
 
-        auto size = locator.GetTotalDataLen() + locator.GetFooterLen();
+        auto size = newLocator.GetTotalDataLen() + newLocator.GetFooterLen();
 
         switch (ev->Get()->Result) {
             case TEvMoveDataBlobCopied::EResult::OK:
@@ -655,16 +655,22 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (MoveData.RecordTouched) {
+            const auto blobSeqId = TBlobSeqId::FromProto(newLocator.GetBlobSeqId());
+            if (MoveData.ProtectedBlobSeqIds.erase(blobSeqId)) {
+                ReleaseMoveDataBlobSeqId(blobSeqId);
+            }
+
             MoveData.RecordTouched = false;
             MoveData.ValueChainIndex = 0;
+            MoveData.BlobId = {};
+            MoveData.BlobLocator.Clear();
+            MoveData.NewBlobLocator.Clear();
+            MoveData.NewBlobSeqId = {};
             MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
             ContinueMoveData();
             return;
         }
 
-        const bool inserted = MoveData.BlobIdToNewLocator.emplace(
-            MoveData.BlobId, ev->Get()->NewLocator).second;
-        Y_ABORT_UNLESS(inserted);
         MoveData.NewBlobLocator.CopyFrom(ev->Get()->NewLocator);
         MoveData.Phase = TMoveDataState::EPhase::UpdatingIndex;
 
@@ -678,10 +684,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId) {
-        if (!MoveData.ProtectedBlobSeqIds.erase(blobSeqId)) {
-            return;
-        }
-
         TChannelInfo& channel = Channels[blobSeqId.Channel];
         const ui32 generation = Executor()->Generation();
         const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
@@ -723,6 +725,11 @@ namespace NKikimr::NBlobDepot {
         YDB_LOG_DEBUG("CancelMoveData",
             {"marker", "BDM21"},
             {"id", GetLogId()});
+
+        for (const TBlobSeqId& blobSeqId : MoveData.ProtectedBlobSeqIds) {
+            ReleaseMoveDataBlobSeqId(blobSeqId);
+        }
+        MoveData.ProtectedBlobSeqIds.clear();
 
         Y_ABORT_UNLESS(MoveData.IsInProgress());
         MoveData = {};

@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
     Y_UNIT_TEST(ManyBlobs) {
         TMoveDataTest test;
         for (ui32 cookie = 1; cookie <= 32; ++cookie) {
-            test.Put(test.AddBlob(cookie, 128 + cookie * 31));
+            test.Put(test.AddBlob(cookie, 1, 1, 0, 128 + cookie * 31));
         }
 
         test.ReassignAllChannels();

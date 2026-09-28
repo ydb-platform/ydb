@@ -6,6 +6,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
+#include <util/system/compiler.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_enum_reflection.h>
@@ -184,26 +185,16 @@ public:
     }
 
     // Native types support
-    template <typename T, typename K = TKeyName>
-    TCreateMessageArg(K&& name, const T& value) {
-        if constexpr (std::is_function<T>::value) {
-            static_assert(false, "It is not allowed to pass function into structured message");
-        } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
-            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value);
-        } else if constexpr (THasToStructuredMessageMethod<std::decay_t<T>>::value) {
-            auto message = value.ToStructuredMessage();
-            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, message);
-        } else if constexpr (std::is_same<T, TMaybe<TStructuredMessage>>::value) {
-            if (value.Defined()) {
-                TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value.GetRef());
-            }
-        } else if constexpr (TNativeTypeSupport<T>::value) {
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
-        } else {
-            TStringStream stream;
-            OutputParam(stream, value);
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
-        }
+    // A string literal key is passed on as a pointer and a length, so the key length
+    // doesn't produce new instantiations and the call site stays a single call.
+    template <typename T, unsigned N>
+    Y_FORCE_INLINE TCreateMessageArg(const char (&name)[N], const T& value) {
+        AppendLiteralKeyArg<T>(name, N - 1 /* zero char */, value);
+    }
+
+    template <typename T>
+    TCreateMessageArg(TKeyName name, const T& value) {
+        AppendArg<T>(std::move(name), value);
     }
 
     TCreateMessageArg(const TStructuredMessage& message);
@@ -216,6 +207,42 @@ public:
 
     void* operator new(std::size_t sz) = delete;
     void* operator new[](std::size_t sz) = delete;
+
+private:
+    template <typename T>
+    static Y_NO_INLINE void AppendLiteralKeyArg(const char* name, std::size_t length, const T& value) {
+        AppendArg<T>(TKeyName(name, length), value);
+    }
+
+    template <typename T>
+    static void AppendArg(TKeyName&& name, const T& value) {
+        if constexpr (std::is_function<T>::value) {
+            static_assert(false, "It is not allowed to pass function into structured message");
+        } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
+            AppendSubMessage(std::move(name), value);
+        } else if constexpr (THasToStructuredMessageMethod<std::decay_t<T>>::value) {
+            AppendSubMessage(std::move(name), value.ToStructuredMessage());
+        } else if constexpr (std::is_same<T, TMaybe<TStructuredMessage>>::value) {
+            if (value.Defined()) {
+                AppendSubMessage(std::move(name), value.GetRef());
+            }
+        } else if constexpr (TNativeTypeSupport<T>::value) {
+            TCreateMessageGuard::GetBuildMessage().AppendSingleKeyValue(std::move(name), value);
+        } else {
+            AppendOutput(std::move(name), &OutputErased<T>, &value);
+        }
+    }
+
+    using TOutputFunc = void (*)(IOutputStream& s, const void* value);
+
+    template <typename T>
+    static void OutputErased(IOutputStream& s, const void* value) {
+        OutputParam(s, *static_cast<const T*>(value));
+    }
+
+    static void AppendSubMessage(TKeyName&& name, const TStructuredMessage& message);
+    // Appends the string written by output(stream, value)
+    static void AppendOutput(TKeyName&& name, TOutputFunc output, const void* value);
 };
 
 }  // namespace NActors::NStructuredLog

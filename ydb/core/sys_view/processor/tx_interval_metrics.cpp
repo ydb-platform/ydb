@@ -46,6 +46,10 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             auto queryHash = queryText.GetHash();
             auto& text = *queryText.MutableText();
 
+            if (text.empty()) {
+                continue;
+            }
+
             db.Table<Schema::IntervalMetrics>().Key(queryHash).Update(
                 NIceDb::TUpdate<Schema::IntervalMetrics::Text>(text));
 

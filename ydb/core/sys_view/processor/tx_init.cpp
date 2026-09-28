@@ -312,20 +312,15 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             Self->CurrentHourMetrics.clear();
             Self->CurrentHourEnd = EndOfQueryMetricsHourInterval(Self->IntervalEnd);
 
-            auto rowset = db.Table<Schema::IntervalMetricsOneHour>().Range().Select();
+            auto rowset = db.Table<Schema::IntervalMetricsOneHour>()
+                .Prefix(Self->CurrentHourEnd.MicroSeconds())
+                .Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                const ui64 hourEndUs = rowset.GetValue<Schema::IntervalMetricsOneHour::HourEnd>();
                 TQueryHash queryHash = rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
-                if (hourEndUs != Self->CurrentHourEnd.MicroSeconds()) {
-                    if (!rowset.Next()) {
-                        return false;
-                    }
-                    continue;
-                }
                 TString data = rowset.GetValue<Schema::IntervalMetricsOneHour::Data>();
 
                 if (data) {

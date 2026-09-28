@@ -1246,7 +1246,6 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
             ? stats.GetMemoryUsage() : 0;
         CurrentMemoryBytes += current.MemoryBytes;
-        ObservedPeakComputeMemoryBytes = std::max(ObservedPeakComputeMemoryBytes, CurrentMemoryBytes);
         // Failure before task-runner setup produces a report without Tasks.
         if (stats.GetTasks().empty()) {
             return;
@@ -1570,7 +1569,6 @@ TCurrentQueryResources TQueryExecutionStats::GetCurrentQueryResources() const {
     result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
     result.ComputeMemoryBytes = CurrentMemoryBytes;
     result.ReadIngressBytes = CurrentReadIngressBytes;
-    result.ObservedPeakComputeMemoryBytes = ObservedPeakComputeMemoryBytes;
     return result;
 }
 

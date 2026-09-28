@@ -105,7 +105,8 @@ TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext&
     }
     if (settings.CollectCurrentQueryStats) {
         const auto interval = context.CurrentQueryStatsInterval;
-        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{interval, interval};
+        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
         if (settings.RemoteReportStatsSettings) {
             settings.RemoteReportStatsSettings->MinInterval = Min(settings.RemoteReportStatsSettings->MinInterval, interval);
             settings.RemoteReportStatsSettings->MaxInterval = Min(settings.RemoteReportStatsSettings->MaxInterval, interval);

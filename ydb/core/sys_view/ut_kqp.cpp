@@ -2519,6 +2519,16 @@ Y_UNIT_TEST_SUITE(SystemView) {
         };
         checkSysView(true);
 
+        auto busySender = runtime.AllocateEdgeActor();
+        auto busyRequest = MakeStreamQueryRequest(busySender, "SELECT 1;");
+        busyRequest->Record.MutableRequest()->SetSessionId(session.GetId().c_str());
+        busyRequest->Record.MutableRequest()->SetDatabase("/Root");
+        busyRequest->Record.MutableRequest()->SetKeepSession(true);
+        SendKqpQueryRequest(runtime, busySender, std::move(busyRequest));
+        auto busyReply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(busySender);
+        UNIT_ASSERT_VALUES_EQUAL(busyReply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SESSION_BUSY);
+        checkSysView(true);
+
         auto resumeAck = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(0, 0);
         resumeAck->Record.SetEnough(false);
         resumeAck->Record.SetFreeSpace(100_MB);

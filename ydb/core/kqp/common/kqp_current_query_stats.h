@@ -16,8 +16,6 @@ struct TCurrentQueryResources {
     ui64 ComputeMemoryBytes = 0;
     // Bytes received by DQ compute tasks from all input sources.
     ui64 ReadIngressBytes = 0;
-    // Highest compute-task quota observed during this execution.
-    ui64 ObservedPeakComputeMemoryBytes = 0;
 };
 
 struct TCurrentExecStatsReport {
@@ -72,8 +70,6 @@ private:
         Total.ReadIngressBytes += current.ReadIngressBytes - previous.ReadIngressBytes;
         Total.ComputeMemoryBytes -= previous.ComputeMemoryBytes;
         Total.ComputeMemoryBytes += current.ComputeMemoryBytes;
-        Total.ObservedPeakComputeMemoryBytes = std::max({Total.ObservedPeakComputeMemoryBytes,
-            Total.ComputeMemoryBytes, current.ObservedPeakComputeMemoryBytes});
         previous = current;
         HasReports = true;
     }
@@ -141,10 +137,6 @@ public:
         PublishScheduled = UpdatedSincePublish;
         UpdatedSincePublish = false;
         return TPublication{std::move(published), ++SequenceNo, PublishScheduled};
-    }
-
-    TDuration GetInterval() const {
-        return Interval;
     }
 
     TDuration GetNextPublishDelay() const {

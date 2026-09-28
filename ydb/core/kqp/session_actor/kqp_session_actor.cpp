@@ -2584,7 +2584,7 @@ public:
     }
 
     void FinishCurrentExecutionStats() {
-        if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+        if (!QueryState || QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
             return;
         }
         if (QueryState->RuntimeStats.Finish()) {

@@ -421,7 +421,6 @@ private:
     std::vector<TCurrentTaskStats> CurrentTaskStats;
     ui64 CurrentMemoryBytes = 0;
     ui64 CurrentReadIngressBytes = 0;
-    ui64 ObservedPeakComputeMemoryBytes = 0;
     ui64 CurrentStatsSequenceNo = 0;
     bool CollectCurrentQueryStats = false;
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;

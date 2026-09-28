@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_planner.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
@@ -326,6 +327,19 @@ Y_UNIT_TEST_SUITE(KqpCurrentExecutionStats) {
 
 using namespace NYql::NDqProto;
 
+    Y_UNIT_TEST(RuntimeStatsKeepClientProgressInterval) {
+        TUserRequestContext context;
+        context.CurrentQueryStatsInterval = TDuration::Seconds(30);
+
+        const auto settings = MakeStatsReportingSettings(context, TDuration::Seconds(1));
+        UNIT_ASSERT(settings.LocalReportStatsSettings);
+        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MinInterval, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MaxInterval, TDuration::Seconds(30));
+        UNIT_ASSERT(settings.RemoteReportStatsSettings);
+        UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings->MinInterval, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings->MaxInterval, TDuration::Seconds(30));
+    }
+
     Y_UNIT_TEST(CurrentQueryStatsPublisherReportsRateAndStaleness) {
         TCurrentQueryStatsPublisher publisher(TMonotonic::Seconds(10), TDuration::Seconds(30));
         TCurrentExecStatsReport report;
@@ -381,7 +395,6 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
         UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 100);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 0);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.ObservedPeakComputeMemoryBytes, 0);
     }
 
     Y_UNIT_TEST(CollectWithoutFullProfile) {
@@ -454,7 +467,7 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
     }
 
-    Y_UNIT_TEST(FinalReportIncludesPeakWithoutProgressDelivery) {
+    Y_UNIT_TEST(FinalReportReleasesMemoryWithoutProgressDelivery) {
         TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(stats);
         auto report = MakeReport(1, 100, 4096, 1000, 700);
@@ -467,7 +480,6 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
         TCurrentQueryStats::TSourceState source;
         query.Update(source, final);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
-        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 4096);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 100);
     }
 
@@ -485,7 +497,6 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
         query.Update(firstSource, first.TakeCurrentStats());
         second.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         query.Update(secondSource, second.TakeCurrentStats());
-        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 8192);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ReadIngressBytes, 1400);
@@ -493,13 +504,11 @@ TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBy
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
         query.Update(secondSource, second.TakeCurrentStats(true));
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
-        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
         TQueryExecutionStats third(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0, true);
         Init(third);
         third.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
         query.Update(thirdSource, third.TakeCurrentStats());
-        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 300);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
     }

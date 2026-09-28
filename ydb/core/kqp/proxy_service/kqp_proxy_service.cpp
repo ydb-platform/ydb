@@ -844,6 +844,10 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
+            if (sessionInfo->State == TKqpSessionInfo::EXECUTING) {
+                ReplyProcessError(Ydb::StatusIds::SESSION_BUSY, "Session is busy", requestId);
+                return;
+            }
             LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
             if (FeatureFlags.GetEnableKqpRuntimeStats()) {
                 ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;

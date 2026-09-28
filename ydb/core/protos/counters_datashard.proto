@@ -159,6 +159,7 @@ enum ECumulativeCounters {
     COUNTER_REMOVED_COMMITTED_TXS = 114                   [(CounterOpts) = {Name: "RemovedCommittedTxs"}];
     COUNTER_LOCK_ROWS_FINISHED = 115                      [(CounterOpts) = {Name: "LockRowsFinished"}];
     COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS = 116           [(CounterOpts) = {Name: "ChangeQueueOverflowRejects"}];
+    COUNTER_UNSAFE_TRUNCATE = 117                         [(CounterOpts) = {Name: "UnsafeTruncate"}];
 }
 
 enum EPercentileCounters {

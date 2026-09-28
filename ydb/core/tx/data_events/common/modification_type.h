@@ -94,6 +94,10 @@ public:
                 return NEvWrite::EModificationType::Increment;
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
                 return NEvWrite::EModificationType::UpsertIncrement;
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE:
+                // Row-shard only: there is no bulk modification type for it, so ColumnShard
+                // rejects the operation instead of ever seeing it here.
+                return {};
         }
     }
 

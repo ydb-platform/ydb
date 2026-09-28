@@ -93,6 +93,11 @@ public:
     ui64 HasOperations() const {
         return !Operations.empty();
     }
+    bool HasUnsafeTruncate() const {
+        return AnyOf(Operations, [](const TValidatedWriteTxOperation& operation) {
+            return operation.GetOperationType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE;
+        });
+    }
     ui32 KeysCount() const {
         return TxInfo().WritesCount;
     }
@@ -131,6 +136,8 @@ private:
 
     YDB_READONLY_DEF(ui64, LockTxId);
     YDB_READONLY_DEF(ui32, LockNodeId);
+    // Locks spared by an unsafe truncate, see TEvWrite::PreserveLockTxIds.
+    YDB_READONLY_DEF(std::vector<ui64>, PreserveLockTxIds);
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_READONLY_DEF(std::optional<NKikimrDataEvents::TKqpLocks>, KqpLocks);
     YDB_READONLY_DEF(TInstant, ReceivedAt);

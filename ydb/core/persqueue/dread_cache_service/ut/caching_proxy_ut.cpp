@@ -56,15 +56,12 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
         runtime->DispatchEvents(opts);
     }
 
-    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
-    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
-    response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
-    auto* result = response->Record.MutablePartitionResponse()->MutableCmdReadResult();
-    result->SetRealReadOffset(13);
-    result->SetLastOffset(15);
-    result->SetEndOffset(24);
+    NKikimrClient::TCmdReadResult rows;
+    rows.SetRealReadOffset(13);
+    rows.SetLastOffset(15);
+    rows.SetEndOffset(24);
     auto add = [&](ui64 offset, ui32 partNo, ui32 totalParts) {
-        auto* row = result->AddResult();
+        auto* row = rows.AddResult();
         row->SetOffset(offset);
         row->SetData("x");
         row->SetPartNo(partNo);
@@ -75,6 +72,11 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     add(13, 0, 1);
     add(14, 0, 1);
     add(15, 0, 2);
+
+    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    response->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(rows);
 
     runtime->Send(new IEventHandle(proxy, setup.Context.Edge, response.Release()));
     auto followup = runtime->GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(5));
@@ -94,7 +96,7 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     auto plainResponse = MakeHolder<TEvPersQueue::TEvResponse>();
     plainResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     plainResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
-    plainResponse->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(*result);
+    plainResponse->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(rows);
     runtime->Send(new IEventHandle(plain, setup.Context.Edge, plainResponse.Release()));
     auto prepared = runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(TDuration::Seconds(5));
     UNIT_ASSERT(prepared);

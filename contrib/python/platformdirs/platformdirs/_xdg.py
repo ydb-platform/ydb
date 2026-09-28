@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import posixpath
+from typing import Final
 
 from .api import PlatformDirsABC
 
@@ -13,7 +15,7 @@ class XDGMixin(PlatformDirsABC):
     @property
     def user_data_dir(self) -> str:
         """Data directory tied to the user, from ``$XDG_DATA_HOME`` if set, else platform default."""
-        if path := os.environ.get("XDG_DATA_HOME", "").strip():
+        if path := _xdg_dir("XDG_DATA_HOME"):
             return self._append_app_name_and_version(path)
         return super().user_data_dir
 
@@ -32,7 +34,7 @@ class XDGMixin(PlatformDirsABC):
     @property
     def user_config_dir(self) -> str:
         """Config directory tied to the user, from ``$XDG_CONFIG_HOME`` if set, else platform default."""
-        if path := os.environ.get("XDG_CONFIG_HOME", "").strip():
+        if path := _xdg_dir("XDG_CONFIG_HOME"):
             return self._append_app_name_and_version(path)
         return super().user_config_dir
 
@@ -51,28 +53,28 @@ class XDGMixin(PlatformDirsABC):
     @property
     def user_cache_dir(self) -> str:
         """Cache directory tied to the user, from ``$XDG_CACHE_HOME`` if set, else platform default."""
-        if path := os.environ.get("XDG_CACHE_HOME", "").strip():
+        if path := _xdg_dir("XDG_CACHE_HOME"):
             return self._append_app_name_and_version(path)
         return super().user_cache_dir
 
     @property
     def user_state_dir(self) -> str:
         """State directory tied to the user, from ``$XDG_STATE_HOME`` if set, else platform default."""
-        if path := os.environ.get("XDG_STATE_HOME", "").strip():
+        if path := _xdg_dir("XDG_STATE_HOME"):
             return self._append_app_name_and_version(path)
         return super().user_state_dir
 
     @property
     def user_runtime_dir(self) -> str:
         """Runtime directory tied to the user, from ``$XDG_RUNTIME_DIR`` if set, else platform default."""
-        if path := os.environ.get("XDG_RUNTIME_DIR", "").strip():
+        if path := _xdg_dir("XDG_RUNTIME_DIR"):
             return self._append_app_name_and_version(path)
         return super().user_runtime_dir
 
     @property
     def site_runtime_dir(self) -> str:
         """Runtime directory shared by users, from ``$XDG_RUNTIME_DIR`` if set, else platform default."""
-        if path := os.environ.get("XDG_RUNTIME_DIR", "").strip():
+        if path := _xdg_dir("XDG_RUNTIME_DIR"):
             return self._append_app_name_and_version(path)
         return super().site_runtime_dir
 
@@ -142,14 +144,14 @@ class XDGMixin(PlatformDirsABC):
     @property
     def user_fonts_dir(self) -> str:
         """Fonts directory tied to the user, from ``$XDG_DATA_HOME/fonts`` if set, else platform default."""
-        if path := os.environ.get("XDG_DATA_HOME", "").strip():
+        if path := _xdg_dir("XDG_DATA_HOME"):
             return f"{os.path.expanduser(path)}/fonts"  # ruff:ignore[os-path-expanduser]  # API returns str, not Path
         return super().user_fonts_dir
 
     @property
     def user_applications_dir(self) -> str:
         """Applications directory tied to the user, from ``$XDG_DATA_HOME`` if set, else platform default."""
-        if path := os.environ.get("XDG_DATA_HOME", "").strip():
+        if path := _xdg_dir("XDG_DATA_HOME"):
             return os.path.join(os.path.expanduser(path), "applications")  # ruff:ignore[os-path-expanduser, os-path-join]
         return super().user_applications_dir
 
@@ -166,11 +168,18 @@ class XDGMixin(PlatformDirsABC):
         return os.pathsep.join(dirs) if self.multipath else dirs[0]
 
 
+def _xdg_dir(env_var: str) -> str | None:
+    path: Final = os.environ.get(env_var, "").strip()
+    return path if posixpath.isabs(path) else None
+
+
 def _xdg_dir_list(env_var: str) -> list[str]:
-    """Stripped non-blank entries of ``env_var``, so a value of only separators and whitespace falls back like unset."""
-    return [stripped for path in os.environ.get(env_var, "").split(os.pathsep) if (stripped := path.strip())]
+    return [
+        stripped for path in os.environ.get(env_var, "").split(os.pathsep) if posixpath.isabs(stripped := path.strip())
+    ]
 
 
 __all__ = [
     "XDGMixin",
+    "_xdg_dir",
 ]

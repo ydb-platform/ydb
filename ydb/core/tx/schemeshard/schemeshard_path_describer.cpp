@@ -19,36 +19,6 @@ void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSch
     out.MutableStorageRooms()->Clear();
 }
 
-// Parents deactivated in ReassignIds get AlterVersion bumped before topic AlterVersion,
-// so the usual AlterVersion filter would hide them together with new children and leave
-// Describe without an open-ended Active partition (breaks TBoundaryChooser / writers).
-// Keep the committed pre-alter view until FinishAlter: still show those parents as Active.
-THashSet<ui32> ParentsDeactivatedInFlight(const NKikimr::NSchemeShard::TTopicInfo& pqGroup) {
-    THashSet<ui32> parents;
-    if (!pqGroup.AlterData) {
-        return parents;
-    }
-    for (const auto& p : pqGroup.AlterData->PartitionsToAdd) {
-        parents.insert(p.ParentPartitionIds.begin(), p.ParentPartitionIds.end());
-    }
-    return parents;
-}
-
-bool IsPartitionVisibleInDescribe(
-        const NKikimr::NSchemeShard::TTopicTabletInfo::TTopicPartitionInfo& partition,
-        const NKikimr::NSchemeShard::TTopicInfo& pqGroup,
-        const THashSet<ui32>& parentsDeactivatedInFlight)
-{
-    if (partition.AlterVersion <= pqGroup.AlterVersion) {
-        return true;
-    }
-    // Only pre-alter parents (CreateVersion older than this alter), not intermediate
-    // partitions created and then further split within the same alter.
-    return pqGroup.AlterData
-        && parentsDeactivatedInFlight.contains(partition.PqId)
-        && partition.CreateVersion < pqGroup.AlterData->AlterVersion;
-}
-
 }
 
 namespace NKikimr {
@@ -727,15 +697,12 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
-            TTabletId TabletId;
-            const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
-            bool ForceCommittedActive = false;
+                TTabletId TabletId;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
-            const auto parentsDeactivatedInFlight = ParentsDeactivatedInFlight(*pqGroupInfo);
-
-            // Not indexed by PqId: ids may have gaps. Reserve for the partitions we
-            // actually store and sort later.
+            // Not indexed by PqId: ids may have gaps, so a vector of size NextPartitionId
+            // would be sparse. Reserve for the partitions we actually store and sort later.
             TVector<TPartitionDesc> descriptions;
             descriptions.reserve(pqGroupInfo->Partitions.size());
 
@@ -744,15 +711,23 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 Y_VERIFY_S(it != Self->ShardInfos.end(), "No shard with shardIdx: " << shardIdx);
 
                 for (const auto& partition : pqShard->Partitions) {
-                    if (!IsPartitionVisibleInDescribe(*partition, *pqGroupInfo, parentsDeactivatedInFlight)) {
-                        continue;
+                    // Describe the partition set as of the committed topic AlterVersion.
+                    //
+                    // ReassignIds bumps parent AlterVersion (and sets Inactive) before FinishAlter
+                    // bumps topic AlterVersion. Filtering only by partition.AlterVersion would hide
+                    // those parents together with new children and leave no open-ended Active range
+                    // for TBoundaryChooser / writers.
+                    //
+                    // CreateVersion is the topic version when the partition was added:
+                    // - created in the in-flight alter: CreateVersion > committed → hidden
+                    // - existed before: CreateVersion <= committed → visible; if AlterVersion was
+                    //   bumped by the in-flight alter, still report Active until FinishAlter
+                    // - topic create quirk: CreateVersion may be 1 while AlterVersion is still 0 →
+                    //   visible via AlterVersion <= committed
+                    if (partition->CreateVersion <= pqGroupInfo->AlterVersion
+                            || partition->AlterVersion <= pqGroupInfo->AlterVersion) {
+                        descriptions.push_back({it->second.TabletID, partition.Get()});
                     }
-                    descriptions.push_back({
-                        it->second.TabletID,
-                        partition.Get(),
-                        parentsDeactivatedInFlight.contains(partition->PqId)
-                            && partition->AlterVersion > pqGroupInfo->AlterVersion,
-                    });
                 }
             }
 
@@ -775,7 +750,8 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     desc.Info->KeyRange->SerializeToProto(*partition.MutableKeyRange());
                 }
 
-                partition.SetStatus(desc.ForceCommittedActive
+                // Parents deactivated in the in-flight alter still look Active at committed version.
+                partition.SetStatus(desc.Info->AlterVersion > pqGroupInfo->AlterVersion
                     ? NKikimrPQ::ETopicPartitionStatus::Active
                     : desc.Info->Status);
                 for (const auto parent : desc.Info->ParentPartitionIds) {
@@ -783,7 +759,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 }
                 // Do not expose child links created by the in-flight alter while we still
                 // present the parent as committed-Active.
-                if (!desc.ForceCommittedActive) {
+                if (desc.Info->AlterVersion <= pqGroupInfo->AlterVersion) {
                     for (const auto child : desc.Info->ChildPartitionIds) {
                         partition.AddChildPartitionIds(child);
                     }
@@ -812,32 +788,32 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         allocate->SetBalancerOwnerId(pqGroupInfo->BalancerShardIdx.GetOwnerId());
         allocate->SetBalancerShardId(ui64(pqGroupInfo->BalancerShardIdx.GetLocalId()));
 
-        const auto parentsDeactivatedInFlight = ParentsDeactivatedInFlight(*pqGroupInfo);
         for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
             const auto& shardInfo = Self->ShardInfos.at(shardIdx);
             for (const auto& pq : pqShard->Partitions) {
-                if (!IsPartitionVisibleInDescribe(*pq, *pqGroupInfo, parentsDeactivatedInFlight)) {
+                if (pq->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
                     continue;
                 }
-                auto partition = allocate->MutablePartitions()->Add();
-                partition->SetPartitionId(pq->PqId);
-                partition->SetGroupId(pq->GroupId);
-                partition->SetTabletId(ui64(shardInfo.TabletID));
-                partition->SetOwnerId(shardIdx.GetOwnerId());
-                partition->SetShardId(ui64(shardIdx.GetLocalId()));
-                const bool forceCommittedActive = parentsDeactivatedInFlight.contains(pq->PqId)
-                    && pq->AlterVersion > pqGroupInfo->AlterVersion;
-                partition->SetStatus(forceCommittedActive
-                    ? NKikimrPQ::ETopicPartitionStatus::Active
-                    : pq->Status);
-                for (const auto parent : pq->ParentPartitionIds) {
-                    partition->AddParentPartitionIds(parent);
-                }
-                if (pq->KeyRange) {
-                    pq->KeyRange->SerializeToProto(*partition->MutableKeyRange());
-                }
-                if (pq->CreationTimestamp) {
-                    partition->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
+                if (pq->CreateVersion <= pqGroupInfo->AlterVersion
+                        || pq->AlterVersion <= pqGroupInfo->AlterVersion) {
+                    auto partition = allocate->MutablePartitions()->Add();
+                    partition->SetPartitionId(pq->PqId);
+                    partition->SetGroupId(pq->GroupId);
+                    partition->SetTabletId(ui64(shardInfo.TabletID));
+                    partition->SetOwnerId(shardIdx.GetOwnerId());
+                    partition->SetShardId(ui64(shardIdx.GetLocalId()));
+                    partition->SetStatus(pq->AlterVersion > pqGroupInfo->AlterVersion
+                        ? NKikimrPQ::ETopicPartitionStatus::Active
+                        : pq->Status);
+                    for (const auto parent : pq->ParentPartitionIds) {
+                        partition->AddParentPartitionIds(parent);
+                    }
+                    if (pq->KeyRange) {
+                        pq->KeyRange->SerializeToProto(*partition->MutableKeyRange());
+                    }
+                    if (pq->CreationTimestamp) {
+                        partition->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
+                    }
                 }
             }
         }

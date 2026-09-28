@@ -1645,6 +1645,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             .CreateSamplePool(false)
             .Create([](Tests::TServerSettings& settings) {
                 settings.CreateTicketParser = NKikimr::CreateTicketParser;
+                settings.FeatureFlags.SetEnableCompileCacheView(false);
             });
         auto& runtime = *ydb->GetRuntime();
         const NACLib::TUserToken adminToken("root@builtin", TVector<NACLib::TSID>{});
@@ -1654,7 +1655,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             const auto nodeIndex = database == ydb->GetSettings().GetDedicatedTenantName()
                 ? ydb->GetDedicatedTenantInfo().NodeIdx : ydb->GetSharedTenantInfo().NodeIdx;
             auto edge = runtime.AllocateEdgeActor(nodeIndex);
-            ydb->WaitFor(TDuration::Seconds(65), "compile cache database type", [&](TString& error) {
+            auto checkCache = [&](TString& error) {
                 const auto serviceId = MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex));
                 if (!runtime.GetLocalServiceId(serviceId, nodeIndex)) {
                     error = "Compile service is not registered yet";
@@ -1668,18 +1669,22 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 UNIT_ASSERT(response);
                 const auto& record = response->Get()->Record;
                 error = record.ShortDebugString();
-                if (record.HasStatus() && record.GetStatus() == Ydb::StatusIds::UNAVAILABLE) {
+                const bool viewEnabled = runtime.GetAppData(nodeIndex).FeatureFlags.GetEnableCompileCacheView();
+                if (viewEnabled && record.HasStatus() && record.GetStatus() == Ydb::StatusIds::UNAVAILABLE) {
                     UNIT_ASSERT_VALUES_EQUAL(record.GetCacheCacheQueries().size(), 0);
                     return false;
                 }
-                if (database == ydb->GetSettings().GetSharedTenantName()) {
+                if (viewEnabled && database == ydb->GetSettings().GetSharedTenantName()) {
                     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), Ydb::StatusIds::UNSUPPORTED);
                     UNIT_ASSERT_VALUES_EQUAL(record.GetCacheCacheQueries().size(), 0);
                 } else {
                     UNIT_ASSERT(!record.HasStatus() || record.GetStatus() == Ydb::StatusIds::SUCCESS);
                 }
                 return true;
-            });
+            };
+            ydb->WaitFor(TDuration::Seconds(5), "local compile cache with view disabled", checkCache);
+            runtime.GetAppData(nodeIndex).FeatureFlags.SetEnableCompileCacheView(true);
+            ydb->WaitFor(TDuration::Seconds(65), "compile cache database type", checkCache);
         }
 
         auto checkWarmup = [&](const TString& database, ui32 nodeIndex, EStatus expected, TStringBuf reason) {
@@ -1694,11 +1699,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
             if (expected == EStatus::UNSUPPORTED) {
-                UNIT_ASSERT_STRING_CONTAINS(complete->Get()->Message, "Skipped: Compile cache is not available for");
+                UNIT_ASSERT_STRING_CONTAINS(complete->Get()->Message, "Skipped: Compile cache view and warmup are not supported for");
                 UNIT_ASSERT_STRING_CONTAINS(complete->Get()->Message, reason);
                 UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
             } else {
-                UNIT_ASSERT(!complete->Get()->Message.Contains("not available"));
+                UNIT_ASSERT(!complete->Get()->Message.Contains("not supported"));
             }
         };
 
@@ -1732,7 +1737,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         check(ydb->GetSettings().GetServerlessTenantName(), ydb->GetServerlessTenantInfo(),
             EStatus::UNSUPPORTED, "serverless databases");
         check(ydb->GetSettings().GetSharedTenantName(), ydb->GetSharedTenantInfo(),
-            EStatus::UNSUPPORTED, "shared resource (serverless compute) databases");
+            EStatus::UNSUPPORTED, "serverless or shared resource databases");
     }
 
     Y_UNIT_TEST(CompileCacheUserIsolation) {

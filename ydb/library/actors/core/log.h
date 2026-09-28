@@ -126,6 +126,9 @@
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 85b8e77f856 ([YDB_LOG] Reimplement TRACE_EVENT (#54073))
 #define TRACE_EVENT(component)                                                              \
     const auto& currentTracer = component;                                                  \
     if (ev->HasEvent()) {                                                                   \
@@ -141,6 +144,7 @@
             {"eventType", ev->Type},                                                        \
             {"sender", ev->Sender.ToString()},                                              \
             {"recipient", ev->Recipient.ToString()});                                       \
+<<<<<<< HEAD
 =======
 #define TRACE_EVENT(component)                                                                                                         \
     const auto& currentTracer = component;                                                                                             \
@@ -151,6 +155,8 @@
         LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
                   __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
 >>>>>>> b38a01406b5 ([YDB_LOG] Remove LOG_LOG_S_THROTTLE/LOG_LOG_THROTTLE (#53919))
+=======
+>>>>>>> 85b8e77f856 ([YDB_LOG] Reimplement TRACE_EVENT (#54073))
     }
 
 #define TRACE_EVENT_TYPE(eventType)                                                         \

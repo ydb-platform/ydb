@@ -47,7 +47,5 @@ TString NPrivate::MapKeyToString(long long key) {
 }
 
 void NPrivate::ThrowKeyNotFoundInHashTableException(const TStringBuf keyRepresentation) {
-    int* x = (int*)0;
-    *x = 1;
     ythrow yexception() << "Key not found in hashtable: " << keyRepresentation;
 }

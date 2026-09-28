@@ -393,6 +393,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
         }
     }
 
+    auto stageGUID = CreateGuidAsString();
+
     if (needFinalUnionStage) {
         // clang-format off
         auto input = Build<TDqCnUnionAll>(ctx, stage->Pos())
@@ -410,7 +412,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
                 .Args({"arg"})
                 .Body("arg")
             .Build()
-            .Settings(NYql::NDq::TDqStageSettings().BuildNode(ctx, stage->Pos()))
+            .Settings(NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, stage->Pos()))
         .Done().Ptr();
     // clang-format on
     } else {
@@ -432,6 +434,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(int rootIdx, const 
     const auto narrowBody =
         NPhysicalConvertionUtils::ExtractMembers(dqStage.Program().Body().Ptr(), ctx, std::move(finalColumns));
 
+    auto stageGUID = CreateGuidAsString();
     // clang-format off
     return Build<TDqPhyStage>(ctx, stage->Pos())
         .InitFrom(dqStage)
@@ -439,6 +442,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(int rootIdx, const 
             .Args(dqStage.Program().Args())
             .Body(narrowBody)
         .Build()
+        .Settings(NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, stage->Pos()))
     .Done().Ptr();
     // clang-format on
 }

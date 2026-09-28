@@ -66,36 +66,39 @@ public:
     }
 
 private:
-    ui64 DirectReadLastOffset(const NKikimrClient::TCmdReadResult& readResult) const {
-        // Tablet LastOffset is the cursor after every offset the tablet walked,
-        // including a multipart message whose tail was not copied into the staged
-        // batch (YDBBUGS-822). The partition actor then sets ReadOffset = LastOffset + 1,
-        // so publishing that cursor skips the missing message on the next DirectRead.
-        ui64 lastOffset = readResult.GetLastOffset();
-        if (!TailClipped || !PreparedResponse) {
-            // Payload matches the tablet cursor: an incomplete tail was either glued
-            // by the follow-up read or was not present.
-            return lastOffset;
+    const NKikimrClient::TCmdReadResult* StagedRead() const {
+        if (!PreparedResponse || !PreparedResponse->HasPartitionResponse()
+            || !PreparedResponse->GetPartitionResponse().HasCmdReadResult())
+        {
+            return nullptr;
         }
-        const auto& staged = PreparedResponse->GetPartitionResponse().GetCmdReadResult();
-        if (staged.ResultSize() == 0) {
-            // Nothing from this read was staged, so the next DirectRead must start
-            // again at readOffset. The published cursor is inclusive: the partition
-            // actor reads from LastOffset + 1, hence readOffset - 1.
-            // The dropped row may itself be a batch. Do not apply LogicalMessageCount
-            // here: that would skip the rest of the batch. Offset 0 has no predecessor.
+        return &PreparedResponse->GetPartitionResponse().GetCmdReadResult();
+    }
+
+    // Cursor of the batch that will be staged, not of the last tablet response.
+    // A follow-up for a blob tail starts at the split message, so its RealReadOffset
+    // and LastOffset do not cover the earlier messages already in this batch.
+    ui64 DirectReadReadOffset() const {
+        const auto* staged = StagedRead();
+        if (staged && staged->ResultSize() > 0) {
+            return staged->GetResult(0).GetOffset();
+        }
+        return Request.GetPartitionRequest().GetCmdRead().GetOffset();
+    }
+
+    ui64 DirectReadLastOffset(const NKikimrClient::TCmdReadResult& readResult) const {
+        const auto* staged = StagedRead();
+        if (!staged || staged->ResultSize() == 0) {
             const ui64 readOffset = Request.GetPartitionRequest().GetCmdRead().GetOffset();
+            const ui64 lastOffset = readResult.GetLastOffset();
             if (readOffset > 0) {
                 return Min(lastOffset, readOffset - 1);
             }
             return lastOffset;
         }
-        const auto& last = staged.GetResult(staged.ResultSize() - 1);
-        // A staged row can be a batch: Offset is its first message, LogicalMessageCount
-        // is how many it covers. Stop on the last message actually present.
-        // Min keeps the cursor from moving past the tablet.
+        const auto& last = staged->GetResult(staged->ResultSize() - 1);
         const ui64 logical = last.GetLogicalMessageCount() > 0 ? last.GetLogicalMessageCount() : 1;
-        return Min(lastOffset, last.GetOffset() + logical - 1);
+        return last.GetOffset() + logical - 1;
     }
 
     void SendResponse(const TActorContext& ctx, bool isDirectRead, const NKikimrClient::TCmdReadResult& readResult,
@@ -108,11 +111,7 @@ private:
             PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
-            prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
-            // YDBBUGS-822: a blob-boundary tail can be omitted from the staged payload
-            // (incomplete part, or a part that does not fit this response) while the
-            // tablet LastOffset already steps past it. The next DirectRead then starts
-            // after the missing message. Keep LastOffset on the last staged record.
+            prepareResponse->SetReadOffset(DirectReadReadOffset());
             prepareResponse->SetLastOffset(DirectReadLastOffset(readResult));
             prepareResponse->SetEndOffset(readResult.GetEndOffset());
 
@@ -264,12 +263,10 @@ private:
                 if (currentReadResult.GetPartNo() == 0) {
                     // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
                     // This is fine, we can drop last message;
-                    TailClipped = true;
                     break;
                 }
                 const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
                 if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
-                    TailClipped = true;
                     break;
                 }
             }
@@ -280,7 +277,6 @@ private:
             if (!isDirectRead && partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
                 currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > readResult.ResultSize())
             {
-                TailClipped = true;
                 break;
             }
 
@@ -382,12 +378,6 @@ private:
                 return;
             }
         }
-        if (partResp->ResultSize() > 0) {
-            const auto& lastRes = partResp->GetResult(partResp->ResultSize() - 1);
-            if (lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) {
-                TailClipped = true;
-            }
-        }
         removeIncompleteMessageIfAny();
         //filter old messages
         ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
@@ -443,8 +433,6 @@ private:
     const bool CanReadBatches;
     const TActorId BatchProcessorActor;
     bool InitialRequest = true;
-    // Staged payload ends before the tablet cursor (incomplete blob-boundary tail).
-    bool TailClipped = false;
     TMaybe<ui64> LastSkipOffset;
     bool PendingDirectRead = false;
     NKikimrClient::TPersQueuePartitionResponse PendingPartitionResponse;

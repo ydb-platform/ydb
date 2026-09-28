@@ -72,6 +72,8 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     add(13, 0, 1);
     add(14, 0, 1);
     add(15, 0, 2);
+    // Glued body is "x" + "y". TotalSize is taken from the first part.
+    rows.MutableResult(rows.ResultSize() - 1)->SetTotalSize(2);
 
     auto response = MakeHolder<TEvPersQueue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -84,6 +86,32 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     const auto& follow = followup->Record.GetPartitionRequest().GetCmdRead();
     UNIT_ASSERT_VALUES_EQUAL(follow.GetOffset(), 15);
     UNIT_ASSERT_VALUES_EQUAL(follow.GetPartNo(), 1);
+
+    // Follow-up response starts at the split message. The published cursor must
+    // still cover the whole staged batch, offsets 13..15.
+    auto tail = MakeHolder<TEvPersQueue::TEvResponse>();
+    tail->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    tail->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    auto* tailResult = tail->Record.MutablePartitionResponse()->MutableCmdReadResult();
+    tailResult->SetRealReadOffset(15);
+    tailResult->SetLastOffset(15);
+    tailResult->SetEndOffset(24);
+    auto* tailRow = tailResult->AddResult();
+    tailRow->SetOffset(15);
+    tailRow->SetPartNo(1);
+    tailRow->SetTotalParts(2);
+    tailRow->SetData("y");
+
+    runtime->SetEventFilter([](NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle>& ev) {
+        return ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>() != nullptr;
+    });
+    runtime->Send(new IEventHandle(proxy, tablet, tail.Release()));
+    auto preparedDirect = runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(setup.Context.Edge, TDuration::Seconds(5));
+    UNIT_ASSERT(preparedDirect && preparedDirect->Get());
+    const auto& prepare = preparedDirect->Get()->Record.GetPartitionResponse().GetCmdPrepareReadResult();
+    UNIT_ASSERT_VALUES_EQUAL(prepare.GetReadOffset(), 13);
+    UNIT_ASSERT_VALUES_EQUAL(prepare.GetLastOffset(), 15);
+    runtime->SetEventFilter(&NActors::TTestActorRuntimeBase::DefaultFilterFunc);
 
     read->ClearDirectReadId();
     auto plain = runtime->Register(CreateReadProxy(

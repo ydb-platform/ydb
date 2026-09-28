@@ -2289,6 +2289,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+        optional uint64 IdleDeviceProbeIntervalSeconds = 13 [(ControlOptions) = {
+            Description: "Issue a one-sector PDisk health read after this many seconds without successful physical I/O. "
+                         "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {

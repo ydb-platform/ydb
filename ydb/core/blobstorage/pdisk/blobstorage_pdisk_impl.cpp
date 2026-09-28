@@ -24,6 +24,38 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
+namespace {
+
+class TIdleDeviceProbeCompletion final : public TCompletionAction {
+    TPDisk* const PDisk;
+    TAlignedData Buffer;
+
+public:
+    TIdleDeviceProbeCompletion(TPDisk* pdisk, ui32 size)
+        : PDisk(pdisk)
+        , Buffer(size)
+    {}
+
+    void* Data() {
+        return Buffer.Get();
+    }
+
+    void Exec(TActorSystem*) override {
+        PDisk->IdleDeviceProbeInFlight.store(false, std::memory_order_release);
+        delete this;
+    }
+
+    void Release(TActorSystem*) override {
+        if (Result != EIoResult::Unknown && Result != EIoResult::Ok) {
+            PDisk->IdleDeviceProbeFailed.store(true, std::memory_order_release);
+        }
+        PDisk->IdleDeviceProbeInFlight.store(false, std::memory_order_release);
+        delete this;
+    }
+};
+
+} // anonymous namespace
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -102,6 +134,9 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     // Enabled by default; can be disabled via ICB (no restart required) to
     // fall back to the legacy PDisk-only overestimation metric computation.
     UseDeviceOverestimationRatioMerged = TControlWrapper(1, 0, 1);
+    IdleDeviceProbeIntervalSeconds = TControlWrapper(0, 0, 86400);
+    ObservedDeviceIoCompletionGeneration = Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+    LastDeviceIoCompletionGenerationChange = HPNow();
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -382,14 +417,7 @@ void TPDisk::Stop() {
         {"marker", "BPD01"},
         {"ownerInfo", StartupOwnerInfo()});
 
-#if defined(__linux__)
-    if (SharedUringRouter) {
-        SharedUringRouter->StopSync();
-        SharedUringRouter.reset();
-    }
-#endif
-
-    BlockDevice->Stop();
+    StopDeviceIo(false);
 
     // BlockDevice is stopped, the data will NOT hit the disk.
     if (CommonLogger.Get()) {
@@ -454,6 +482,29 @@ void TPDisk::Stop() {
         InitialTailBuffer->Exec(PCtx->ActorSystem);
         InitialTailBuffer = nullptr;
     }
+}
+
+void TPDisk::StopDeviceIo(bool isError) {
+    TGuard<TMutex> guard(DeviceIoStopMutex);
+    if (DeviceIoState.load(std::memory_order_acquire) == EDeviceIoState::Stopped) {
+        return;
+    }
+    DeviceIoState.store(EDeviceIoState::Stopping, std::memory_order_release);
+
+#if defined(__linux__)
+    if (SharedUringRouter) {
+        if (isError) {
+            SharedUringRouter->StopAsync(true);
+        }
+        SharedUringRouter->StopSync();
+        SharedUringRouter.reset();
+    }
+#else
+    Y_UNUSED(isError);
+#endif
+
+    BlockDevice->Stop();
+    DeviceIoState.store(EDeviceIoState::Stopped, std::memory_order_release);
 }
 
 void TPDisk::ObliterateCommonLogSectorSet() {
@@ -2280,7 +2331,8 @@ TOwner TPDisk::FindNextOwnerId() {
 }
 
 void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode) {
-    if (SharedUringCreateAttempted) {
+    if (SharedUringCreateAttempted ||
+            DeviceIoState.load(std::memory_order_acquire) != EDeviceIoState::Running) {
         return;
     }
     SharedUringCreateAttempted = true;
@@ -2319,6 +2371,7 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode) {
     router->RegisterFile();
 
     router->SetSampleSink(MakeUringSampleSink());
+    router->SetIoCompletionSink(MakeUringCompletionSink());
 
     router->Start();
 
@@ -2366,6 +2419,13 @@ TDeviceIoSampleSink TPDisk::MakeUringSampleSink() const {
         const ui64 speed = s.IsWrite ? writeBps : readBps;
         s.BaseCostNs = speed ? s.Size * 1'000'000'000ull / speed : 0;
         sampleAgg->Push(s);
+    };
+}
+
+TIoCompletionSink TPDisk::MakeUringCompletionSink() const {
+    auto generation = Mon.DeviceIoCompletionGeneration;
+    return [generation] {
+        generation->fetch_add(1, std::memory_order_relaxed);
     };
 }
 #endif
@@ -3563,6 +3623,8 @@ bool TPDisk::Initialize() {
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
             TControlBoard::RegisterSharedControl(UseDeviceOverestimationRatioMerged,
                     icb->PDiskControls.UseDeviceOverestimationRatioMerged);
+            TControlBoard::RegisterSharedControl(IdleDeviceProbeIntervalSeconds,
+                    icb->PDiskControls.IdleDeviceProbeIntervalSeconds);
             TControlBoard::RegisterSharedControl(StaticGroupChunkReservePerMille,
                     icb->PDiskControls.StaticGroupChunkReservePerMille);
             TControlBoard::RegisterSharedControl(CompactionAdmissionColor,
@@ -4240,7 +4302,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestCompactionBidder:
             break;
         case ERequestType::RequestStopDevice:
-            BlockDevice->Stop();
+            StopDeviceIo(true);
             delete request;
             return false;
         case ERequestType::RequestChunkReadPiece:
@@ -4744,6 +4806,8 @@ void TPDisk::Update() {
 
         // Make input queue empty
         EnqueueAll();
+
+        MaybeScheduleIdleDeviceProbe();
     }
 
     // Make token injection to correct drive model underestimations and avoid disk underutilization
@@ -4886,6 +4950,45 @@ void TPDisk::Update() {
     LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs );
     UpdateCycleOrbit.Reset();
     *Mon.PDiskThreadCPU = ThreadCPUTime();
+}
+
+bool TPDisk::MaybeScheduleIdleDeviceProbe() {
+    const NHPTimer::STime now = HPNow();
+    const i64 intervalSeconds = IdleDeviceProbeIntervalSeconds;
+
+    if (intervalSeconds != IdleDeviceProbeIntervalSecondsCached) {
+        IdleDeviceProbeIntervalSecondsCached = intervalSeconds;
+        ObservedDeviceIoCompletionGeneration =
+            Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+        LastDeviceIoCompletionGenerationChange = now;
+    }
+
+    if (!intervalSeconds || InitPhase.load(std::memory_order_acquire) != EInitPhase::Initialized ||
+            DeviceIoState.load(std::memory_order_acquire) != EDeviceIoState::Running ||
+            IdleDeviceProbeFailed.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    const ui64 generation = Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+    if (generation != ObservedDeviceIoCompletionGeneration) {
+        ObservedDeviceIoCompletionGeneration = generation;
+        LastDeviceIoCompletionGenerationChange = now;
+        return false;
+    }
+
+    if (HPSecondsFloat(now - LastDeviceIoCompletionGenerationChange) < intervalSeconds) {
+        return false;
+    }
+
+    auto* completion = new TIdleDeviceProbeCompletion(this, Format.SectorSize);
+    if (IdleDeviceProbeInFlight.exchange(true, std::memory_order_acq_rel)) {
+        delete completion;
+        return false;
+    }
+
+    BlockDevice->PreadAsync(completion->Data(), Format.SectorSize, 0, completion,
+        TReqId(TReqId::IdleDeviceProbe, 0), nullptr);
+    return true;
 }
 
 void TPDisk::UpdateMinLogCostNs() {

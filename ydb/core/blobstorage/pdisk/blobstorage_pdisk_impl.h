@@ -134,6 +134,10 @@ public:
     // sensors. Can be toggled via ICB without a cluster restart to revert to the
     // old algorithm if something goes wrong with the new one.
     TControlWrapper UseDeviceOverestimationRatioMerged;
+    // Seconds without successful physical I/O before issuing a one-sector
+    // health read. Zero disables the probe; the ICB default is zero.
+    TControlWrapper IdleDeviceProbeIntervalSeconds;
+    i64 IdleDeviceProbeIntervalSecondsCached = 0;
     i64 SemiStrictSpaceIsolationCached = 0;
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
@@ -267,6 +271,18 @@ public:
     volatile ui64 InitialNonceJumpSize = 0;
     TAtomic IsStarted = false;
     TMutex StopMutex;
+    enum class EDeviceIoState : ui8 {
+        Running,
+        Stopping,
+        Stopped,
+    };
+    std::atomic<EDeviceIoState> DeviceIoState = EDeviceIoState::Running;
+    TMutex DeviceIoStopMutex;
+
+    ui64 ObservedDeviceIoCompletionGeneration = 0;
+    NHPTimer::STime LastDeviceIoCompletionGenerationChange = 0;
+    std::atomic<bool> IdleDeviceProbeInFlight = false;
+    std::atomic<bool> IdleDeviceProbeFailed = false;
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
@@ -328,6 +344,7 @@ public:
     // Destruction
     virtual ~TPDisk();
     void Stop(); // Called by actor
+    void StopDeviceIo(bool isError);
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
@@ -441,6 +458,7 @@ public:
     void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);
 #if defined(__linux__)
     TDeviceIoSampleSink MakeUringSampleSink() const;
+    TIoCompletionSink MakeUringCompletionSink() const;
 #endif
     void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
@@ -551,6 +569,7 @@ public:
     void EnqueueAll();
     void GetJobsFromForsetti();
     void Update() override;
+    bool MaybeScheduleIdleDeviceProbe();
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // External interface

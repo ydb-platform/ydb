@@ -886,23 +886,71 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(!normal->UringRouter);
     }
 
+    Y_UNIT_TEST(TestErrorStopRetiresRouterWithRetainedInitResult) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        TManualEvent retired;
+        ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            NPDisk::TPDiskTestPeer::ConfigureRouter(*pdisk, [&](NPDisk::TUringRouter& instance) {
+                NPDisk::NUringPrivate::TRouterHooks hooks;
+                hooks.Retired = [&] { retired.Signal(); };
+                NPDisk::TUringRouterTestPeer::SetHooks(instance, std::move(hooks));
+            });
+        });
+        auto init = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0, true), NKikimrProto::OK);
+        auto router = std::dynamic_pointer_cast<NPDisk::TUringRouter>(init->UringRouter);
+        UNIT_ASSERT(router);
+
+        auto* pdisk = ctx.GetPDisk();
+        pdisk->InputRequest(pdisk->ReqCreator.CreateFromArgs<NPDisk::TStopDevice>());
+        UNIT_ASSERT_C(retired.WaitT(TDuration::Seconds(10)), "shared router was not retired by error stop");
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (pdisk->DeviceIoState.load(std::memory_order_acquire) != NPDisk::TPDisk::EDeviceIoState::Stopped) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "device I/O teardown did not finish");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+
+        UNIT_ASSERT(router->IsBroken());
+        UNIT_ASSERT(NPDisk::TUringRouterTestPeer::Retired(*router));
+        UNIT_ASSERT(!pdisk->BlockDevice->DuplicateFd().IsOpen());
+        TFile independent(ctx.TestCtx.Path, OpenExisting | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
+    }
+
     Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         auto pdisk = MakeHolder<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg,
             MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto sink = pdisk->MakeUringSampleSink();
+        auto completionSink = pdisk->MakeUringCompletionSink();
         std::weak_ptr<NPDisk::TDeviceOverestimationAggregator> aggregator = pdisk->Mon.DeviceOverestimationMerged;
+        std::weak_ptr<std::atomic<ui64>> generation = pdisk->Mon.DeviceIoCompletionGeneration;
         pdisk.Reset();
         UNIT_ASSERT(!aggregator.expired());
+        UNIT_ASSERT(!generation.expired());
         NPDisk::TDeviceIoSample sample;
         sample.Size = 4096;
         sample.SubmitCycles = 1;
         sample.CompleteCycles = 2;
         sink(sample);
         UNIT_ASSERT_VALUES_EQUAL(aggregator.lock()->ComputeAndReset(0).SampleCount, 1);
+        completionSink();
+        UNIT_ASSERT_VALUES_EQUAL(generation.lock()->load(std::memory_order_relaxed), 1u);
         sink = {};
         UNIT_ASSERT(aggregator.expired());
+        UNIT_ASSERT(!generation.expired());
+        completionSink = {};
+        UNIT_ASSERT(generation.expired());
     }
 
     Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
@@ -2597,6 +2645,79 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         control->RestoreDefault();
         UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+    }
+
+    Y_UNIT_TEST(IdleDeviceProbeControlDefaultsToDisabledAndUsesSeconds) {
+        TActorTestContext testCtx{{}};
+        testCtx.GetPDisk();
+
+        auto& icb = testCtx.GetRuntime()->GetAppData().Icb;
+        auto control = icb->PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT_C(control, "IdleDeviceProbeIntervalSeconds must be registered by PDisk::Initialize");
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 0);
+
+        control->SetFromHtmlRequest(5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 5);
+        control->SetFromHtmlRequest(100000);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 86400);
+        control->RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+    }
+
+    Y_UNIT_TEST(IdleDeviceProbeReadsAfterCompletionGenerationStalls) {
+        TActorTestContext testCtx{{}};
+        auto* pdisk = testCtx.GetPDisk();
+        auto control = testCtx.GetRuntime()->GetAppData().Icb->
+            PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+        control->SetFromHtmlRequest(1);
+
+        ui64 generationBefore = 0;
+        const bool scheduled = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            p->IdleDeviceProbeIntervalSecondsCached = 1;
+            generationBefore = p->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+            p->ObservedDeviceIoCompletionGeneration = generationBefore;
+            p->LastDeviceIoCompletionGenerationChange = 0;
+            return p->MaybeScheduleIdleDeviceProbe();
+        });
+        UNIT_ASSERT(scheduled);
+
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (pdisk->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed) == generationBefore ||
+                pdisk->IdleDeviceProbeInFlight.load(std::memory_order_acquire)) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "idle device probe did not complete");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Normal);
+    }
+
+    Y_UNIT_TEST(IdleDeviceProbeFailureMovesPDiskToDeviceErrorAndStopsIo) {
+        TActorTestContext testCtx{{}};
+        auto* pdisk = testCtx.GetPDisk();
+        auto control = testCtx.GetRuntime()->GetAppData().Icb->
+            PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+        control->SetFromHtmlRequest(1);
+        testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
+
+        const bool scheduled = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            p->IdleDeviceProbeIntervalSecondsCached = 1;
+            p->ObservedDeviceIoCompletionGeneration =
+                p->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+            p->LastDeviceIoCompletionGenerationChange = 0;
+            return p->MaybeScheduleIdleDeviceProbe();
+        });
+        UNIT_ASSERT(scheduled);
+
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (pdisk->Mon.PDiskState->Val() != NKikimrBlobStorage::TPDiskState::DeviceIoError ||
+                pdisk->DeviceIoState.load(std::memory_order_acquire) != NPDisk::TPDisk::EDeviceIoState::Stopped) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "probe failure did not stop PDisk device I/O");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT(pdisk->IdleDeviceProbeFailed.load(std::memory_order_acquire));
+        UNIT_ASSERT(!pdisk->IdleDeviceProbeInFlight.load(std::memory_order_acquire));
     }
 
     Y_UNIT_TEST(DeviceHaltTooLong) {

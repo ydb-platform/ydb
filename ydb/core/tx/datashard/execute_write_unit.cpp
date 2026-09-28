@@ -576,13 +576,6 @@ public:
         NDataIntegrity::LogIntegrityTrailsUnsafeTruncate(ctx, DataShard.TabletID(), globalTxId, tableId,
             TStringBuilder() << mvccVersion.Step << ":" << mvccVersion.TxId,
             lockStats.Broken, lockStats.Preserved);
-
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: unsafe truncated table",
-            {"tabletId", DataShard.TabletID()},
-            {"tableId", tableId},
-            {"localTid", localTid},
-            {"brokenLocks", lockStats.Broken},
-            {"preservedLocks", lockStats.Preserved});
     }
 
     void DoUpdateToUserDb(TDataShardUserDb& userDb, const TValidatedWriteTxOperation& validatedOperation, TTransactionContext& txc) {

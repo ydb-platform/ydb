@@ -1,4 +1,5 @@
 #include "yql_pq_provider_impl.h"
+#include "yql_pq_pushdown.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -25,24 +26,16 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
-    struct TPushdownSettings: public NPushdown::TSettings {
-        TPushdownSettings()
-            : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
-        {
-            using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(
-                // Operator features
-                EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
-                EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
-                EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals | EFlag::PredicateAsExpression |
-
-                // Split features
-                EFlag::SplitOrOperator
-            );
-            EnableFunction("Re2.Grep");  // For REGEXP pushdown
-        }
-    };
+struct TPushdownSettings: public NPq::TCommonPushdownSettings {
+    TPushdownSettings()
+    {
+        using EFlag = NPushdown::TSettings::EFeatureFlag;
+        Enable(
+            // Split features
+            EFlag::SplitOrOperator
+        );
+    }
+};
 
 std::unordered_set<TString> GetUsedColumnNames(const TCoExtractMembers& extractMembers) {
     std::unordered_set<TString> usedColumnNames;
@@ -276,7 +269,7 @@ public:
 
         TStringBuilder err;
         NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
             return node;
         }

@@ -57,6 +57,22 @@ struct TColumnStatistics {
     {}
 };
 
+struct TMultiColumnStatistics {
+    TVector<TString> Columns;
+    TVector<TString> Types;
+    std::shared_ptr<NKikimr::TEqHeightHistogram> EqHeightHistogram;
+    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+
+    TMultiColumnStatistics() {}
+    TMultiColumnStatistics(const NYql::TMultiColumnStatistics& yqlStats) : Columns(yqlStats.Columns)
+        , Types(yqlStats.Types)
+        , EqHeightHistogram(yqlStats.EqHeightHistogram)
+        , CountMinSketch(yqlStats.CountMinSketch)
+    {}
+};
+
+using NYql::MakeMultiColumnKey;
+
 class TShufflingOrderingsByJoinLabels {
 public:
     void Add(TVector<TString> joinLabels, TOrderingsStateMachine::TLogicalOrderings shufflings) {
@@ -109,6 +125,7 @@ struct TOptimizerStatistics {
 
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString, TColumnStatistics> Data;
+        THashMap<TString, TMultiColumnStatistics> MultiData;
         TColumnStatMap() {}
         explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data) : Data(std::move(data)) {}
     };

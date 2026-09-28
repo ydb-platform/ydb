@@ -65,6 +65,12 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(dataMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
         }
 
+        // Transform() walks the map record by record; a second pass over the same records (a compaction that was
+        // planned first) starts it over.
+        void RestartTransform() {
+            Counter = 0;
+        }
+
     private:
         THullCtxPtr HullCtx;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;

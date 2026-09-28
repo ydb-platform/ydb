@@ -812,6 +812,13 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmExtraMemFree = KqpGroup->GetCounter("RM/ExtraMemFree", true);
     RmOnCompleteFree = KqpGroup->GetCounter("RM/OnCompleteFree", true);
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
+    RmArenaSize = KqpGroup->GetCounter("RM/ArenaSize", false);
+    RmArenaUsed = KqpGroup->GetCounter("RM/ArenaUsed", false);
+    RmArenaDeficit = KqpGroup->GetCounter("RM/ArenaDeficit", false);
+    RmArenaGrows = KqpGroup->GetCounter("RM/ArenaGrows", true);
+    RmArenaShrinks = KqpGroup->GetCounter("RM/ArenaShrinks", true);
+    RmArenaGrowFailures = KqpGroup->GetCounter("RM/ArenaGrowFailures", true);
+    RmArenaBurstGrows = KqpGroup->GetCounter("RM/ArenaBurstGrows", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 

@@ -50,6 +50,12 @@ Y_UNIT_TEST(TruncateTable) {
 
         {"use plato;truncate table `/Root/test/table` with();",
          "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE);\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true,other = false);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE, other = FALSE);\n"},
     };
 
     TSetup setup;
@@ -377,6 +383,18 @@ Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
     TSetup setup;
     setup.Run({{"alter table t set ttl interval('P1D') to external data source `eds`.`archive/data` on ts",
                 "ALTER TABLE t\n\tSET ttl interval('P1D') TO EXTERNAL DATA SOURCE `eds`.`archive/data` ON ts\n;\n"}});
+}
+
+Y_UNIT_TEST(SymlinkOperations) {
+    TCases cases = {
+        {"create symlink plato.link to target", "CREATE SYMLINK plato.link TO target;\n"},
+        {"create symlink if not exists link to target", "CREATE SYMLINK IF NOT EXISTS link TO target;\n"},
+        {"drop symlink link", "DROP SYMLINK link;\n"},
+        {"drop symlink if exists plato.link", "DROP SYMLINK IF EXISTS plato.link;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
 }
 
 Y_UNIT_TEST(CreateTable) {
@@ -1258,6 +1276,63 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n"},
         {"select * from $user where key == 1 -- comment",
          "SELECT\n\t*\nFROM\n\t$user\nWHERE\n\tkey == 1 -- comment\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(GroupingElementLists) {
+    TCases cases = {
+        {R"sql(select 1 from user group by cube (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                CUBE (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by rollup (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                ROLLUP (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets (cube (a, b), rollup (c, d), e))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    CUBE (
+                        a,
+                        b
+                    ),
+                    ROLLUP (
+                        c,
+                        d
+                    ),
+                    e
+                )
+            ;
+
+         )sql")},
     };
 
     TSetup setup;

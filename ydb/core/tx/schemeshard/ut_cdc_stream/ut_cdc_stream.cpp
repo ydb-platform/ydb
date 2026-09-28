@@ -336,6 +336,90 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(SchemaChangesRejectUnnamedFamilies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies { Id: 0 StorageConfig { SysLog {} Log {} } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "value" Family: 1 }
+            PartitionConfig {
+              ColumnFamilies { Id: 1 ColumnCodec: ColumnCodecLZ4 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "LegacyStream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+              ColumnFamilies { Id: 1 ColumnCodec: ColumnCodecPlain }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OtherTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies { Id: 0 StorageConfig { SysLog {} Log {} } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "OtherTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OtherTable"
+            Columns { Name: "value" Family: 1 }
+            PartitionConfig {
+              ColumnFamilies { Id: 1 ColumnCodec: ColumnCodecLZ4 }
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+    }
+
     Y_UNIT_TEST(RetentionPeriod) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));

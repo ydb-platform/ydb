@@ -67,6 +67,12 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
     TExtContext& ctx,
     const TInputs& inputs);
 
+IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
+IGraphTransformer::TStatus FinalizeYqlColumnRefs(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 

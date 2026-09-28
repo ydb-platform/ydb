@@ -19,6 +19,7 @@ namespace NYT::NHttp {
 
 namespace NHeaders {
 
+inline const std::string AcceptEncodingHeaderName("Accept-Encoding");
 inline const std::string AcceptHeaderName("Accept");
 inline const std::string AccessControlAllowCredentialsHeaderName("Access-Control-Allow-Credentials");
 inline const std::string AccessControlAllowHeadersHeaderName("Access-Control-Allow-Headers");
@@ -28,6 +29,7 @@ inline const std::string AccessControlExposeHeadersHeaderName("Access-Control-Ex
 inline const std::string AccessControlMaxAgeHeaderName("Access-Control-Max-Age");
 inline const std::string AuthorizationHeaderName("Authorization");
 inline const std::string CacheControlHeaderName("Cache-Control");
+inline const std::string ContentEncodingHeaderName("Content-Encoding");
 inline const std::string ContentRangeHeaderName("Content-Range");
 inline const std::string ContentTypeHeaderName("Content-Type");
 inline const std::string CookieHeaderName("Cookie");
@@ -36,6 +38,7 @@ inline const std::string PragmaHeaderName("Pragma");
 inline const std::string RangeHeaderName("Range");
 inline const std::string RequestTimeoutHeaderName("Request-Timeout");
 inline const std::string UserAgentHeaderName("User-Agent");
+inline const std::string VaryHeaderName("Vary");
 inline const std::string XContentTypeOptionsHeaderName("X-Content-Type-Options");
 inline const std::string XRequestTimeoutHeaderName("X-Request-Timeout");
 

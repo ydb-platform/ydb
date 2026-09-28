@@ -17,8 +17,6 @@
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
-#include <deque>
-
 namespace NYql::NDq {
 
 using namespace NKikimr;
@@ -177,7 +175,6 @@ private:
             }
         }
         ReadySet = std::move(readySet);
-        SlotStates.assign(Inputs.size(), ESlotState::Idle);
     }
 
     NUdf::EFetchStatus FindBuffer() {
@@ -190,26 +187,14 @@ private:
         return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
     }
 
-    // Visits the marked inputs, and those which had data the last time, as they may have more. An input leaves
-    // the Ready queue only once it has been found empty, which asks it to wake the consumer up on its next push.
+    // Visits the inputs ReadySet hands out: the marked ones, and those which had data the last time
     bool FindNotified() {
-        Taken.clear();
-        ReadySet->Take(Taken);
-        for (auto slot : Taken) {
-            if (SlotStates[slot] == ESlotState::Idle) {
-                SlotStates[slot] = ESlotState::Ready;
-                Ready.push_back(slot);
-            }
-        }
-
-        for (auto count = Ready.size(); count > 0; --count) {
-            auto slot = Ready.front();
-            Ready.pop_front();
-            // cleared before the input is looked at, see TDqInputReadySet
-            ReadySet->Clear(slot);
+        ReadySet->Collect();
+        for (auto count = ReadySet->ReadyCount(); count > 0; --count) {
+            auto slot = ReadySet->Next();
             auto& input = Inputs[slot];
             if (input->Pop(Batch, Watermark)) {
-                Ready.push_back(slot);
+                ReadySet->Keep(slot);
                 InputKey = InputKeys[slot];
                 return true;
             }
@@ -217,10 +202,11 @@ private:
                 if (WatermarksEnabled()) {
                     WatermarksTracker->UnregisterInput(InputKeys[slot].InputId, InputKeys[slot].IsChannel, /*silent=*/true);
                 }
-                SlotStates[slot] = ESlotState::Finished;
+                ReadySet->Retire(slot);
                 --Alive;
             } else {
-                SlotStates[slot] = ESlotState::Idle;
+                // found empty, which asks the input to wake the consumer up on its next push
+                ReadySet->Release(slot);
             }
         }
 
@@ -293,15 +279,7 @@ private:
     TDqComputeActorWatermarks* WatermarksTracker;
 
     // set when the inputs are visited when marked rather than polled, see BindReadySet
-    enum class ESlotState : ui8 {
-        Idle,       // found empty, waits for a mark
-        Ready,      // in Ready
-        Finished,
-    };
     std::shared_ptr<TDqInputReadySet> ReadySet;
-    std::vector<ESlotState> SlotStates;
-    std::deque<ui32> Ready;
-    std::vector<ui32> Taken;
 };
 
 template<bool IsWide>

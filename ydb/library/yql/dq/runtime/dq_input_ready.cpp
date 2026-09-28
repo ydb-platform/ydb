@@ -6,8 +6,13 @@ namespace NYql::NDq {
 
 TDqInputReadySet::TDqInputReadySet(ui32 size)
     : Marked(size)
+    , States(size, ESlotState::Idle)
 {
+    for (auto& marked : Marked) {
+        marked.store(false, std::memory_order_relaxed);
+    }
     Queue.reserve(size);
+    Taken.reserve(size);
 }
 
 void TDqInputReadySet::Mark(ui32 slot) {
@@ -20,23 +25,49 @@ void TDqInputReadySet::Mark(ui32 slot) {
         std::lock_guard lock(Mutex);
         Queue.push_back(slot);
     }
-    // after the slot is queued: a Take which finds Pending set finds the slot, or a later one does
+    // after the slot is queued: a Collect which finds Pending set finds the slot, or a later one does
     Pending.store(true);
 }
 
-void TDqInputReadySet::Take(std::vector<ui32>& slots) {
+void TDqInputReadySet::Collect() {
     if (!Pending.load() || !Pending.exchange(false)) {
         return;
     }
-    std::lock_guard lock(Mutex);
-    slots.insert(slots.end(), Queue.begin(), Queue.end());
-    Queue.clear();
+    Taken.clear();
+    {
+        std::lock_guard lock(Mutex);
+        Taken.swap(Queue);
+    }
+    for (auto slot : Taken) {
+        if (States[slot] == ESlotState::Idle) {
+            States[slot] = ESlotState::Ready;
+            Ready.push_back(slot);
+        }
+    }
 }
 
-void TDqInputReadySet::Clear(ui32 slot) {
-    Y_DEBUG_ABORT_UNLESS(slot < Marked.size());
-    // a store, seq_cst, which may be followed by a load of the state of the input: see the class comment
+ui32 TDqInputReadySet::Next() {
+    Y_DEBUG_ABORT_UNLESS(!Ready.empty());
+    auto slot = Ready.front();
+    Ready.pop_front();
+    // a store, seq_cst, followed by the load of the state of the input: see the class comment
     Marked[slot].store(false);
+    return slot;
+}
+
+void TDqInputReadySet::Keep(ui32 slot) {
+    Y_DEBUG_ABORT_UNLESS(States[slot] == ESlotState::Ready);
+    Ready.push_back(slot);
+}
+
+void TDqInputReadySet::Release(ui32 slot) {
+    Y_DEBUG_ABORT_UNLESS(States[slot] == ESlotState::Ready);
+    States[slot] = ESlotState::Idle;
+}
+
+void TDqInputReadySet::Retire(ui32 slot) {
+    Y_DEBUG_ABORT_UNLESS(States[slot] == ESlotState::Ready);
+    States[slot] = ESlotState::Retired;
 }
 
 } // namespace NYql::NDq

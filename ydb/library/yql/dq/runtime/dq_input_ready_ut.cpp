@@ -161,34 +161,48 @@ struct TUnionTest {
 
 Y_UNIT_TEST_SUITE(DqInputReadySet) {
 
-    Y_UNIT_TEST(MarkTakeClear) {
+    Y_UNIT_TEST(ConsumerApi) {
         TDqInputReadySet set(4);
-        std::vector<ui32> slots;
 
-        set.Take(slots);
-        UNIT_ASSERT(slots.empty());
+        set.Collect();
+        UNIT_ASSERT_VALUES_EQUAL(set.ReadyCount(), 0);
 
+        // marked twice, queued once
         set.Mark(2);
         set.Mark(2);
         set.Mark(0);
-        set.Take(slots);
-        UNIT_ASSERT_VALUES_EQUAL(slots.size(), 2);
+        set.Collect();
+        UNIT_ASSERT_VALUES_EQUAL(set.ReadyCount(), 2);
 
-        // still marked: not queued again until cleared
-        slots.clear();
-        set.Mark(2);
-        set.Take(slots);
-        UNIT_ASSERT(slots.empty());
+        // had data: back to the tail; marked while taken: not queued a 2nd time
+        auto first = set.Next();
+        UNIT_ASSERT_VALUES_EQUAL(first, 2);
+        set.Mark(first);
+        set.Keep(first);
+        set.Collect();
+        UNIT_ASSERT_VALUES_EQUAL(set.ReadyCount(), 2);
 
-        set.Clear(2);
-        set.Mark(2);
-        set.Take(slots);
-        UNIT_ASSERT_VALUES_EQUAL(slots.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(slots[0], 2);
+        // found empty: out until marked again
+        auto second = set.Next();
+        UNIT_ASSERT_VALUES_EQUAL(second, 0);
+        set.Release(second);
+        UNIT_ASSERT_VALUES_EQUAL(set.ReadyCount(), 1);
+        set.Mark(second);
+        set.Collect();
+        UNIT_ASSERT_VALUES_EQUAL(set.ReadyCount(), 2);
+
+        // finished: its marks are ignored
+        auto third = set.Next();
+        UNIT_ASSERT_VALUES_EQUAL(third, 2);
+        set.Retire(third);
+        set.Mark(third);
+        set.Collect();
+        UNIT_ASSERT_VALUES_EQUAL(set.ReadyCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(set.Next(), 0);
     }
 
-    // Producers make an item visible and then mark its slot, the consumer clears a slot and then takes what is
-    // there: no item may be left behind with its slot neither marked nor being served
+    // Producers make an item visible and then mark its slot, the consumer visits what the set hands out, one item
+    // per visit as a union pops a chunk: no item may be left behind with its slot neither marked nor ready
     Y_UNIT_TEST(NoLostMarkUnderRace) {
         constexpr ui32 slotCount = 8;
         constexpr ui32 producerCount = 4;
@@ -212,43 +226,30 @@ Y_UNIT_TEST_SUITE(DqInputReadySet) {
 
         const ui64 total = producerCount * itemsPerProducer;
         ui64 consumed = 0;
-        std::vector<ui32> taken;
-        std::deque<ui32> ready;
-        std::vector<bool> inReady(slotCount);
         TInstant stuckSince;
         while (consumed < total) {
-            taken.clear();
-            set.Take(taken);
-            for (auto slot : taken) {
-                if (!inReady[slot]) {
-                    inReady[slot] = true;
-                    ready.push_back(slot);
-                }
-            }
-            if (ready.empty()) {
+            set.Collect();
+            if (set.ReadyCount() == 0) {
                 if (producersDone.load() == producerCount) {
-                    // every mark is in by now: nothing to serve means an item was left behind
+                    // every mark is in by now: nothing ready means an item was left behind
                     if (!stuckSince) {
                         stuckSince = TInstant::Now();
                     }
                     UNIT_ASSERT_C(TInstant::Now() - stuckSince < TDuration::Seconds(5),
-                        TStringBuilder() << "consumed " << consumed << " of " << total << " and nothing is marked");
+                        TStringBuilder() << "consumed " << consumed << " of " << total << " and nothing is ready");
                 }
                 continue;
             }
             stuckSince = TInstant::Zero();
-            auto slot = ready.front();
-            ready.pop_front();
-            set.Clear(slot);
-            // takes one at a time, as a union pops a chunk per visit
+            auto slot = set.Next();
             auto value = available[slot].load();
             if (value > 0 && available[slot].compare_exchange_strong(value, value - 1)) {
                 consumed++;
-                ready.push_back(slot);
+                set.Keep(slot);
             } else if (value > 0) {
-                ready.push_back(slot);
+                set.Keep(slot);
             } else {
-                inReady[slot] = false;
+                set.Release(slot);
             }
         }
 

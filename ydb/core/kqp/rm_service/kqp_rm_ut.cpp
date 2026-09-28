@@ -1174,7 +1174,8 @@ void KqpRm::TaskQuotaManagerOptional() {
             tx->TotalMemoryCookie->MemoryAvailability.store(saved);
             qm->FreeQuota(50);
             qm.reset();
-            // the initial limit and the execution unit stay with the query quota manager
+            // the initial limit and the execution unit stay with the query quota manager till the compute actor
+            // terminates (FreeTasks) or the query quota manager dies
             assertHeld(query, 100);
             UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 900);
@@ -1251,9 +1252,11 @@ void KqpRm::TaskQuotaManagerOptional() {
 }
 
 // The query quota manager is the only path between the tx and the resource manager. It holds the execution units and
-// the external memory of the started tasks till it dies; the task and channel quota managers start with their part of
-// that external memory as the initial limit, take Memory through AllocateQuota and FreeQuota and return, when they
-// die, only the Memory they grew by. It counts what the query holds: the external memory and the Memory
+// the external memory of the started tasks; the task and channel quota managers start with their part of that external
+// memory as the initial limit, take Memory through AllocateQuota and FreeQuota and return, when they die, only the
+// Memory they grew by. A terminated compute actor returns the execution unit and the initial limit of its task
+// (FreeTasks), the rest is returned when the query quota manager dies. It counts what the query holds: the external
+// memory and the Memory
 void KqpRm::QueryQuotaManager() {
     StartRms();
     NKikimr::TActorSystemStub stub;
@@ -1315,15 +1318,22 @@ void KqpRm::QueryQuotaManager() {
         // the children outlive the owner (the query manager actor dies before the compute actors are destroyed)
         std::weak_ptr<IQueryQuotaManager> weak = query;
         query.reset();
-        t1.reset(); // returns the 64 it grew by, not its initial limit
-        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 314);
-        UNIT_ASSERT_VALUES_EQUAL(held(), 314);
-        t2.reset();
-        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 314);
+        // the compute actor of task 1 terminates: its execution unit and initial limit come back
+        weak.lock()->FreeTasks(1, 100);
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 278);
+        UNIT_ASSERT_VALUES_EQUAL(held(), 278);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 1);
+        t1.reset(); // then its task quota manager dies and returns the 64 it grew by
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 214);
+        UNIT_ASSERT_VALUES_EQUAL(held(), 214);
+        t2.reset(); // no terminated compute actor: the initial limit stays with the query quota manager
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 214);
         cm->FreeQuota(100); // stays prepaid in the channel quota manager
-        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 314);
-        UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 2);
-        cm.reset(); // the last child: the query quota manager dies and returns the execution units and the external memory
+        UNIT_ASSERT_VALUES_EQUAL(weak.lock()->GetCurrentQuota(), 214);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 1);
+        // the last child: the query quota manager dies and returns the rest, the external memory of task 2 and of the
+        // channels and the execution unit of task 2
+        cm.reset();
         UNIT_ASSERT(weak.expired());
         UNIT_ASSERT_VALUES_EQUAL(held(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 0);

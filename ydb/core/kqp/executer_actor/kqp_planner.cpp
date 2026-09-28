@@ -575,7 +575,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
-    // held by the query quota manager till it dies, the task starts with it
+    // the task starts with it and returns it when its compute actor terminates
     auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
@@ -608,6 +608,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
+        .QueryQuotaManager = QueryQuotaManager,
+        .InitialMemoryLimit = initialMemoryLimit,
         .UserToken = UserToken,
         .Database = Database,
         .Query = Query,

@@ -25,7 +25,8 @@ public:
         Y_ABORT_UNLESS(Tx && Tx->ResourceManager);
     }
 
-    // the task and channel quota managers keep it alive: their Memory is back by now
+    // the task and channel quota managers keep it alive: their Memory is back by now. The external memory left is the
+    // one of the channels and of the tasks whose compute actors did not terminate
     ~TQueryQuotaManager() override {
         const ui64 externalMemory = ExternalMemory.load();
         Y_DEBUG_ABORT_UNLESS(AllocatedMemory.load() == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
@@ -48,6 +49,20 @@ public:
             Allocated(externalMemory);
         }
         return result;
+    }
+
+    void FreeTasks(ui64 executionUnits, ui64 externalMemory) override {
+        // uncounted before the release: never more than the tx holds
+        const ui64 prevUnits = ExecutionUnits.fetch_sub(executionUnits);
+        const ui64 prevExternal = ExternalMemory.fetch_sub(externalMemory);
+        const ui64 prevAllocated = AllocatedMemory.fetch_sub(externalMemory);
+        Y_DEBUG_ABORT_UNLESS(prevUnits >= executionUnits && prevExternal >= externalMemory && prevAllocated >= externalMemory,
+            "TxId: %" PRIu64 ", freeing %" PRIu64 " execution units of %" PRIu64 ", %" PRIu64 " bytes of external memory of %" PRIu64,
+            Tx->TxId, executionUnits, prevUnits, externalMemory, prevExternal);
+        Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
+            .ExecutionUnits = executionUnits,
+            .ExternalMemory = externalMemory,
+        });
     }
 
     const TIntrusivePtr<NRm::TTxState>& GetTx() const override {
@@ -108,7 +123,7 @@ private:
     }
 
     const TIntrusivePtr<NRm::TTxState> Tx;
-    // held till the destructor
+    // not returned yet
     std::atomic<ui64> ExecutionUnits = 0;
     std::atomic<ui64> ExternalMemory = 0;
     // Memory + ExternalMemory
@@ -429,7 +444,8 @@ public:
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException()));
         }
 
-        // held by the query quota manager till it dies, the tasks and the channels start with their part of it
+        // the tasks and the channels start with their part of it; a task returns its part when its compute actor
+        // terminates, the rest is returned when the query quota manager dies
         auto rmResult = QueryQuotaManager->AllocateTasks(tasksCount, externalMemory);
 
         if (!rmResult) {
@@ -496,6 +512,8 @@ public:
                 .RlPath = rlPath,
                 .ComputesByStages = &computesByStage,
                 .State = State_, // pass state to later inform when task is finished
+                .QueryQuotaManager = QueryQuotaManager,
+                .InitialMemoryLimit = initialMemoryLimit,
                 .Database = msg.GetDatabase(),
                 .Query = query,
                 .UseBatchPool = msg.GetUseBatchPool(),

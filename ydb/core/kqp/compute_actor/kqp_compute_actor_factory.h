@@ -15,6 +15,7 @@
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
     class TNodeState;
+    class IQueryQuotaManager;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -136,6 +137,10 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<TNodeState> State = nullptr;
+        // the execution unit and the initial memory limit (external memory) of the task are returned to it when the
+        // compute actor terminates, see IQueryQuotaManager::FreeTasks
+        std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
+        ui64 InitialMemoryLimit = 0;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 

@@ -274,37 +274,12 @@ struct TConsumerPreparationParameters {
     std::optional<TString> MonitoringProjectId;
 };
 
-<<<<<<< HEAD
-=======
-NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
-    const TTabletPreparationParameters& parameters,
-    TConstArrayRef<TConsumerPreparationParameters> users,
-    TTestActorRuntime& runtime,
-    ui32 version);
-
-void SendPQTabletConfig(
-    TTestActorRuntime& runtime,
-    ui64 tabletId,
-    const TActorId& edge,
-    const NKikimrPQ::TPQTabletConfig& tabletConfig,
-    ui64 txId,
-    ui64 planStep);
-
-// txId и planStep по умолчанию берутся из возрастающего счётчика: каждый вызов - отдельная
-// транзакция. Явные значения нужны только там, где тест проверяет конкретную пару
->>>>>>> 804e2c01d93 (Fix TEvPlanStepAccepted ordering in PQ tablet (#52566))
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TConstArrayRef<TConsumerPreparationParameters> users,
     TTestActorRuntime& runtime,
     ui64 tabletId,
-<<<<<<< HEAD
     TActorId edge);
-=======
-    TActorId edge,
-    ui64 txId = 0,
-    ui64 planStep = 0);
->>>>>>> 804e2c01d93 (Fix TEvPlanStepAccepted ordering in PQ tablet (#52566))
 
 
 struct TBalancerParams {

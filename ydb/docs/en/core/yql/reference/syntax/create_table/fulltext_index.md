@@ -16,6 +16,10 @@ CREATE TABLE `<table_name>` (
 )
 ```
 
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
+## Parameters {#parameters}
+
 Where:
 
 * `<index_name>` - unique index name for data access
@@ -25,8 +29,6 @@ Where:
 * `<parameter_name>` and `<parameter_value>` - list of key-value parameters:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Examples
 

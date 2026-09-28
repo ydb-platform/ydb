@@ -10,7 +10,7 @@ Fulltext indexes in {{ ydb-short-name }} are built by tokenizing text and creati
 
 * fast filtering with [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match)
 * relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) with [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) when using [fulltext_relevance](#relevance)
-* case normalization, stemming, [lemmatization with SuperLemmer](#superlemmer), and n-gram matching via index filters
+* case normalization, stemming, [lemmatization with SuperLemmer](../yql/reference/syntax/create_table/fulltext_index.md#superlemmer), and n-gram matching via index filters
 
 The current implementation supports two indexes:
 
@@ -148,31 +148,6 @@ LIMIT 20;
 ```
 
 Multiple filter columns are supported. The equality predicates may appear in any order in `WHERE`; {{ ydb-short-name }} reorders them internally to match the index column order.
-
-## Lemmatization with SuperLemmer {#superlemmer}
-
-[SuperLemmer](../concepts/glossary.md#superlemmer) normalizes word forms for fulltext search and is primarily optimized for Russian.
-
-{% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
-
-Set `use_filter_superlemmer=true` and specify `language` on a [fulltext_plain](#basic) or [fulltext_relevance](#relevance) index. SuperLemmer cannot be combined with Snowball, n-gram, or edge n-gram filters. For example, to index Russian text in an existing table:
-
-```yql
-ALTER TABLE articles
-  ADD INDEX ft_superlemmer GLOBAL USING fulltext_plain
-  ON (body)
-  WITH (tokenizer=standard, use_filter_lowercase=true,
-        use_filter_superlemmer=true, language="russian");
-```
-
-Search using the index; the filter also normalizes the search terms:
-
-```yql
-SELECT id, title
-FROM articles VIEW ft_superlemmer
-WHERE FulltextMatch(body, "поисковые запросы")
-LIMIT 20;
-```
 
 ## Primary key types {#primary-key}
 

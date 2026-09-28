@@ -10,7 +10,7 @@
 
 * быстро фильтровать строки через [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match);
 * ранжировать результаты по релевантности ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) через [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) при использовании [fulltext_relevance](#relevance);
-* применять нормализацию регистра, стемминг, [лемматизацию с SuperLemmer](#superlemmer) и N-граммы с помощью фильтров индекса.
+* применять нормализацию регистра, стемминг, [лемматизацию с SuperLemmer](../yql/reference/syntax/create_table/fulltext_index.md#superlemmer) и N-граммы с помощью фильтров индекса.
 
 В текущей реализации доступны два варианта индекса:
 
@@ -148,31 +148,6 @@ LIMIT 20;
 ```
 
 Поддерживается несколько колонок фильтрации. Предикаты равенства в `WHERE` могут быть указаны в любом порядке — {{ ydb-short-name }} автоматически упорядочит их в соответствии с порядком колонок в индексе.
-
-## Лемматизация с SuperLemmer {#superlemmer}
-
-[SuperLemmer](../concepts/glossary.md#superlemmer) приводит формы слов к общему виду для полнотекстового поиска и оптимизирован прежде всего для русского языка.
-
-{% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
-
-Задайте `use_filter_superlemmer=true` и язык в параметре `language` для индекса [fulltext_plain](#basic) или [fulltext_relevance](#relevance). SuperLemmer нельзя сочетать с фильтрами Snowball, N-грамм или краевых N-грамм. Например, для индексации русского текста в существующей таблице:
-
-```yql
-ALTER TABLE articles
-  ADD INDEX ft_superlemmer GLOBAL USING fulltext_plain
-  ON (body)
-  WITH (tokenizer=standard, use_filter_lowercase=true,
-        use_filter_superlemmer=true, language="russian");
-```
-
-При поиске фильтр также нормализует поисковые слова:
-
-```yql
-SELECT id, title
-FROM articles VIEW ft_superlemmer
-WHERE FulltextMatch(body, "поисковые запросы")
-LIMIT 20;
-```
 
 ## Типы первичного ключа {#primary-key}
 

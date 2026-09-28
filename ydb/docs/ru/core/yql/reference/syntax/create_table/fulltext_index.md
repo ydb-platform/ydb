@@ -16,6 +16,10 @@ CREATE TABLE `<table_name>` (
 )
 ```
 
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
+## Параметры {#parameters}
+
 Где:
 
 * `<index_name>` - уникальное имя индекса для доступа к данным
@@ -25,8 +29,6 @@ CREATE TABLE `<table_name>` (
 * `<parameter_name>` и `<parameter_value>` - список параметров в формате ключ-значение:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Примеры
 
